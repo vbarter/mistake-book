@@ -1,0 +1,13 @@
+[Unit]
+Description=Zhicuoben API (Flask + gunicorn)
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/zhicuoben/server
+ExecStart=/opt/zhicuoben/server/.venv/bin/gunicorn --workers 2 --threads 4 --timeout 120 --bind 127.0.0.1:5001 --access-logfile /opt/zhicuoben/data/access.log --error-logfile /opt/zhicuoben/data/error.log run:app
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

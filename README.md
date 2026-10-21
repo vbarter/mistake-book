@@ -112,14 +112,60 @@ cd app && npx cap open android
 
 Gradle 同步后直接运行。开发期 `capacitor.config.ts` 开启了明文 HTTP 以便连局域网后端，上线前应改为 HTTPS 并关闭 `cleartext`。
 
-## 三、关键规则（与 PRD 画板 31 一致）
+## 三、云服务器部署（已部署）
+
+后端运行在 `43.129.175.172`（OpenCloudOS 9，Python 3.11），对外地址：
+
+```
+http://43.129.175.172:8080/zhicuoben/api/health
+```
+
+| 项 | 位置 |
+|---|---|
+| 代码与虚拟环境 | `/opt/zhicuoben/server`（`.venv`、`.env` 在其中） |
+| 上传图片与日志 | `/opt/zhicuoben/data/`（`uploads/`、`access.log`、`error.log`） |
+| 进程 | systemd `zhicuoben.service`，gunicorn 2 进程 × 4 线程，监听 `127.0.0.1:5001`（[deploy/zhicuoben.service](deploy/zhicuoben.service)） |
+| 反向代理 | nginx 8080 通用站点 `include /etc/nginx/default.d/zhicuoben.conf`，`/zhicuoben/` → 5001（[deploy/nginx-zhicuoben.conf](deploy/nginx-zhicuoben.conf)） |
+
+常用命令（在服务器上）：
+
+```bash
+systemctl status zhicuoben
+journalctl -u zhicuoben -n 50
+tail -f /opt/zhicuoben/data/error.log
+```
+
+更新代码：本地执行 `deploy/deploy.sh`，会同步 `server/`、安装依赖并重启服务。
+
+**MySQL 切换**：服务器内网是 `10.5.0.0/22`，而 MySQL 实例地址 `172.17.32.3` 不在该网络，服务器连接超时，所以当前暂用 SQLite。需要在云控制台把数据库和服务器放到同一 VPC（或打通对等连接），并在数据库安全组放行 `10.5.0.14`。打通后：
+
+```bash
+# 1. 在服务器上确认能连通（应打印 CONNECTED）
+python3 -c "import socket;s=socket.create_connection(('172.17.32.3',3306),5);print('CONNECTED',s.recv(40))"
+# 2. 建库建表（服务器没装 mysql 客户端，用 Python 执行 DDL）
+cd /opt/zhicuoben/server && .venv/bin/python - <<'EOF'
+import pymysql, re
+sql = open('db/schema.mysql.sql', encoding='utf-8').read()
+conn = pymysql.connect(host='172.17.32.3', user='root', password='<密码>', charset='utf8mb4', autocommit=True)
+with conn.cursor() as c:
+    for stmt in [s.strip() for s in re.split(r';\s*\n', sql) if s.strip() and not s.strip().startswith('--')]:
+        c.execute(stmt)
+print('schema ok')
+EOF
+# 3. 把 .env 里的 DATABASE_URL 那行取消注释（已预填），重启
+systemctl restart zhicuoben && curl -s http://127.0.0.1:5001/api/health
+```
+
+**App 指向线上**：`app/.env` 设 `VITE_API_BASE=http://43.129.175.172:8080/zhicuoben` 后 `npm run cap:sync`。注意 iOS 的 ATS 默认禁止向公网 IP 发明文 HTTP，真机调试需在 `Info.plist` 临时加 `NSAppTransportSecurity → NSAllowsArbitraryLoads = true`；正式发布应给 API 配一个带 HTTPS 证书的子域名（magicart.cc 当前被 Cloudflare 规则整站 301 到首页，不能直接复用）。
+
+## 四、关键规则（与 PRD 画板 31 一致）
 
 - 掌握状态：待复习 → 巩固中 → 已掌握。到期即待复习；连续两次「记得」且档位 ≥ 2 自动升级已掌握；手动标记可撤销。
 - 间隔序列 1 → 3 → 7 → 15 → 30 天；「模糊」间隔减半，「忘了」回到 1 天；练习答错立即到期。
 - 同学科题干相似度 ≥ 90% 的再次录入会合并为「再错一次」。
 - 每日复习队列上限 20 题，按到期时间、错次、学科轮换排序。
 
-## 四、接口一览
+## 五、接口一览
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -136,7 +182,7 @@ Gradle 同步后直接运行。开发期 `capacitor.config.ts` 开启了明文 H
 | POST | /api/practice/start · /:sid/answer · /:sid/finish | 开始 / 作答 / 结束 |
 | GET | /api/stats/overview | 今天页与我的页数据 |
 
-## 五、尚未实现（PRD 范围内）
+## 六、尚未实现（PRD 范围内）
 
 - 导出 PDF（界面已留入口，提示「下个版本提供」）。
 - 复习提醒的本地通知推送（设置已可保存，需接入 `@capacitor/local-notifications`）。
