@@ -137,23 +137,11 @@ tail -f /opt/zhicuoben/data/error.log
 
 更新代码：本地执行 `deploy/deploy.sh`，会同步 `server/`、安装依赖并重启服务。
 
-**MySQL 切换**：服务器内网是 `10.5.0.0/22`，而 MySQL 实例地址 `172.17.32.3` 不在该网络，服务器连接超时，所以当前暂用 SQLite。需要在云控制台把数据库和服务器放到同一 VPC（或打通对等连接），并在数据库安全组放行 `10.5.0.14`。打通后：
+**数据库**：MySQL 8.0 直接装在这台服务器上（`dnf install mysql-server`），配置 `/etc/my.cnf.d/zhicuoben.cnf` 只监听 `127.0.0.1`，默认 utf8mb4、东八区。库表由 [server/db/schema.mysql.sql](server/db/schema.mysql.sql) 建立，应用账号 `zhicuoben@localhost` 只有增删改查权限，密码在服务器的 `/opt/zhicuoben/server/.env` 里。上海那台 TencentDB 与香港服务器不在同一地域，跨境打通需购买云联网带宽，故未使用。
 
 ```bash
-# 1. 在服务器上确认能连通（应打印 CONNECTED）
-python3 -c "import socket;s=socket.create_connection(('172.17.32.3',3306),5);print('CONNECTED',s.recv(40))"
-# 2. 建库建表（服务器没装 mysql 客户端，用 Python 执行 DDL）
-cd /opt/zhicuoben/server && .venv/bin/python - <<'EOF'
-import pymysql, re
-sql = open('db/schema.mysql.sql', encoding='utf-8').read()
-conn = pymysql.connect(host='172.17.32.3', user='root', password='<密码>', charset='utf8mb4', autocommit=True)
-with conn.cursor() as c:
-    for stmt in [s.strip() for s in re.split(r';\s*\n', sql) if s.strip() and not s.strip().startswith('--')]:
-        c.execute(stmt)
-print('schema ok')
-EOF
-# 3. 把 .env 里的 DATABASE_URL 那行取消注释（已预填），重启
-systemctl restart zhicuoben && curl -s http://127.0.0.1:5001/api/health
+mysql -uroot zhicuoben            # 服务器上本地 root 免密登录
+mysqldump -uroot zhicuoben > /opt/zhicuoben/data/backup-$(date +%F).sql   # 备份
 ```
 
 **App 指向线上**：`app/.env` 设 `VITE_API_BASE=http://43.129.175.172:8080/zhicuoben` 后 `npm run cap:sync`。注意 iOS 的 ATS 默认禁止向公网 IP 发明文 HTTP，真机调试需在 `Info.plist` 临时加 `NSAppTransportSecurity → NSAllowsArbitraryLoads = true`；正式发布应给 API 配一个带 HTTPS 证书的子域名（magicart.cc 当前被 Cloudflare 规则整站 301 到首页，不能直接复用）。
