@@ -1,0 +1,26 @@
+# python
+server/.venv/
+__pycache__/
+*.pyc
+server/instance/
+server/*.db
+server/uploads/
+.env
+
+# node
+app/node_modules/
+app/dist/
+app/.vite/
+
+# capacitor native
+app/ios/App/Pods/
+app/ios/App/App.xcworkspace/xcuserdata/
+app/android/.gradle/
+app/android/build/
+app/android/app/build/
+app/android/local.properties
+
+.DS_Store
+
+# xcodebuild derived data
+app/ios/build/

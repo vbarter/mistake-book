@@ -1,0 +1,25 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: zhicuoben-mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: zhicuoben
+      MYSQL_USER: zhicuoben
+      MYSQL_PASSWORD: zhicuoben
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - zhicuoben-mysql:/var/lib/mysql
+      # 首次启动自动执行 DDL（容器数据卷为空时）
+      - ./server/db/schema.mysql.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  zhicuoben-mysql:

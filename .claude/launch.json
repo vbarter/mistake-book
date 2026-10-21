@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "app",
+      "port": 5173
+    },
+    {
+      "name": "server",
+      "runtimeExecutable": "server/.venv/bin/python",
+      "runtimeArgs": ["server/run.py"],
+      "port": 5001
+    }
+  ]
+}

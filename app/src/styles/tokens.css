@@ -1,0 +1,87 @@
+/* 设计令牌：对应 PRD 画板 03 设计系统 */
+:root {
+  --brand: #2f6fed;
+  --brand-pressed: #1f55c4;
+  --brand-tint: #e6eefb;
+  --brand-on-tint: #1f55c4;
+
+  --label: #1c1c1e;
+  --secondary: #5b5b63;
+  --tertiary: #8e8e93;
+  --separator: #d1d1d6;
+  --separator-light: #ececf0;
+  --fill: #e5e5ea;
+  --fill-light: #f2f2f7;
+
+  --bg: #f2f2f7;
+  --card: #ffffff;
+  --bar: rgba(249, 249, 249, 0.94);
+
+  --due: #b35300;
+  --due-bg: #fff0e3;
+  --learning: #1f55c4;
+  --learning-bg: #e6eefb;
+  --mastered: #1e7a47;
+  --mastered-bg: #e3f5ea;
+  --wrong: #b42323;
+  --wrong-bg: #fbe9e9;
+
+  --math: #2f6fed;
+  --math-bg: #e6eefb;
+  --chinese: #9a3a1e;
+  --chinese-bg: #fbe9e3;
+  --english: #5b37a8;
+  --english-bg: #efe8fb;
+  --science: #0b6b6b;
+  --science-bg: #ddf3f3;
+
+  --radius-card: 16px;
+  --radius-btn: 14px;
+  --radius-list: 12px;
+  --radius-img: 12px;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tabbar-h: 49px;
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Noto Sans CJK SC", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand: #5b8dff;
+    --brand-pressed: #7aa2ff;
+    --brand-tint: #1a2740;
+    --brand-on-tint: #9dbaff;
+
+    --label: #f2f2f7;
+    --secondary: #a1a1aa;
+    --tertiary: #8e8e93;
+    --separator: #38383a;
+    --separator-light: #2c2c2e;
+    --fill: #3a3a3c;
+    --fill-light: #1c1c1e;
+
+    --bg: #000000;
+    --card: #1c1c1e;
+    --bar: rgba(22, 22, 24, 0.94);
+
+    --due: #ffb35c;
+    --due-bg: #3d2a14;
+    --learning: #9dbaff;
+    --learning-bg: #1a2740;
+    --mastered: #6fd39a;
+    --mastered-bg: #123a24;
+    --wrong: #ff8a8a;
+    --wrong-bg: #3d1a1a;
+
+    --math: #9dbaff;
+    --math-bg: #1a2740;
+    --chinese: #ffa98a;
+    --chinese-bg: #3d2218;
+    --english: #c9b3ff;
+    --english-bg: #2a1f45;
+    --science: #7fdede;
+    --science-bg: #123838;
+  }
+}

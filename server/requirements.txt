@@ -1,0 +1,10 @@
+Flask==3.0.3
+Flask-Cors==4.0.1
+Flask-SQLAlchemy==3.1.1
+Flask-JWT-Extended==4.6.0
+SQLAlchemy==2.0.36
+python-dotenv==1.0.1
+anthropic>=0.80
+pytest==8.3.3
+PyMySQL>=1.1
+cryptography>=43
