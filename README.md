@@ -122,7 +122,7 @@ cd app/ios && xcodebuild -exportArchive -archivePath build/App.xcarchive -export
 - 每次上传前把 `CURRENT_PROJECT_VERSION`（build 号）加 1。
 - `Info.plist` 里 `NSAllowsArbitraryLoads = true` 是为了连公网 HTTP 的 API；提交审核前应改为 HTTPS 域名并移除该项。**注意**：ATS 字典里不能同时出现 `NSAllowsLocalNetworking`、`NSAllowsArbitraryLoadsInWebContent` 或 `NSAllowsArbitraryLoadsForMedia`，否则 iOS 会忽略 `NSAllowsArbitraryLoads`（build 1、2 就是因此在真机上报「没有网络」，系统日志为 `does not conform to ATS policy`）。
 
-Apple 登录：`@capacitor-community/apple-sign-in` 6.x 不支持 Swift Package Manager，暂未接入；接入时在 Signing & Capabilities 加 **Sign in with Apple**，拿到 `identityToken` 后调用 `Login.tsx` 里预留的 `appleLogin()`。
+Apple 登录（已接入）：工程已升级到 Capacitor 7，使用 `@capacitor-community/apple-sign-in` 7.1.0（支持 SPM）。`App/App.entitlements` 声明 `com.apple.developer.applesignin`，自动签名归档时会把 **Sign in with Apple** 能力注册到 App ID。登录页点「通过 Apple 登录」→ 系统授权面板 → 把 `identityToken` 交给 `/api/auth/apple`（新用户）或 `/api/auth/bind`（游客绑定）。服务端 `APPLE_VERIFY=1` 时用 Apple JWKS 公钥校验签名、`iss`、`aud`（Bundle ID）和有效期，线上已开启；本地联调可设为 0 只解码。Apple 只在首次授权返回姓名，之后沿用已保存的昵称。模拟器测试需先在模拟器的「设置」里登录 Apple ID。
 
 4. Android（需要 Android Studio 与 JDK 17，本机未安装）：
 

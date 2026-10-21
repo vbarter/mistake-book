@@ -59,13 +59,33 @@ export default function Login() {
       toast("通过 Apple 登录需要在 iPhone 上使用");
       return;
     }
-    // 原生 Apple 登录插件需在 Xcode 中开启 Sign in with Apple 能力后接入（见 README），
-    // 接入后在此调用插件拿到 identityToken，再走 appleLogin()。
-    toast("Apple 登录即将开放，请先用手机号登录");
+    setBusy(true);
+    try {
+      const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
+      const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const { response } = await SignInWithApple.authorize({
+        clientId: "com.zhicuoben.app",
+        redirectURI: "https://zhicuoben.app/auth/apple",
+        scopes: "name",
+        state: "zcb",
+        nonce,
+      });
+      if (!response.identityToken) throw new Error("没有拿到 Apple 登录凭证");
+      // Apple 只在首次授权返回姓名；之后为空，服务端会沿用已有昵称
+      const nickname = [response.familyName, response.givenName].filter(Boolean).join("") || undefined;
+      await appleLogin(response.identityToken, nickname);
+    } catch (e) {
+      const msg = String((e as Error).message || "");
+      if (/cancel|1001|canceled/i.test(msg)) return; // 用户取消
+      if (/1000|unknown/i.test(msg)) toast("Apple 登录暂不可用：请确认设备已登录 Apple ID 且已联网", "error");
+      else if (/1004|notHandled|failed/i.test(msg)) toast("Apple 登录失败，请稍后再试", "error");
+      else toastError(e);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  // 预留：拿到 identityToken 后的服务端交换
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // 拿到 identityToken 后的服务端交换：游客则绑定，否则登录
   const appleLogin = async (identityToken: string, nickname?: string) => {
     if (binding) {
       await api("/api/auth/bind", { method: "POST", body: { identityToken } });

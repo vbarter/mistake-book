@@ -193,3 +193,68 @@ def test_relay_provider_uses_plain_messages(monkeypatch):
     assert items[0].correctAnswer == "14 米" and items[0].knowledgePoints == ["分数乘法"]
     assert "output_config" not in captured and "betas" not in captured
     assert "JSON Schema" in captured["messages"][0]["content"][-1]["text"]
+
+
+def _fake_identity_token(sub="001234.abc", aud="com.zhicuoben.app"):
+    import base64
+    import json
+    import time
+
+    def b64(d):
+        return base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()
+
+    now = int(time.time())
+    return b64({"alg": "RS256", "kid": "x"}) + "." + b64({"iss": "https://appleid.apple.com", "aud": aud, "sub": sub, "exp": now + 600, "iat": now}) + ".sig"
+
+
+def test_apple_login_without_verify(client):
+    token = _fake_identity_token()
+    r = client.post("/api/auth/apple", json={"identityToken": token, "profile": {"nickname": "小苹果"}})
+    assert r.status_code == 200
+    user = r.get_json()["user"]
+    assert user["loginMethod"] == "apple" and user["nickname"] == "小苹果"
+    # 同一 sub 再登录复用账号
+    r2 = client.post("/api/auth/apple", json={"identityToken": token})
+    assert r2.get_json()["user"]["id"] == user["id"]
+
+
+def test_apple_login_with_verify_uses_jwks(app, client, monkeypatch):
+    from app.routes import auth as auth_mod
+
+    app.config["APPLE_VERIFY"] = True
+    calls = []
+
+    def fake_verify(token):
+        calls.append(token)
+        if token == "bad":
+            from flask import abort
+
+            abort(401, "Apple 登录凭证无效")
+        return {"sub": "verified.sub"}
+
+    monkeypatch.setattr(auth_mod, "_verify_apple_token", fake_verify)
+    assert client.post("/api/auth/apple", json={"identityToken": "bad"}).status_code == 401
+    r = client.post("/api/auth/apple", json={"identityToken": "good"})
+    assert r.status_code == 200 and calls == ["bad", "good"]
+
+    # 绑定游客账号也走验签
+    guest = client.post("/api/auth/guest").get_json()
+    h = {"Authorization": f"Bearer {guest['token']}"}
+    assert client.post("/api/auth/bind", json={"identityToken": "good"}, headers=h).status_code == 400  # sub 已被占用
+    monkeypatch.setattr(auth_mod, "_verify_apple_token", lambda t: {"sub": "another.sub"})
+    assert client.post("/api/auth/bind", json={"identityToken": "good"}, headers=h).get_json()["user"]["loginMethod"] == "apple"
+
+
+def test_apple_verify_rejects_garbage_against_real_jwks_shape(app, client, monkeypatch):
+    """不联网：让 JWKS 客户端抛错，接口应给 503 而不是 500。"""
+    from app.routes import auth as auth_mod
+
+    app.config["APPLE_VERIFY"] = True
+
+    class Boom:
+        def get_signing_key_from_jwt(self, token):
+            raise RuntimeError("network down")
+
+    monkeypatch.setattr(auth_mod, "_apple_jwks", Boom())
+    r = client.post("/api/auth/apple", json={"identityToken": _fake_identity_token()})
+    assert r.status_code == 503

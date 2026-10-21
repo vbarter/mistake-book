@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 import time
 
+import jwt
 from flask import Blueprint, abort, current_app, jsonify, request
 from flask_jwt_extended import create_access_token
+from jwt import PyJWKClient
 
 from ..auth_utils import current_user, login_required
 from ..constants import GRADES, SUBJECTS
@@ -15,6 +18,7 @@ from ..extensions import db
 from ..models import User
 
 bp = Blueprint("auth", __name__)
+log = logging.getLogger(__name__)
 
 # 开发期验证码存内存；生产应换成 Redis + 短信服务
 _codes: dict[str, tuple[str, float]] = {}
@@ -58,8 +62,40 @@ def login_with_phone():
     return _issue(user)
 
 
+APPLE_ISSUER = "https://appleid.apple.com"
+APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
+_apple_jwks: PyJWKClient | None = None
+
+
+def _verify_apple_token(token: str) -> dict:
+    """用 Apple 公钥（JWKS）校验 identityToken 的签名、签发者、受众（Bundle ID）与有效期。"""
+    global _apple_jwks
+    if _apple_jwks is None:
+        _apple_jwks = PyJWKClient(APPLE_JWKS_URL, cache_keys=True, lifespan=3600)
+    try:
+        signing_key = _apple_jwks.get_signing_key_from_jwt(token)
+        return jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=current_app.config["APPLE_BUNDLE_ID"],
+            issuer=APPLE_ISSUER,
+            options={"require": ["exp", "iat", "sub", "aud", "iss"]},
+        )
+    except jwt.ExpiredSignatureError:
+        abort(401, "Apple 登录凭证已过期，请重新登录")
+    except jwt.PyJWTError as e:
+        log.warning("apple identity token rejected: %s", e)
+        abort(401, "Apple 登录凭证无效")
+    except Exception as e:  # noqa: BLE001  取公钥失败等
+        log.warning("apple jwks error: %s", e)
+        abort(503, "暂时无法验证 Apple 登录，请稍后再试")
+
+
 def _decode_identity_token(token: str) -> dict:
-    """开发期只解码 payload；APPLE_VERIFY=1 时需接入 Apple 公钥校验签名。"""
+    """APPLE_VERIFY=1（生产）走公钥验签；=0 仅解码 payload，供本地联调。"""
+    if current_app.config["APPLE_VERIFY"]:
+        return _verify_apple_token(token)
     try:
         payload = token.split(".")[1]
         payload += "=" * (-len(payload) % 4)
@@ -74,8 +110,6 @@ def login_with_apple():
     token = str(data.get("identityToken", ""))
     if not token:
         abort(400, "缺少 identityToken")
-    if current_app.config["APPLE_VERIFY"]:
-        abort(501, "生产环境需接入 Apple 公钥验签（见 README）")
     claims = _decode_identity_token(token)
     sub = claims.get("sub")
     if not sub:
