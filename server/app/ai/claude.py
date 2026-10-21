@@ -1,9 +1,17 @@
-"""Claude Provider：用视觉模型一次完成 OCR、学科归类、知识点标注、答案与解析。"""
+"""Claude Provider：用视觉模型一次完成 OCR、学科归类、知识点标注、答案与解析。
+
+两种工作方式：
+- 官方 API（默认）：结构化输出（JSON Schema）+ 服务端回退。
+- 中转模式（设置 ANTHROPIC_BASE_URL 指向 api.tu-zi.com 等 new-api 中转时自动启用）：
+  只用标准 Messages 接口，不带 beta 头 / output_config / fallbacks，由提示词约束 JSON 并稳健解析。
+"""
 from __future__ import annotations
 
 import base64
 import json
 import logging
+import os
+import re
 
 import anthropic
 
@@ -86,29 +94,73 @@ VARIANT_SCHEMA = {
 }
 
 
-class ClaudeProvider(AIProvider):
-    name = "claude"
+def extract_json(text: str) -> dict:
+    """从模型输出里取出 JSON 对象：兼容 ```json 围栏、前后多余说明文字。"""
+    text = (text or "").strip()
+    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+    if fence:
+        text = fence.group(1)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        return json.loads(text[start : end + 1])
+    raise json.JSONDecodeError("no JSON object found", text, 0)
 
-    def __init__(self, model: str = "claude-opus-5-5"):
-        # 凭据从环境解析：ANTHROPIC_API_KEY，或 `ant auth login` 的配置
+
+def is_relay_base_url(url: str | None) -> bool:
+    return bool(url) and "anthropic.com" not in url
+
+
+class ClaudeProvider(AIProvider):
+    def __init__(self, model: str = "claude-opus-5-5", relay: bool | None = None):
+        # 凭据与地址从环境解析：ANTHROPIC_API_KEY、ANTHROPIC_BASE_URL（中转）或 `ant auth login` 的配置
         self.client = anthropic.Anthropic()
         self.model = model
+        env_relay = os.getenv("ANTHROPIC_RELAY_MODE")
+        if relay is not None:
+            self.relay = relay
+        elif env_relay in ("0", "1"):
+            self.relay = env_relay == "1"
+        else:
+            self.relay = is_relay_base_url(os.getenv("ANTHROPIC_BASE_URL"))
+        self.name = "claude-relay" if self.relay else "claude"
 
     # ------------------------------------------------------------------ helpers
-    def _call(self, system: str, content: list[dict], schema: dict, max_tokens: int = 16000):
-        try:
-            response = self.client.beta.messages.create(
+    def _create(self, system: str, content: list[dict], schema: dict, max_tokens: int):
+        if self.relay:
+            instruction = (
+                "\n\n只输出一个 JSON 对象，不要任何解释、前后缀或 Markdown 围栏。"
+                "JSON 必须符合下面的 JSON Schema：\n" + json.dumps(schema, ensure_ascii=False)
+            )
+            content = list(content) + [{"type": "text", "text": instruction}]
+            return self.client.messages.create(
                 model=self.model,
                 max_tokens=max_tokens,
                 system=system,
                 messages=[{"role": "user", "content": content}],
-                output_config={"format": {"type": "json_schema", "schema": schema}},
-                # 安全分类器拒答时由服务端自动改用备用模型
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
             )
+        return self.client.beta.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": content}],
+            output_config={"format": {"type": "json_schema", "schema": schema}},
+            # 安全分类器拒答时由服务端自动改用备用模型
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        )
+
+    def _call(self, system: str, content: list[dict], schema: dict, max_tokens: int = 16000) -> dict:
+        try:
+            response = self._create(system, content, schema, max_tokens)
         except anthropic.AuthenticationError as e:
             raise AIError("AI 服务的密钥无效，请检查 ANTHROPIC_API_KEY") from e
+        except anthropic.PermissionDeniedError as e:
+            log.warning("anthropic 403: %s", e.message)
+            raise AIError("AI 服务额度不足或无权限，请联系管理员充值") from e
         except anthropic.RateLimitError as e:
             raise AIError("AI 服务正忙，请稍后再试") from e
         except anthropic.APIStatusError as e:
@@ -124,10 +176,11 @@ class ClaudeProvider(AIProvider):
         if response.stop_reason == "max_tokens":
             raise AIError("AI 返回内容过长被截断，请减少一次识别的题目数量")
 
-        text = next((b.text for b in response.content if b.type == "text"), "")
+        text = "".join(b.text for b in response.content if getattr(b, "type", "") == "text")
         try:
-            return json.loads(text)
+            return extract_json(text)
         except json.JSONDecodeError as e:
+            log.warning("unparseable model output: %.300s", text)
             raise AIError("AI 返回了无法解析的结果，请重试") from e
 
     # ------------------------------------------------------------------ api
@@ -158,7 +211,7 @@ class ClaudeProvider(AIProvider):
             }
         )
         data = self._call(SYSTEM_PROMPT, content, RECOGNIZE_SCHEMA)
-        items = [RecognizedItem(**it) for it in data.get("items", [])]
+        items = [RecognizedItem(**_clean_item(it)) for it in data.get("items", [])]
         # 兜底：条数不符时按截图数对齐
         while len(items) < len(crops):
             items.append(RecognizedItem(subject=subjects[0] if subjects else "math", knowledgePoints=[], stemText=""))
@@ -178,5 +231,40 @@ class ClaudeProvider(AIProvider):
             "你是一位小学教师，擅长为学生出同类变式题，题目表述简洁、面向小学生。",
             [{"type": "text", "text": prompt}],
             VARIANT_SCHEMA,
+            max_tokens=4000,
         )
-        return [Variant(**v) for v in data.get("variants", [])][:count]
+        return [Variant(**_clean_variant(v)) for v in data.get("variants", [])][:count]
+
+
+_ITEM_KEYS = {f for f in RecognizedItem.__dataclass_fields__}  # noqa: SLF001
+_VARIANT_KEYS = {f for f in Variant.__dataclass_fields__}  # noqa: SLF001
+
+
+def _clean_item(raw: dict) -> dict:
+    """中转模式下模型可能多给或少给字段：只保留已知字段并补默认值。"""
+    out = {k: raw[k] for k in _ITEM_KEYS if k in raw}
+    out.setdefault("subject", "math")
+    if out["subject"] not in SUBJECTS:
+        out["subject"] = "math"
+    out.setdefault("knowledgePoints", [])
+    out.setdefault("stemText", "")
+    if out.get("questionType") not in QUESTION_TYPES:
+        out["questionType"] = "solve"
+    for key in ("options", "uncertainSpans"):
+        if not isinstance(out.get(key), list):
+            out[key] = []
+    for key in ("studentAnswer", "correctAnswer", "analysis", "tip"):
+        out[key] = str(out.get(key) or "")
+    return out
+
+
+def _clean_variant(raw: dict) -> dict:
+    out = {k: raw[k] for k in _VARIANT_KEYS if k in raw}
+    out.setdefault("question", "")
+    if out.get("questionType") not in QUESTION_TYPES:
+        out["questionType"] = "solve"
+    if not isinstance(out.get("options"), list):
+        out["options"] = []
+    out["answer"] = str(out.get("answer") or "")
+    out["analysis"] = str(out.get("analysis") or "")
+    return out

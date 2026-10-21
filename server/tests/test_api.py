@@ -151,3 +151,45 @@ def test_user_isolation(client, auth):
     assert client.get("/api/mistakes", headers=other).get_json()["total"] == 0
     mid = client.get("/api/mistakes", headers=auth).get_json()["items"][0]["id"]
     assert client.get(f"/api/mistakes/{mid}", headers=other).status_code == 404
+
+
+def test_extract_json_tolerates_fences_and_prose():
+    from app.ai.claude import extract_json, is_relay_base_url
+
+    assert extract_json('{"a": 1}') == {"a": 1}
+    assert extract_json('好的，结果如下：\n```json\n{"items": [{"x": "y"}]}\n```\n以上。') == {"items": [{"x": "y"}]}
+    assert extract_json('前缀 {"ok": true} 后缀') == {"ok": True}
+    assert is_relay_base_url("https://api.tu-zi.com") is True
+    assert is_relay_base_url("https://api.anthropic.com") is False
+    assert is_relay_base_url(None) is False
+
+
+def test_relay_provider_uses_plain_messages(monkeypatch):
+    """中转模式：走 messages.create，不带 beta / output_config，并能解析带围栏的 JSON。"""
+    from app.ai.claude import ClaudeProvider
+    from app.ai.base import Crop
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    assert provider.relay and provider.name == "claude-relay"
+
+    captured = {}
+
+    class _Block:
+        type = "text"
+        text = '```json\n{"items":[{"subject":"math","knowledgePoints":["分数乘法"],"stemText":"题","questionType":"solve","options":[],"uncertainSpans":[],"studentAnswer":"17","correctAnswer":"14 米","analysis":"略","tip":"注意单位1","extra":"ignored"}]}\n```'
+
+    class _Resp:
+        stop_reason = "end_turn"
+        content = [_Block()]
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return _Resp()
+
+    monkeypatch.setattr(provider.client.messages, "create", fake_create)
+    items = provider.recognize([Crop(data=b"x", media_type="image/png")], subjects=["math"], grade="5")
+    assert items[0].correctAnswer == "14 米" and items[0].knowledgePoints == ["分数乘法"]
+    assert "output_config" not in captured and "betas" not in captured
+    assert "JSON Schema" in captured["messages"][0]["content"][-1]["text"]
