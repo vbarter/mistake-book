@@ -11,6 +11,8 @@ const config: CapacitorConfig = {
   plugins: {
     SplashScreen: { launchShowDuration: 0 },
     StatusBar: { style: "DEFAULT" },
+    // 保持关闭：真机连不上 HTTP 的根因是 ATS（见 Info.plist 注释），与 fetch 实现无关
+    CapacitorHttp: { enabled: false },
   },
 };
 

@@ -120,7 +120,7 @@ cd app/ios && xcodebuild -exportArchive -archivePath build/App.xcarchive -export
 - `export-dev/App.ipa`：Apple Development 签名，只能装到开发者账号里已注册的设备（Finder 拖到设备、Apple Configurator，或 `xcrun devicectl device install app --device <udid> App.ipa`）。
 - `export-appstore/App.ipa`：Cloud Managed Apple Distribution 签名，用于上传 TestFlight / App Store（Xcode Organizer，或 `xcrun altool --upload-app`，或 `asc` CLI）。上传前在 App Store Connect 新建 App 记录（Bundle ID `com.zhicuoben.app`）。
 - 每次上传前把 `CURRENT_PROJECT_VERSION`（build 号）加 1。
-- `Info.plist` 里 `NSAllowsArbitraryLoads = true` 是为了连公网 HTTP 的 API；提交审核前应改为 HTTPS 域名并移除该项。
+- `Info.plist` 里 `NSAllowsArbitraryLoads = true` 是为了连公网 HTTP 的 API；提交审核前应改为 HTTPS 域名并移除该项。**注意**：ATS 字典里不能同时出现 `NSAllowsLocalNetworking`、`NSAllowsArbitraryLoadsInWebContent` 或 `NSAllowsArbitraryLoadsForMedia`，否则 iOS 会忽略 `NSAllowsArbitraryLoads`（build 1、2 就是因此在真机上报「没有网络」，系统日志为 `does not conform to ATS policy`）。
 
 Apple 登录：`@capacitor-community/apple-sign-in` 6.x 不支持 Swift Package Manager，暂未接入；接入时在 Signing & Capabilities 加 **Sign in with Apple**，拿到 `identityToken` 后调用 `Login.tsx` 里预留的 `appleLogin()`。
 
