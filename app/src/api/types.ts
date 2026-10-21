@@ -71,9 +71,10 @@ export interface RecognizedItem {
   correctAnswer: string;
   analysis: string;
   tip: string;
-  stemImage: string;
   aiGenerated: boolean;
-  // 本地补充
+  index?: number; // 服务端返回的截图序号，用于回填本地裁剪图
+  // 本地补充（服务端不回传图片，截图由客户端按 index 回填）
+  stemImage: string;
   reasons: Reason[];
   note: string;
 }

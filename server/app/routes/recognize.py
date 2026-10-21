@@ -52,10 +52,11 @@ def recognize():
     except AIError as e:
         return jsonify({"error": "ai_unavailable", "message": str(e)}), 502
 
+    # 不回传截图：客户端已持有裁剪图，按 index 对应即可（回传会让响应膨胀到 1 MB 以上）
     results = []
     for i, item in enumerate(items):
         d = item.to_dict()
-        d["stemImage"] = crops_raw[i].get("image") if isinstance(crops_raw[i], dict) else crops_raw[i]
+        d["index"] = i
         d["aiGenerated"] = True
         results.append(d)
     return jsonify({"items": results, "provider": provider.name})

@@ -23,7 +23,7 @@ export default function Crop() {
   const [pageIdx, setPageIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [addMode, setAddMode] = useState(false);
-  const [progress, setProgress] = useState<{ stage: string; pct: number } | null>(null);
+  const [progress, setProgress] = useState<{ stage: string; pct: number; elapsed: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const dragRef = useRef<Drag | null>(null);
@@ -141,7 +141,7 @@ export default function Crop() {
   const recognize = async () => {
     abortRef.current = false;
     const crops: { image: string }[] = [];
-    setProgress({ stage: "正在裁剪题目", pct: 5 });
+    setProgress({ stage: "正在裁剪题目", pct: 5, elapsed: 0 });
     try {
       for (const pg of pages) {
         for (const b of pg.boxes) {
@@ -149,24 +149,25 @@ export default function Crop() {
         }
       }
       if (abortRef.current) return;
-      setProgress({ stage: "正在读题目文字", pct: 20 });
+      const startedAt = Date.now();
+      setProgress({ stage: "正在上传截图", pct: 12, elapsed: 0 });
+      // 进度随时间渐近推进（不会停死在某个值），阶段文案按经验时长切换
       const ticker = setInterval(() => {
-        setProgress((p) => {
-          if (!p) return p;
-          const pct = Math.min(90, p.pct + 4);
-          const stage = pct < 45 ? "正在读题目文字" : pct < 70 ? "正在归类知识点" : "正在生成解析";
-          return { stage, pct };
-        });
-      }, 700);
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        const pct = Math.round(12 + 83 * (1 - Math.exp(-elapsed / 30)));
+        const stage = elapsed < 6 ? "正在上传截图" : elapsed < 20 ? "正在读题目文字" : elapsed < 35 ? "正在归类知识点" : "正在生成解析";
+        setProgress({ stage, pct, elapsed });
+      }, 1000);
       let items: RecognizedItem[];
       try {
-        const res = await api<{ items: RecognizedItem[] }>("/api/recognize", { method: "POST", body: { crops }, timeoutMs: 120000 });
-        items = res.items.map((it) => ({ ...it, reasons: [], note: "" }));
+        const res = await api<{ items: RecognizedItem[] }>("/api/recognize", { method: "POST", body: { crops }, timeoutMs: 150000 });
+        // 服务端不回传截图，按 index 回填本地裁剪图
+        items = res.items.map((it, i) => ({ ...it, stemImage: crops[it.index ?? i]?.image ?? crops[i]?.image ?? "", reasons: [], note: "" }));
       } finally {
         clearInterval(ticker);
       }
       if (abortRef.current) return;
-      setProgress({ stage: "完成", pct: 100 });
+      setProgress({ stage: "完成", pct: 100, elapsed: Math.round((Date.now() - startedAt) / 1000) });
       setItems(items);
       void haptic.success();
       nav("/capture/review");
@@ -286,8 +287,13 @@ export default function Crop() {
             <Icon name="sparkles" size={36} style={{ color: "var(--brand)" }} />
             <h2 className="t-title3">AI 正在识别错题</h2>
             <p className="t-sub c-sec">{progress.stage}…</p>
-            <div className="bar" style={{ width: "100%" }}><span style={{ width: `${progress.pct}%`, background: "var(--brand)", transition: "width .5s ease" }} /></div>
-            <span className="t-foot c-sec">识别题干 · 匹配知识点 · 生成解析 · 约 {Math.max(3, total * 3)} 秒</span>
+            <div className="bar" style={{ width: "100%" }}><span style={{ width: `${progress.pct}%`, background: "var(--brand)", transition: "width .9s linear" }} /></div>
+            <span className="t-foot c-sec num">
+              {progress.elapsed > 0 ? `已用 ${progress.elapsed} 秒 · ` : ""}通常 {Math.max(10, total * 8)} 秒左右
+            </span>
+            {progress.elapsed >= 30 && (
+              <span className="t-foot" style={{ color: "var(--due)", fontWeight: 500 }}>网络有点慢，正在等待服务器返回，请稍候</span>
+            )}
             <Button variant="plain" onClick={() => { abortRef.current = true; setProgress(null); }} style={{ height: 44 }}>取消</Button>
           </div>
         </div>

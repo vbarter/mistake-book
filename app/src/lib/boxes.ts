@@ -20,7 +20,8 @@ export function clampBox(b: Box, W: number, H: number, min = 40): Box {
   return { ...b, x, y, w, h };
 }
 
-export async function cropToDataUrl(src: string, box: Box, maxW = 1200): Promise<string> {
+/** 裁剪为 JPEG dataURL。默认最宽 1000px、质量 0.8：OCR 足够清晰，上传量约为原来的一半。 */
+export async function cropToDataUrl(src: string, box: Box, maxW = 1000, quality = 0.8): Promise<string> {
   const img = await loadImage(src);
   const scale = Math.min(1, maxW / box.w);
   const canvas = document.createElement("canvas");
@@ -30,7 +31,7 @@ export async function cropToDataUrl(src: string, box: Box, maxW = 1200): Promise
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, box.x, box.y, box.w, box.h, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.88);
+  return canvas.toDataURL("image/jpeg", quality);
 }
 
 /**

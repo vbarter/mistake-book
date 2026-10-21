@@ -12,8 +12,10 @@ def _recognize_and_save(client, auth, n=3):
     assert r.status_code == 200, r.get_json()
     items = r.get_json()["items"]
     assert len(items) == n
+    assert all("stemImage" not in it and it["index"] == i for i, it in enumerate(items))  # 响应不回传图片
     for it in items:
         it["reasons"] = ["concept"]
+        it["stemImage"] = TINY_PNG  # 客户端按 index 回填本地裁剪图
     r = client.post("/api/mistakes", json={"items": items}, headers=auth)
     assert r.status_code == 201, r.get_json()
     return r.get_json()
