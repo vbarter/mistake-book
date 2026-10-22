@@ -62,6 +62,8 @@ cd server && TEST_DATABASE_URL='mysql+pymysql://zhicuoben:zhicuoben@127.0.0.1:33
 - 接入 Claude：在 `.env` 里填 `ANTHROPIC_API_KEY`（或先 `ant auth login`），`AI_PROVIDER=auto` 会自动切换。识别用 `claude-opus-5-5` 视觉模型 + JSON Schema 结构化输出，一次完成 OCR、学科归类、知识点、答案与解析；不填 Key 时用本地 Mock，返回四道示例题，全流程可跑。
 - 走中转（线上用的是 api.tu-zi.com）：再设 `ANTHROPIC_BASE_URL=https://api.tu-zi.com`，Key 用中转的 `sk-...`。中转只提供标准 Messages 接口，Provider 会自动进入中转模式：不发 beta 头、结构化输出和服务端回退，改为提示词约束 JSON 并容错解析（`/api/health` 显示 `claude-relay`）。tu-zi 对每次请求按模型最大输出预扣额度，余额不足时返回 403，App 会提示「额度不足」。
 
+本地调试大模型：`server/.env` 里填 `ANTHROPIC_API_KEY` 与 `ANTHROPIC_BASE_URL=https://api.tu-zi.com`，重启后 `/api/health` 应显示 `claude-relay`；想临时回到不花钱的示例结果，把 `AI_PROVIDER=mock` 即可。项目 `.env` 会覆盖 shell 里同名的环境变量（`load_dotenv(override=True)`）。日志在 `server/instance/dev-server.log`（用 `python -u run.py` 启动时不缓冲）。
+
 测试：
 
 ```bash

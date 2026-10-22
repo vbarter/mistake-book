@@ -5,8 +5,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-# 必须在读取 os.getenv 之前加载 .env
-load_dotenv(BASE_DIR / ".env")
+# 必须在读取 os.getenv 之前加载 .env；override=True 让项目 .env 覆盖 shell 里残留的同名变量
+# （例如开发机上全局导出的 ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY）
+load_dotenv(BASE_DIR / ".env", override=True)
 
 
 def _env_list(name: str, default: str) -> list[str]:
