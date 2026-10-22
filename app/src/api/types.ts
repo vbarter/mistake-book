@@ -73,6 +73,9 @@ export interface RecognizedItem {
   tip: string;
   aiGenerated: boolean;
   index?: number; // 服务端返回的截图序号，用于回填本地裁剪图
+  page?: number; // 整页扫描：所在页
+  bbox?: number[]; // 整页扫描：归一化位置 [x0, y0, x1, y1]
+  reason?: string; // 整页扫描：判错依据
   // 本地补充（服务端不回传图片，截图由客户端按 index 回填）
   stemImage: string;
   reasons: Reason[];

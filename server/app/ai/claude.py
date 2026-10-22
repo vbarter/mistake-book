@@ -16,7 +16,7 @@ import re
 import anthropic
 
 from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
-from .base import AIError, AIProvider, Crop, RecognizedItem, Variant
+from .base import AIError, AIProvider, Crop, RecognizedItem, ScannedItem, Variant
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +62,42 @@ RECOGNIZE_SCHEMA = {
                     "analysis",
                     "tip",
                 ],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["items"],
+    "additionalProperties": False,
+}
+
+SCAN_SYSTEM_PROMPT = (
+    "你是一位小学教师助手。你会收到整页试卷的照片（可能有多页）。请找出页面上所有被判为错误的题目："
+    "依据包括红叉、半对半错的勾叉、扣分标记、老师的红笔订正、学生作答与正确答案不符等。"
+    "答对的题（打勾且作答正确）不要输出。对每道错题：提取题目原文（保留分数、公式与选项原样），"
+    "识别学生写的作答，判断学科，标注 1 到 3 个知识点（课本常见说法），给出正确答案、"
+    "面向小学生的简短解析（不超过 120 字）和一句「下次注意」提示，并说明判错依据。"
+    "bbox 为该题在所在页面上的位置，格式 [x0, y0, x1, y1]，均为 0 到 1 的比例（相对页面宽高），"
+    "要完整包住题干、选项和学生作答。看不清的词写入 uncertainSpans。"
+    "页面上的学生姓名、学校、班级一律忽略。"
+)
+
+_SCAN_ITEM_PROPS = dict(RECOGNIZE_SCHEMA["properties"]["items"]["items"]["properties"])
+_SCAN_ITEM_PROPS.update(
+    {
+        "page": {"type": "integer"},
+        "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+        "reason": {"type": "string"},
+    }
+)
+SCAN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": _SCAN_ITEM_PROPS,
+                "required": RECOGNIZE_SCHEMA["properties"]["items"]["items"]["required"] + ["page", "bbox", "reason"],
                 "additionalProperties": False,
             },
         }
@@ -130,19 +166,21 @@ class ClaudeProvider(AIProvider):
 
     # ------------------------------------------------------------------ helpers
     def _create(self, system: str, content: list[dict], schema: dict, max_tokens: int):
+        """统一用流式请求再取完整消息：SDK 对大 max_tokens 的非流式调用会直接拒绝，流式也不受 HTTP 超时影响。"""
         if self.relay:
             instruction = (
                 "\n\n只输出一个 JSON 对象，不要任何解释、前后缀或 Markdown 围栏。"
                 "JSON 必须符合下面的 JSON Schema：\n" + json.dumps(schema, ensure_ascii=False)
             )
             content = list(content) + [{"type": "text", "text": instruction}]
-            return self.client.messages.create(
+            with self.client.messages.stream(
                 model=self.model,
                 max_tokens=max_tokens,
                 system=system,
                 messages=[{"role": "user", "content": content}],
-            )
-        return self.client.beta.messages.create(
+            ) as stream:
+                return stream.get_final_message()
+        with self.client.beta.messages.stream(
             model=self.model,
             max_tokens=max_tokens,
             system=system,
@@ -151,7 +189,8 @@ class ClaudeProvider(AIProvider):
             # 安全分类器拒答时由服务端自动改用备用模型
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
-        )
+        ) as stream:
+            return stream.get_final_message()
 
     def _call(self, system: str, content: list[dict], schema: dict, max_tokens: int = 16000) -> dict:
         try:
@@ -216,6 +255,45 @@ class ClaudeProvider(AIProvider):
         while len(items) < len(crops):
             items.append(RecognizedItem(subject=subjects[0] if subjects else "math", knowledgePoints=[], stemText=""))
         return items[: len(crops)]
+
+    def scan_pages(self, pages: list[Crop], subjects: list[str], grade: str) -> list[ScannedItem]:
+        content: list[dict] = []
+        for i, page in enumerate(pages):
+            content.append({"type": "text", "text": f"第 {i} 页（page = {i}）："})
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": page.media_type,
+                        "data": base64.standard_b64encode(page.data).decode("utf-8"),
+                    },
+                }
+            )
+        subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
+        content.append(
+            {
+                "type": "text",
+                "text": (
+                    f"学生年级：小学{grade}年级。可选学科：{subject_names}（subject 字段用英文枚举）。"
+                    f"共 {len(pages)} 页，请把所有页面上的错题都列出来，page 从 0 开始计数；没有错题则 items 为空数组。"
+                ),
+            }
+        )
+        data = self._call(SCAN_SYSTEM_PROMPT, content, SCAN_SCHEMA, max_tokens=24000)
+        items: list[ScannedItem] = []
+        for raw in data.get("items", []):
+            cleaned = _clean_item(raw)
+            page = int(raw.get("page", 0) or 0)
+            bbox = raw.get("bbox") if isinstance(raw.get("bbox"), list) and len(raw.get("bbox")) == 4 else [0, 0, 1, 1]
+            try:
+                bbox = [min(1.0, max(0.0, float(v))) for v in bbox]
+            except (TypeError, ValueError):
+                bbox = [0.0, 0.0, 1.0, 1.0]
+            if bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
+                bbox = [0.0, 0.0, 1.0, 1.0]
+            items.append(ScannedItem(**cleaned, page=min(max(page, 0), len(pages) - 1), bbox=bbox, reason=str(raw.get("reason") or "")))
+        return items
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:
         subject = SUBJECT_LABELS.get(mistake.get("subject", ""), mistake.get("subject", ""))

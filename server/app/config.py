@@ -45,4 +45,5 @@ class Config:
     APPLE_BUNDLE_ID = os.getenv("APPLE_BUNDLE_ID", "com.zhicuoben.app")
 
     MAX_CROPS_PER_RECOGNIZE = 6
+    MAX_PAGES_PER_SCAN = 4
     DAILY_REVIEW_LIMIT = 20

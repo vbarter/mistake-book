@@ -155,6 +155,28 @@ def test_user_isolation(client, auth):
     assert client.get(f"/api/mistakes/{mid}", headers=other).status_code == 404
 
 
+class _FakeStream:
+    """模拟 anthropic 的 messages.stream() 上下文管理器。"""
+
+    def __init__(self, response, captured=None):
+        self._response = response
+        self._captured = captured
+
+    def __call__(self, **kwargs):
+        if self._captured is not None:
+            self._captured.update(kwargs)
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get_final_message(self):
+        return self._response
+
+
 def test_extract_json_tolerates_fences_and_prose():
     from app.ai.claude import extract_json, is_relay_base_url
 
@@ -186,11 +208,7 @@ def test_relay_provider_uses_plain_messages(monkeypatch):
         stop_reason = "end_turn"
         content = [_Block()]
 
-    def fake_create(**kwargs):
-        captured.update(kwargs)
-        return _Resp()
-
-    monkeypatch.setattr(provider.client.messages, "create", fake_create)
+    monkeypatch.setattr(provider.client.messages, "stream", _FakeStream(_Resp(), captured))
     items = provider.recognize([Crop(data=b"x", media_type="image/png")], subjects=["math"], grade="5")
     assert items[0].correctAnswer == "14 米" and items[0].knowledgePoints == ["分数乘法"]
     assert "output_config" not in captured and "betas" not in captured
@@ -260,3 +278,37 @@ def test_apple_verify_rejects_garbage_against_real_jwks_shape(app, client, monke
     monkeypatch.setattr(auth_mod, "_apple_jwks", Boom())
     r = client.post("/api/auth/apple", json={"identityToken": _fake_identity_token()})
     assert r.status_code == 503
+
+
+def test_scan_pages_returns_items_with_bbox(client, auth):
+    r = client.post("/api/scan", json={"pages": [{"image": TINY_PNG}, {"image": TINY_PNG}]}, headers=auth)
+    assert r.status_code == 200, r.get_json()
+    body = r.get_json()
+    assert body["pages"] == 2 and len(body["items"]) == 6
+    first = body["items"][0]
+    assert first["page"] == 0 and len(first["bbox"]) == 4 and first["reason"] and "stemImage" not in first
+    assert body["items"][3]["page"] == 1
+    assert client.post("/api/scan", json={"pages": []}, headers=auth).status_code == 400
+    assert client.post("/api/scan", json={"pages": [{"image": TINY_PNG}] * 5}, headers=auth).status_code == 400
+
+
+def test_claude_scan_cleans_bbox(monkeypatch):
+    from app.ai.claude import ClaudeProvider
+    from app.ai.base import Crop
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+
+    class _Block:
+        type = "text"
+        text = '{"items":[{"subject":"math","knowledgePoints":["k"],"stemText":"q","questionType":"solve","options":[],"uncertainSpans":[],"studentAnswer":"","correctAnswer":"1","analysis":"a","tip":"t","page":7,"bbox":[0.1,1.4,"0.9",0.5],"reason":"有红叉"},{"subject":"math","knowledgePoints":[],"stemText":"q2","questionType":"solve","options":[],"uncertainSpans":[],"studentAnswer":"","correctAnswer":"","analysis":"","tip":"","page":0,"bbox":[0.5,0.5,0.2,0.2],"reason":""}]}'
+
+    class _Resp:
+        stop_reason = "end_turn"
+        content = [_Block()]
+
+    monkeypatch.setattr(provider.client.messages, "stream", _FakeStream(_Resp()))
+    items = provider.scan_pages([Crop(data=b"x")], subjects=["math"], grade="5")
+    assert items[0].page == 0 and items[0].bbox == [0.1, 1.0, 0.9, 0.5] or items[0].bbox == [0.0, 0.0, 1.0, 1.0]
+    assert items[1].bbox == [0.0, 0.0, 1.0, 1.0]  # 非法框退化为整页

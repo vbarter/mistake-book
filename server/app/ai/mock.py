@@ -8,7 +8,14 @@ from __future__ import annotations
 import random
 import re
 
-from .base import AIProvider, Crop, RecognizedItem, Variant
+from .base import AIProvider, Crop, RecognizedItem, ScannedItem, Variant
+
+# 示例试卷（app/public/sample-paper.svg，1200×1700）上三道错题的归一化位置
+SAMPLE_BBOXES = [
+    [0.06, 0.15, 0.95, 0.24],
+    [0.06, 0.30, 0.95, 0.44],
+    [0.06, 0.50, 0.95, 0.57],
+]
 
 SAMPLES = [
     RecognizedItem(
@@ -164,6 +171,14 @@ class MockProvider(AIProvider):
             if crop.hint:
                 item.stemText = crop.hint
             items.append(item)
+        return items
+
+    def scan_pages(self, pages: list[Crop], subjects: list[str], grade: str) -> list[ScannedItem]:
+        pool = [s for s in SAMPLES[:3] if s.subject in subjects] or SAMPLES[:3]
+        items: list[ScannedItem] = []
+        for p, _page in enumerate(pages):
+            for i, sample in enumerate(pool):
+                items.append(ScannedItem(**sample.to_dict(), page=p, bbox=SAMPLE_BBOXES[i % len(SAMPLE_BBOXES)], reason="有红叉"))
         return items
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:

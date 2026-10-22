@@ -136,7 +136,7 @@ export default function Recognize() {
         title="核对错题"
         subtitle="第 2 步，共 2 步"
         back
-        backLabel="框选"
+        backLabel="试卷"
         right={<button className="nav-btn" onClick={() => setConfirmLeave(true)}>取消</button>}
       />
       <div style={{ padding: "4px 16px 8px" }}>
@@ -155,7 +155,7 @@ export default function Recognize() {
               {SUBJECT_LABEL[item.subject]}
               <Icon name="chevron-down" size={12} stroke={2.4} />
             </button>
-            <span className="t-foot c-sec">{QTYPE_LABEL[item.questionType]} · 学科由 AI 判断，点按可改</span>
+            <span className="t-foot c-sec">{QTYPE_LABEL[item.questionType]}{item.reason ? ` · ${item.reason}` : " · 学科由 AI 判断，点按可改"}</span>
           </div>
           <button className="row" style={{ padding: "8px 10px", background: "var(--fill-light)", borderRadius: 10, minHeight: 56 }} onClick={() => setImageOpen(true)}>
             <img src={item.stemImage} alt="原题截图" style={{ width: 48, height: 36, objectFit: "cover", borderRadius: 6 }} />

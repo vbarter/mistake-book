@@ -4,7 +4,7 @@ import { api } from "../../api/client";
 import type { RecognizedItem } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Button, InlineNav } from "../../components/ui";
-import { clampBox, cropToDataUrl, newId, type Box } from "../../lib/boxes";
+import { autoSegment, clampBox, cropToDataUrl, newId, type Box } from "../../lib/boxes";
 import { haptic } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
 import { MAX_BOXES, totalBoxes, useCapture } from "../../store/capture";
@@ -35,6 +35,16 @@ export default function Crop() {
   useEffect(() => {
     if (pages.length === 0) nav("/capture", { replace: true });
   }, [pages.length, nav]);
+
+  // 手动框选是备用入口：进入时才对还没分段的页面做自动分段
+  useEffect(() => {
+    for (const p of pages) {
+      if (p.boxes.length === 0) {
+        autoSegment(p.src, MAX_BOXES).then((boxes) => setBoxes(p.id, boxes)).catch(() => undefined);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 显示比例：容器宽 / 图片原始宽
   const measure = useCallback(() => {
@@ -192,8 +202,8 @@ export default function Crop() {
         title="框选错题"
         subtitle="第 1 步，共 2 步"
         back
-        backLabel="拍摄"
-        right={<button className="nav-btn" style={{ color: "#5b8dff" }} onClick={() => nav("/capture")}>重拍</button>}
+        backLabel="试卷"
+        right={<button className="nav-btn" style={{ color: "#5b8dff" }} onClick={() => nav("/capture")}>换试卷</button>}
       />
       <div className="screen__content screen__content--modal" style={{ gap: 10, padding: "0 12px calc(var(--safe-bottom) + 12px)" }}>
         <div style={{ flex: 1, overflowY: "auto", borderRadius: 8, background: "#000", WebkitOverflowScrolling: "touch" }}>

@@ -51,16 +51,48 @@ export async function pickImage(source: "camera" | "photos"): Promise<string | n
   });
 }
 
-async function downscale(file: File, maxSide: number): Promise<string> {
-  const url = URL.createObjectURL(file);
+/** 从相册多选，返回 dataURL 列表（JPEG，最长边 1600）。网页端退化为多选文件。 */
+export async function pickImages(limit = 8): Promise<string[]> {
+  if (isNative) {
+    const { Camera } = await import("@capacitor/camera");
+    try {
+      const result = await Camera.pickImages({ quality: 82, limit, correctOrientation: true, width: 1600 });
+      const out: string[] = [];
+      for (const p of result.photos) {
+        if (!p.webPath) continue;
+        out.push(await downscale(p.webPath, 1600));
+      }
+      return out;
+    } catch (e) {
+      const msg = String((e as Error).message || "");
+      if (/cancel/i.test(msg)) return [];
+      throw new Error(msg.includes("denied") || msg.includes("permission") ? "permission_denied" : msg);
+    }
+  }
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = true;
+    input.onchange = async () => {
+      const files = Array.from(input.files ?? []).slice(0, limit);
+      resolve(await Promise.all(files.map((f) => downscale(f, 1600))));
+    };
+    input.click();
+  });
+}
+
+/** 把文件或 URL 缩放到 maxSide 并转成 JPEG dataURL。 */
+export async function downscale(source: File | string, maxSide: number, quality = 0.85): Promise<string> {
+  const url = typeof source === "string" ? source : URL.createObjectURL(source);
   const img = await loadImage(url);
   const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(img.naturalWidth * scale);
   canvas.height = Math.round(img.naturalHeight * scale);
   canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-  URL.revokeObjectURL(url);
-  return canvas.toDataURL("image/jpeg", 0.85);
+  if (typeof source !== "string") URL.revokeObjectURL(url);
+  return canvas.toDataURL("image/jpeg", quality);
 }
 
 export function loadImage(src: string): Promise<HTMLImageElement> {

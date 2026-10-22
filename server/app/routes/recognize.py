@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 
 from flask import Blueprint, abort, current_app, jsonify, request
 
@@ -10,6 +11,7 @@ from ..auth_utils import current_user, login_required
 from ..constants import SUBJECTS
 
 bp = Blueprint("recognize", __name__)
+log = logging.getLogger(__name__)
 
 
 def _decode(data_url: str) -> tuple[bytes, str]:
@@ -51,6 +53,9 @@ def recognize():
         items = provider.recognize(crops, subjects=subjects, grade=user.grade or "5")
     except AIError as e:
         return jsonify({"error": "ai_unavailable", "message": str(e)}), 502
+    except Exception:  # noqa: BLE001  未知异常也给出可读提示，不返回 500 页面
+        log.exception("recognize failed")
+        return jsonify({"error": "ai_failed", "message": "AI 识别出错了，请稍后重试"}), 502
 
     # 不回传截图：客户端已持有裁剪图，按 index 对应即可（回传会让响应膨胀到 1 MB 以上）
     results = []
@@ -60,3 +65,42 @@ def recognize():
         d["aiGenerated"] = True
         results.append(d)
     return jsonify({"items": results, "provider": provider.name})
+
+
+@bp.post("/scan")
+@login_required
+def scan():
+    """整页扫描：传整页试卷（可多页），AI 找出所有错题并返回位置（bbox 归一化）与识别结果。"""
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    pages_raw = data.get("pages")
+    if not isinstance(pages_raw, list) or not pages_raw:
+        abort(400, "请先选择试卷")
+    if len(pages_raw) > current_app.config["MAX_PAGES_PER_SCAN"]:
+        abort(400, f"一次最多扫描 {current_app.config['MAX_PAGES_PER_SCAN']} 页")
+
+    pages: list[Crop] = []
+    for raw in pages_raw:
+        image = raw.get("image") if isinstance(raw, dict) else raw
+        if not image:
+            abort(400, "缺少试卷图片")
+        blob, media = _decode(image)
+        pages.append(Crop(data=blob, media_type=media))
+
+    subjects = [s for s in (user.subjects or SUBJECTS) if s in SUBJECTS] or SUBJECTS
+    provider = get_provider()
+    try:
+        items = provider.scan_pages(pages, subjects=subjects, grade=user.grade or "5")
+    except AIError as e:
+        return jsonify({"error": "ai_unavailable", "message": str(e)}), 502
+    except Exception:  # noqa: BLE001
+        log.exception("scan failed")
+        return jsonify({"error": "ai_failed", "message": "AI 扫描出错了，请稍后重试"}), 502
+
+    results = []
+    for i, item in enumerate(items):
+        d = item.to_dict()
+        d["index"] = i
+        d["aiGenerated"] = True
+        results.append(d)
+    return jsonify({"items": results, "pages": len(pages), "provider": provider.name})
