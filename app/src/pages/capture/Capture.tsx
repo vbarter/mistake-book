@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../api/client";
-import type { RecognizedItem } from "../../api/types";
+import type { DigitizedResult } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
-import { cropToDataUrl } from "../../lib/boxes";
 import { createFolder, defaultFolderName, deleteFolder, getFolder, listFolders, saveFolder, toPage, type Folder } from "../../lib/folders";
 import { formatDate } from "../../lib/format";
 import { downscale, haptic, isNative, pickImage, pickImages } from "../../lib/native";
@@ -17,7 +16,7 @@ type Progress = { stage: string; pct: number; elapsed: number };
 export default function Capture() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { folderId, folderName, pages, setFolder, setFolderName, addPage, removePage, setItems, reset, returnTo } = useCapture();
+  const { folderId, folderName, pages, digitized, setFolder, setFolderName, setDigitized, addPage, removePage, reset, returnTo } = useCapture();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState(false);
@@ -42,7 +41,8 @@ export default function Capture() {
       return;
     }
     const existing = await getFolder(folderId);
-    if (existing) await saveFolder({ ...existing, name: name || existing.name, pages: nextPages.map(({ id, src, width, height }) => ({ id, src, width, height })) });
+    // 页面变了，旧的电子版不再对应，一并清掉
+    if (existing) await saveFolder({ ...existing, name: name || existing.name, pages: nextPages.map(({ id, src, width, height }) => ({ id, src, width, height })), digitized: undefined });
   };
 
   const addSources = async (sources: string[]) => {
@@ -93,7 +93,7 @@ export default function Capture() {
   }, []);
 
   const openFolder = async (f: Folder) => {
-    setFolder(f.id, f.name, f.pages.map((p) => ({ ...p, boxes: p.boxes ?? [] })));
+    setFolder(f.id, f.name, f.pages.map((p) => ({ ...p, boxes: p.boxes ?? [] })), f.digitized ?? null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -102,7 +102,7 @@ export default function Capture() {
     removePage(id);
     if (folderId) {
       const existing = await getFolder(folderId);
-      if (existing) await saveFolder({ ...existing, pages: existing.pages.filter((p) => p.id !== id) });
+      if (existing) await saveFolder({ ...existing, pages: existing.pages.filter((p) => p.id !== id), digitized: undefined });
     }
     if (next.length === 0 && folderId) {
       await deleteFolder(folderId);
@@ -121,7 +121,7 @@ export default function Capture() {
     void refreshFolders();
   };
 
-  /** 整页扫描：把每页压到 1400px 上传，AI 返回错题与位置；按 bbox 裁出缩略图进入核对页。 */
+  /** 扫描还原电子版：每页压到 1400px 上传，AI 转写全部题目、手写作答与批改；结果存进试卷夹并进入电子版页。 */
   const scan = async () => {
     if (pages.length === 0) return;
     abortRef.current = false;
@@ -134,38 +134,31 @@ export default function Capture() {
       setProgress({ stage: "正在上传试卷", pct: 12, elapsed: 0 });
       const ticker = setInterval(() => {
         const elapsed = Math.round((Date.now() - startedAt) / 1000);
-        const pct = Math.round(12 + 83 * (1 - Math.exp(-elapsed / 35)));
-        const stage = elapsed < 6 ? "正在上传试卷" : elapsed < 25 ? "正在找出错题" : elapsed < 45 ? "正在识别题目与知识点" : "正在生成解析";
+        const pct = Math.round(12 + 83 * (1 - Math.exp(-elapsed / 40)));
+        const stage = elapsed < 6 ? "正在上传试卷" : elapsed < 25 ? "正在转写题目与手写作答" : elapsed < 45 ? "正在识别老师批改" : "正在为错题生成解析";
         setProgress({ stage, pct, elapsed });
       }, 1000);
-      let items: RecognizedItem[];
+      let result: DigitizedResult;
       try {
-        const res = await api<{ items: RecognizedItem[] }>("/api/scan", { method: "POST", body: { pages: uploads }, timeoutMs: 180000 });
-        items = [];
-        for (const it of res.items) {
-          const page = pages[Math.min(Math.max(it.page ?? 0, 0), pages.length - 1)];
-          const [x0, y0, x1, y1] = it.bbox && it.bbox.length === 4 ? it.bbox : [0, 0, 1, 1];
-          const box = { id: "b", x: x0 * page.width, y: y0 * page.height, w: Math.max(40, (x1 - x0) * page.width), h: Math.max(30, (y1 - y0) * page.height) };
-          const stemImage = await cropToDataUrl(page.src, box, 1000, 0.8);
-          items.push({ ...it, stemImage, reasons: [], note: "" });
-        }
+        const res = await api<DigitizedResult>("/api/digitize", { method: "POST", body: { pages: uploads }, timeoutMs: 240000 });
+        result = { pages: res.pages, questions: res.questions, provider: res.provider, at: new Date().toISOString() };
       } finally {
         clearInterval(ticker);
       }
       if (abortRef.current) return;
-      if (items.length === 0) {
+      if (result.questions.length === 0) {
         setProgress(null);
-        toast("没有找到被判错的题目，可以改用手动框选", "info");
+        toast("没有识别到题目，请换一张更清晰的照片", "info");
         return;
       }
       if (folderId) {
         const existing = await getFolder(folderId);
-        if (existing) await saveFolder({ ...existing, scannedAt: new Date().toISOString() });
+        if (existing) await saveFolder({ ...existing, digitized: result, scannedAt: result.at });
       }
+      setDigitized(result);
       setProgress({ stage: "完成", pct: 100, elapsed: Math.round((Date.now() - startedAt) / 1000) });
-      setItems(items);
       void haptic.success();
-      nav("/capture/review");
+      nav("/capture/paper");
     } catch (e) {
       toastError(e);
     } finally {
@@ -254,13 +247,24 @@ export default function Capture() {
             <Button variant="tinted" icon="camera" onClick={() => pick("camera")} disabled={busy || pages.length >= MAX_PAGES} style={{ flex: 1 }}>{pages.length ? "再拍一页" : "拍照"}</Button>
             <Button variant="tinted" icon="photo" onClick={() => pick("photos")} disabled={busy || pages.length >= MAX_PAGES} style={{ flex: 1 }}>从相册选</Button>
           </div>
-          <Button icon="sparkles" onClick={scan} disabled={pages.length === 0 || busy}>
-            {busy ? "处理中…" : `扫描识别错题${pages.length > 1 ? `（${pages.length} 页）` : ""}`}
-          </Button>
+          {digitized && pages.length > 0 ? (
+            <Button icon="book" onClick={() => nav("/capture/paper")} disabled={busy}>
+              查看电子版 · {digitized.questions.length} 题
+            </Button>
+          ) : (
+            <Button icon="sparkles" onClick={scan} disabled={pages.length === 0 || busy}>
+              {busy ? "处理中…" : `扫描还原电子版${pages.length > 1 ? `（${pages.length} 页）` : ""}`}
+            </Button>
+          )}
           {pages.length > 0 && (
-            <button className="t-sub" style={{ color: "var(--brand)", fontWeight: 500, minHeight: 36 }} onClick={() => nav("/capture/crop")}>
-              改用手动框选
-            </button>
+            <div style={{ display: "flex", justifyContent: "center", gap: 24 }}>
+              {digitized && (
+                <button className="t-sub" style={{ color: "var(--brand)", fontWeight: 500, minHeight: 36 }} onClick={scan}>重新扫描</button>
+              )}
+              <button className="t-sub" style={{ color: "var(--brand)", fontWeight: 500, minHeight: 36 }} onClick={() => nav("/capture/crop")}>
+                改用手动框选
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -280,10 +284,10 @@ export default function Capture() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }} role="dialog" aria-live="polite">
           <div className="card" style={{ width: "100%", maxWidth: 360, alignItems: "center", textAlign: "center", gap: 14 }}>
             <Icon name="sparkles" size={36} style={{ color: "var(--brand)" }} />
-            <h2 className="t-title3">AI 正在扫描试卷</h2>
+            <h2 className="t-title3">AI 正在还原电子版</h2>
             <p className="t-sub c-sec">{progress.stage}…</p>
             <div className="bar" style={{ width: "100%" }}><span style={{ width: `${progress.pct}%`, background: "var(--brand)", transition: "width .9s linear" }} /></div>
-            <span className="t-foot c-sec num">{progress.elapsed > 0 ? `已用 ${progress.elapsed} 秒 · ` : ""}通常 {20 + pages.length * 15} 秒左右</span>
+            <span className="t-foot c-sec num">{progress.elapsed > 0 ? `已用 ${progress.elapsed} 秒 · ` : ""}通常 {30 + pages.length * 20} 秒左右</span>
             {progress.elapsed >= 40 && <span className="t-foot" style={{ color: "var(--due)", fontWeight: 500 }}>网络有点慢，正在等待服务器返回，请稍候</span>}
             <Button variant="plain" onClick={() => { abortRef.current = true; setProgress(null); }} style={{ height: 44 }}>取消</Button>
           </div>

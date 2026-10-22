@@ -82,6 +82,42 @@ export interface RecognizedItem {
   note: string;
 }
 
+export type Mark = "correct" | "wrong" | "partial" | "unmarked";
+
+/** 电子版试卷里的一道题（AI 转写） */
+export interface DigitizedQuestion {
+  index: number;
+  page: number;
+  number: string;
+  subject: Subject;
+  questionType: QuestionType;
+  stemText: string;
+  options: string[];
+  studentAnswer: string;
+  mark: Mark;
+  teacherNote: string;
+  bbox: number[];
+  knowledgePoints: string[];
+  correctAnswer: string;
+  analysis: string;
+  tip: string;
+  uncertainSpans: string[];
+}
+
+export interface DigitizedPage {
+  page: number;
+  title: string;
+  score: string;
+  note: string;
+}
+
+export interface DigitizedResult {
+  pages: DigitizedPage[];
+  questions: DigitizedQuestion[];
+  provider?: string;
+  at?: string;
+}
+
 export interface TopicGroup {
   subject: Subject;
   topic: string;

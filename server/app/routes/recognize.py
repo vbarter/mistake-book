@@ -104,3 +104,41 @@ def scan():
         d["aiGenerated"] = True
         results.append(d)
     return jsonify({"items": results, "pages": len(pages), "provider": provider.name})
+
+
+@bp.post("/digitize")
+@login_required
+def digitize():
+    """试卷数字化：整页照片 → 电子版（全部题目、手写作答转写、老师批改；判错题附答案解析）。"""
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    pages_raw = data.get("pages")
+    if not isinstance(pages_raw, list) or not pages_raw:
+        abort(400, "请先选择试卷")
+    if len(pages_raw) > current_app.config["MAX_PAGES_PER_SCAN"]:
+        abort(400, f"一次最多处理 {current_app.config['MAX_PAGES_PER_SCAN']} 页")
+
+    pages: list[Crop] = []
+    for raw in pages_raw:
+        image = raw.get("image") if isinstance(raw, dict) else raw
+        if not image:
+            abort(400, "缺少试卷图片")
+        blob, media = _decode(image)
+        pages.append(Crop(data=blob, media_type=media))
+
+    subjects = [s for s in (user.subjects or SUBJECTS) if s in SUBJECTS] or SUBJECTS
+    provider = get_provider()
+    try:
+        page_infos, questions = provider.digitize_pages(pages, subjects=subjects, grade=user.grade or "5")
+    except AIError as e:
+        return jsonify({"error": "ai_unavailable", "message": str(e)}), 502
+    except Exception:  # noqa: BLE001
+        log.exception("digitize failed")
+        return jsonify({"error": "ai_failed", "message": "AI 还原试卷出错了，请稍后重试"}), 502
+
+    out = []
+    for i, q in enumerate(questions):
+        d = q.to_dict()
+        d["index"] = i
+        out.append(d)
+    return jsonify({"pages": [p.to_dict() for p in page_infos], "questions": out, "provider": provider.name})

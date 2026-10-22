@@ -8,7 +8,7 @@ from __future__ import annotations
 import random
 import re
 
-from .base import AIProvider, Crop, RecognizedItem, ScannedItem, Variant
+from .base import AIProvider, Crop, DigitizedPage, DigitizedQuestion, RecognizedItem, ScannedItem, Variant
 
 # 示例试卷（app/public/sample-paper.svg，1200×1700）上三道错题的归一化位置
 SAMPLE_BBOXES = [
@@ -180,6 +180,39 @@ class MockProvider(AIProvider):
             for i, sample in enumerate(pool):
                 items.append(ScannedItem(**sample.to_dict(), page=p, bbox=SAMPLE_BBOXES[i % len(SAMPLE_BBOXES)], reason="有红叉"))
         return items
+
+    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str):
+        """示例试卷的完整电子版：5 题（3 错 2 对）。"""
+        page_infos = [DigitizedPage(page=p, title="五年级随堂练习", score="82", note="订正提醒：注意题目中的“剩下的”和“last weekend”，它们会影响解题方法。") for p in range(len(pages))]
+        questions: list[DigitizedQuestion] = []
+        for p in range(len(pages)):
+            for i, s in enumerate(SAMPLES[:3]):
+                questions.append(
+                    DigitizedQuestion(
+                        page=p,
+                        number=str(i + 1),
+                        subject=s.subject,
+                        questionType=s.questionType,
+                        stemText=s.stemText,
+                        options=list(s.options),
+                        studentAnswer=s.studentAnswer,
+                        mark="partial" if i == 0 else "wrong",
+                        teacherNote="半对半错" if i == 0 else "✗",
+                        bbox=SAMPLE_BBOXES[i],
+                        knowledgePoints=list(s.knowledgePoints),
+                        correctAnswer=s.correctAnswer,
+                        analysis=s.analysis,
+                        tip=s.tip,
+                        uncertainSpans=list(s.uncertainSpans),
+                    )
+                )
+            questions.append(
+                DigitizedQuestion(page=p, number="4", subject="math", questionType="solve", stemText="一个圆的半径是 3 厘米，它的面积是多少？", studentAnswer="答：3.14 × 3² = 28.26（平方厘米）", mark="correct", teacherNote="✓", bbox=[0.06, 0.60, 0.95, 0.68], correctAnswer="28.26 平方厘米")
+            )
+            questions.append(
+                DigitizedQuestion(page=p, number="5", subject="chinese", questionType="solve", stemText="用“因为……所以……”造句。", studentAnswer="因为今天下雨，所以我们没有去春游。", mark="correct", teacherNote="✓", bbox=[0.06, 0.72, 0.95, 0.80], correctAnswer="因为今天下雨，所以我们没有去春游。")
+            )
+        return page_infos, questions
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:
         subject = mistake.get("subject", "math")

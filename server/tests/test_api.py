@@ -312,3 +312,39 @@ def test_claude_scan_cleans_bbox(monkeypatch):
     items = provider.scan_pages([Crop(data=b"x")], subjects=["math"], grade="5")
     assert items[0].page == 0 and items[0].bbox == [0.1, 1.0, 0.9, 0.5] or items[0].bbox == [0.0, 0.0, 1.0, 1.0]
     assert items[1].bbox == [0.0, 0.0, 1.0, 1.0]  # 非法框退化为整页
+
+
+def test_digitize_returns_full_paper(client, auth):
+    r = client.post("/api/digitize", json={"pages": [{"image": TINY_PNG}]}, headers=auth)
+    assert r.status_code == 200, r.get_json()
+    body = r.get_json()
+    assert body["pages"][0]["title"] == "五年级随堂练习" and body["pages"][0]["score"] == "82"
+    qs = body["questions"]
+    assert len(qs) == 5
+    marks = [q["mark"] for q in qs]
+    assert marks == ["partial", "wrong", "wrong", "correct", "correct"]
+    assert all(q["studentAnswer"] for q in qs) and all(len(q["bbox"]) == 4 for q in qs)
+    assert qs[0]["analysis"] and qs[3]["analysis"] == ""
+
+
+def test_claude_digitize_cleans_fields(monkeypatch):
+    from app.ai.claude import ClaudeProvider
+    from app.ai.base import Crop
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+
+    class _Block:
+        type = "text"
+        text = '{"pages":[{"page":0,"title":"单元测","score":"90","note":""},{"page":9,"title":"x","score":"","note":""}],"questions":[{"page":0,"number":"1","subject":"math","questionType":"fill","stemText":"1+1=","options":[],"studentAnswer":"3","mark":"wrong","teacherNote":"✗","bbox":[0.1,0.1,0.9,0.2],"knowledgePoints":["加法"],"correctAnswer":"2","analysis":"a","tip":"t","uncertainSpans":[]},{"page":0,"number":"2","subject":"bogus","questionType":"x","stemText":"q","options":[],"studentAnswer":"","mark":"weird","teacherNote":"","bbox":[1,1,0,0],"knowledgePoints":[],"correctAnswer":"","analysis":"","tip":"","uncertainSpans":[]}]}'
+
+    class _Resp:
+        stop_reason = "end_turn"
+        content = [_Block()]
+
+    monkeypatch.setattr(provider.client.messages, "stream", _FakeStream(_Resp()))
+    pages, qs = provider.digitize_pages([Crop(data=b"x")], subjects=["math"], grade="5")
+    assert [p.page for p in pages] == [0] and pages[0].title == "单元测"
+    assert qs[0].mark == "wrong" and qs[0].bbox == [0.1, 0.1, 0.9, 0.2]
+    assert qs[1].subject == "math" and qs[1].questionType == "solve" and qs[1].mark == "unmarked" and qs[1].bbox == [0.0, 0.0, 1.0, 1.0]

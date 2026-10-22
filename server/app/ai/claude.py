@@ -16,7 +16,7 @@ import re
 import anthropic
 
 from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
-from .base import AIError, AIProvider, Crop, RecognizedItem, ScannedItem, Variant
+from .base import AIError, AIProvider, Crop, DigitizedPage, DigitizedQuestion, RecognizedItem, ScannedItem, Variant
 
 log = logging.getLogger(__name__)
 
@@ -103,6 +103,63 @@ SCAN_SCHEMA = {
         }
     },
     "required": ["items"],
+    "additionalProperties": False,
+}
+
+DIGITIZE_SYSTEM_PROMPT = (
+    "你是一位小学教师助手，负责把试卷照片还原成清晰的电子版。你会收到整页试卷的照片（可能有多页）。"
+    "请逐题、按卷面顺序完整转写：\n"
+    "1. 题号原样（number），题目原文（stemText，保留分数、公式、括号、下划线与选项的原始写法），选择题把选项放进 options；\n"
+    "2. 学生手写的作答逐字转写进 studentAnswer（包括算式、过程、涂改后最终的答案；看不清的字用「□」占位并写入 uncertainSpans）；\n"
+    "3. 老师的批改：mark 取 correct（打勾）/ wrong（打叉）/ partial（半对半错、部分扣分）/ unmarked（没有批改）；"
+    "红笔批注、扣分、订正文字写进 teacherNote；\n"
+    "4. 对 mark 为 wrong 或 partial 的题，补充 1 到 3 个知识点（课本常见说法）、正确答案、面向小学生的简短解析（不超过 120 字）和一句「下次注意」；"
+    "对 correct 的题只填 correctAnswer，其余留空；\n"
+    "5. bbox 为该题在所在页面上的位置 [x0, y0, x1, y1]，0 到 1 的比例，要完整包住题干、选项和作答。\n"
+    "每页还要给出 pages：标题（title）、卷面总分或得分（score，原样文字）、以及不属于任何题目的卷面文字（note，如订正提醒）。"
+    "学生姓名、学校、班级一律忽略，不要写入任何字段。答对的题也要转写，不要遗漏任何题目。"
+)
+
+_DIGITIZE_Q_PROPS = {
+    "page": {"type": "integer"},
+    "number": {"type": "string"},
+    "subject": {"type": "string", "enum": _SUBJECT_ENUM},
+    "questionType": {"type": "string", "enum": QUESTION_TYPES},
+    "stemText": {"type": "string"},
+    "options": {"type": "array", "items": {"type": "string"}},
+    "studentAnswer": {"type": "string"},
+    "mark": {"type": "string", "enum": ["correct", "wrong", "partial", "unmarked"]},
+    "teacherNote": {"type": "string"},
+    "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+    "knowledgePoints": {"type": "array", "items": {"type": "string"}},
+    "correctAnswer": {"type": "string"},
+    "analysis": {"type": "string"},
+    "tip": {"type": "string"},
+    "uncertainSpans": {"type": "array", "items": {"type": "string"}},
+}
+DIGITIZE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "pages": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "page": {"type": "integer"},
+                    "title": {"type": "string"},
+                    "score": {"type": "string"},
+                    "note": {"type": "string"},
+                },
+                "required": ["page", "title", "score", "note"],
+                "additionalProperties": False,
+            },
+        },
+        "questions": {
+            "type": "array",
+            "items": {"type": "object", "properties": _DIGITIZE_Q_PROPS, "required": list(_DIGITIZE_Q_PROPS), "additionalProperties": False},
+        },
+    },
+    "required": ["pages", "questions"],
     "additionalProperties": False,
 }
 
@@ -294,6 +351,76 @@ class ClaudeProvider(AIProvider):
                 bbox = [0.0, 0.0, 1.0, 1.0]
             items.append(ScannedItem(**cleaned, page=min(max(page, 0), len(pages) - 1), bbox=bbox, reason=str(raw.get("reason") or "")))
         return items
+
+    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str):
+        content: list[dict] = []
+        for i, page in enumerate(pages):
+            content.append({"type": "text", "text": f"第 {i} 页（page = {i}）："})
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": page.media_type,
+                        "data": base64.standard_b64encode(page.data).decode("utf-8"),
+                    },
+                }
+            )
+        subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
+        content.append(
+            {
+                "type": "text",
+                "text": (
+                    f"学生年级：小学{grade}年级。可选学科：{subject_names}（subject 字段用英文枚举）。"
+                    f"共 {len(pages)} 页，page 从 0 开始。请完整还原每一道题，按卷面顺序输出。"
+                ),
+            }
+        )
+        data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000)
+
+        page_infos: list[DigitizedPage] = []
+        seen = set()
+        for raw in data.get("pages", []):
+            p = int(raw.get("page", 0) or 0)
+            if 0 <= p < len(pages) and p not in seen:
+                seen.add(p)
+                page_infos.append(DigitizedPage(page=p, title=str(raw.get("title") or ""), score=str(raw.get("score") or ""), note=str(raw.get("note") or "")))
+        for p in range(len(pages)):
+            if p not in seen:
+                page_infos.append(DigitizedPage(page=p))
+        page_infos.sort(key=lambda x: x.page)
+
+        questions: list[DigitizedQuestion] = []
+        for raw in data.get("questions", []):
+            cleaned = _clean_item(raw)
+            bbox = raw.get("bbox") if isinstance(raw.get("bbox"), list) and len(raw.get("bbox")) == 4 else [0, 0, 1, 1]
+            try:
+                bbox = [min(1.0, max(0.0, float(v))) for v in bbox]
+            except (TypeError, ValueError):
+                bbox = [0.0, 0.0, 1.0, 1.0]
+            if bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
+                bbox = [0.0, 0.0, 1.0, 1.0]
+            mark = raw.get("mark") if raw.get("mark") in ("correct", "wrong", "partial", "unmarked") else "unmarked"
+            questions.append(
+                DigitizedQuestion(
+                    page=min(max(int(raw.get("page", 0) or 0), 0), len(pages) - 1),
+                    number=str(raw.get("number") or ""),
+                    subject=cleaned["subject"],
+                    questionType=cleaned["questionType"],
+                    stemText=cleaned["stemText"],
+                    options=cleaned["options"],
+                    studentAnswer=cleaned["studentAnswer"],
+                    mark=mark,
+                    teacherNote=str(raw.get("teacherNote") or ""),
+                    bbox=bbox,
+                    knowledgePoints=cleaned["knowledgePoints"],
+                    correctAnswer=cleaned["correctAnswer"],
+                    analysis=cleaned["analysis"],
+                    tip=cleaned["tip"],
+                    uncertainSpans=cleaned["uncertainSpans"],
+                )
+            )
+        return page_infos, questions
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:
         subject = SUBJECT_LABELS.get(mistake.get("subject", ""), mistake.get("subject", ""))

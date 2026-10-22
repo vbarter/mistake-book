@@ -175,7 +175,9 @@ mysqldump -uroot zhicuoben > /opt/zhicuoben/data/backup-$(date +%F).sql   # 备�
 
 ## 录题流程（v1.0 第二版）
 
-录入页 = 一个「试卷夹」：拍照或相册多选（`Camera.pickImages`）后自动建夹并存到本机 IndexedDB（`app/src/lib/folders.ts`），最多 4 页，可重命名、追加页、随时回来继续。主按钮「扫描识别错题」把整页压到 1400px 上传 `/api/scan`，AI 找出所有被判错的题（红叉、半对半错、订正、作答与答案不符）并给出位置，客户端按位置裁出缩略图直接进入核对页；「改用手动框选」保留旧流程作为备用。服务端 AI 调用统一走流式请求（SDK 对大 `max_tokens` 的非流式调用会直接报错）。
+录入页 = 一个「试卷夹」：拍照或相册多选（`Camera.pickImages`）后自动建夹并存到本机 IndexedDB（`app/src/lib/folders.ts`），最多 4 页，可重命名、追加页、随时回来继续。
+
+主按钮「扫描还原电子版」把整页压到 1400px 上传 `/api/digitize`，AI 把试卷还原成电子版：每页标题与得分、卷面提醒；每道题的题号、题干、选项、学生手写作答的逐字转写（看不清的字用「□」并列入 uncertainSpans）、老师批改（correct / wrong / partial / unmarked）与红笔批注、在页面上的位置；判错题附知识点、正确答案、解析与提示。结果存进试卷夹，下次打开直接看。电子版页（`Paper.tsx`）按卷面顺序展示，判错题默认勾选，「收进错题本」把勾选的题按位置裁出截图进入核对页；答对的题也可以勾选主动收录。「改用手动框选」保留旧流程作为备用；`/api/scan` 仍可用（只返回判错题）。服务端 AI 调用统一走流式请求（SDK 对大 `max_tokens` 的非流式调用会直接报错）。
 
 ## 五、接口一览
 
@@ -183,7 +185,8 @@ mysqldump -uroot zhicuoben > /opt/zhicuoben/data/backup-$(date +%F).sql   # 备�
 |---|---|---|
 | POST | /api/auth/code · /auth/login · /auth/apple · /auth/guest · /auth/bind | 验证码 / 手机登录 / Apple 登录 / 游客 / 绑定 |
 | GET PATCH DELETE | /api/auth/me | 资料、设置、删除账号 |
-| POST | /api/scan | 整页试卷（≤4 页）→ AI 找出所有判错题目，返回识别结果与归一化位置 bbox（不入库） |
+| POST | /api/digitize | 整页试卷（≤4 页）→ 电子版：全部题目、手写作答转写、老师批改、位置；判错题附答案解析（不入库） |
+| POST | /api/scan | 整页试卷（≤4 页）→ 只返回判错题目及位置（不入库） |
 | POST | /api/recognize | 手动框选截图 → AI 识别（不入库） |
 | GET POST | /api/mistakes | 列表（subject / state / q / topic）· 批量入库（自动合并同题） |
 | GET | /api/mistakes/groups | 学科 → 知识点聚合 |

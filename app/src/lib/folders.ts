@@ -1,4 +1,5 @@
 /** 试卷夹：本地 IndexedDB 存储，一夹多页（整页图片）。不上传服务器，只在本机保存。 */
+import type { DigitizedResult } from "../api/types";
 import type { Box } from "./boxes";
 
 export interface FolderPage {
@@ -16,6 +17,7 @@ export interface Folder {
   updatedAt: string;
   pages: FolderPage[];
   scannedAt?: string;
+  digitized?: DigitizedResult; // AI 还原的电子版（与 pages 一一对应）
 }
 
 const DB = "zhicuoben";

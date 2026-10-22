@@ -14,6 +14,7 @@ import Detail from "./pages/Detail";
 import Capture from "./pages/capture/Capture";
 import Crop from "./pages/capture/Crop";
 import Recognize from "./pages/capture/Recognize";
+import Paper from "./pages/capture/Paper";
 import Review from "./pages/Review";
 import Practice from "./pages/Practice";
 import Quiz from "./pages/Quiz";
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="/mistake/:id" element={<Detail />} />
           <Route path="/capture" element={<Capture />} />
           <Route path="/capture/crop" element={<Crop />} />
+          <Route path="/capture/paper" element={<Paper />} />
           <Route path="/capture/review" element={<Recognize />} />
           <Route path="/review" element={<Review />} />
           <Route path="/practice/quiz/:sid" element={<Quiz />} />
