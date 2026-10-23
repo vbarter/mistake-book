@@ -132,6 +132,7 @@ class DigitizedPage:
     examGrade: str = ""  # 年级 / 学段，如 "九年级"
     region: str = ""  # 地区，如 "上海"
     syllabus: str = ""  # 知识点归类依据的考纲 / 课标名称，如 "上海中考英语考纲"
+    ocrText: str = ""  # OCR 模型逐行识别出的原文（印刷文字，公式为 LaTeX），同一张照片的几个 sheet 相同
     blocks: list[DigitizedBlock] = field(default_factory=list)
 
     def to_dict(self) -> dict:

@@ -572,3 +572,37 @@ def test_claude_streaming_reports_text_progress(monkeypatch):
     sheets, qs = provider.digitize_pages([Crop(data=b"x")], subjects=["math"], grade="5", on_page_progress=lambda i, f: seen.append((i, round(f, 4))))
     assert len(sheets) == 1 and qs[0].number == "1"
     assert [i for i, _ in seen] == [0, 0, 0] and seen[-1][1] > seen[0][1] > 0  # 按累计字数递增
+
+
+
+def test_ocr_text_is_fed_to_llm(monkeypatch):
+    """OCR 启用时：先 OCR，文字作为提示放进大模型的输入；sheet 上带 ocrText。"""
+    from app.ai import ocr
+    from app.ai.claude import ClaudeProvider
+    from app.ai.base import Crop
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
+    monkeypatch.setenv("OCR_BASE_URL", "https://ocr.example")
+    monkeypatch.setenv("OCR_AUTH", "u:p")
+    monkeypatch.setattr(ocr, "ocr_image", lambda data, media_type="image/jpeg", **kw: "1. 方程 \\(x^{2}-5x+6=0\\) 的两个根为 ___。")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    seen = {}
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        seen["content"] = content
+        return {"sheets": [{"label": "p1", "blocks": [{"type": "item", "number": "1", "text": "方程的两个根为 [[1]]", "blanks": [{"id": "1", "student": "2,3", "mark": "correct"}]}]}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    sheets, qs = provider.digitize_pages([Crop(data=b"img")], subjects=["math"], grade="9")
+    texts = [c["text"] for c in seen["content"] if c.get("type") == "text"]
+    assert any("<ocr>" in t and "x^{2}-5x+6" in t for t in texts)
+    assert sheets[0].ocrText.startswith("1. 方程")
+
+
+def test_ocr_disabled_without_config(monkeypatch):
+    from app.ai import ocr
+
+    monkeypatch.delenv("OCR_BASE_URL", raising=False)
+    monkeypatch.delenv("OCR_AUTH", raising=False)
+    assert ocr.enabled() is False and ocr.health() == "disabled"

@@ -58,3 +58,10 @@ def auth(client):
 TINY_PNG = (
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_ocr_env(monkeypatch):
+    """测试不依赖本机 .env 里的 OCR 配置：默认关闭，需要的测试自己设置。"""
+    monkeypatch.delenv("OCR_BASE_URL", raising=False)
+    monkeypatch.delenv("OCR_AUTH", raising=False)

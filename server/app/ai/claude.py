@@ -18,6 +18,7 @@ import anthropic
 
 from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedPage, RecognizedItem, ScannedItem, Variant
+from . import ocr
 from . import queue as page_queue
 from .digitize import clean_sheets, derive_questions
 
@@ -110,7 +111,11 @@ SCAN_SCHEMA = {
 }
 
 DIGITIZE_SYSTEM_PROMPT = (
-    "你是一位教师助手，负责把试卷照片逐字逐段还原成电子版，并且保持与原卷一致的版面结构。你会收到一张试卷照片。\n"
+    "你是一位教师助手，负责把试卷照片逐字逐段还原成电子版，并且保持与原卷一致的版面结构。你会收到一张试卷照片，"
+    "有时还会附上 OCR 模型逐行识别出的印刷文字：题目、选项、大题说明、页眉页脚等印刷内容以 OCR 文字为准逐字照抄，不要改写；"
+    "照片用来判断版面结构（分栏、分块、空格位置）、学生手写作答和老师批改符号，这些 OCR 文字里没有。"
+    "OCR 文字里的 LaTeX 标记要这样处理：\\underline{...} 表示原卷划线，正文只保留划线里的文字，并在 instruction 里注明划线部分（如「对划线部分提问：With the help of these games」）；"
+    "\\text{...}、\\( \\) 这类包装只是排版，去掉只留内容；真正的数学公式（分数、根号、上下标、方程）保留 LaTeX 写法。\n"
     "输出 sheets：照片里拍到几页卷面就输出几个 sheet（左右两页拍在一张照片里就是两个 sheet，先左后右）。"
     "每个 sheet 给出页码文字 label（如「第5页」）、卷头标题 title、卷面总分或得分 score（原样文字）、不属于任何块的零散文字 note，"
     "并根据卷头、页眉页脚、题型判断整张卷子的学科 subject（学科枚举，如「九年级化学」就是 chemistry；题块的 subject 默认和它一致，只有卷子里夹了别科内容才单独标）和考试信息：examLevel（单元测 / 期中 / 期末 / 中考模拟 / 中考 / 高考模拟 / 高考 / 竞赛 / 日常练习）、examGrade（年级或学段，如「九年级」）、"
@@ -401,11 +406,24 @@ class ClaudeProvider(AIProvider):
         subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
 
         def one(index: int, page: Crop) -> list[DigitizedPage]:
+            # 第一步：OCR 模型把印刷文字逐行识别出来（几秒钟）；失败就退回让大模型直接看图
+            ocr_text = ""
+            if ocr.enabled():
+                try:
+                    ocr_text = ocr.ocr_image(page.data, page.media_type)
+                except ocr.OCRError as e:
+                    log.warning("ocr failed on page %s, fallback to image only: %s", index, e)
+                if on_page_progress:
+                    on_page_progress(index, 0.08)
             content = [
                 {
                     "type": "image",
                     "source": {"type": "base64", "media_type": page.media_type, "data": base64.standard_b64encode(page.data).decode("utf-8")},
                 },
+            ]
+            if ocr_text:
+                content.append({"type": "text", "text": "OCR 模型逐行识别出的印刷文字（公式为 LaTeX，印刷内容以此为准逐字照抄）：\n<ocr>\n" + ocr_text[:20000] + "\n</ocr>"})
+            content += [
                 {
                     "type": "text",
                     "text": (
@@ -415,8 +433,8 @@ class ClaudeProvider(AIProvider):
                     ),
                 },
             ]
-            # 整页输出通常 8k–20k 字：按已生成字数估算这一页的完成度，曲线渐近到 1
-            on_text = (lambda n: on_page_progress(index, 1 - math.exp(-n / 9000.0))) if on_page_progress else None
+            # 整页输出通常 8k–20k 字：按已生成字数估算这一页的完成度，曲线渐近到 1（OCR 阶段占前 8%）
+            on_text = (lambda n: on_page_progress(index, 0.08 + 0.92 * (1 - math.exp(-n / 9000.0)))) if on_page_progress else None
             # 模型偶尔吐出解析不了 / 被截断的 JSON：这张照片自动重试一次，不让整个任务失败
             try:
                 data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000, on_text=on_text)
@@ -426,6 +444,8 @@ class ClaudeProvider(AIProvider):
                 log.warning("digitize page %s retry after: %s", index, e)
                 data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000, on_text=on_text)
             sheets = clean_sheets(data, index)
+            for sh in sheets:
+                sh.ocrText = ocr_text
             if on_page_done:
                 with progress_lock:
                     done_count[0] += 1

@@ -40,7 +40,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     def health():
         from .ai import provider_name
 
-        return jsonify({"ok": True, "aiProvider": provider_name()})
+        from .ai import ocr
+
+        return jsonify({"ok": True, "aiProvider": provider_name(), "ocr": ocr.health()})
 
     @app.errorhandler(404)
     def not_found(_e):
