@@ -3,13 +3,27 @@ import { QTYPE_LABEL } from "../lib/format";
 import { SubjectChip } from "./ui";
 import { Tag, subjectColors } from "./v2";
 
+/** 卡片的锚点 id：题号小圆片点一下就滚到这里 */
+export const errorAnchor = (key: string) => `err-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+
+/** 滚到某道错题并闪一下高亮 */
+export function jumpToError(key: string) {
+  const el = document.getElementById(errorAnchor(key));
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.remove("card--flash");
+  void el.offsetWidth; // 重新触发动画
+  el.classList.add("card--flash");
+  window.setTimeout(() => el.classList.remove("card--flash"), 1600);
+}
+
 /** 一道错题：题干、作答与正确答案、解析、细分知识点；showKnowledge 在没按知识点分组的列表里把知识点标在卡片上 */
 export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem; showSource?: boolean; showKnowledge?: boolean }) {
   const q = item.q;
   const c = subjectColors(q.subject);
   const student = q.studentAnswer.trim() || "未作答";
   return (
-    <div className="card" style={{ gap: 8 }}>
+    <div className="card" id={errorAnchor(item.key)} style={{ gap: 8, scrollMarginTop: 80 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span className="t-headline">第 {q.number} 题</span>
         <SubjectChip subject={q.subject} small />

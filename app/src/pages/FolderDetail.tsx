@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Subject } from "../api/types";
-import { ErrorCard } from "../components/ErrorCard";
+import { ErrorCard, jumpToError } from "../components/ErrorCard";
 import { ExportSheet } from "../components/ExportSheet";
 import { SwipeSortList } from "../components/SwipeSortList";
 import { Icon } from "../components/Icon";
@@ -141,9 +141,9 @@ export default function FolderDetail() {
             </div>
             <div className="nums">
               {items.map((i) => (
-                <span key={i.key} className={`num-chip${i.kind === "未作答" ? " num-chip--blank" : ""}`} aria-label={`第 ${i.q.number} 题（${i.kind}）`}>
+                <button key={i.key} className={`num-chip${i.kind === "未作答" ? " num-chip--blank" : ""}`} onClick={() => jumpToError(i.key)} aria-label={`第 ${i.q.number} 题（${i.kind}），点击查看`}>
                   {i.q.number}
-                </span>
+                </button>
               ))}
             </div>
           </div>

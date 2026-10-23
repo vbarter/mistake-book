@@ -106,3 +106,7 @@
 .splash__logo.on .splash__icon { transform: none; }
 .splash__name { font-size: 34px; font-weight: 900; color: #2d3047; letter-spacing: 0.08em; }
 .splash__slogan { font-size: 15px; color: #6b7090; font-weight: 600; }
+
+/* 点题号跳到错题卡片时闪一下 */
+@keyframes card-flash { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 20%, 60% { box-shadow: 0 0 0 3px var(--brand); } }
+.card--flash { animation: card-flash 1.5s ease; }
