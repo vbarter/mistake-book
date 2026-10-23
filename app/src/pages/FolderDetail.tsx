@@ -88,7 +88,7 @@ export default function FolderDetail() {
                     <span className="t-cap" style={{ color: "var(--brand)", fontWeight: 700, whiteSpace: "nowrap" }}>{scanStageText(p.scanJob)}</span>
                   </>
                 ) : p.scanError ? (
-                  <Tag kind="wrong" icon="warning">还原失败 · 点开重扫</Tag>
+                  <Tag kind="wrong" icon="warning">扫描失败 · 点开重扫</Tag>
                 ) : st.scanned ? (
                   <>
                     <Tag kind="wrong">{st.wrong} 错</Tag>

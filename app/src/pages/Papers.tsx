@@ -63,7 +63,7 @@ export default function Papers() {
       } />
       <div className="screen__content" style={{ paddingBottom: 0, gap: 12 }}>
         {folders && folders.length === 0 && (
-          <Empty icon="folder" title="还没有试卷" text="拍下整页试卷或从相册多选，AI 会还原成电子版，找出错题并按知识点归类。" />
+          <Empty icon="folder" title="还没有试卷" text="拍下整页试卷或从相册多选，会自动扫描成电子版，找出错题并按知识点归类。" />
         )}
 
         {folders && folders.length > 0 && (

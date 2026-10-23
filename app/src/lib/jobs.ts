@@ -17,10 +17,10 @@ export interface ScanJob {
   waiting?: number; // 全局队列里排在前面等槽位的照片数
 }
 
-/** 试卷行上显示的一句话：排队中 / 还原中 */
+/** 试卷行上显示的一句话：排队中 / 扫描中 */
 export function scanStageText(job: ScanJob): string {
   if (!job.startedPages && job.waiting && job.waiting > 0) return `排队中 · 前面还有 ${job.waiting} 张`;
-  return `AI 还原中 ${job.progress}%`;
+  return `扫描中 ${job.progress}%`;
 }
 
 /** 任务有变化就 +1，页面据此重新读本机数据 */
@@ -66,7 +66,7 @@ export async function submitScan(folderId: string, paperId: string, pages: Captu
     useJobs.getState().bump();
     return { id: job.jobId, startedAt: new Date().toISOString(), parts, progress: 100, status: "running" };
   }
-  if (job.status === "failed") throw new Error(job.error || "AI 还原试卷出错了");
+  if (job.status === "failed") throw new Error(job.error || "扫描出错了");
   const scanJob: ScanJob = { id: job.jobId, startedAt: new Date().toISOString(), parts, progress: job.progress, status: job.status };
   await updatePaper(folderId, paperId, { scanJob, scanError: undefined });
   useJobs.getState().bump();
@@ -91,7 +91,7 @@ export async function pollPendingJobs(): Promise<number> {
             await finishJob(folder.id, paper.id, job, paper.scanJob.parts);
             useJobs.getState().bump();
           } else if (job.status === "failed") {
-            await updatePaper(folder.id, paper.id, { scanJob: undefined, scanError: job.error || "还原失败，请重新扫描" });
+            await updatePaper(folder.id, paper.id, { scanJob: undefined, scanError: job.error || "扫描失败，请重新扫描" });
             useJobs.getState().bump();
           } else {
             pending += 1;
@@ -107,7 +107,7 @@ export async function pollPendingJobs(): Promise<number> {
           // 任务过期 / 不存在：标记失败让用户重扫；网络错误下次再试
           const status = (e as { status?: number }).status;
           if (status === 404) {
-            await updatePaper(folder.id, paper.id, { scanJob: undefined, scanError: "这次还原已过期，请重新扫描" });
+            await updatePaper(folder.id, paper.id, { scanJob: undefined, scanError: "这次扫描已过期，请重新扫描" });
             useJobs.getState().bump();
           } else {
             pending += 1;

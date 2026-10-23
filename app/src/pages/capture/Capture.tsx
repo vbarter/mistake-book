@@ -142,7 +142,7 @@ export default function Capture() {
     try {
       await submitScan(state.folderId, state.paperId, state.pages, (stage) => setProgress({ stage, pct: stage.includes("上传") ? 60 : 20, elapsed: 0 }));
       void haptic.success();
-      toast("已交给 AI 还原，可以先去做别的，好了会在试卷上显示", "success");
+      toast("已开始扫描，可以先去做别的，好了会在试卷上显示", "success");
       nav(`/papers/${state.folderId}`, { replace: true });
     } catch (e) {
       toastError(e);
@@ -167,7 +167,7 @@ export default function Capture() {
           <Empty
             icon="camera"
             title="把试卷平放，对准整页拍"
-            text="从相册一次选完整张试卷，选好后会自动开始还原。"
+            text="从相册一次选完整张试卷，选好后会自动开始扫描。"
             action={<Button size="xs" variant="plain" onClick={() => pick("sample")} disabled={busy}>没有试卷？用示例试卷试试</Button>}
           />
         )}
@@ -211,7 +211,7 @@ export default function Capture() {
             <Button icon="document" onClick={() => nav(`/papers/${folderId}/${paperId}`)} disabled={busy}>查看电子版 · {digitized.questions.length} 题</Button>
           ) : (
             <Button icon="sparkles" onClick={scan} disabled={pages.length === 0 || busy}>
-              {busy ? "处理中…" : `扫描还原电子版${pages.length > 1 ? `（${pages.length} 张照片）` : ""}`}
+              {busy ? "处理中…" : `扫描试卷${pages.length > 1 ? `（${pages.length} 张照片）` : ""}`}
             </Button>
           )}
           {digitized && pages.length > 0 && (
@@ -229,10 +229,10 @@ export default function Capture() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }} role="dialog" aria-live="polite">
           <div className="card" style={{ width: "100%", maxWidth: 360, alignItems: "center", textAlign: "center", gap: 14 }}>
             <Icon name="sparkles" size={36} style={{ color: "var(--brand)" }} />
-            <h2 className="t-title3">正在提交给 AI</h2>
+            <h2 className="t-title3">正在上传试卷</h2>
             <p className="t-sub c-sec">{progress.stage}…</p>
             <div className="bar" style={{ width: "100%" }}><span style={{ width: `${progress.pct}%`, background: "var(--brand)", transition: "width .9s linear" }} /></div>
-            <span className="t-foot c-sec">上传完成后就可以离开，还原在服务器上继续</span>
+            <span className="t-foot c-sec">上传完成后就可以离开，扫描在服务器上继续</span>
           </div>
         </div>
       )}

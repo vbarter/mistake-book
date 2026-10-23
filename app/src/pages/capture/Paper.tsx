@@ -95,7 +95,7 @@ export default function Paper() {
         <InlineNav title="" back backLabel={folder.name} />
         <div className="screen__content screen__content--modal" style={{ justifyContent: "center", alignItems: "center", gap: 14, textAlign: "center" }}>
           <Icon name="sparkles" size={44} style={{ color: "var(--brand)" }} />
-          <h2 className="t-title3">AI 正在还原「{paper.name}」</h2>
+          <h2 className="t-title3">正在扫描「{paper.name}」</h2>
           <span className="progress" style={{ maxWidth: 260, background: "var(--brand-tint)" }}><span style={{ width: `${Math.max(6, paper.scanJob.progress)}%` }} /></span>
           <p className="t-sub c-sec">{scanStageText(paper.scanJob)} · 在服务器上进行，切走 App 也不影响，好了会自动显示</p>
           <Button variant="tinted" onClick={() => nav(`/papers/${folderId}`)} style={{ height: 44 }}>先回文件夹</Button>
