@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import os
 import re
 
@@ -254,8 +255,19 @@ class ClaudeProvider(AIProvider):
         self.name = "claude-relay" if self.relay else "claude"
 
     # ------------------------------------------------------------------ helpers
-    def _create(self, system: str, content: list[dict], schema: dict, max_tokens: int):
-        """统一用流式请求再取完整消息：SDK 对大 max_tokens 的非流式调用会直接拒绝，流式也不受 HTTP 超时影响。"""
+    def _create(self, system: str, content: list[dict], schema: dict, max_tokens: int, on_text=None):
+        """统一用流式请求再取完整消息：SDK 对大 max_tokens 的非流式调用会直接拒绝，流式也不受 HTTP 超时影响。
+        on_text(chars) 在流式输出过程中按累计字数回调，用来推进进度。"""
+
+        def drain(stream):
+            if on_text is None:
+                return stream.get_final_message()
+            n = 0
+            for piece in stream.text_stream:
+                n += len(piece)
+                on_text(n)
+            return stream.get_final_message()
+
         if self.relay:
             instruction = (
                 "\n\n只输出一个 JSON 对象，不要任何解释、前后缀或 Markdown 围栏。"
@@ -268,7 +280,7 @@ class ClaudeProvider(AIProvider):
                 system=system,
                 messages=[{"role": "user", "content": content}],
             ) as stream:
-                return stream.get_final_message()
+                return drain(stream)
         with self.client.beta.messages.stream(
             model=self.model,
             max_tokens=max_tokens,
@@ -279,11 +291,11 @@ class ClaudeProvider(AIProvider):
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
         ) as stream:
-            return stream.get_final_message()
+            return drain(stream)
 
-    def _call(self, system: str, content: list[dict], schema: dict, max_tokens: int = 16000) -> dict:
+    def _call(self, system: str, content: list[dict], schema: dict, max_tokens: int = 16000, on_text=None) -> dict:
         try:
-            response = self._create(system, content, schema, max_tokens)
+            response = self._create(system, content, schema, max_tokens, on_text=on_text)
         except anthropic.AuthenticationError as e:
             raise AIError("AI 服务的密钥无效，请检查 ANTHROPIC_API_KEY") from e
         except anthropic.PermissionDeniedError as e:
@@ -384,7 +396,7 @@ class ClaudeProvider(AIProvider):
             items.append(ScannedItem(**cleaned, page=min(max(page, 0), len(pages) - 1), bbox=bbox, reason=str(raw.get("reason") or "")))
         return items
 
-    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = "", on_page_done=None, on_page_start=None):
+    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = "", on_page_done=None, on_page_start=None, on_page_progress=None):
         """每张照片单独调用一次模型，经全局队列并发还原（整个进程最多 MAX_CONCURRENT_PAGES 张同时调模型），再合并派生题目。"""
         subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
 
@@ -403,14 +415,16 @@ class ClaudeProvider(AIProvider):
                     ),
                 },
             ]
+            # 整页输出通常 8k–20k 字：按已生成字数估算这一页的完成度，曲线渐近到 1
+            on_text = (lambda n: on_page_progress(index, 1 - math.exp(-n / 9000.0))) if on_page_progress else None
             # 模型偶尔吐出解析不了 / 被截断的 JSON：这张照片自动重试一次，不让整个任务失败
             try:
-                data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000)
+                data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000, on_text=on_text)
             except AIError as e:
                 if "无法解析" not in str(e) and "过长" not in str(e):
                     raise
                 log.warning("digitize page %s retry after: %s", index, e)
-                data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000)
+                data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000, on_text=on_text)
             sheets = clean_sheets(data, index)
             if on_page_done:
                 with progress_lock:

@@ -413,7 +413,7 @@ def test_claude_digitize_runs_one_call_per_page(monkeypatch):
     provider = ClaudeProvider(model="claude-sonnet-4-5")
     calls = []
 
-    def fake_call(system, content, schema, max_tokens=16000):
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
         calls.append(content[0]["source"]["data"])
         n = len(calls)
         return {"sheets": [{"label": f"p{n}", "blocks": [{"type": "item", "number": str(n), "text": f"q{n} [[{n}]]", "blanks": [{"id": str(n), "student": "x", "mark": "wrong", "answer": "y"}]}]}]}
@@ -496,9 +496,10 @@ def test_digitize_job_progress_from_worker_threads(client, auth, monkeypatch):
     class _Threaded(AIProvider):
         name = "threaded"
 
-        def digitize_pages(self, pages, subjects, grade, region="", on_page_done=None, on_page_start=None):
+        def digitize_pages(self, pages, subjects, grade, region="", on_page_done=None, on_page_start=None, on_page_progress=None):
             def one(i):
                 on_page_start(i + 1, len(pages))
+                on_page_progress(i, 0.5)
                 on_page_done(i + 1, len(pages))
                 return [DigitizedPage(page=i, label=f"p{i}")]
             with ThreadPoolExecutor(max_workers=2) as pool:
@@ -536,3 +537,38 @@ def test_page_queue_limits_concurrency(monkeypatch):
     assert sum(f.result() for f in futures) == 6
     assert peak[0] <= 2  # 同时在跑的不超过槽位数
     assert q.stats()["running"] == 0 and q.stats()["waiting"] == 0
+
+
+
+def test_claude_streaming_reports_text_progress(monkeypatch):
+    from app.ai.claude import ClaudeProvider
+    from app.ai.base import Crop
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+
+    class _Block:
+        type = "text"
+        text = '{"sheets":[{"label":"p","blocks":[{"type":"item","number":"1","text":"a [[1]]","blanks":[{"id":"1","student":"x","mark":"wrong","answer":"y"}]}]}]}'
+
+    class _Resp:
+        stop_reason = "end_turn"
+        content = [_Block()]
+
+    class _Stream:
+        def __init__(self, resp):
+            self._resp = resp
+            self.text_stream = iter(["{\"sheets\"", ":[...]", "}"])
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+        def get_final_message(self):
+            return self._resp
+
+    monkeypatch.setattr(provider.client.messages, "stream", lambda **kw: _Stream(_Resp()))
+    seen = []
+    sheets, qs = provider.digitize_pages([Crop(data=b"x")], subjects=["math"], grade="5", on_page_progress=lambda i, f: seen.append((i, round(f, 4))))
+    assert len(sheets) == 1 and qs[0].number == "1"
+    assert [i for i, _ in seen] == [0, 0, 0] and seen[-1][1] > seen[0][1] > 0  # 按累计字数递增

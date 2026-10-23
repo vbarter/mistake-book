@@ -112,8 +112,10 @@ def scan():
     return jsonify({"items": results, "pages": len(pages), "provider": provider.name})
 
 
-# 进程内记录每个任务已拿到识别槽位的照片数（不落库，和队列一样只在本进程有效）
+# 进程内记录每个任务已拿到识别槽位的照片数、每张照片的流式完成度（不落库，和队列一样只在本进程有效）
 _started_pages: dict[str, int] = {}
+_page_progress: dict[str, dict[int, float]] = {}
+_touched_at: dict[str, float] = {}
 
 
 def _run_job(app, job_id: str, pages: list[Crop], subjects: list[str], grade: str, region: str) -> None:
@@ -146,8 +148,24 @@ def _run_job_here(job_id: str, pages: list[Crop], subjects: list[str], grade: st
         def on_page_start(started: int, total: int) -> None:
             _started_pages[job_id] = started
 
+        def on_page_progress(index: int, fraction: float) -> None:
+            _page_progress.setdefault(job_id, {})[index] = max(0.0, min(0.98, fraction))
+            # 每 10 秒把 updated_at 刷新一次：整页输出可能要几分钟，别被「10 分钟没动静」误判成卡死
+            import time as _t
+            now = _t.time()
+            if now - _touched_at.get(job_id, 0) >= 10:
+                _touched_at[job_id] = now
+                try:
+                    with app.app_context():
+                        j = db.session.get(DigitizeJob, job_id)
+                        if j:
+                            j.updated_at = datetime.now()
+                            db.session.commit()
+                except Exception:  # noqa: BLE001
+                    pass
+
         try:
-            page_infos, questions = get_provider().digitize_pages(pages, subjects=subjects, grade=grade, region=region, on_page_done=on_page_done, on_page_start=on_page_start)
+            page_infos, questions = get_provider().digitize_pages(pages, subjects=subjects, grade=grade, region=region, on_page_done=on_page_done, on_page_start=on_page_start, on_page_progress=on_page_progress)
             out = []
             for i, q in enumerate(questions):
                 d = q.to_dict()
@@ -159,6 +177,8 @@ def _run_job_here(job_id: str, pages: list[Crop], subjects: list[str], grade: st
             j.status = "done"
             db.session.commit()
             _started_pages.pop(job_id, None)
+            _page_progress.pop(job_id, None)
+            _touched_at.pop(job_id, None)
         except AIError as e:
             j = db.session.get(DigitizeJob, job_id)
             j.status, j.error = "failed", str(e)
@@ -170,6 +190,8 @@ def _run_job_here(job_id: str, pages: list[Crop], subjects: list[str], grade: st
             j.status, j.error = "failed", f"AI 还原试卷出错了，请稍后重试（{type(e).__name__}）"
             db.session.commit()
             _started_pages.pop(job_id, None)
+            _page_progress.pop(job_id, None)
+            _touched_at.pop(job_id, None)
 
 
 def _cleanup_jobs() -> None:
@@ -227,7 +249,13 @@ def _job_view(job: DigitizeJob) -> dict:
     started = max(_started_pages.get(job.id, 0), job.done_pages or 0)
     total = max(1, job.total_pages or 1)
     if job.status in ("queued", "running"):
-        d["progress"] = min(95, int(5 + 90 * ((job.done_pages or 0) + 0.5 * (started - (job.done_pages or 0))) / total))
+        done = job.done_pages or 0
+        fractions = _page_progress.get(job.id, {})
+        # 已完成的页算 1，进行中的页按流式输出的完成度，刚拿到槽位还没输出的算 0.05
+        partial = sum(max(0.05, min(0.98, f)) for f in sorted(fractions.values(), reverse=True)[: max(0, started - done)])
+        if started - done > len(fractions):
+            partial += 0.05 * (started - done - len(fractions))
+        d["progress"] = min(95, int(5 + 90 * (done + partial) / total))
     d["startedPages"] = started
     d["queue"] = page_queue.stats()
     return d
