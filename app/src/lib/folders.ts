@@ -33,6 +33,7 @@ export interface Folder {
   createdAt: string;
   updatedAt: string;
   papers: Paper[];
+  order?: number; // 用户手动排过序后才有：越小越靠前；没排过的（新建的）排在最前，按更新时间倒序
 }
 
 /** 1.x 的记录：一个夹就是一张试卷 */
@@ -105,7 +106,27 @@ export async function listFolders(): Promise<Folder[]> {
     if (migrated) await tx("readwrite", (s) => s.put(folder));
     out.push(folder);
   }
-  return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return out.sort(compareFolders);
+}
+
+/** 没手动排过的在前（更新时间倒序），手动排过的按 order */
+function compareFolders(a: Folder, b: Folder): number {
+  const ao = a.order ?? -1;
+  const bo = b.order ?? -1;
+  if (ao < 0 && bo < 0) return b.updatedAt.localeCompare(a.updatedAt);
+  if (ao < 0 || bo < 0) return ao < 0 ? -1 : 1;
+  return ao - bo;
+}
+
+/** 用户拖动排序后按新顺序写 order；不改 updatedAt */
+export async function reorderFolders(ids: string[]): Promise<void> {
+  const all = await listFolders();
+  const byId = new Map(all.map((f) => [f.id, f]));
+  const ordered = [...ids.filter((id) => byId.has(id)), ...all.filter((f) => !ids.includes(f.id)).map((f) => f.id)];
+  for (let i = 0; i < ordered.length; i++) {
+    const f = byId.get(ordered[i])!;
+    if (f.order !== i) await tx("readwrite", (s) => s.put({ ...f, order: i }));
+  }
 }
 
 export async function getFolder(id: string): Promise<Folder | undefined> {

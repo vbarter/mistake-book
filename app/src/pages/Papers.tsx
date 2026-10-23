@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Subject } from "../api/types";
 import { Icon } from "../components/Icon";
+import { SwipeSortList } from "../components/SwipeSortList";
 import { Button, Empty, LargeNav, Sheet } from "../components/ui";
+import { toast } from "../store/banner";
 import { SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
 import { folderErrors, groupByKnowledge } from "../lib/errors";
-import { createFolder, defaultFolderName, folderStats, listFolders, type Folder } from "../lib/folders";
+import { createFolder, defaultFolderName, deleteFolder, folderStats, listFolders, reorderFolders, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
 import { scanStageText, useJobs } from "../lib/jobs";
 import { useCapture } from "../store/capture";
@@ -21,6 +23,7 @@ export default function Papers() {
   const [creating, setCreating] = useState<{ source: Source | null } | null>(null);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState<Subject | undefined>(undefined);
+  const [deleting, setDeleting] = useState<Folder | null>(null); // 左滑后点了删除，等确认
 
   const jobsVersion = useJobs((s) => s.version);
   useEffect(() => {
@@ -63,7 +66,16 @@ export default function Papers() {
           <Empty icon="folder" title="还没有试卷" text="拍下整页试卷或从相册多选，AI 会还原成电子版，找出错题并按知识点归类。" />
         )}
 
-        {folders?.map((f) => {
+        {folders && folders.length > 0 && (
+          <SwipeSortList
+            items={folders}
+            keyOf={(f) => f.id}
+            onReorder={(ids) => {
+              setFolders(ids.map((id) => folders.find((f) => f.id === id)!));
+              void reorderFolders(ids);
+            }}
+            onDelete={setDeleting}
+            render={(f) => {
           const st = folderStats(f);
           const kps = groupByKnowledge(folderErrors(f)).slice(0, 2);
           const more = Math.max(0, groupByKnowledge(folderErrors(f)).length - 2);
@@ -104,7 +116,9 @@ export default function Papers() {
               </div>
             </button>
           );
-        })}
+            }}
+          />
+        )}
 
         <div className="bottom-bar bottom-bar--tab" style={{ marginTop: "auto" }}>
           <Button icon="camera" onClick={() => startCapture("camera")} style={{ flex: 1.25 }}>拍试卷</Button>
@@ -126,6 +140,12 @@ export default function Papers() {
           })}
         </div>
         <Button variant="tinted" icon="plus" onClick={() => { setName(defaultFolderName()); setSubject(undefined); setCreating({ source: pick }); }}>新建文件夹</Button>
+      </Sheet>
+
+      <Sheet open={Boolean(deleting)} onClose={() => setDeleting(null)} title={`删除「${deleting?.name ?? ""}」？`}>
+        <span className="t-body c-sec">里面的 {deleting?.papers.length ?? 0} 张试卷和错题会一起删掉，删了就找不回来了。</span>
+        <Button variant="danger" onClick={async () => { if (deleting) await deleteFolder(deleting.id); setDeleting(null); toast("已删除"); setFolders(await listFolders()); }}>删除</Button>
+        <Button variant="plain" onClick={() => setDeleting(null)}>取消</Button>
       </Sheet>
 
       <Sheet open={Boolean(creating)} onClose={() => setCreating(null)} title="新建文件夹">
