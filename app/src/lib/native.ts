@@ -95,6 +95,41 @@ export async function downscale(source: File | string, maxSide: number, quality 
   return canvas.toDataURL("image/jpeg", quality);
 }
 
+/** 模型会把图片压到最长边约 1568px；两页并排的宽幅照片直接上传等于每页只剩七八百像素，手写就糊了 */
+export const UPLOAD_MAX_SIDE = 1568;
+/** 宽高比超过这个值视为左右两页拍在一张照片里 */
+export const SPLIT_ASPECT = 1.3;
+
+export interface UploadPart {
+  page: number; // 来源页下标
+  image: string; // dataURL
+  x0: number; // 该部分在原图上的横向起点（0–1）
+  w: number; // 该部分在原图上的宽度比例
+}
+
+/**
+ * 把一页照片准备成上传片段：宽幅照片切成左右两张（各带 2% 重叠），其余整张；都缩到 UPLOAD_MAX_SIDE。
+ * 返回的 x0 / w 用来把模型给出的 bbox 映射回原图坐标。
+ */
+export async function prepareUpload(src: string, page: number, quality = 0.85): Promise<UploadPart[]> {
+  const img = await loadImage(src);
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+  const parts: { x0: number; w: number }[] = W / H >= SPLIT_ASPECT ? [{ x0: 0, w: 0.52 }, { x0: 0.48, w: 0.52 }] : [{ x0: 0, w: 1 }];
+  const out: UploadPart[] = [];
+  for (const part of parts) {
+    const sw = Math.round(W * part.w);
+    const sx = Math.round(W * part.x0);
+    const scale = Math.min(1, UPLOAD_MAX_SIDE / Math.max(sw, H));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(sw * scale);
+    canvas.height = Math.round(H * scale);
+    canvas.getContext("2d")!.drawImage(img, sx, 0, sw, H, 0, 0, canvas.width, canvas.height);
+    out.push({ page, image: canvas.toDataURL("image/jpeg", quality), x0: part.x0, w: part.w });
+  }
+  return out;
+}
+
 export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -111,4 +146,33 @@ export async function openAppSettings() {
     // Capacitor 没有直接打开设置的 API，这里退化为提示；可接入 capacitor-native-settings 插件
     void App;
   } catch { /* ignore */ }
+}
+
+/**
+ * 把 PDF 交给用户：原生端写入缓存目录后拉起系统分享面板（可打印、存到「文件」、AirDrop）；
+ * 网页端在新标签打开，由浏览器打印或保存。
+ */
+export async function exportPdf(blob: Blob, filename: string): Promise<void> {
+  if (isNative) {
+    const { Filesystem, Directory } = await import("@capacitor/filesystem");
+    const { Share } = await import("@capacitor/share");
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result).split(",")[1] ?? "");
+      fr.onerror = () => reject(fr.error);
+      fr.readAsDataURL(blob);
+    });
+    const written = await Filesystem.writeFile({ path: filename, data: base64, directory: Directory.Cache });
+    await Share.share({ title: filename, files: [written.uri] });
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank");
+  if (!win) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }

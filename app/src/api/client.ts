@@ -99,3 +99,32 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   }
   return data as T;
 }
+
+/** 请求二进制内容（例如 PDF）；错误仍按 JSON 解析成 ApiError */
+export async function apiBlob(path: string, opts: Options = {}): Promise<Blob> {
+  const { method = "POST", body, auth = true, timeoutMs = 60000 } = opts;
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (auth && token) headers.Authorization = `Bearer ${token}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${getApiBase()}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
+  } catch (e) {
+    clearTimeout(timer);
+    if ((e as Error).name === "AbortError") throw new ApiError(0, "timeout", "请求超时，请稍后再试");
+    throw new ApiError(0, "offline", "现在没有网络，请检查连接");
+  }
+  clearTimeout(timer);
+  if (res.status === 401) {
+    onUnauthorized?.();
+    throw new ApiError(401, "unauthorized", "登录已过期，请重新登录");
+  }
+  if (!res.ok) {
+    let data: Record<string, unknown> = {};
+    try { data = (await res.json()) as Record<string, unknown>; } catch { /* 非 JSON */ }
+    throw new ApiError(res.status, String(data.error || "error"), String(data.message || "请求失败"));
+  }
+  return res.blob();
+}

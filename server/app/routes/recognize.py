@@ -4,11 +4,12 @@ from __future__ import annotations
 import base64
 import logging
 
-from flask import Blueprint, abort, current_app, jsonify, request
+from flask import Blueprint, Response, abort, current_app, jsonify, request
 
 from ..ai import AIError, Crop, get_provider
 from ..auth_utils import current_user, login_required
 from ..constants import SUBJECTS
+from ..pdf import build_pdf
 
 bp = Blueprint("recognize", __name__)
 log = logging.getLogger(__name__)
@@ -109,7 +110,7 @@ def scan():
 @bp.post("/digitize")
 @login_required
 def digitize():
-    """试卷数字化：整页照片 → 电子版（全部题目、手写作答转写、老师批改；判错题附答案解析）。"""
+    """试卷数字化：整页照片 → 按原卷版面还原的电子版（sheets → blocks），并派生可收录的题目列表。"""
     user = current_user()
     data = request.get_json(silent=True) or {}
     pages_raw = data.get("pages")
@@ -141,4 +142,24 @@ def digitize():
         d = q.to_dict()
         d["index"] = i
         out.append(d)
-    return jsonify({"pages": [p.to_dict() for p in page_infos], "questions": out, "provider": provider.name})
+    return jsonify({"pages": [p.to_dict() for p in page_infos], "questions": out, "provider": provider.name})  # pages = sheets
+
+
+@bp.post("/digitize/pdf")
+@login_required
+def digitize_pdf():
+    """电子版试卷 → 可打印 PDF：原题干净还原 + 作答与批改对照表 + 错题汇总。前端把扫描结果原样传回。"""
+    data = request.get_json(silent=True) or {}
+    sheets = data.get("pages")
+    questions = data.get("questions") or []
+    if not isinstance(sheets, list) or not sheets or not all(isinstance(s, dict) for s in sheets):
+        abort(400, "缺少电子版内容")
+    if not isinstance(questions, list):
+        abort(400, "题目列表格式不对")
+    title = str(data.get("title") or "")[:80]
+    try:
+        pdf = build_pdf(title, sheets, questions)
+    except Exception:  # noqa: BLE001
+        log.exception("pdf failed")
+        return jsonify({"error": "pdf_failed", "message": "生成 PDF 出错了，请稍后重试"}), 500
+    return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": "attachment; filename=paper.pdf"})

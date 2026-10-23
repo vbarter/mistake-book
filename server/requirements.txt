@@ -8,3 +8,4 @@ anthropic>=0.80
 pytest==8.3.3
 PyMySQL>=1.1
 cryptography>=43
+reportlab>=4.2

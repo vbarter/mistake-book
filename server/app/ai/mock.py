@@ -8,7 +8,8 @@ from __future__ import annotations
 import random
 import re
 
-from .base import AIProvider, Crop, DigitizedPage, DigitizedQuestion, RecognizedItem, ScannedItem, Variant
+from .base import AIProvider, Crop, DigitizedBlank, DigitizedBlock, DigitizedPage, RecognizedItem, ScannedItem, Variant
+from .digitize import derive_questions
 
 # 示例试卷（app/public/sample-paper.svg，1200×1700）上三道错题的归一化位置
 SAMPLE_BBOXES = [
@@ -182,37 +183,25 @@ class MockProvider(AIProvider):
         return items
 
     def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str):
-        """示例试卷的完整电子版：5 题（3 错 2 对）。"""
-        page_infos = [DigitizedPage(page=p, title="五年级随堂练习", score="82", note="订正提醒：注意题目中的“剩下的”和“last weekend”，它们会影响解题方法。") for p in range(len(pages))]
-        questions: list[DigitizedQuestion] = []
+        """示例试卷的版面块电子版：两个大题 + 一篇带内嵌空格的短文，共派生 7 题（1 半对 / 3 错 / 3 对）。"""
+        sheets: list[DigitizedPage] = []
         for p in range(len(pages)):
-            for i, s in enumerate(SAMPLES[:3]):
-                questions.append(
-                    DigitizedQuestion(
-                        page=p,
-                        number=str(i + 1),
-                        subject=s.subject,
-                        questionType=s.questionType,
-                        stemText=s.stemText,
-                        options=list(s.options),
-                        studentAnswer=s.studentAnswer,
-                        mark="partial" if i == 0 else "wrong",
-                        teacherNote="半对半错" if i == 0 else "✗",
-                        bbox=SAMPLE_BBOXES[i],
-                        knowledgePoints=list(s.knowledgePoints),
-                        correctAnswer=s.correctAnswer,
-                        analysis=s.analysis,
-                        tip=s.tip,
-                        uncertainSpans=list(s.uncertainSpans),
-                    )
-                )
-            questions.append(
-                DigitizedQuestion(page=p, number="4", subject="math", questionType="solve", stemText="一个圆的半径是 3 厘米，它的面积是多少？", studentAnswer="答：3.14 × 3² = 28.26（平方厘米）", mark="correct", teacherNote="✓", bbox=[0.06, 0.60, 0.95, 0.68], correctAnswer="28.26 平方厘米")
-            )
-            questions.append(
-                DigitizedQuestion(page=p, number="5", subject="chinese", questionType="solve", stemText="用“因为……所以……”造句。", studentAnswer="因为今天下雨，所以我们没有去春游。", mark="correct", teacherNote="✓", bbox=[0.06, 0.72, 0.95, 0.80], correctAnswer="因为今天下雨，所以我们没有去春游。")
-            )
-        return page_infos, questions
+            s0, s1, s2 = SAMPLES[0], SAMPLES[1], SAMPLES[2]
+            blocks = [
+                DigitizedBlock(type="section", label="一", title="填空题", instruction="把答案填在横线上", points="每题 4 分，共 12 分", bbox=[0.06, 0.10, 0.95, 0.14]),
+                DigitizedBlock(type="item", number="1", text=s0.stemText + " [[1]]", subject=s0.subject, questionType="solve", bbox=SAMPLE_BBOXES[0], knowledgePoints=list(s0.knowledgePoints), tip=s0.tip, uncertainSpans=list(s0.uncertainSpans), blanks=[DigitizedBlank(id="1", number="1", student=s0.studentAnswer, mark="partial", note="半对半错", answer=s0.correctAnswer, analysis=s0.analysis)]),
+                DigitizedBlock(type="item", number="2", text=s1.stemText.replace("（　　）", "（[[2]]）"), options=list(s1.options), subject=s1.subject, questionType="choice", bbox=SAMPLE_BBOXES[1], knowledgePoints=list(s1.knowledgePoints), tip=s1.tip, blanks=[DigitizedBlank(id="2", number="2", student=s1.studentAnswer, mark="wrong", note="✗", answer=s1.correctAnswer, analysis=s1.analysis)]),
+                DigitizedBlock(type="item", number="3", text="She [[3]] her grandparents last weekend.", hint="(visit)", subject=s2.subject, questionType="fill", bbox=SAMPLE_BBOXES[2], knowledgePoints=list(s2.knowledgePoints), tip=s2.tip, blanks=[DigitizedBlank(id="3", number="3", student=s2.studentAnswer, mark="wrong", note="✗", answer=s2.correctAnswer, analysis=s2.analysis)]),
+                DigitizedBlock(type="section", label="二", title="选词填空", instruction="从方框中选出合适的词填入短文，每词限用一次", points="共 4 分", bbox=[0.06, 0.58, 0.95, 0.62]),
+                DigitizedBlock(type="wordbank", options=["A. 因为", "B. 所以", "C. 虽然", "D. 但是"], bbox=[0.06, 0.62, 0.95, 0.66]),
+                DigitizedBlock(type="passage", label="(A)", text="今天下雨了，[[4]]我们没有去春游。[[5]]有点遗憾，大家还是在教室里玩得很开心。", subject="chinese", questionType="choice", bbox=[0.06, 0.66, 0.95, 0.80], knowledgePoints=["关联词"], tip="先读完整句再选词", blanks=[DigitizedBlank(id="4", number="4", student="A", mark="wrong", note="✗", answer="B", analysis="前句说了原因「下雨」，后句是结果，要用「所以」。"), DigitizedBlank(id="5", number="5", student="C", mark="correct", note="✓")]),
+                DigitizedBlock(type="section", label="三", title="解答题", points="共 10 分", bbox=[0.06, 0.82, 0.95, 0.85]),
+                DigitizedBlock(type="item", number="6", text="一个圆的半径是 3 厘米，它的面积是多少？列式：[[6-1]]　答：[[6-2]]", subject="math", questionType="solve", bbox=[0.06, 0.85, 0.95, 0.92], blanks=[DigitizedBlank(id="6-1", number="6", student="3.14 × 3² = 28.26", mark="correct", note="✓"), DigitizedBlank(id="6-2", number="6", student="28.26 平方厘米", mark="correct")]),
+                DigitizedBlock(type="item", number="7", text="用“因为……所以……”造句。[[7]]", subject="chinese", questionType="solve", bbox=[0.06, 0.92, 0.95, 0.98], blanks=[DigitizedBlank(id="7", number="7", student="因为今天下雨，所以我们没有去春游。", mark="correct", note="✓")]),
+                DigitizedBlock(type="text", text="第 1 页 共 1 页", bbox=[0.40, 0.98, 0.60, 1.0]),
+            ]
+            sheets.append(DigitizedPage(page=p, label=f"第 {p + 1} 页", title="五年级随堂练习", score="82", note="订正提醒：注意题目中的“剩下的”和“last weekend”，它们会影响解题方法。", examLevel="日常练习", examGrade="五年级", region="", syllabus="小学五年级课标", blocks=blocks))
+        return sheets, derive_questions(sheets)
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:
         subject = mistake.get("subject", "math")

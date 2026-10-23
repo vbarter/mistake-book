@@ -289,7 +289,7 @@ def test_scan_pages_returns_items_with_bbox(client, auth):
     assert first["page"] == 0 and len(first["bbox"]) == 4 and first["reason"] and "stemImage" not in first
     assert body["items"][3]["page"] == 1
     assert client.post("/api/scan", json={"pages": []}, headers=auth).status_code == 400
-    assert client.post("/api/scan", json={"pages": [{"image": TINY_PNG}] * 5}, headers=auth).status_code == 400
+    assert client.post("/api/scan", json={"pages": [{"image": TINY_PNG}] * 9}, headers=auth).status_code == 400
 
 
 def test_claude_scan_cleans_bbox(monkeypatch):
@@ -318,13 +318,22 @@ def test_digitize_returns_full_paper(client, auth):
     r = client.post("/api/digitize", json={"pages": [{"image": TINY_PNG}]}, headers=auth)
     assert r.status_code == 200, r.get_json()
     body = r.get_json()
-    assert body["pages"][0]["title"] == "五年级随堂练习" and body["pages"][0]["score"] == "82"
+    sheet = body["pages"][0]
+    assert sheet["title"] == "五年级随堂练习" and sheet["score"] == "82" and sheet["label"] == "第 1 页"
+    types = [b["type"] for b in sheet["blocks"]]
+    assert types[:2] == ["section", "item"] and "passage" in types and "wordbank" in types and types[-1] == "text"
+    passage = next(b for b in sheet["blocks"] if b["type"] == "passage")
+    assert "[[4]]" in passage["text"] and [x["id"] for x in passage["blanks"]] == ["4", "5"]
     qs = body["questions"]
-    assert len(qs) == 5
-    marks = [q["mark"] for q in qs]
-    assert marks == ["partial", "wrong", "wrong", "correct", "correct"]
-    assert all(q["studentAnswer"] for q in qs) and all(len(q["bbox"]) == 4 for q in qs)
-    assert qs[0]["analysis"] and qs[3]["analysis"] == ""
+    assert len(qs) == 7 and [q["index"] for q in qs] == list(range(7))
+    assert [q["mark"] for q in qs] == ["partial", "wrong", "wrong", "wrong", "correct", "correct", "correct"]
+    assert qs[2]["stemText"] == "She ____ her grandparents last weekend. (visit)" and qs[2]["studentAnswer"] == "visits"
+    # 短文的每个空派生一题：题干是整篇短文，当前空为「____」、其余空带编号；词库框成为选项
+    assert qs[3]["number"] == "4" and qs[3]["options"][0] == "A. 因为" and "(5)____" in qs[3]["stemText"] and qs[3]["questionType"] == "choice"
+    assert qs[3]["blankIds"] == ["4"] and qs[3]["blockIndex"] == passage["index"] if "index" in passage else True
+    # 一题多空：作答与答案按空拼接
+    assert qs[5]["blankIds"] == ["6-1", "6-2"] and qs[5]["studentAnswer"] == "3.14 × 3² = 28.26；28.26 平方厘米"
+    assert all(len(q["bbox"]) == 4 for q in qs)
 
 
 def test_claude_digitize_cleans_fields(monkeypatch):
@@ -337,14 +346,81 @@ def test_claude_digitize_cleans_fields(monkeypatch):
 
     class _Block:
         type = "text"
-        text = '{"pages":[{"page":0,"title":"单元测","score":"90","note":""},{"page":9,"title":"x","score":"","note":""}],"questions":[{"page":0,"number":"1","subject":"math","questionType":"fill","stemText":"1+1=","options":[],"studentAnswer":"3","mark":"wrong","teacherNote":"✗","bbox":[0.1,0.1,0.9,0.2],"knowledgePoints":["加法"],"correctAnswer":"2","analysis":"a","tip":"t","uncertainSpans":[]},{"page":0,"number":"2","subject":"bogus","questionType":"x","stemText":"q","options":[],"studentAnswer":"","mark":"weird","teacherNote":"","bbox":[1,1,0,0],"knowledgePoints":[],"correctAnswer":"","analysis":"","tip":"","uncertainSpans":[]}]}'
+        text = (
+            '{"sheets":[{"label":"第5页","title":"单元测","score":"90","note":"",'
+            '"blocks":[{"type":"section","label":"Ⅳ","title":"Complete","instruction":"每空格限填一词","points":"共8分","bbox":[0,0,1,0.1]},'
+            '{"type":"text","text":"(B)"},'
+            '{"type":"wordbank","options":["A. repairs","B. awards"]},'
+            '{"type":"passage","text":"Students win [[36]] and make [[37]].","subject":"english","questionType":"fill","bbox":[0,0.1,1,0.3],'
+            '"blanks":[{"id":"36","number":"36","student":"B","mark":"correct"},{"id":"37","student":"B","mark":"wrong","answer":"A","analysis":"make repairs 固定搭配"},{"id":"38","student":"","mark":"unmarked","answer":"C"}]},'
+            '{"type":"item","number":"44","text":"There are some nice [[44]] here.","hint":"(bakery)","subject":"bogus","questionType":"x","bbox":[1,1,0,0],'
+            '"blanks":[{"id":"44","number":"44","student":"bakerys","mark":"weird","answer":"bakeries"}]},'
+            '{"type":"item","number":"52","text":"[[52-1]] Jack [[52-2]] out early?","instruction":"改为一般疑问句","subject":"english","questionType":"fill","bbox":[0,0.5,1,0.6],'
+            '"blanks":[{"id":"52-1","number":"52","student":"Did","mark":"correct"},{"id":"52-2","number":"52","student":"sets","mark":"wrong","answer":"set"}]},'
+            '{"type":"wordbank","options":[]},{"type":"item","text":""}]},{"label":"空页","blocks":[]}]}'
+        )
 
     class _Resp:
         stop_reason = "end_turn"
         content = [_Block()]
 
     monkeypatch.setattr(provider.client.messages, "stream", _FakeStream(_Resp()))
-    pages, qs = provider.digitize_pages([Crop(data=b"x")], subjects=["math"], grade="5")
-    assert [p.page for p in pages] == [0] and pages[0].title == "单元测"
-    assert qs[0].mark == "wrong" and qs[0].bbox == [0.1, 0.1, 0.9, 0.2]
-    assert qs[1].subject == "math" and qs[1].questionType == "solve" and qs[1].mark == "unmarked" and qs[1].bbox == [0.0, 0.0, 1.0, 1.0]
+    sheets, qs = provider.digitize_pages([Crop(data=b"x")], subjects=["english"], grade="9")
+    assert len(sheets) == 1 and sheets[0].page == 0 and sheets[0].label == "第5页" and sheets[0].title == "单元测"
+    assert [b.type for b in sheets[0].blocks] == ["section", "wordbank", "passage", "item", "item"]  # 空块被丢弃
+    passage = sheets[0].blocks[2]
+    assert passage.label == "(B)"  # 单独成块的篇号并进短文
+    assert [b.id for b in passage.blanks] == ["36", "37", "38"] and passage.blanks[1].number == "37"
+    item44 = sheets[0].blocks[3]
+    assert item44.subject == "math" and item44.questionType == "fill" and item44.bbox == [0.0, 0.0, 1.0, 1.0] and item44.blanks[0].mark == "unmarked"
+    # 没写作答的空按错题处理
+    assert passage.blanks[2].id == "38" and passage.blanks[2].mark == "wrong" and passage.blanks[2].note == "未作答"
+    assert [q.number for q in qs] == ["36", "37", "38", "44", "52"]
+    qs = [q for q in qs if q.number != "38"]
+    assert qs[0].options == ["A. repairs", "B. awards"] and qs[0].questionType == "choice" and qs[0].mark == "correct"
+    assert qs[1].stemText == "Students win (36)____ and make ____." and qs[1].correctAnswer == "A"
+    assert qs[2].stemText == "There are some nice ____ here. (bakery)"
+    assert qs[3].mark == "partial" and qs[3].studentAnswer == "Did；sets" and qs[3].correctAnswer == "set" and "改为一般疑问句" in qs[3].stemText
+
+
+def test_digitize_dedupes_label_block_and_notes():
+    from app.ai.digitize import clean_sheets, derive_questions
+
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "text", "text": "(B)"},
+        {"type": "wordbank", "options": ["A. x"]},
+        {"type": "passage", "label": "(B)", "text": "a [[1]] b [[2]]", "blanks": [{"id": "1", "student": ""}, {"id": "2", "student": ""}]},
+        {"type": "item", "number": "3.", "text": "3. [[3-1]] [[3-2]]", "blanks": [{"id": "3-1", "student": ""}, {"id": "3-2", "student": ""}]},
+    ]}]}, 0)
+    assert [b.type for b in sheets[0].blocks] == ["wordbank", "passage", "item"]  # 重复的篇号块被丢弃
+    assert sheets[0].blocks[2].number == "3" and sheets[0].blocks[2].text == "[[3-1]] [[3-2]]"  # 题号尾点与正文重复题号被清掉
+    qs = derive_questions(sheets)
+    assert qs[-1].number == "3" and qs[-1].teacherNote == "未作答" and qs[-1].mark == "wrong"
+
+
+def test_claude_digitize_runs_one_call_per_page(monkeypatch):
+    from app.ai.claude import ClaudeProvider
+    from app.ai.base import Crop
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    calls = []
+
+    def fake_call(system, content, schema, max_tokens=16000):
+        calls.append(content[0]["source"]["data"])
+        n = len(calls)
+        return {"sheets": [{"label": f"p{n}", "blocks": [{"type": "item", "number": str(n), "text": f"q{n} [[{n}]]", "blanks": [{"id": str(n), "student": "x", "mark": "wrong", "answer": "y"}]}]}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    sheets, qs = provider.digitize_pages([Crop(data=b"a"), Crop(data=b"b")], subjects=["math"], grade="5")
+    assert len(calls) == 2 and sorted(s.page for s in sheets) == [0, 1]
+    assert sorted((q.page, q.number) for q in qs) == [(0, "1"), (1, "2")]
+
+
+
+def test_digitize_pdf_export(client, auth):
+    body = client.post("/api/digitize", json={"pages": [{"image": TINY_PNG}]}, headers=auth).get_json()
+    r = client.post("/api/digitize/pdf", json={"title": "五年级随堂练习", "pages": body["pages"], "questions": body["questions"]}, headers=auth)
+    assert r.status_code == 200 and r.mimetype == "application/pdf" and r.data.startswith(b"%PDF") and len(r.data) > 2000
+    assert client.post("/api/digitize/pdf", json={"pages": []}, headers=auth).status_code == 400

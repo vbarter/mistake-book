@@ -4,13 +4,28 @@ import { api } from "../../api/client";
 import type { DigitizedResult } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
-import { createFolder, defaultFolderName, deleteFolder, getFolder, listFolders, saveFolder, toPage, type Folder } from "../../lib/folders";
+import { createFolder, defaultFolderName, deleteFolder, getFolder, listFolders, saveFolder, toPage, validDigitized, type Folder } from "../../lib/folders";
 import { formatDate } from "../../lib/format";
-import { downscale, haptic, isNative, pickImage, pickImages } from "../../lib/native";
+import { haptic, isNative, pickImage, pickImages, prepareUpload, type UploadPart } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
 import { MAX_PAGES, useCapture, type CapturePage } from "../../store/capture";
 
 type Progress = { stage: string; pct: number; elapsed: number };
+
+/** 服务端按上传片段编号；把 page 换回试卷夹里的页下标，并把片段内的 bbox 横向映射回整页坐标 */
+function remapParts(res: DigitizedResult, parts: UploadPart[]): Pick<DigitizedResult, "pages" | "questions"> {
+  const part = (i: number) => parts[i] ?? { page: i, x0: 0, w: 1, image: "" };
+  const mapBox = (b: number[], p: UploadPart) => (b.length === 4 ? [p.x0 + b[0] * p.w, b[1], p.x0 + b[2] * p.w, b[3]] : b);
+  const pages = res.pages.map((sheet) => {
+    const p = part(sheet.page);
+    return { ...sheet, page: p.page, blocks: sheet.blocks.map((blk) => ({ ...blk, bbox: mapBox(blk.bbox, p) })) };
+  });
+  const questions = res.questions.map((q) => {
+    const p = part(q.page);
+    return { ...q, page: p.page, bbox: mapBox(q.bbox, p) };
+  });
+  return { pages, questions };
+}
 
 /** 录入试卷：拍照 / 相册多选 → 自动归入试卷夹（本地保存）→ 整页扫描识别错题 → 核对。 */
 export default function Capture() {
@@ -93,7 +108,7 @@ export default function Capture() {
   }, []);
 
   const openFolder = async (f: Folder) => {
-    setFolder(f.id, f.name, f.pages.map((p) => ({ ...p, boxes: p.boxes ?? [] })), f.digitized ?? null);
+    setFolder(f.id, f.name, f.pages.map((p) => ({ ...p, boxes: p.boxes ?? [] })), validDigitized(f.digitized));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -127,21 +142,22 @@ export default function Capture() {
     abortRef.current = false;
     setProgress({ stage: "正在压缩试卷", pct: 5, elapsed: 0 });
     try {
-      const uploads: { image: string }[] = [];
-      for (const p of pages) uploads.push({ image: await downscale(p.src, 1400, 0.8) });
+      const parts: UploadPart[] = [];
+      for (let i = 0; i < pages.length; i++) parts.push(...(await prepareUpload(pages[i].src, i)));
+      const uploads = parts.map((p) => ({ image: p.image }));
       if (abortRef.current) return;
       const startedAt = Date.now();
       setProgress({ stage: "正在上传试卷", pct: 12, elapsed: 0 });
       const ticker = setInterval(() => {
         const elapsed = Math.round((Date.now() - startedAt) / 1000);
         const pct = Math.round(12 + 83 * (1 - Math.exp(-elapsed / 40)));
-        const stage = elapsed < 6 ? "正在上传试卷" : elapsed < 25 ? "正在转写题目与手写作答" : elapsed < 45 ? "正在识别老师批改" : "正在为错题生成解析";
+        const stage = elapsed < 6 ? "正在上传试卷" : elapsed < 30 ? "正在逐字还原题目与版面" : elapsed < 50 ? "正在转写手写作答与批改" : "正在为错题生成解析";
         setProgress({ stage, pct, elapsed });
       }, 1000);
       let result: DigitizedResult;
       try {
         const res = await api<DigitizedResult>("/api/digitize", { method: "POST", body: { pages: uploads }, timeoutMs: 240000 });
-        result = { pages: res.pages, questions: res.questions, provider: res.provider, at: new Date().toISOString() };
+        result = { ...remapParts(res, parts), provider: res.provider, at: new Date().toISOString() };
       } finally {
         clearInterval(ticker);
       }

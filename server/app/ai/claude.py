@@ -12,11 +12,13 @@ import json
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import anthropic
 
 from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
-from .base import AIError, AIProvider, Crop, DigitizedPage, DigitizedQuestion, RecognizedItem, ScannedItem, Variant
+from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedPage, RecognizedItem, ScannedItem, Variant
+from .digitize import clean_sheets, derive_questions
 
 log = logging.getLogger(__name__)
 
@@ -107,59 +109,74 @@ SCAN_SCHEMA = {
 }
 
 DIGITIZE_SYSTEM_PROMPT = (
-    "你是一位小学教师助手，负责把试卷照片还原成清晰的电子版。你会收到整页试卷的照片（可能有多页）。"
-    "请逐题、按卷面顺序完整转写：\n"
-    "1. 题号原样（number），题目原文（stemText，保留分数、公式、括号、下划线与选项的原始写法），选择题把选项放进 options；\n"
-    "2. 学生手写的作答逐字转写进 studentAnswer（包括算式、过程、涂改后最终的答案；看不清的字用「□」占位并写入 uncertainSpans）；\n"
-    "3. 老师的批改：mark 取 correct（打勾）/ wrong（打叉）/ partial（半对半错、部分扣分）/ unmarked（没有批改）；"
-    "红笔批注、扣分、订正文字写进 teacherNote；\n"
-    "4. 对 mark 为 wrong 或 partial 的题，补充 1 到 3 个知识点（课本常见说法）、正确答案、面向小学生的简短解析（不超过 120 字）和一句「下次注意」；"
-    "对 correct 的题只填 correctAnswer，其余留空；\n"
-    "5. bbox 为该题在所在页面上的位置 [x0, y0, x1, y1]，0 到 1 的比例，要完整包住题干、选项和作答。\n"
-    "每页还要给出 pages：标题（title）、卷面总分或得分（score，原样文字）、以及不属于任何题目的卷面文字（note，如订正提醒）。"
-    "学生姓名、学校、班级一律忽略，不要写入任何字段。答对的题也要转写，不要遗漏任何题目。"
+    "你是一位教师助手，负责把试卷照片逐字逐段还原成电子版，并且保持与原卷一致的版面结构。你会收到一张试卷照片。\n"
+    "输出 sheets：照片里拍到几页卷面就输出几个 sheet（左右两页拍在一张照片里就是两个 sheet，先左后右）。"
+    "每个 sheet 给出页码文字 label（如「第5页」）、卷头标题 title、卷面总分或得分 score（原样文字）、不属于任何块的零散文字 note，"
+    "并根据卷头、页眉页脚、题型判断考试信息：examLevel（单元测 / 期中 / 期末 / 中考模拟 / 中考 / 高考模拟 / 高考 / 竞赛 / 日常练习）、examGrade（年级或学段，如「九年级」）、"
+    "region（地区，如「上海」；嘉定区、浦东新区等区名要写成所属城市）、syllabus（知识点归类依据的考纲或课标名称，如「上海中考英语考纲」「人教版五年级数学课标」）；判断不了的用学生资料里的年级，region 留空。\n"
+    "以及 blocks：按原卷阅读顺序（先左栏后右栏、自上而下）排列的版面块，块的类型有：\n"
+    "- section：大题标题。label 是大题编号（如「Ⅳ」「三」），title 是标题原文（英文题保留英文），instruction 是作答说明（如「用括号中所给单词的适当形式完成下列句子。每空格限填一词」），points 是分值（如「共8分」）。大题说明只放在 section 里，绝不要并进小题。\n"
+    "- passage：短文、阅读材料、对话等整段文字。篇号（如「(A)」「(B)」）放 label，不要单独成块；原文逐字转写进 text；文中每个作答空格用 [[空号]] 占位（如 ...more fun than [[38]] classes），并在 blanks 里逐空记录。短文从第一个字开始完整转写，不要从中间开始，不要省略。短文下方供作答的横线行（如「40.____ 41.____」）不要写进 text，那里的手写字母记入对应空的 student；短文里的空一律记在该 passage 的 blanks 里，不要另拆成 item。\n"
+    "- wordbank：选词填空的词库方框或一组共用选项，options 原样逐项（如「A. repairs」）。\n"
+    "- item：一道小题。number 是题号原样，text 是题目原文（空格用 [[空号]] 占位；一题多空用 [[52-1]] [[52-2]]），hint 是句末括号里的给词（如「(bakery)」），instruction 是括号里的改写要求（如「改为一般疑问句」），选择题的选项放 options，blanks 逐空记录。\n"
+    "- text：页眉页脚、订正提醒等其他文字。\n"
+    "每个空（blank）：id 与占位一致；number 是所属题号；student 只写学生手写内容的逐字转写（涂改后以最终答案为准，看不清的字用「□」，没写就留空，不要写「无法辨认」之类的描述）；"
+    "mark 按老师的批改符号判定：打勾「✓」「√」「☑」或写了对号 = correct；打叉「✗」「×」、斜杠「/」、划掉、圈出 = wrong；半勾、打分低于满分、部分扣分 = partial；完全没有批改符号 = unmarked。"
+    "没有写作答的空视为不会做：mark = wrong，note 写「未作答」。note 另外只记录老师的红笔批注或扣分，不写任何说明或推测；"
+    "answer 只写正确答案本身（mark 为 wrong、partial 或 unmarked 时都要给，correct 时留空；依据不在本页、无法确定时留空，不要写任何说明文字）；analysis 是判错时面向学生的简短解析（不超过 80 字，correct 时留空）。\n"
+    "passage 与 item 块还要给出：subject（学科枚举）、questionType（choice/fill/solve）、知识点 knowledgePoints（所有题都给，1 到 3 项）、判错或未作答时一句「下次注意」tip、看不清的词 uncertainSpans，"
+    "以及 bbox。知识点的要求：第一项必须是 syllabus 对应考纲 / 课标里的一级知识点名称，整张卷子用统一的规范名称，便于按知识点归类记忆；后面的项才是细分点。"
+    "例如英语按考纲语法与题型：名词、代词、冠词、数词、介词、连词、形容词和副词、动词时态、被动语态、非谓语动词、情态动词、构词法、简单句句型、并列句、宾语从句、定语从句、状语从句、词汇辨析、完形填空、阅读理解、选词填空、句型转换、书面表达；"
+    "数学按课标领域到章节：如「数与代数 · 一元二次方程」「图形与几何 · 相似三角形」「统计与概率 · 概率初步」；语文：字词、句子、修辞、标点、阅读理解、古诗文、写作；科学按单元主题。"
+    "同一道题的多个空共用块级知识点。"
+    "bbox 是该块在整张照片上的位置 [x0, y0, x1, y1]（0 到 1 的比例），完整包住该块的文字与作答。其他类型的块 bbox 也要给，没有知识点等字段时给空值。\n"
+    "要求：不要遗漏任何题目和空格，答对的题也要转写；手写内容一定要按空号一一对应，不要合并；学生姓名、学校、班级一律忽略，不要写入任何字段。"
 )
 
-_DIGITIZE_Q_PROPS = {
-    "page": {"type": "integer"},
+_BLANK_PROPS = {
+    "id": {"type": "string"},
     "number": {"type": "string"},
+    "student": {"type": "string"},
+    "mark": {"type": "string", "enum": ["correct", "wrong", "partial", "unmarked"]},
+    "note": {"type": "string"},
+    "answer": {"type": "string"},
+    "analysis": {"type": "string"},
+}
+_BLOCK_PROPS = {
+    "type": {"type": "string", "enum": BLOCK_TYPES},
+    "text": {"type": "string"},
+    "label": {"type": "string"},
+    "title": {"type": "string"},
+    "instruction": {"type": "string"},
+    "points": {"type": "string"},
+    "number": {"type": "string"},
+    "hint": {"type": "string"},
+    "options": {"type": "array", "items": {"type": "string"}},
+    "blanks": {"type": "array", "items": {"type": "object", "properties": _BLANK_PROPS, "required": list(_BLANK_PROPS), "additionalProperties": False}},
+    "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
     "subject": {"type": "string", "enum": _SUBJECT_ENUM},
     "questionType": {"type": "string", "enum": QUESTION_TYPES},
-    "stemText": {"type": "string"},
-    "options": {"type": "array", "items": {"type": "string"}},
-    "studentAnswer": {"type": "string"},
-    "mark": {"type": "string", "enum": ["correct", "wrong", "partial", "unmarked"]},
-    "teacherNote": {"type": "string"},
-    "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
     "knowledgePoints": {"type": "array", "items": {"type": "string"}},
-    "correctAnswer": {"type": "string"},
-    "analysis": {"type": "string"},
     "tip": {"type": "string"},
     "uncertainSpans": {"type": "array", "items": {"type": "string"}},
+}
+_SHEET_PROPS = {
+    "label": {"type": "string"},
+    "title": {"type": "string"},
+    "score": {"type": "string"},
+    "note": {"type": "string"},
+    "examLevel": {"type": "string"},
+    "examGrade": {"type": "string"},
+    "region": {"type": "string"},
+    "syllabus": {"type": "string"},
+    "blocks": {"type": "array", "items": {"type": "object", "properties": _BLOCK_PROPS, "required": list(_BLOCK_PROPS), "additionalProperties": False}},
 }
 DIGITIZE_SCHEMA = {
     "type": "object",
     "properties": {
-        "pages": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "page": {"type": "integer"},
-                    "title": {"type": "string"},
-                    "score": {"type": "string"},
-                    "note": {"type": "string"},
-                },
-                "required": ["page", "title", "score", "note"],
-                "additionalProperties": False,
-            },
-        },
-        "questions": {
-            "type": "array",
-            "items": {"type": "object", "properties": _DIGITIZE_Q_PROPS, "required": list(_DIGITIZE_Q_PROPS), "additionalProperties": False},
-        },
+        "sheets": {"type": "array", "items": {"type": "object", "properties": _SHEET_PROPS, "required": list(_SHEET_PROPS), "additionalProperties": False}},
     },
-    "required": ["pages", "questions"],
+    "required": ["sheets"],
     "additionalProperties": False,
 }
 
@@ -353,74 +370,33 @@ class ClaudeProvider(AIProvider):
         return items
 
     def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str):
-        content: list[dict] = []
-        for i, page in enumerate(pages):
-            content.append({"type": "text", "text": f"第 {i} 页（page = {i}）："})
-            content.append(
+        """每张照片单独调用一次模型并发还原（互不依赖，整体耗时≈单页耗时），再合并派生题目。"""
+        subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
+
+        def one(index: int, page: Crop) -> list[DigitizedPage]:
+            content = [
                 {
                     "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": page.media_type,
-                        "data": base64.standard_b64encode(page.data).decode("utf-8"),
-                    },
-                }
-            )
-        subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
-        content.append(
-            {
-                "type": "text",
-                "text": (
-                    f"学生年级：小学{grade}年级。可选学科：{subject_names}（subject 字段用英文枚举）。"
-                    f"共 {len(pages)} 页，page 从 0 开始。请完整还原每一道题，按卷面顺序输出。"
-                ),
-            }
-        )
-        data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000)
+                    "source": {"type": "base64", "media_type": page.media_type, "data": base64.standard_b64encode(page.data).decode("utf-8")},
+                },
+                {
+                    "type": "text",
+                    "text": (
+                        f"学生年级：{grade}年级。可选学科：{subject_names}（subject 字段用英文枚举）。"
+                        "请按原卷版面把这张照片完整还原为 sheets，保持阅读顺序与格式。"
+                    ),
+                },
+            ]
+            data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000)
+            return clean_sheets(data, index)
 
-        page_infos: list[DigitizedPage] = []
-        seen = set()
-        for raw in data.get("pages", []):
-            p = int(raw.get("page", 0) or 0)
-            if 0 <= p < len(pages) and p not in seen:
-                seen.add(p)
-                page_infos.append(DigitizedPage(page=p, title=str(raw.get("title") or ""), score=str(raw.get("score") or ""), note=str(raw.get("note") or "")))
-        for p in range(len(pages)):
-            if p not in seen:
-                page_infos.append(DigitizedPage(page=p))
-        page_infos.sort(key=lambda x: x.page)
-
-        questions: list[DigitizedQuestion] = []
-        for raw in data.get("questions", []):
-            cleaned = _clean_item(raw)
-            bbox = raw.get("bbox") if isinstance(raw.get("bbox"), list) and len(raw.get("bbox")) == 4 else [0, 0, 1, 1]
-            try:
-                bbox = [min(1.0, max(0.0, float(v))) for v in bbox]
-            except (TypeError, ValueError):
-                bbox = [0.0, 0.0, 1.0, 1.0]
-            if bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
-                bbox = [0.0, 0.0, 1.0, 1.0]
-            mark = raw.get("mark") if raw.get("mark") in ("correct", "wrong", "partial", "unmarked") else "unmarked"
-            questions.append(
-                DigitizedQuestion(
-                    page=min(max(int(raw.get("page", 0) or 0), 0), len(pages) - 1),
-                    number=str(raw.get("number") or ""),
-                    subject=cleaned["subject"],
-                    questionType=cleaned["questionType"],
-                    stemText=cleaned["stemText"],
-                    options=cleaned["options"],
-                    studentAnswer=cleaned["studentAnswer"],
-                    mark=mark,
-                    teacherNote=str(raw.get("teacherNote") or ""),
-                    bbox=bbox,
-                    knowledgePoints=cleaned["knowledgePoints"],
-                    correctAnswer=cleaned["correctAnswer"],
-                    analysis=cleaned["analysis"],
-                    tip=cleaned["tip"],
-                    uncertainSpans=cleaned["uncertainSpans"],
-                )
-            )
-        return page_infos, questions
+        if len(pages) == 1:
+            results = [one(0, pages[0])]
+        else:
+            with ThreadPoolExecutor(max_workers=min(4, len(pages))) as pool:
+                results = list(pool.map(lambda ip: one(*ip), enumerate(pages)))
+        sheets = [sheet for group in results for sheet in group]
+        return sheets, derive_questions(sheets)
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:
         subject = SUBJECT_LABELS.get(mistake.get("subject", ""), mistake.get("subject", ""))

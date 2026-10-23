@@ -88,3 +88,10 @@ export function toPage(src: string): Promise<FolderPage> {
     img.src = src;
   });
 }
+
+/** 旧版本存的电子版没有版面块（blocks）或空 id（blankIds），当作未扫描，打开后重新扫描即可 */
+export function validDigitized(d: DigitizedResult | undefined | null): DigitizedResult | null {
+  if (!d || !Array.isArray(d.pages) || !Array.isArray(d.questions)) return null;
+  if (!d.pages.every((p) => Array.isArray(p.blocks)) || !d.questions.every((q) => Array.isArray(q.blankIds))) return null;
+  return d;
+}

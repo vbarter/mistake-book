@@ -84,7 +84,40 @@ export interface RecognizedItem {
 
 export type Mark = "correct" | "wrong" | "partial" | "unmarked";
 
-/** 电子版试卷里的一道题（AI 转写） */
+/** 卷面上的一个空：空号、学生手写、老师批改、正确答案 */
+export interface DigitizedBlank {
+  id: string; // 在 text 里以 [[id]] 占位；编号空就是题号（"36"），一题多空为 "52-1" "52-2"
+  number: string;
+  student: string; // 手写转写，看不清的字为「□」
+  mark: Mark;
+  note: string;
+  answer: string;
+  analysis: string;
+}
+
+export type BlockType = "section" | "passage" | "wordbank" | "item" | "text";
+
+/** 电子版试卷里的一个版面块，按原卷阅读顺序排列 */
+export interface DigitizedBlock {
+  type: BlockType;
+  text: string; // passage / item / text 的正文，空格用 [[id]] 占位
+  label: string; // section 的大题编号、passage 的篇号
+  title: string; // section 标题
+  instruction: string; // section 的作答说明 / item 的改写要求
+  points: string; // section 分值
+  number: string; // item 题号
+  hint: string; // item 句末括号给词
+  options: string[]; // wordbank 词库 / 选择题选项
+  blanks: DigitizedBlank[];
+  bbox: number[];
+  subject: Subject;
+  questionType: QuestionType;
+  knowledgePoints: string[];
+  tip: string;
+  uncertainSpans: string[];
+}
+
+/** 从版面块派生出的一道可收录的题（一个编号空 = 一题） */
 export interface DigitizedQuestion {
   index: number;
   page: number;
@@ -102,13 +135,23 @@ export interface DigitizedQuestion {
   analysis: string;
   tip: string;
   uncertainSpans: string[];
+  sheet: number;
+  blockIndex: number;
+  blankIds: string[];
 }
 
+/** 一张电子版卷面；一张照片拍到左右两页时对应两个 sheet */
 export interface DigitizedPage {
   page: number;
+  label: string;
   title: string;
   score: string;
   note: string;
+  examLevel: string; // 考试类型：单元测 / 期中 / 中考模拟 / 高考 …
+  examGrade: string; // 年级 / 学段
+  region: string; // 地区
+  syllabus: string; // 知识点归类依据的考纲 / 课标
+  blocks: DigitizedBlock[];
 }
 
 export interface DigitizedResult {

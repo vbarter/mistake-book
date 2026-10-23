@@ -41,11 +41,62 @@ class ScannedItem(RecognizedItem):
 
 
 @dataclass
+class DigitizedBlank:
+    """卷面上的一个空：空号、学生手写、老师批改、正确答案。"""
+
+    id: str  # 在 text 里用 [[id]] 占位；编号空就是题号，如 "36"；一题多空用 "52-1" "52-2"
+    number: str = ""  # 所属题号
+    student: str = ""  # 学生手写转写，看不清的字用「□」
+    mark: str = "unmarked"  # correct | wrong | partial | unmarked
+    note: str = ""  # 老师红笔批注 / 扣分
+    answer: str = ""  # 正确答案（判错或未批改时给出）
+    analysis: str = ""  # 判错时的简短解析
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+BLOCK_TYPES = ["section", "passage", "wordbank", "item", "text"]
+
+
+@dataclass
+class DigitizedBlock:
+    """电子版试卷里的一个版面块，按原卷阅读顺序排列。
+
+    section  大题标题：label（"Ⅳ"）、title（英文/中文标题）、instruction（中文说明）、points（分值）
+    passage  短文/材料：text 中用 [[36]] 这样的占位表示内嵌空格，blanks 逐空记录
+    wordbank 词库/选项框：options
+    item     小题：number、text（含占位空格）、hint（括号给词）、instruction（改写要求）、options（选择题选项）、blanks
+    text     其他卷面文字（页眉页脚、订正提醒等）
+    """
+
+    type: str
+    text: str = ""
+    label: str = ""
+    title: str = ""
+    instruction: str = ""
+    points: str = ""
+    number: str = ""
+    hint: str = ""
+    options: list[str] = field(default_factory=list)
+    blanks: list[DigitizedBlank] = field(default_factory=list)
+    bbox: list[float] = field(default_factory=lambda: [0.0, 0.0, 1.0, 1.0])
+    subject: str = "math"
+    questionType: str = "fill"
+    knowledgePoints: list[str] = field(default_factory=list)
+    tip: str = ""
+    uncertainSpans: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
 class DigitizedQuestion:
-    """电子版试卷里的一道题：题目原文 + 学生手写作答的转写 + 老师批改。"""
+    """从版面块派生出的一道可收录的题（一个编号空 = 一题），兼容错题本收录链路。"""
 
     page: int
-    number: str  # 题号原样，如 "1" "二、3"
+    number: str  # 题号原样，如 "36" "二、3"
     subject: str
     questionType: str
     stemText: str
@@ -59,6 +110,9 @@ class DigitizedQuestion:
     analysis: str = ""
     tip: str = ""
     uncertainSpans: list[str] = field(default_factory=list)
+    sheet: int = 0  # 所在 sheet（pages 列表里的下标）
+    blockIndex: int = 0  # 所在版面块在 sheet.blocks 里的下标
+    blankIds: list[str] = field(default_factory=list)  # 对应的空 id
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -66,10 +120,18 @@ class DigitizedQuestion:
 
 @dataclass
 class DigitizedPage:
-    page: int
+    """一张电子版卷面（sheet）。一张照片可能拍到左右两页，于是一个 page 可对应多个 sheet。"""
+
+    page: int  # 来源照片下标
+    label: str = ""  # 卷面页码文字，如 "第5页"
     title: str = ""
     score: str = ""
     note: str = ""  # 卷面上的其他文字（订正提醒等）
+    examLevel: str = ""  # 考试类型：单元测 / 期中 / 期末 / 中考模拟 / 中考 / 高考 …
+    examGrade: str = ""  # 年级 / 学段，如 "九年级"
+    region: str = ""  # 地区，如 "上海"
+    syllabus: str = ""  # 知识点归类依据的考纲 / 课标名称，如 "上海中考英语考纲"
+    blocks: list[DigitizedBlock] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -98,7 +160,7 @@ class AIProvider:
         raise NotImplementedError
 
     def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str) -> tuple[list[DigitizedPage], list[DigitizedQuestion]]:
-        """试卷数字化：转写全部题目与手写作答、老师批改；判错题附答案解析。"""
+        """试卷数字化：按原卷版面还原为 sheet → blocks，并派生出可收录的题目列表。"""
         raise NotImplementedError
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:

@@ -59,7 +59,7 @@ cd server && TEST_DATABASE_URL='mysql+pymysql://zhicuoben:zhicuoben@127.0.0.1:33
 
 - `GET /api/health` 返回当前 AI Provider。
 - 开发期短信验证码固定 `123456`，接口会回显 `devCode`。
-- 接入 Claude：在 `.env` 里填 `ANTHROPIC_API_KEY`（或先 `ant auth login`），`AI_PROVIDER=auto` 会自动切换。识别用 `claude-opus-5-5` 视觉模型 + JSON Schema 结构化输出，一次完成 OCR、学科归类、知识点、答案与解析；不填 Key 时用本地 Mock，返回四道示例题，全流程可跑。
+- 接入 Claude：在 `.env` 里填 `ANTHROPIC_API_KEY`（或先 `ant auth login`），`AI_PROVIDER=auto` 会自动切换。识别模型由 `ANTHROPIC_MODEL` 指定，默认 `gpt-6.1-sol`（经 api.tu-zi.com 中转，用真卷对比过 claude-opus-5-5 / claude-haiku-5-5 / gpt-6.1-sol，gpt-6.1-sol 对铅笔手写的识别最好、答案与知识点准确），JSON Schema 结构化输出，一次完成 OCR、学科归类、知识点、答案与解析；不填 Key 时用本地 Mock，返回四道示例题，全流程可跑。
 - 走中转（线上用的是 api.tu-zi.com）：再设 `ANTHROPIC_BASE_URL=https://api.tu-zi.com`，Key 用中转的 `sk-...`。中转只提供标准 Messages 接口，Provider 会自动进入中转模式：不发 beta 头、结构化输出和服务端回退，改为提示词约束 JSON 并容错解析（`/api/health` 显示 `claude-relay`）。tu-zi 对每次请求按模型最大输出预扣额度，余额不足时返回 403，App 会提示「额度不足」。
 
 本地调试大模型：`server/.env` 里填 `ANTHROPIC_API_KEY` 与 `ANTHROPIC_BASE_URL=https://api.tu-zi.com`，重启后 `/api/health` 应显示 `claude-relay`；想临时回到不花钱的示例结果，把 `AI_PROVIDER=mock` 即可。项目 `.env` 会覆盖 shell 里同名的环境变量（`load_dotenv(override=True)`）。日志在 `server/instance/dev-server.log`（用 `python -u run.py` 启动时不缓冲）。
@@ -179,7 +179,7 @@ mysqldump -uroot zhicuoben > /opt/zhicuoben/data/backup-$(date +%F).sql   # 备�
 
 录入页 = 一个「试卷夹」：拍照或相册多选（`Camera.pickImages`）后自动建夹并存到本机 IndexedDB（`app/src/lib/folders.ts`），最多 4 页，可重命名、追加页、随时回来继续。
 
-主按钮「扫描还原电子版」把整页压到 1400px 上传 `/api/digitize`，AI 把试卷还原成电子版：每页标题与得分、卷面提醒；每道题的题号、题干、选项、学生手写作答的逐字转写（看不清的字用「□」并列入 uncertainSpans）、老师批改（correct / wrong / partial / unmarked）与红笔批注、在页面上的位置；判错题附知识点、正确答案、解析与提示。结果存进试卷夹，下次打开直接看。电子版页（`Paper.tsx`）按卷面顺序展示，判错题默认勾选，「收进错题本」把勾选的题按位置裁出截图进入核对页；答对的题也可以勾选主动收录。「改用手动框选」保留旧流程作为备用；`/api/scan` 仍可用（只返回判错题）。服务端 AI 调用统一走流式请求（SDK 对大 `max_tokens` 的非流式调用会直接报错）。
+主按钮「扫描还原电子版」把每页准备成上传片段（`prepareUpload`：模型会把图片压到最长边约 1568px，所以左右两页拍在一张里的宽幅照片先切成左右两张各带 2% 重叠，再缩到 1568px / 质量 0.85），上传 `/api/digitize`。服务端对每张图片并发各调一次模型，按原卷版面还原为 `sheets`（一张照片拍到几页就几个 sheet，带页码 label、卷头 title、得分 score、零散文字 note）→ `blocks`（按阅读顺序：`section` 大题标题 / 说明 / 分值，`passage` 短文正文并用 `[[36]]` 占位内嵌空格，`wordbank` 词库方框，`item` 小题含题号、正文占位空格、括号给词 hint、改写要求 instruction、选项，`text` 页眉页脚），每个空（`blank`）单独记录学生手写转写 student（看不清用「□」）、老师批改 mark、批注 note、正确答案 answer 与解析 analysis；passage / item 还带学科、题型、知识点、提示、在照片上的 bbox。服务端再从版面块派生 `questions`（一个编号空 = 一题，带 sheet / blockIndex / blankIds），错题本收录链路不变；前端把片段编号和 bbox 映射回试卷夹里的页。结果存进试卷夹，下次打开直接看（旧结构的电子版会被忽略，重扫即可）。批改判定规则：打勾 ✓ ☑ √ 为正确，打叉 ✗ ×、斜杠 /、划掉为错误，部分扣分为半对；没有作答的空按错题处理（mark=wrong，note「未作答」，服务端 `digitize.py` 也会兜底）。电子版页（`Paper.tsx` + `styles/paper.css`）分三段：「试卷」是可打印的干净原题（大题标题与说明、短文内嵌只带空号的空格、词库方框、括号给词与改写要求，不含任何手写）；「作答」逐空列出学生手写转写、判定（正确 / 错误 / 半对 / 未作答 / 未批改）与正确答案；「错题汇总」只按知识点归类：模型先从卷头、页眉页脚判断考试信息（examLevel 考试类型、examGrade 年级、region 地区、syllabus 归类依据的考纲 / 课标，如「上海中考英语考纲」），再要求每题 knowledgePoints 第一项必须是该考纲里的一级知识点规范名称（整卷统一，便于按知识点记忆），后面才是细分点；页面与 PDF 都按第一项分组，组内逐题给出作答、正确答案、解析、提示与细分点，错题默认全选，「收进错题本」按位置裁出截图进入核对页。「导出 PDF」调用 `POST /api/digitize/pdf`（reportlab，内置 STSong-Light 中文字体，不依赖服务器字体文件），PDF 含试卷打印版、作答与批改对照表、错题汇总三部分；原生端写入缓存后拉起系统分享面板（可直接打印、存到「文件」），网页端在新标签打开。「改用手动框选」保留旧流程作为备用；`/api/scan` 仍可用（只返回判错题）。服务端 AI 调用统一走流式请求（SDK 对大 `max_tokens` 的非流式调用会直接报错）。
 
 ## 五、接口一览
 
@@ -187,7 +187,8 @@ mysqldump -uroot zhicuoben > /opt/zhicuoben/data/backup-$(date +%F).sql   # 备�
 |---|---|---|
 | POST | /api/auth/code · /auth/login · /auth/apple · /auth/guest · /auth/bind | 验证码 / 手机登录 / Apple 登录 / 游客 / 绑定 |
 | GET PATCH DELETE | /api/auth/me | 资料、设置、删除账号 |
-| POST | /api/digitize | 整页试卷（≤4 页）→ 电子版：全部题目、手写作答转写、老师批改、位置；判错题附答案解析（不入库） |
+| POST | /api/digitize | 整页试卷照片（≤8 张，宽幅照片前端已拆成左右两张）→ 按原卷版面还原的电子版 `pages`（sheets → blocks → blanks）+ 派生题目 `questions`（不入库） |
+| POST | /api/digitize/pdf | 电子版（`title`、`pages`、`questions` 原样传回）→ 可打印 PDF：试卷 + 作答与批改 + 错题汇总 |
 | POST | /api/scan | 整页试卷（≤4 页）→ 只返回判错题目及位置（不入库） |
 | POST | /api/recognize | 手动框选截图 → AI 识别（不入库） |
 | GET POST | /api/mistakes | 列表（subject / state / q / topic）· 批量入库（自动合并同题） |

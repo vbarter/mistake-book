@@ -1,0 +1,73 @@
+/* 电子版试卷：按原卷排版渲染版面块（大题 / 短文 / 词库 / 小题），手写作答以墨水色填在空格上 */
+:root {
+  --ink: #1d4ed8; /* 学生手写 */
+  --ink-wrong: #b42323;
+  --paper: #fffdf8;
+  --paper-line: #c9c9cf;
+  --hand-font: "Bradley Hand", "Chalkboard SE", "Noteworthy", "Segoe Print", "Comic Sans MS", cursive;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #8db1ff;
+    --ink-wrong: #ff8080;
+    --paper: #1c1c1e;
+    --paper-line: #48484a;
+  }
+}
+
+.paper { background: var(--paper); border: 1px solid var(--separator-light); border-radius: var(--radius-card); padding: 16px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.paper__head { display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; padding-bottom: 10px; border-bottom: 1px solid var(--separator-light); }
+.paper__title { font-size: 17px; line-height: 22px; font-weight: 700; }
+.paper__meta { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--secondary); }
+.paper__score { color: var(--wrong); font-family: var(--hand-font); font-size: 20px; font-weight: 700; }
+.paper__note { font-size: 13px; line-height: 18px; color: var(--secondary); background: var(--fill-light); border-radius: 8px; padding: 6px 10px; }
+
+.blk-section { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.blk-section__title { font-size: 16px; line-height: 22px; font-weight: 700; }
+.blk-section__instruction { font-size: 13px; line-height: 18px; color: var(--secondary); }
+.blk-section__points { color: var(--tertiary); font-weight: 400; margin-left: 6px; font-size: 13px; }
+
+.blk-wordbank { border: 1.5px solid var(--label); border-radius: 4px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 15px; line-height: 20px; }
+
+.blk-passage { display: flex; flex-direction: column; gap: 8px; }
+.blk-passage__label { font-weight: 700; font-size: 15px; }
+.blk-text { font-size: 15px; line-height: 26px; white-space: pre-wrap; word-break: break-word; }
+.blk-hint { color: var(--secondary); margin-left: 4px; }
+.blk-instruction { color: var(--secondary); margin-left: 4px; }
+
+.blk-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; }
+.blk-item__num { font-weight: 600; font-size: 15px; line-height: 26px; min-width: 24px; flex-shrink: 0; }
+.blk-item__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.blk-options { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 15px; line-height: 22px; }
+.blk-plain { font-size: 12px; line-height: 16px; color: var(--tertiary); text-align: center; }
+
+/* 空格（打印版）：下划线留白 + 小角标空号 */
+.blank { display: inline-block; min-width: 3.2em; padding: 0 4px; margin: 0 2px; border-bottom: 1.5px solid var(--label); vertical-align: baseline; line-height: 22px; text-align: center; }
+.blank__num { font-size: 10px; color: var(--tertiary); line-height: 12px; vertical-align: top; }
+
+/* 作答对照表 */
+.ans__head { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0 8px; }
+.ans__row { display: grid; grid-template-columns: 2.4em 1fr 4.6em 1fr; gap: 8px; align-items: start; padding: 8px 0; border-top: 1px solid var(--separator-light); font-size: 14px; line-height: 20px; }
+.ans__row--head { font-size: 12px; color: var(--secondary); font-weight: 600; border-top: 0; padding: 4px 0 6px; }
+.ans__row--wrong { background: var(--wrong-bg); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+.ans__num { font-weight: 600; }
+.ans__hand { font-family: var(--hand-font); color: var(--ink); font-size: 16px; font-weight: 600; white-space: pre-wrap; word-break: break-word; }
+.ans__hand--wrong { color: var(--ink-wrong); }
+.ans__answer { color: var(--mastered); font-weight: 600; word-break: break-word; }
+
+.mark-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.mark-chip--correct { background: var(--mastered-bg); color: var(--mastered); }
+.mark-chip--wrong { background: var(--wrong-bg); color: var(--wrong); }
+.mark-chip--partial { background: var(--due-bg); color: var(--due); }
+.mark-chip--unmarked { background: var(--fill-light); color: var(--secondary); }
+
+.blk-feedback { display: flex; flex-direction: column; gap: 3px; font-size: 13px; line-height: 18px; color: var(--secondary); background: var(--fill-light); border-radius: 8px; padding: 6px 10px; }
+.blk-feedback b { font-weight: 600; }
+
+/* 错题汇总分组行 */
+.grp { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; font-size: 14px; line-height: 20px; }
+.grp__name { color: var(--secondary); }
+.grp__nums { font-weight: 600; word-break: break-all; }
+
+.pick { width: 24px; height: 24px; border-radius: 12px; border: 2px solid var(--separator); background: transparent; color: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pick.on { border: 0; background: var(--brand); }

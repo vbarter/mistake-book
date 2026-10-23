@@ -35,7 +35,7 @@ class Config:
 
     # AI：auto = 有 ANTHROPIC_API_KEY 就用 Claude，否则用本地 Mock
     AI_PROVIDER = os.getenv("AI_PROVIDER", "auto")
-    ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5")
+    ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "gpt-6.1-sol")
 
     # 短信：mock 模式下验证码固定为 123456，并在接口返回里回显
     SMS_PROVIDER = os.getenv("SMS_PROVIDER", "mock")
@@ -46,5 +46,5 @@ class Config:
     APPLE_BUNDLE_ID = os.getenv("APPLE_BUNDLE_ID", "com.zhicuoben.app")
 
     MAX_CROPS_PER_RECOGNIZE = 6
-    MAX_PAGES_PER_SCAN = 4
+    MAX_PAGES_PER_SCAN = 8  # 试卷夹最多 4 页，宽幅照片会被前端拆成左右两张上传
     DAILY_REVIEW_LIMIT = 20
