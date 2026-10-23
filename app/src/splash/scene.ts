@@ -272,38 +272,83 @@ function spriteTexture(kind: "star" | "heart" | "glow" | "sparkle") {
   });
 }
 
-// ---------------------------------------------------------------- 卡通角色（Q 版大头，赛璐璐着色 + 描边）
+// ---------------------------------------------------------------- 卡通角色（Q 版大头，赛璐璐着色 + 描边，两段 IK 骨骼）
+//
+// 动画师的做法：不直接转关节角，而是摆「手 / 脚该在哪」（躯干坐标系里的目标点），
+// 用两段式 IK 解出肩→肘→手、胯→膝→脚，肘往外后弯、膝往前弯，所以任何姿势都不会僵直穿模。
+// 角色整体带一点 3/4 侧身，膝盖、手臂往前伸这些前后方向的动作才看得出来。
 
-/** 关节角度（度）：手臂 0 = 自然下垂，a 越大越往外上抬；e 是手肘弯曲；腿同理 */
+type V3 = [number, number, number];
+
+/** 躯干坐标系里的手脚目标；le / re 是肘部朝向（不给用默认：往外、往下、略往后） */
 interface Pose {
-  la: number;
-  le: number;
-  ra: number;
-  re: number;
-  ll: number;
-  lk: number;
-  rl: number;
-  rk: number;
+  lh: V3;
+  rh: V3;
+  lf: V3;
+  rf: V3;
+  le?: V3;
+  re?: V3;
 }
 
 const UA = 0.4; // 上臂
-const LA = 0.36; // 前臂
+const LA = 0.42; // 前臂（含拳头）
 const UL = 0.36; // 大腿
-const LL = 0.34; // 小腿
+const LL = 0.36; // 小腿
 const HEAD_R = 0.74;
 const HEAD_Y = 1.62; // 头心离胯部的高度
-const HIP_H = UL + LL + 0.2; // 胯部离地高度（含鞋）
+const SHOULDER: V3 = [0.33, 0.93, 0];
+const HIP: V3 = [0.17, 0.12, 0];
+const ANKLE_Y = -0.55; // 站立时脚踝高度（比伸直略高，膝盖微弯更自然）
+const HIP_H = -ANKLE_Y + 0.2; // 胯部离地高度（含鞋底）
 const OUT = 0.035; // 描边粗细
 
-const STAND: Pose = { la: 14, le: 8, ra: 14, re: 8, ll: 4, lk: 0, rl: 4, rk: 0 };
-const HEADACHE: Pose = { la: 150, le: 18, ra: 150, re: 18, ll: 8, lk: 0, rl: 8, rk: 0 };
-const PHONE: Pose = { la: 16, le: 10, ra: 118, re: 38, ll: 6, lk: 0, rl: 6, rk: 0 };
-const CHEER: Pose = { la: 158, le: -12, ra: 158, re: -12, ll: 14, lk: 0, rl: 14, rk: 0 };
+const FEET = { lf: [-0.21, ANKLE_Y, 0.04] as V3, rf: [0.21, ANKLE_Y, 0.04] as V3 };
+const STAND: Pose = { lh: [-0.5, 0.24, 0.12], rh: [0.5, 0.24, 0.12], ...FEET };
+// 抱头：手按在两侧太阳穴，手肘往外撑开，不挡脸
+const HEADACHE: Pose = { lh: [-0.74, 1.4, 0.48], rh: [0.74, 1.4, 0.48], lf: [-0.25, ANKLE_Y, 0.06], rf: [0.25, ANKLE_Y, 0.06], le: [-1, -0.2, -0.3], re: [1, -0.2, -0.3] };
+// 举手机：右手抬到脸侧前方，手肘往下
+const PHONE: Pose = { lh: [-0.48, 0.3, 0.2], rh: [0.62, 1.22, 0.5], ...FEET, re: [1, -1, 0] };
+// 欢呼：双手 V 字举过头
+const CHEER: Pose = { lh: [-0.82, 1.72, 0.18], rh: [0.82, 1.72, 0.18], ...FEET };
+
+function mixV(a: V3 | undefined, b: V3 | undefined, x: number): V3 | undefined {
+  if (!a && !b) return undefined;
+  const p = a ?? b!;
+  const q = b ?? a!;
+  return [lerp(p[0], q[0], x), lerp(p[1], q[1], x), lerp(p[2], q[2], x)];
+}
 
 function mixPose(a: Pose, b: Pose, x: number): Pose {
-  const o = { ...a };
-  (Object.keys(a) as (keyof Pose)[]).forEach((k) => (o[k] = lerp(a[k], b[k], x)));
-  return o;
+  return { lh: mixV(a.lh, b.lh, x)!, rh: mixV(a.rh, b.rh, x)!, lf: mixV(a.lf, b.lf, x)!, rf: mixV(a.rf, b.rf, x)!, le: mixV(a.le, b.le, x), re: mixV(a.re, b.re, x) };
+}
+
+const DOWN = new THREE.Vector3(0, -1, 0);
+const _o = new THREE.Vector3();
+const _t = new THREE.Vector3();
+const _p = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _u = new THREE.Vector3();
+const _e = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+
+/** 两段 IK：up 挂在 origin，low 挂在 up 的末端；把末端送到 target，弯曲方向朝 pole */
+function solveTwoBone(up: THREE.Object3D, low: THREE.Object3D, origin: V3, target: V3, pole: V3, a: number, b: number) {
+  _o.set(...origin);
+  _d.set(...target).sub(_o);
+  const dist = clamp(_d.length(), Math.abs(a - b) + 0.01, a + b - 0.005);
+  _d.normalize();
+  const angA = Math.acos(clamp((a * a + dist * dist - b * b) / (2 * a * dist), -1, 1));
+  _p.set(...pole);
+  _p.sub(_u.copy(_d).multiplyScalar(_p.dot(_d)));
+  if (_p.lengthSq() < 1e-6) _p.set(0, 0, 1);
+  _p.normalize();
+  _u.copy(_d).multiplyScalar(Math.cos(angA)).addScaledVector(_p, Math.sin(angA)).normalize();
+  up.quaternion.setFromUnitVectors(DOWN, _u);
+  // 肘 / 膝位置 → 末端方向
+  _e.copy(_o).addScaledVector(_u, a);
+  _t.copy(_o).addScaledVector(_d, dist).sub(_e).normalize();
+  _q.setFromUnitVectors(DOWN, _t);
+  low.quaternion.copy(up.quaternion).invert().multiply(_q);
 }
 
 type Kind = "kid" | "mom" | "dad" | "teacher";
@@ -350,8 +395,8 @@ class Chibi {
   root = new THREE.Group();
   torso = new THREE.Group();
   head = new THREE.Group();
-  arms: { up: THREE.Group; low: THREE.Group; hand: THREE.Object3D }[] = [];
-  legs: { up: THREE.Group; low: THREE.Group }[] = [];
+  arms: { up: THREE.Group; low: THREE.Group; hand: THREE.Object3D; origin: V3 }[] = [];
+  legs: { up: THREE.Group; low: THREE.Group; foot: THREE.Group; origin: V3 }[] = [];
   eyesOpen: THREE.Group[] = [];
   eyesHappy: THREE.Object3D[] = [];
   brows: THREE.Object3D[] = [];
@@ -368,7 +413,7 @@ class Chibi {
     const ball = (r: number, color: number, outline = true) => part(m, (o) => new THREE.SphereGeometry(r + o, 24, 16), color, outline);
     this.root.add(this.torso);
 
-    // ---- 身体
+    // ---- 身体：上窄下宽的「梨形」，比直筒更像 Q 版
     if (L.dress) {
       const dress = part(m, (o) => new THREE.CylinderGeometry(0.3 + o, 0.62 + o, 1.05 + o, 28), L.dress);
       dress.position.y = 0.45;
@@ -377,28 +422,36 @@ class Chibi {
       chest.position.y = 0.9;
       this.torso.add(chest);
     } else {
-      const body = capsule(0.38, 0.42, L.shirt);
+      const body = part(m, (o) => new THREE.SphereGeometry(0.42 + o, 28, 20), L.shirt);
+      body.scale.set(1, 1.18, 0.9);
       body.position.y = 0.62;
       this.torso.add(body);
-      const hips = capsule(0.36, 0.04, L.pants);
+      const hips = capsule(0.35, 0.04, L.pants);
+      hips.scale.z = 0.88;
       hips.position.y = 0.2;
       this.torso.add(hips);
     }
+    const neck = capsule(0.13, 0.12, L.skin);
+    neck.position.y = 1.08;
+    this.torso.add(neck);
     if (L.scarf) {
-      // 红领巾
-      const tri = part(m, (o) => new THREE.ConeGeometry(0.2 + o, 0.42 + o, 3), 0xe63946);
+      // 红领巾：领口一圈 + 胸前三角
+      const collar = part(m, (o) => new THREE.TorusGeometry(0.2, 0.06 + o, 10, 24), 0xe63946);
+      collar.rotation.x = Math.PI / 2;
+      collar.position.y = 1.02;
+      const tri = part(m, (o) => new THREE.ConeGeometry(0.18 + o, 0.4 + o, 3), 0xe63946);
       tri.rotation.z = Math.PI;
-      tri.position.set(0, 0.86, 0.34);
-      tri.scale.z = 0.35;
-      const knot = ball(0.09, 0xe63946);
-      knot.position.set(0, 1.04, 0.36);
-      this.torso.add(tri, knot);
+      tri.scale.z = 0.3;
+      tri.position.set(0, 0.8, 0.36);
+      const knot = ball(0.08, 0xe63946);
+      knot.position.set(0, 0.97, 0.3);
+      this.torso.add(collar, tri, knot);
     }
     if (L.tie) {
       const tie = part(m, (o) => new THREE.ConeGeometry(0.11 + o, 0.5 + o, 4), L.tie);
       tie.rotation.z = Math.PI;
       tie.scale.z = 0.4;
-      tie.position.set(0, 0.8, 0.37);
+      tie.position.set(0, 0.78, 0.38);
       this.torso.add(tie);
     }
 
@@ -416,7 +469,6 @@ class Chibi {
     this.addHair(m, L, ball);
 
     for (const s of [-1, 1]) {
-      // 大眼睛：黑色椭圆 + 两个高光
       const eye = new THREE.Group();
       const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 14), m.ink);
       pupil.scale.set(0.85, 1.2, 0.45);
@@ -429,7 +481,6 @@ class Chibi {
       eye.rotation.y = s * 0.36;
       this.head.add(eye);
       this.eyesOpen.push(eye);
-      // 开心时眯成 ^ ^
       const happy = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.03, 8, 18, Math.PI), m.ink);
       happy.position.set(s * 0.26, -0.04, 0.68);
       happy.rotation.y = s * 0.36;
@@ -467,7 +518,6 @@ class Chibi {
     this.frown = new THREE.Mesh(arc, m.ink);
     this.frown.scale.set(0.8, 0.7, 1);
     this.frown.position.set(0, -0.34, 0.69);
-    // 开心张嘴：红色半圆 + 舌头
     this.grin = new THREE.Group();
     const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.15, 24, Math.PI, Math.PI), m.basic(0x9b2c3c));
     const tongue = new THREE.Mesh(new THREE.CircleGeometry(0.075, 16, Math.PI, Math.PI), m.basic(0xff7a8a));
@@ -484,46 +534,57 @@ class Chibi {
     this.sweat = drop;
     this.head.add(drop);
 
-    // ---- 手臂（肩膀在身体两侧）
+    // ---- 手臂：肩、肘都有圆球关节，弯起来没有断口
+    const sx = L.dress ? 0.28 : SHOULDER[0];
     for (const s of [-1, 1]) {
+      const origin: V3 = [s * sx, SHOULDER[1], SHOULDER[2]];
       const up = new THREE.Group();
-      up.position.set(s * 0.3, 0.92, 0.05);
-      const upper = capsule(0.12, UA, L.shirt);
+      up.position.set(...origin);
+      const shoulder = ball(0.135, L.dress ?? L.shirt);
+      const upper = capsule(0.115, UA, L.dress ?? L.shirt);
       upper.position.y = -UA / 2;
-      up.add(upper);
+      up.add(shoulder, upper);
       const low = new THREE.Group();
       low.position.y = -UA;
-      const lower = capsule(0.105, LA, L.longSleeve ? L.shirt : L.skin);
-      lower.position.y = -LA / 2;
+      const lowColor = L.longSleeve ? L.shirt : L.skin;
+      const elbow = ball(0.1, lowColor);
+      const lower = capsule(0.1, LA - 0.16, lowColor);
+      lower.position.y = -(LA - 0.16) / 2;
       const fist = ball(0.135, L.skin);
-      fist.position.y = -LA - 0.04;
-      low.add(lower, fist);
+      fist.position.y = -LA + 0.04;
+      low.add(elbow, lower, fist);
       up.add(low);
       const hand = new THREE.Object3D();
-      hand.position.y = -LA - 0.06;
+      hand.position.y = -LA;
       low.add(hand);
       this.torso.add(up);
-      this.arms.push({ up, low, hand });
+      this.arms.push({ up, low, hand, origin });
     }
 
-    // ---- 腿
+    // ---- 腿：膝盖往前弯，鞋子始终贴地放平
     for (const s of [-1, 1]) {
+      const origin: V3 = [s * HIP[0], HIP[1], HIP[2]];
       const up = new THREE.Group();
-      up.position.set(s * 0.18, 0.12, 0);
-      const thigh = capsule(0.14, UL, L.shorts || L.dress ? (L.dress ? L.skin : L.pants) : L.pants);
+      up.position.set(...origin);
+      const bare = L.shorts || Boolean(L.dress);
+      const thigh = capsule(0.14, UL, bare && L.dress ? L.skin : L.pants);
       thigh.position.y = -UL / 2;
       up.add(thigh);
       const low = new THREE.Group();
       low.position.y = -UL;
-      const shin = capsule(0.12, LL, L.shorts || L.dress ? L.skin : L.pants);
+      const knee = ball(0.125, bare ? L.skin : L.pants);
+      const shin = capsule(0.12, LL, bare ? L.skin : L.pants);
       shin.position.y = -LL / 2;
+      const foot = new THREE.Group();
+      foot.position.y = -LL;
       const shoe = ball(0.18, L.shoes);
-      shoe.scale.set(1.05, 0.68, 1.35);
-      shoe.position.set(0, -LL - 0.08, 0.07);
-      low.add(shin, shoe);
+      shoe.scale.set(1.05, 0.68, 1.4);
+      shoe.position.set(0, -0.08, 0.08);
+      foot.add(shoe);
+      low.add(knee, shin, foot);
       up.add(low);
       this.torso.add(up);
-      this.legs.push({ up, low });
+      this.legs.push({ up, low, foot, origin });
     }
 
     this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.8, 28), m.basic(0x6b4a2a, 0.13));
@@ -543,7 +604,6 @@ class Chibi {
     };
     if (L.hairStyle === "spiky") {
       hairCap(Math.PI * 0.42, -0.42);
-      // 刘海 + 呆毛
       for (const [x, rot] of [[-0.3, 0.5], [-0.05, 0.15], [0.22, -0.35]] as const) {
         const bang = part(m, (o) => new THREE.ConeGeometry(0.17 + o, 0.42 + o, 10), L.hair);
         bang.position.set(x, 0.42, 0.5);
@@ -579,15 +639,34 @@ class Chibi {
 
   setPose(p: Pose) {
     const [l, r] = this.arms;
-    l.up.rotation.z = -p.la * D;
-    l.low.rotation.z = -p.le * D;
-    r.up.rotation.z = p.ra * D;
-    r.low.rotation.z = p.re * D;
-    const [ll, rl] = this.legs;
-    ll.up.rotation.z = -p.ll * D;
-    ll.low.rotation.z = p.lk * D;
-    rl.up.rotation.z = p.rl * D;
-    rl.low.rotation.z = -p.rk * D;
+    solveTwoBone(l.up, l.low, l.origin, p.lh, p.le ?? [-1, -0.7, -0.45], UA, LA);
+    solveTwoBone(r.up, r.low, r.origin, p.rh, p.re ?? [1, -0.7, -0.45], UA, LA);
+    this.legs.forEach((leg, i) => {
+      const s = i === 0 ? -1 : 1;
+      solveTwoBone(leg.up, leg.low, leg.origin, i === 0 ? p.lf : p.rf, [s * 0.15, 0, 1], UL, LL);
+      // 鞋子反向转回来，保持脚底平行地面、脚尖朝前
+      leg.foot.quaternion.copy(leg.up.quaternion).multiply(leg.low.quaternion).invert();
+    });
+  }
+
+  /** 把世界坐标的点换成躯干坐标（用来让手指向某个东西） */
+  toTorso(world: THREE.Vector3): V3 {
+    this.root.updateMatrixWorld(true);
+    const v = this.torso.worldToLocal(world.clone());
+    return [v.x, v.y, v.z];
+  }
+
+  /** 从肩膀朝某个躯干坐标点伸直手臂（指向） */
+  reachToward(arm: number, at: V3, reach = 0.95): V3 {
+    const o = this.arms[arm].origin;
+    const v = new THREE.Vector3(at[0] - o[0], at[1] - o[1], at[2] - o[2]).normalize();
+    // Q 版手短头大：手臂朝外斜上方伸直（别往正上方指），往前带一点，才不会被大头挡住
+    const side = arm === 0 ? -1 : 1;
+    if (v.x * side < 0.85) v.x = side * 0.85;
+    v.y = clamp(v.y, -0.3, 0.5); // 最多斜向上约 30°，手才落在大头外面
+    v.z = Math.max(v.z, 0.25);
+    v.normalize().multiplyScalar((UA + LA) * reach);
+    return [o[0] + v.x, o[1] + v.y, o[2] + v.z];
   }
 
   setMood(mood: Mood, blink = 1) {
@@ -609,17 +688,12 @@ class Chibi {
     this.blush.forEach((b) => ((b.material as THREE.MeshBasicMaterial).opacity = happy ? 0.75 : 0.4));
   }
 
-  /** 手臂离身体的前后距离：抱头时要挪到放大的头前面 */
-  armZ(z: number) {
-    this.arms.forEach((a) => (a.up.position.z = z));
-  }
-
-  /** 让挂在手上的道具保持竖直；offset 是屏幕方向的偏移 */
-  upright(obj: THREE.Object3D, arm: number, offset?: [number, number]) {
-    const a = this.arms[arm];
-    const th = -(this.root.rotation.z + this.torso.rotation.z + a.up.rotation.z + a.low.rotation.z);
-    obj.rotation.z = th;
-    if (offset) obj.position.set(offset[0] * Math.cos(th) - offset[1] * Math.sin(th), offset[0] * Math.sin(th) + offset[1] * Math.cos(th), obj.position.z);
+  /** 让挂在手上的道具正对镜头、保持竖直（可加一点倾斜）；offset 是相对手的屏幕方向偏移 */
+  upright(obj: THREE.Object3D, arm: number, offset: [number, number] = [0, 0], tilt = 0) {
+    this.root.updateMatrixWorld(true);
+    const inv = this.arms[arm].hand.getWorldQuaternion(new THREE.Quaternion()).invert();
+    obj.quaternion.copy(inv).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), tilt));
+    obj.position.set(offset[0], offset[1], 0.3).applyQuaternion(inv);
   }
 
   /** 头顶在世界坐标里的高度 */
@@ -627,9 +701,11 @@ class Chibi {
     return this.root.position.y + (HEAD_Y + HEAD_R * headScale) * this.root.scale.y;
   }
 
-  place(x: number, ground: number, scale: number, hop = 0) {
+  /** 站位；hop 是离地高度；breathe 让身体轻微起伏 */
+  place(x: number, ground: number, scale: number, hop = 0, t = 0) {
     this.root.scale.setScalar(scale);
     this.root.position.set(x, ground + HIP_H * scale + hop, this.root.position.z);
+    this.torso.scale.set(1, 1 + Math.sin(t * 3.2) * 0.012, 1);
     this.shadow.position.set(x, ground + 0.02, -0.5);
     const s = scale * (1 - clamp(hop / 2.5) * 0.45);
     this.shadow.scale.set(s, s * 0.2, 1);
@@ -805,6 +881,7 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
   });
   scene.add(confetti);
   const dummy = new THREE.Object3D();
+  const tmpV = new THREE.Vector3();
 
   // ---------------------------------------------------------------- 每帧
 
@@ -817,60 +894,74 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
 
     clouds.forEach((c, i) => (c.position.x = c.userData.base + Math.sin(t * 0.25 + i) * 0.35));
 
-    // ---------- 小人
-    const blink = (t % 3.1) < 0.12 ? 0.15 : 1;
+    // ---------- 小主角
+    const blink = t % 3.1 < 0.12 ? 0.15 : 1;
     let pose: Pose = STAND;
     let mood: Mood = "neutral";
     let hop = 0;
     let headScale = 1;
-    kid.root.rotation.z = 0;
+    kid.root.rotation.set(0, 0.22, 0); // 3/4 侧身，前后方向的动作才看得出
+    kid.torso.rotation.set(0, 0, 0);
+    kid.head.rotation.set(0, 0, 0);
     kid.head.position.y = HEAD_Y;
-    let armZ = 0.05;
 
     if (t < 3.3) {
-      // 第一幕：先发愣，再抱头、头变大
-      const k = smooth(seg(t, 1.0, 1.5));
+      // 第一幕：抬头看纸往下掉 → 双手按住太阳穴、手肘撑开、摇头，头胀大一圈
+      const k = smooth(seg(t, 1.0, 1.45));
       pose = mixPose(STAND, HEADACHE, k);
-      armZ = lerp(0.05, 1.15, k);
       mood = t < 0.9 ? "neutral" : "sad";
-      headScale = 1 + 0.3 * smooth(seg(t, 1.3, 2.0)) + 0.04 * Math.sin(t * 9) * seg(t, 1.6, 2.0);
-      kid.root.rotation.z = Math.sin(t * 5) * 0.06 * seg(t, 1.2, 1.6);
+      headScale = 1 + 0.12 * smooth(seg(t, 1.3, 1.9));
+      kid.head.rotation.x = lerp(-0.25, 0.1, smooth(seg(t, 0.6, 1.2)));
+      kid.head.rotation.z = Math.sin(t * 7) * 0.13 * seg(t, 1.5, 1.9);
+      kid.torso.rotation.x = 0.1 * k;
+      kid.root.rotation.y = lerp(0.22, 0, k);
     } else if (t < 6.9) {
+      // 第二幕：掏手机，每次拍照手往前一顶，眼睛看着手机
       const k = smooth(seg(t, 3.3, 3.75));
       pose = mixPose(HEADACHE, PHONE, k);
-      armZ = lerp(1.15, 0.35, k);
-      headScale = lerp(1.3, 1, smooth(seg(t, 3.3, 3.7)));
-      // 每次闪光手腕一抖
+      headScale = lerp(1.12, 1, k);
       const tap = FLASHES.reduce((a, f) => a + pulse(t, f - 0.08, 0.2), 0);
-      pose = { ...pose, re: pose.re - tap * 18 };
+      pose.rh = [pose.rh[0], pose.rh[1] + tap * 0.05, pose.rh[2] + tap * 0.12];
+      pose.lf = [-0.21, ANKLE_Y + pulse(t, 4.5, 0.25) * 0.08, 0.04];
+      kid.head.rotation.set(0, 0.28 * k, -0.08 * k);
       mood = t < 4.4 ? "neutral" : "happy";
     } else if (t < 10.1) {
-      // 第三幕：指着正在翻面的卡片，点头
+      // 第三幕：真正「指向」正在翻面的卡片，换卡片时手臂平滑转过去，边看边点头
+      const pointAt = (i: number): Pose => {
+        const at = kid.toTorso(tmpV.copy(cards[i].g.position));
+        return i === 0 ? { ...STAND, lh: kid.reachToward(0, at) } : { ...STAND, rh: kid.reachToward(1, at), lh: [-0.42, 0.42, 0.2] };
+      };
       const idx = t < 8.1 ? 0 : t < 8.8 ? 1 : 2;
-      const pointL: Pose = { ...STAND, la: 145, le: -5 };
-      const pointC: Pose = { ...STAND, ra: 158, re: 8 };
-      const pointR: Pose = { ...STAND, ra: 128, re: 0 };
-      const target = [pointL, pointC, pointR][idx];
-      pose = mixPose(PHONE, target, smooth(seg(t, 6.9, 7.4)));
-      if (t > 7.4) pose = target;
-      kid.head.position.y = HEAD_Y + Math.abs(Math.sin(t * 6)) * 0.05;
-      armZ = 0.3;
+      const sw = [6.9, 8.1, 8.8][idx];
+      const prev = idx === 0 ? PHONE : pointAt(idx - 1);
+      pose = mixPose(prev, pointAt(idx), smooth(seg(t, sw, sw + 0.3)));
+      const card = cards[idx].g.position;
+      kid.head.rotation.set(-0.2 + Math.abs(Math.sin(t * 6)) * 0.08, (card.x - kid.root.position.x) * 0.18, 0);
+      kid.torso.rotation.z = -(card.x - kid.root.position.x) * 0.03;
       mood = t > 9.3 ? "happy" : "neutral";
     } else {
-      // 第四幕：欢呼蹦跳
-      const k = smooth(seg(t, 10.1, 10.5));
-      const wave = Math.sin(t * 10) * 14;
-      pose = mixPose(STAND, { ...CHEER, la: CHEER.la + wave, ra: CHEER.ra - wave }, k);
-      hop = t > 10.4 ? Math.abs(Math.sin((t - 10.4) * Math.PI * 1.7)) * 0.7 : 0;
-      pose = { ...pose, ll: 12 + hop * 22, rl: 12 + hop * 22 };
+      // 第四幕：V 字举手挥舞，起跳时收腿、落地屈膝
+      const k = smooth(seg(t, 10.1, 10.45));
+      const wave = Math.sin(t * 10) * 0.16;
+      const ch: Pose = { ...CHEER, lh: [CHEER.lh[0] - wave, CHEER.lh[1], CHEER.lh[2]], rh: [CHEER.rh[0] + wave, CHEER.rh[1], CHEER.rh[2]] };
+      pose = mixPose(STAND, ch, k);
+      if (t > 10.4) {
+        const ph = ((t - 10.4) * 1.7) % 1;
+        hop = Math.sin(ph * Math.PI) * 0.75;
+        const tuck = hop / 0.75;
+        const land = ph < 0.12 ? 1 - ph / 0.12 : 0; // 落地瞬间屈膝缓冲
+        pose.lf = [-0.24, ANKLE_Y + tuck * 0.22 + land * 0.1, 0.04 - tuck * 0.2];
+        pose.rf = [0.24, ANKLE_Y + tuck * 0.22 + land * 0.1, 0.04 - tuck * 0.2];
+        hop -= land * 0.1;
+      }
+      kid.head.rotation.z = Math.sin(t * 5) * 0.08;
       mood = "happy";
     }
     kid.setPose(pose);
-    kid.armZ(armZ);
     kid.setMood(mood, blink);
     kid.head.scale.setScalar(headScale);
     kid.sweat.position.y = 0.3 - ((t * 0.6) % 0.25);
-    kid.place(lerp(0, 0.2, zoomK), GROUND, KID, hop);
+    kid.place(lerp(0, 0.2, zoomK), GROUND, KID, hop, t);
 
     // 小人头顶转星星
     const dz = seg(t, 1.5, 1.8) * (1 - seg(t, 3.2, 3.5));
@@ -913,8 +1004,7 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
     // ---------- 手机与闪光
     const phoneK = backOut(seg(t, 3.4, 3.75)) * (1 - seg(t, 6.85, 7.1));
     phone.scale.setScalar(Math.max(0, phoneK));
-    kid.upright(phone, 1, [0.08, 0.38]);
-    phone.rotation.z += -0.15;
+    kid.upright(phone, 1, [0.04, 0.34], -0.12);
     const fl = FLASHES.reduce((a, f) => Math.max(a, pulse(t, f, 0.16)), 0);
     (flash.material as THREE.MeshBasicMaterial).opacity = fl * 0.55;
     kid.root.updateMatrixWorld(true);
@@ -953,40 +1043,51 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
     glow.scale.setScalar(1.7 + Math.sin(t * 12) * 0.15);
 
     // ---------- 爸妈、老师
-    const walk = (s: Chibi, from: number, to: number, a: number, b: number, scale: number) => {
-      const k = seg(t, a, b);
-      const x = lerp(from, to, smooth(k));
-      const moving = k > 0 && k < 1;
-      const ph = t * 11;
-      s.place(x, GROUND, scale, moving ? Math.abs(Math.sin(ph)) * 0.08 : 0);
-      return { moving, swing: moving ? Math.sin(ph) * 26 : 0 };
-    };
     const show = t > 10.0;
     for (const s of [mom, dad, teacher]) {
       s.root.visible = show;
       s.shadow.visible = show;
     }
     if (show) {
-      // 爸妈：走进来，然后举手挥舞欢呼
-      const cheer = (s: Chibi, w: { moving: boolean; swing: number }, phase: number) => {
-        const wave = Math.sin(t * 11 + phase) * 16;
-        const p: Pose = w.moving ? { ...STAND, ll: 4 + w.swing, rl: 4 - w.swing, la: 14 - w.swing * 0.6, ra: 14 + w.swing * 0.6 } : { ...CHEER, la: 140 + wave, ra: 140 - wave, ll: 6, rl: 6 };
-        s.setPose(p);
+      /** 侧身走进来（迈腿、摆臂、身体上下颠），到位后转向小主角 */
+      const stroll = (s: Chibi, from: number, to: number, a: number, b: number, scale: number, face: number) => {
+        const k = seg(t, a, b);
+        const moving = k > 0 && k < 1;
+        const dir = Math.sign(to - from);
+        const ph = t * 9.5;
+        s.root.rotation.set(0, moving ? dir * 1.0 : lerp(dir * 1.0, face, smooth(seg(t, b, b + 0.3))), 0);
+        s.place(lerp(from, to, smooth(k)), GROUND, scale, moving ? Math.abs(Math.sin(ph)) * 0.06 : 0, t);
+        const sw = Math.sin(ph);
+        const walkPose: Pose = {
+          lh: [-0.46, 0.28, 0.1 - sw * 0.26],
+          rh: [0.46, 0.28, 0.1 + sw * 0.26],
+          lf: [-0.2, ANKLE_Y + Math.max(0, sw) * 0.14, 0.04 + sw * 0.22],
+          rf: [0.2, ANKLE_Y + Math.max(0, -sw) * 0.14, 0.04 - sw * 0.22],
+        };
+        return { moving, walkPose };
+      };
+      // 爸妈：走到位后在胸前鼓掌
+      const clap = (s: Chibi, w: { moving: boolean; walkPose: Pose }, phase: number, at: number) => {
+        const c = Math.sin(t * 14 + phase) * 0.5 + 0.5;
+        const clapPose: Pose = { lh: [-(0.05 + 0.2 * c), 1.0, 0.55], rh: [0.05 + 0.2 * c, 1.0, 0.55], ...FEET, le: [-1, -0.5, -0.2], re: [1, -0.5, -0.2] };
+        s.setPose(w.moving ? w.walkPose : mixPose(w.walkPose, clapPose, smooth(seg(t, at, at + 0.25))));
+        s.head.rotation.set(0, 0, Math.sin(t * 4 + phase) * 0.06);
         s.setMood("happy", blink);
       };
-      cheer(dad, walk(dad, -6.5, -2.55, 10.05, 10.95, 1.4), 0);
-      cheer(mom, walk(mom, -6.0, -1.35, 10.15, 11.0, 1.28), 1.6);
-      const tw = walk(teacher, 6.5, 2.4, 10.2, 11.05, 1.36);
-      if (tw.moving) teacher.setPose({ ...STAND, ll: 4 + tw.swing, rl: 4 - tw.swing });
+      clap(dad, stroll(dad, -6.5, -2.55, 10.05, 10.95, 1.4, 0.45), 0, 10.95);
+      clap(mom, stroll(mom, -6.0, -1.35, 10.15, 11.0, 1.28, 0.4), 1.6, 11.0);
+      // 老师：走到位后左手举牌，右手叉腰
+      const tw = stroll(teacher, 6.5, 2.4, 10.2, 11.05, 1.36, -0.45);
+      if (tw.moving) teacher.setPose(tw.walkPose);
       else {
-        const k = backOut(seg(t, 11.05, 11.4));
-        teacher.setPose(mixPose(STAND, { ...STAND, la: 155, le: 10, ra: 40 + Math.sin(t * 6) * 10, re: 50 }, k));
+        const k = smooth(seg(t, 11.05, 11.35));
+        const raise: Pose = { lh: [-0.42, 1.78, 0.35], rh: [0.42, 0.55, -0.02], ...FEET, le: [-1, -0.4, -0.2], re: [1, 0.1, -0.6] };
+        teacher.setPose(mixPose(tw.walkPose, raise, k));
       }
+      teacher.head.rotation.set(0, 0, -0.08 + Math.sin(t * 4) * 0.04);
       teacher.setMood("happy", blink);
-      teacher.root.updateMatrixWorld(true);
       sign.scale.setScalar(Math.max(0, backOut(seg(t, 11.1, 11.45))));
-      teacher.upright(sign, 0, [-0.2, 0.55]);
-      sign.rotation.z += Math.sin(t * 5) * 0.06;
+      teacher.upright(sign, 0, [0, 0.5], Math.sin(t * 5) * 0.06);
     }
 
     hearts.forEach((h) => {
