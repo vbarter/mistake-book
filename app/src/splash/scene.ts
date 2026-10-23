@@ -1,4 +1,4 @@
-/** 开屏动效（three.js，卡通火柴人，约 14 秒）。
+/** 开屏动效（three.js，Q 版卡通小人，约 14 秒）。
  *
  * 四幕：
  *   1. 0.0–3.3s  试卷从天而降堆成山，小人抱头、头变大、冒汗、头顶转星星
@@ -23,8 +23,6 @@ export const CAPTIONS: { from: number; to: number; text: string }[] = [
 // ---------------------------------------------------------------- 工具
 
 const D = Math.PI / 180;
-const HEAD = 1.15; // 头比例：大头更可爱
-const LEG = 0.64;
 const INK = 0x2d3047;
 const clamp = (x: number, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const seg = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
@@ -274,24 +272,33 @@ function spriteTexture(kind: "star" | "heart" | "glow" | "sparkle") {
   });
 }
 
-// ---------------------------------------------------------------- 火柴人
+// ---------------------------------------------------------------- 卡通角色（Q 版大头，赛璐璐着色 + 描边）
 
+/** 关节角度（度）：手臂 0 = 自然下垂，a 越大越往外上抬；e 是手肘弯曲；腿同理 */
 interface Pose {
-  la: number; // 左臂（屏幕左侧）外展角，0 = 下垂
-  le: number; // 左肘弯曲（正 = 向头部方向内收）
+  la: number;
+  le: number;
   ra: number;
   re: number;
-  ll: number; // 左腿外展
-  lk: number; // 左膝
+  ll: number;
+  lk: number;
   rl: number;
   rk: number;
 }
 
-const STAND: Pose = { la: 18, le: 6, ra: 18, re: 6, ll: 9, lk: 0, rl: 9, rk: 0 };
-const HEADACHE: Pose = { la: 140, le: 70, ra: 140, re: 70, ll: 12, lk: 0, rl: 12, rk: 0 };
-const PHONE: Pose = { la: 22, le: 10, ra: 105, re: 45, ll: 12, lk: 0, rl: 12, rk: 0 };
-const CHEER: Pose = { la: 150, le: -18, ra: 150, re: -18, ll: 16, lk: 0, rl: 16, rk: 0 };
-const CLAP: Pose = { la: 60, le: 160, ra: 60, re: 160, ll: 10, lk: 0, rl: 10, rk: 0 };
+const UA = 0.4; // 上臂
+const LA = 0.36; // 前臂
+const UL = 0.36; // 大腿
+const LL = 0.34; // 小腿
+const HEAD_R = 0.74;
+const HEAD_Y = 1.62; // 头心离胯部的高度
+const HIP_H = UL + LL + 0.2; // 胯部离地高度（含鞋）
+const OUT = 0.035; // 描边粗细
+
+const STAND: Pose = { la: 14, le: 8, ra: 14, re: 8, ll: 4, lk: 0, rl: 4, rk: 0 };
+const HEADACHE: Pose = { la: 150, le: 18, ra: 150, re: 18, ll: 8, lk: 0, rl: 8, rk: 0 };
+const PHONE: Pose = { la: 16, le: 10, ra: 118, re: 38, ll: 6, lk: 0, rl: 6, rk: 0 };
+const CHEER: Pose = { la: 158, le: -12, ra: 158, re: -12, ll: 14, lk: 0, rl: 14, rk: 0 };
 
 function mixPose(a: Pose, b: Pose, x: number): Pose {
   const o = { ...a };
@@ -302,148 +309,272 @@ function mixPose(a: Pose, b: Pose, x: number): Pose {
 type Kind = "kid" | "mom" | "dad" | "teacher";
 type Mood = "sad" | "neutral" | "happy";
 
+interface Look {
+  skin: number;
+  hair: number;
+  hairStyle: "spiky" | "long" | "short" | "bun";
+  shirt: number;
+  longSleeve: boolean;
+  pants: number;
+  shorts: boolean;
+  shoes: number;
+  dress?: number;
+  scarf?: boolean;
+  tie?: number;
+  glasses?: boolean;
+}
+
+const LOOKS: Record<Kind, Look> = {
+  kid: { skin: 0xffe0c8, hair: 0x3b2a22, hairStyle: "spiky", shirt: 0x5b8def, longSleeve: false, pants: 0x2f3e6e, shorts: true, shoes: 0xff6b6b, scarf: true },
+  mom: { skin: 0xffe3cf, hair: 0x6b3f2a, hairStyle: "long", shirt: 0xff8fb1, longSleeve: false, pants: 0xffe3cf, shorts: false, shoes: 0xd9466f, dress: 0xff8fb1 },
+  dad: { skin: 0xf8d6bc, hair: 0x26262e, hairStyle: "short", shirt: 0x9ad0ff, longSleeve: true, pants: 0x4a5068, shorts: false, shoes: 0x3a3a46, tie: 0xe5484d },
+  teacher: { skin: 0xffe3cf, hair: 0x8d8fa3, hairStyle: "bun", shirt: 0x5fbf8f, longSleeve: true, pants: 0x3f4a5c, shorts: false, shoes: 0x7a4b36, glasses: true },
+};
+
 interface Mats {
   ink: THREE.Material;
+  outline: THREE.Material;
   toon: (color: number) => THREE.Material;
   basic: (color: number, opacity?: number) => THREE.Material;
 }
 
-class Stick {
+/** 带描边的卡通零件：本体 + 反面朝外、略大一圈的墨色外壳 */
+function part(m: Mats, make: (grow: number) => THREE.BufferGeometry, color: number, outline = true): THREE.Group {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(make(0), m.toon(color)));
+  if (outline) g.add(new THREE.Mesh(make(OUT), m.outline));
+  return g;
+}
+
+class Chibi {
   root = new THREE.Group();
   torso = new THREE.Group();
   head = new THREE.Group();
   arms: { up: THREE.Group; low: THREE.Group; hand: THREE.Object3D }[] = [];
   legs: { up: THREE.Group; low: THREE.Group }[] = [];
-  eyes: THREE.Mesh[] = [];
-  smile: THREE.Mesh;
-  frown: THREE.Mesh;
+  eyesOpen: THREE.Group[] = [];
+  eyesHappy: THREE.Object3D[] = [];
+  brows: THREE.Object3D[] = [];
+  smile: THREE.Object3D;
+  grin: THREE.Object3D;
+  frown: THREE.Object3D;
   blush: THREE.Mesh[] = [];
-  sweat: THREE.Mesh;
+  sweat: THREE.Object3D;
   shadow: THREE.Mesh;
 
   constructor(m: Mats, kind: Kind) {
-    const limb = (len: number) => {
-      const g = new THREE.Group();
-      const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, len, 4, 10), m.ink);
-      mesh.position.y = -len / 2;
-      g.add(mesh);
-      return g;
-    };
+    const L = LOOKS[kind];
+    const capsule = (r: number, len: number, color: number) => part(m, (o) => new THREE.CapsuleGeometry(r + o, len, 6, 16), color);
+    const ball = (r: number, color: number, outline = true) => part(m, (o) => new THREE.SphereGeometry(r + o, 24, 16), color, outline);
     this.root.add(this.torso);
 
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 1.3, 4, 10), m.ink);
-    body.position.y = 0.65;
-    this.torso.add(body);
+    // ---- 身体
+    if (L.dress) {
+      const dress = part(m, (o) => new THREE.CylinderGeometry(0.3 + o, 0.62 + o, 1.05 + o, 28), L.dress);
+      dress.position.y = 0.45;
+      this.torso.add(dress);
+      const chest = capsule(0.3, 0.2, L.dress);
+      chest.position.y = 0.9;
+      this.torso.add(chest);
+    } else {
+      const body = capsule(0.38, 0.42, L.shirt);
+      body.position.y = 0.62;
+      this.torso.add(body);
+      const hips = capsule(0.36, 0.04, L.pants);
+      hips.position.y = 0.2;
+      this.torso.add(hips);
+    }
+    if (L.scarf) {
+      // 红领巾
+      const tri = part(m, (o) => new THREE.ConeGeometry(0.2 + o, 0.42 + o, 3), 0xe63946);
+      tri.rotation.z = Math.PI;
+      tri.position.set(0, 0.86, 0.34);
+      tri.scale.z = 0.35;
+      const knot = ball(0.09, 0xe63946);
+      knot.position.set(0, 1.04, 0.36);
+      this.torso.add(tri, knot);
+    }
+    if (L.tie) {
+      const tie = part(m, (o) => new THREE.ConeGeometry(0.11 + o, 0.5 + o, 4), L.tie);
+      tie.rotation.z = Math.PI;
+      tie.scale.z = 0.4;
+      tie.position.set(0, 0.8, 0.37);
+      this.torso.add(tie);
+    }
 
-    // 头：白色圆 + 描边
-    this.head.position.y = 2.02;
-    this.head.scale.setScalar(HEAD);
+    // ---- 头
+    this.head.position.y = HEAD_Y;
     this.torso.add(this.head);
-    const skin = kind === "kid" ? 0xffffff : 0xfffaf2;
-    const face = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 20), m.toon(skin));
-    const outline = new THREE.Mesh(new THREE.SphereGeometry(0.54, 32, 20), new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }));
-    this.head.add(face, outline);
+    const face = ball(HEAD_R, L.skin);
+    face.scale.set(1.04, 0.94, 1);
+    this.head.add(face);
+    for (const s of [-1, 1]) {
+      const ear = ball(0.14, L.skin);
+      ear.position.set(s * 0.74, -0.04, 0);
+      this.head.add(ear);
+    }
+    this.addHair(m, L, ball);
 
     for (const s of [-1, 1]) {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 10), m.ink);
-      eye.position.set(s * 0.17, 0.06, 0.46);
+      // 大眼睛：黑色椭圆 + 两个高光
+      const eye = new THREE.Group();
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 14), m.ink);
+      pupil.scale.set(0.85, 1.2, 0.45);
+      const hl = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), m.basic(0xffffff));
+      hl.position.set(0.03, 0.06, 0.05);
+      const hl2 = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), m.basic(0xffffff));
+      hl2.position.set(-0.035, -0.05, 0.05);
+      eye.add(pupil, hl, hl2);
+      eye.position.set(s * 0.26, -0.02, 0.67);
+      eye.rotation.y = s * 0.36;
       this.head.add(eye);
-      this.eyes.push(eye);
-      const blush = new THREE.Mesh(new THREE.CircleGeometry(0.085, 16), m.basic(0xff8fa3, 0.75));
-      blush.position.set(s * 0.29, -0.09, 0.44);
-      blush.rotation.y = s * 0.55;
+      this.eyesOpen.push(eye);
+      // 开心时眯成 ^ ^
+      const happy = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.03, 8, 18, Math.PI), m.ink);
+      happy.position.set(s * 0.26, -0.04, 0.68);
+      happy.rotation.y = s * 0.36;
+      this.head.add(happy);
+      this.eyesHappy.push(happy);
+      const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.024, 0.13, 3, 8), m.ink);
+      brow.rotation.z = Math.PI / 2;
+      brow.position.set(s * 0.26, 0.2, 0.66);
+      this.head.add(brow);
+      this.brows.push(brow);
+      const blush = new THREE.Mesh(new THREE.CircleGeometry(0.11, 20), m.basic(0xff8fa3, 0.55));
+      blush.scale.y = 0.65;
+      blush.position.set(s * 0.44, -0.2, 0.56);
+      blush.rotation.y = s * 0.66;
       this.head.add(blush);
       this.blush.push(blush);
     }
-    const arc = new THREE.TorusGeometry(0.14, 0.032, 8, 20, Math.PI);
+    if (L.glasses) {
+      for (const s of [-1, 1]) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 8, 28), m.ink);
+        ring.position.set(s * 0.26, -0.02, 0.73);
+        ring.rotation.y = s * 0.36;
+        this.head.add(ring);
+      }
+      const bridge = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.07, 2, 6), m.ink);
+      bridge.rotation.z = Math.PI / 2;
+      bridge.position.set(0, 0.0, 0.76);
+      this.head.add(bridge);
+    }
+
+    const arc = new THREE.TorusGeometry(0.1, 0.026, 8, 20, Math.PI);
     this.smile = new THREE.Mesh(arc, m.ink);
     this.smile.rotation.z = Math.PI;
-    this.smile.position.set(0, -0.08, 0.47);
+    this.smile.position.set(0, -0.22, 0.71);
     this.frown = new THREE.Mesh(arc, m.ink);
-    this.frown.position.set(0, -0.24, 0.46);
     this.frown.scale.set(0.8, 0.7, 1);
-    this.head.add(this.smile, this.frown);
+    this.frown.position.set(0, -0.34, 0.69);
+    // 开心张嘴：红色半圆 + 舌头
+    this.grin = new THREE.Group();
+    const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.15, 24, Math.PI, Math.PI), m.basic(0x9b2c3c));
+    const tongue = new THREE.Mesh(new THREE.CircleGeometry(0.075, 16, Math.PI, Math.PI), m.basic(0xff7a8a));
+    tongue.position.set(0, -0.07, 0.005);
+    tongue.scale.y = 0.7;
+    this.grin.add(mouth, tongue);
+    this.grin.position.set(0, -0.19, 0.72);
+    this.grin.rotation.x = -0.25;
+    this.head.add(this.smile, this.frown, this.grin);
 
-    this.sweat = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), m.toon(0x7cc7ff));
-    this.sweat.scale.set(1, 1.5, 1);
-    this.sweat.position.set(0.44, 0.22, 0.3);
-    this.head.add(this.sweat);
+    const drop = ball(0.08, 0x7cc7ff);
+    drop.scale.set(1, 1.45, 0.8);
+    drop.position.set(0.62, 0.3, 0.38);
+    this.sweat = drop;
+    this.head.add(drop);
 
-    // 角色特征
-    if (kind === "kid") {
-      for (let i = -1; i <= 1; i++) {
-        const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.28, 8), m.ink);
-        tuft.position.set(i * 0.11, 0.56, 0);
-        tuft.rotation.z = -i * 0.45;
-        this.head.add(tuft);
-      }
-    }
-    if (kind === "mom" || kind === "dad" || kind === "teacher") {
-      const hairColor = kind === "teacher" ? 0x8a8fa8 : 0x4a3428;
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.56, 28, 14, 0, Math.PI * 2, 0, Math.PI * (kind === "dad" ? 0.32 : 0.42)), m.toon(hairColor));
-      cap.rotation.x = -0.2;
-      this.head.add(cap);
-      if (kind === "mom") {
-        const tail = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), m.toon(hairColor));
-        tail.position.set(0.5, 0.25, -0.1);
-        this.head.add(tail);
-        const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.85, 24, 1, true), m.toon(0xff8fb1));
-        skirt.position.y = 0.32;
-        this.torso.add(skirt);
-      }
-      if (kind === "teacher") {
-        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 12), m.toon(hairColor));
-        bun.position.set(0, 0.62, -0.05);
-        this.head.add(bun);
-        for (const s of [-1, 1]) {
-          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.022, 8, 24), m.ink);
-          ring.position.set(s * 0.17, 0.06, 0.5);
-          this.head.add(ring);
-        }
-        const bridge = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.08, 2, 6), m.ink);
-        bridge.rotation.z = Math.PI / 2;
-        bridge.position.set(0, 0.08, 0.52);
-        this.head.add(bridge);
-      }
-      if (kind === "dad") {
-        const tie = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.5, 4), m.toon(0xe5484d));
-        tie.rotation.z = Math.PI;
-        tie.position.set(0, 1.05, 0.12);
-        this.torso.add(tie);
-      }
-    }
-
-    // 四肢：手臂挂在脖子下方，略往前，保证在身体前面
-    for (const _ of [-1, 1]) {
-      const up = limb(0.72);
-      up.position.set(0, 1.32, 0.12);
-      const low = limb(0.66);
-      low.position.y = -0.72;
+    // ---- 手臂（肩膀在身体两侧）
+    for (const s of [-1, 1]) {
+      const up = new THREE.Group();
+      up.position.set(s * 0.3, 0.92, 0.05);
+      const upper = capsule(0.12, UA, L.shirt);
+      upper.position.y = -UA / 2;
+      up.add(upper);
+      const low = new THREE.Group();
+      low.position.y = -UA;
+      const lower = capsule(0.105, LA, L.longSleeve ? L.shirt : L.skin);
+      lower.position.y = -LA / 2;
+      const fist = ball(0.135, L.skin);
+      fist.position.y = -LA - 0.04;
+      low.add(lower, fist);
       up.add(low);
       const hand = new THREE.Object3D();
-      hand.position.y = -0.7;
+      hand.position.y = -LA - 0.06;
       low.add(hand);
       this.torso.add(up);
       this.arms.push({ up, low, hand });
     }
-    for (const _ of [-1, 1]) {
-      const up = limb(LEG);
-      const low = limb(LEG);
-      low.position.y = -LEG;
+
+    // ---- 腿
+    for (const s of [-1, 1]) {
+      const up = new THREE.Group();
+      up.position.set(s * 0.18, 0.12, 0);
+      const thigh = capsule(0.14, UL, L.shorts || L.dress ? (L.dress ? L.skin : L.pants) : L.pants);
+      thigh.position.y = -UL / 2;
+      up.add(thigh);
+      const low = new THREE.Group();
+      low.position.y = -UL;
+      const shin = capsule(0.12, LL, L.shorts || L.dress ? L.skin : L.pants);
+      shin.position.y = -LL / 2;
+      const shoe = ball(0.18, L.shoes);
+      shoe.scale.set(1.05, 0.68, 1.35);
+      shoe.position.set(0, -LL - 0.08, 0.07);
+      low.add(shin, shoe);
       up.add(low);
-      const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), m.ink);
-      shoe.scale.set(1.3, 0.75, 1);
-      shoe.position.y = -LEG - 0.06;
-      low.add(shoe);
       this.torso.add(up);
       this.legs.push({ up, low });
     }
 
-    this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.75, 28), m.basic(0x000000, 0.1));
-    this.shadow.scale.y = 0.18;
+    this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.8, 28), m.basic(0x6b4a2a, 0.13));
+    this.shadow.scale.y = 0.2;
 
     this.setMood("neutral");
     this.setPose(STAND);
+  }
+
+  private addHair(m: Mats, L: Look, ball: (r: number, c: number, o?: boolean) => THREE.Group) {
+    const hairCap = (thetaLen: number, tilt: number) => {
+      const cap = part(m, (o) => new THREE.SphereGeometry(HEAD_R + 0.06 + o, 32, 18, 0, Math.PI * 2, 0, thetaLen), L.hair);
+      cap.rotation.x = tilt;
+      cap.scale.set(1.04, 0.96, 1);
+      this.head.add(cap);
+      return cap;
+    };
+    if (L.hairStyle === "spiky") {
+      hairCap(Math.PI * 0.42, -0.42);
+      // 刘海 + 呆毛
+      for (const [x, rot] of [[-0.3, 0.5], [-0.05, 0.15], [0.22, -0.35]] as const) {
+        const bang = part(m, (o) => new THREE.ConeGeometry(0.17 + o, 0.42 + o, 10), L.hair);
+        bang.position.set(x, 0.42, 0.5);
+        bang.rotation.set(1.9, 0, rot);
+        this.head.add(bang);
+      }
+      const ahoge = part(m, (o) => new THREE.ConeGeometry(0.09 + o, 0.42 + o, 8), L.hair);
+      ahoge.position.set(0.08, 0.86, 0);
+      ahoge.rotation.z = -0.45;
+      this.head.add(ahoge);
+    } else if (L.hairStyle === "long") {
+      hairCap(Math.PI * 0.46, -0.32);
+      const back = part(m, (o) => new THREE.CapsuleGeometry(0.62 + o, 0.5, 6, 18), L.hair);
+      back.position.set(0, -0.3, -0.28);
+      back.scale.z = 0.6;
+      this.head.add(back);
+      const bow = ball(0.13, 0xff5c8a);
+      bow.position.set(0.5, 0.52, 0.3);
+      this.head.add(bow);
+    } else if (L.hairStyle === "short") {
+      hairCap(Math.PI * 0.36, -0.3);
+      const quiff = ball(0.22, L.hair);
+      quiff.scale.set(1.6, 0.7, 1);
+      quiff.position.set(0.12, 0.62, 0.32);
+      this.head.add(quiff);
+    } else {
+      hairCap(Math.PI * 0.44, -0.3);
+      const bun = ball(0.24, L.hair);
+      bun.position.set(0, 0.82, -0.16);
+      this.head.add(bun);
+    }
   }
 
   setPose(p: Pose) {
@@ -459,35 +590,49 @@ class Stick {
     rl.low.rotation.z = -p.rk * D;
   }
 
-  setMood(m: Mood, blink = 1) {
-    this.smile.visible = m !== "sad";
-    this.smile.scale.set(m === "happy" ? 1.25 : 0.85, m === "happy" ? 1.25 : 0.6, 1);
-    this.frown.visible = m === "sad";
-    this.sweat.visible = m === "sad";
-    this.blush.forEach((b) => (b.visible = m === "happy"));
-    this.eyes.forEach((e) => (e.scale.y = blink));
+  setMood(mood: Mood, blink = 1) {
+    const happy = mood === "happy";
+    this.eyesOpen.forEach((e) => {
+      e.visible = !happy;
+      e.scale.y = blink;
+    });
+    this.eyesHappy.forEach((e) => (e.visible = happy));
+    this.grin.visible = happy;
+    this.smile.visible = mood === "neutral";
+    this.frown.visible = mood === "sad";
+    this.sweat.visible = mood === "sad";
+    this.brows.forEach((b, i) => {
+      const s = i === 0 ? -1 : 1;
+      b.rotation.z = Math.PI / 2 + (mood === "sad" ? s * 0.4 : happy ? -s * 0.12 : 0);
+      b.position.y = mood === "sad" ? 0.24 : 0.22;
+    });
+    this.blush.forEach((b) => ((b.material as THREE.MeshBasicMaterial).opacity = happy ? 0.75 : 0.4));
   }
 
-  /** 手臂离身体的前后距离：抱头时要挪到放大的头前面，不然被头挡住 */
+  /** 手臂离身体的前后距离：抱头时要挪到放大的头前面 */
   armZ(z: number) {
     this.arms.forEach((a) => (a.up.position.z = z));
   }
 
-  /** 让挂在手上的道具始终保持竖直 */
+  /** 让挂在手上的道具保持竖直；offset 是屏幕方向的偏移 */
   upright(obj: THREE.Object3D, arm: number, offset?: [number, number]) {
     const a = this.arms[arm];
     const th = -(this.root.rotation.z + this.torso.rotation.z + a.up.rotation.z + a.low.rotation.z);
     obj.rotation.z = th;
-    // offset 是相对手的「屏幕方向」偏移；手是旋转过的，要反转回来才不会被甩到别处
     if (offset) obj.position.set(offset[0] * Math.cos(th) - offset[1] * Math.sin(th), offset[0] * Math.sin(th) + offset[1] * Math.cos(th), obj.position.z);
+  }
+
+  /** 头顶在世界坐标里的高度 */
+  headTop(headScale = 1) {
+    return this.root.position.y + (HEAD_Y + HEAD_R * headScale) * this.root.scale.y;
   }
 
   place(x: number, ground: number, scale: number, hop = 0) {
     this.root.scale.setScalar(scale);
-    this.root.position.set(x, ground + (LEG * 2 + 0.14) * scale + hop, this.root.position.z);
+    this.root.position.set(x, ground + HIP_H * scale + hop, this.root.position.z);
     this.shadow.position.set(x, ground + 0.02, -0.5);
     const s = scale * (1 - clamp(hop / 2.5) * 0.45);
-    this.shadow.scale.set(s, s * 0.18, 1);
+    this.shadow.scale.set(s, s * 0.2, 1);
   }
 }
 
@@ -523,6 +668,7 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
 
   const m: Mats = {
     ink: new THREE.MeshToonMaterial({ color: INK, gradientMap: grad }),
+    outline: new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }),
     toon: (color) => new THREE.MeshToonMaterial({ color, gradientMap: grad }),
     basic: (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 }),
   };
@@ -554,10 +700,11 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
   }
 
   // 角色
-  const kid = new Stick(m, "kid");
-  const mom = new Stick(m, "mom");
-  const dad = new Stick(m, "dad");
-  const teacher = new Stick(m, "teacher");
+  const KID = 1.15; // 小主角的缩放
+  const kid = new Chibi(m, "kid");
+  const mom = new Chibi(m, "mom");
+  const dad = new Chibi(m, "dad");
+  const teacher = new Chibi(m, "teacher");
   for (const s of [kid, mom, dad, teacher]) scene.add(s.root, s.shadow);
   dad.root.position.z = -0.4;
   teacher.root.position.z = -0.2;
@@ -571,9 +718,9 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
     const mesh = new THREE.Mesh(paperGeo, paperMats[i % 4]);
     const side = i % 2 ? 1 : -1;
     const layer = Math.floor(i / 2);
-    const pile = new THREE.Vector3(side * (1.25 + r() * 0.75), GROUND + 0.55 + layer * 0.32 + r() * 0.1, 0.4 + i * 0.03);
+    const pile = new THREE.Vector3(side * (1.4 + r() * 0.65), GROUND + 0.55 + layer * 0.32 + r() * 0.1, 0.4 + i * 0.03);
     // 最后两张砸到头上又滑到肩头
-    if (i >= PAPERS - 2) pile.set(side * 0.5, GROUND + 4.25 - (i - PAPERS + 2) * 0.2, 1.4 + i * 0.02);
+    if (i >= PAPERS - 2) pile.set(side * 0.45, GROUND + (HIP_H + HEAD_Y + HEAD_R * 0.92) * KID + 0.35 - (i - PAPERS + 2) * 0.18, 1.6 + i * 0.02);
     const start = new THREE.Vector3(pile.x + (r() - 0.5) * 3, 6.5 + r() * 2.5, pile.z);
     scene.add(mesh);
     // 归档顺序：砸在头上的两张先收走，露出脸
@@ -590,7 +737,7 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
 
   // 第二幕：手机、闪光、文件夹
   const phone = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.9), flat(tex(phoneTexture())));
-  phone.position.set(0, -0.12, 0.25);
+  phone.position.set(0, 0.3, 0.3);
   kid.arms[1].hand.add(phone);
   const flashSpark = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(spriteTexture("sparkle")), transparent: true, depthTest: false }));
   scene.add(flashSpark);
@@ -638,15 +785,15 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
   scene.add(bulb);
 
   // 第四幕：牌子、爱心、彩纸
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.0), flat(tex(signTexture())));
-  sign.position.set(-0.8, 0.85, 0.4);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.8), flat(tex(signTexture())));
+  sign.position.set(0, 0.6, 0.5);
   teacher.arms[0].hand.add(sign);
 
   const heartTex = tex(spriteTexture("heart"));
   const hearts = Array.from({ length: 6 }, (_, i) => {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: heartTex, transparent: true }));
     scene.add(s);
-    return { s, at: 11.0 + i * 0.28, x: (i % 2 ? -1.55 : -2.6) + (r() - 0.5) * 0.5 };
+    return { s, at: 11.0 + i * 0.28, x: (i % 2 ? -1.35 : -2.55) + (r() - 0.5) * 0.5 };
   });
 
   const CONFETTI = 110;
@@ -664,8 +811,8 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
   function render(t: number) {
     // 镜头：第四幕拉远、上移，给爸妈和老师腾地方
     const zoomK = smooth(seg(t, 10.0, 10.75));
-    cam.zoom = lerp(1, 0.66, zoomK);
-    cam.position.y = lerp(0, 1.35, zoomK);
+    cam.zoom = lerp(1, 0.6, zoomK);
+    cam.position.y = lerp(0, 1.6, zoomK);
     cam.updateProjectionMatrix();
 
     clouds.forEach((c, i) => (c.position.x = c.userData.base + Math.sin(t * 0.25 + i) * 0.35));
@@ -677,22 +824,22 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
     let hop = 0;
     let headScale = 1;
     kid.root.rotation.z = 0;
-    kid.head.position.y = 2.02;
-    let armZ = 0.12;
+    kid.head.position.y = HEAD_Y;
+    let armZ = 0.05;
 
     if (t < 3.3) {
       // 第一幕：先发愣，再抱头、头变大
       const k = smooth(seg(t, 1.0, 1.5));
       pose = mixPose(STAND, HEADACHE, k);
-      armZ = lerp(0.12, 0.95, k);
+      armZ = lerp(0.05, 1.15, k);
       mood = t < 0.9 ? "neutral" : "sad";
-      headScale = 1 + 0.32 * smooth(seg(t, 1.3, 2.0)) + 0.04 * Math.sin(t * 9) * seg(t, 1.6, 2.0);
+      headScale = 1 + 0.3 * smooth(seg(t, 1.3, 2.0)) + 0.04 * Math.sin(t * 9) * seg(t, 1.6, 2.0);
       kid.root.rotation.z = Math.sin(t * 5) * 0.06 * seg(t, 1.2, 1.6);
     } else if (t < 6.9) {
       const k = smooth(seg(t, 3.3, 3.75));
       pose = mixPose(HEADACHE, PHONE, k);
-      armZ = lerp(0.95, 0.3, k);
-      headScale = lerp(1.32, 1, smooth(seg(t, 3.3, 3.7)));
+      armZ = lerp(1.15, 0.35, k);
+      headScale = lerp(1.3, 1, smooth(seg(t, 3.3, 3.7)));
       // 每次闪光手腕一抖
       const tap = FLASHES.reduce((a, f) => a + pulse(t, f - 0.08, 0.2), 0);
       pose = { ...pose, re: pose.re - tap * 18 };
@@ -706,7 +853,7 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
       const target = [pointL, pointC, pointR][idx];
       pose = mixPose(PHONE, target, smooth(seg(t, 6.9, 7.4)));
       if (t > 7.4) pose = target;
-      kid.head.position.y = 2.02 + Math.abs(Math.sin(t * 6)) * 0.06;
+      kid.head.position.y = HEAD_Y + Math.abs(Math.sin(t * 6)) * 0.05;
       armZ = 0.3;
       mood = t > 9.3 ? "happy" : "neutral";
     } else {
@@ -715,21 +862,21 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
       const wave = Math.sin(t * 10) * 14;
       pose = mixPose(STAND, { ...CHEER, la: CHEER.la + wave, ra: CHEER.ra - wave }, k);
       hop = t > 10.4 ? Math.abs(Math.sin((t - 10.4) * Math.PI * 1.7)) * 0.7 : 0;
-      pose = { ...pose, ll: 16 + hop * 18, rl: 16 + hop * 18 };
+      pose = { ...pose, ll: 12 + hop * 22, rl: 12 + hop * 22 };
       mood = "happy";
     }
     kid.setPose(pose);
     kid.armZ(armZ);
     kid.setMood(mood, blink);
-    kid.head.scale.setScalar(headScale * HEAD);
-    kid.sweat.position.y = 0.22 - ((t * 0.6) % 0.25);
-    kid.place(lerp(0, 0.15, zoomK), GROUND, 1, hop);
+    kid.head.scale.setScalar(headScale);
+    kid.sweat.position.y = 0.3 - ((t * 0.6) % 0.25);
+    kid.place(lerp(0, 0.2, zoomK), GROUND, KID, hop);
 
     // 小人头顶转星星
     const dz = seg(t, 1.5, 1.8) * (1 - seg(t, 3.2, 3.5));
     dizzy.forEach((s, i) => {
       const a = t * 3.2 + (i * Math.PI * 2) / 3;
-      s.position.set(Math.cos(a) * 0.95, kid.root.position.y + 2.02 + 0.5 * HEAD * headScale + 0.35 + Math.sin(a) * 0.15, 2 + Math.sin(a));
+      s.position.set(Math.cos(a) * 1.05, kid.headTop(headScale) + 0.3 + Math.sin(a) * 0.15, 2 + Math.sin(a));
       s.scale.setScalar(0.34 * dz);
     });
 
@@ -744,7 +891,7 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
       }
       let scale = fall > 0 ? 1 : 0;
       // 砸在头上的两张：头变大时被顶起
-      if (p.pile.z > 1) pos.y += (headScale - 1) * 1.2;
+      if (p.pile.z > 1) pos.y += (headScale - 1) * HEAD_R * 2 * KID;
 
       // 第二幕：飞进文件夹
       const fly = smooth(seg(t, p.fileAt, p.fileAt + 0.5));
@@ -766,8 +913,8 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
     // ---------- 手机与闪光
     const phoneK = backOut(seg(t, 3.4, 3.75)) * (1 - seg(t, 6.85, 7.1));
     phone.scale.setScalar(Math.max(0, phoneK));
-    kid.upright(phone, 1, [0.05, 0.15]);
-    phone.rotation.z += -0.18;
+    kid.upright(phone, 1, [0.08, 0.38]);
+    phone.rotation.z += -0.15;
     const fl = FLASHES.reduce((a, f) => Math.max(a, pulse(t, f, 0.16)), 0);
     (flash.material as THREE.MeshBasicMaterial).opacity = fl * 0.55;
     kid.root.updateMatrixWorld(true);
@@ -802,17 +949,17 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
 
     const bulbK = backOut(seg(t, 9.3, 9.6)) * (1 - seg(t, 10.0, 10.25));
     bulb.scale.setScalar(Math.max(0, bulbK));
-    bulb.position.set(kid.root.position.x, kid.root.position.y + 3.25, 2);
+    bulb.position.set(kid.root.position.x, kid.headTop() + 0.6, 2);
     glow.scale.setScalar(1.7 + Math.sin(t * 12) * 0.15);
 
     // ---------- 爸妈、老师
-    const walk = (s: Stick, from: number, to: number, a: number, b: number, scale: number) => {
+    const walk = (s: Chibi, from: number, to: number, a: number, b: number, scale: number) => {
       const k = seg(t, a, b);
       const x = lerp(from, to, smooth(k));
       const moving = k > 0 && k < 1;
       const ph = t * 11;
       s.place(x, GROUND, scale, moving ? Math.abs(Math.sin(ph)) * 0.08 : 0);
-      return { moving, swing: moving ? Math.sin(ph) * 24 : 0 };
+      return { moving, swing: moving ? Math.sin(ph) * 26 : 0 };
     };
     const show = t > 10.0;
     for (const s of [mom, dad, teacher]) {
@@ -820,31 +967,32 @@ export function createSplash(canvas: HTMLCanvasElement): SplashScene {
       s.shadow.visible = show;
     }
     if (show) {
-      const clap = (s: Stick, w: { moving: boolean; swing: number }, phase: number) => {
-        const c = Math.sin(t * 13 + phase) * 0.5 + 0.5;
-        const p: Pose = w.moving ? { ...STAND, ll: 10 + w.swing, rl: 10 - w.swing, la: 18 - w.swing * 0.5, ra: 18 + w.swing * 0.5 } : { ...CLAP, le: 150 + c * 28, re: 150 + c * 28 };
+      // 爸妈：走进来，然后举手挥舞欢呼
+      const cheer = (s: Chibi, w: { moving: boolean; swing: number }, phase: number) => {
+        const wave = Math.sin(t * 11 + phase) * 16;
+        const p: Pose = w.moving ? { ...STAND, ll: 4 + w.swing, rl: 4 - w.swing, la: 14 - w.swing * 0.6, ra: 14 + w.swing * 0.6 } : { ...CHEER, la: 140 + wave, ra: 140 - wave, ll: 6, rl: 6 };
         s.setPose(p);
         s.setMood("happy", blink);
       };
-      clap(dad, walk(dad, -6.5, -2.65, 10.05, 10.95, 1.18), 0);
-      clap(mom, walk(mom, -6.0, -1.55, 10.15, 11.0, 1.1), 1.4);
-      const tw = walk(teacher, 6.5, 2.45, 10.2, 11.05, 1.15);
-      if (tw.moving) teacher.setPose({ ...STAND, ll: 10 + tw.swing, rl: 10 - tw.swing });
+      cheer(dad, walk(dad, -6.5, -2.55, 10.05, 10.95, 1.4), 0);
+      cheer(mom, walk(mom, -6.0, -1.35, 10.15, 11.0, 1.28), 1.6);
+      const tw = walk(teacher, 6.5, 2.4, 10.2, 11.05, 1.36);
+      if (tw.moving) teacher.setPose({ ...STAND, ll: 4 + tw.swing, rl: 4 - tw.swing });
       else {
         const k = backOut(seg(t, 11.05, 11.4));
-        teacher.setPose(mixPose(STAND, { ...STAND, la: 150, le: 18, ra: 30 + Math.sin(t * 6) * 8, re: 40 }, k));
+        teacher.setPose(mixPose(STAND, { ...STAND, la: 155, le: 10, ra: 40 + Math.sin(t * 6) * 10, re: 50 }, k));
       }
       teacher.setMood("happy", blink);
       teacher.root.updateMatrixWorld(true);
       sign.scale.setScalar(Math.max(0, backOut(seg(t, 11.1, 11.45))));
-      teacher.upright(sign, 0, [-0.55, 0.75]);
+      teacher.upright(sign, 0, [-0.2, 0.55]);
       sign.rotation.z += Math.sin(t * 5) * 0.06;
     }
 
     hearts.forEach((h) => {
       const k = seg(t, h.at, h.at + 1.6);
       h.s.visible = k > 0 && k < 1;
-      h.s.position.set(h.x + Math.sin(k * 6) * 0.15, GROUND + 3.6 + k * 2.4, 3);
+      h.s.position.set(h.x + Math.sin(k * 6) * 0.15, GROUND + 4.9 + k * 2.2, 3);
       h.s.scale.setScalar(0.5 * Math.sin(Math.min(1, k * 3) * Math.PI * 0.5) * (1 - k * 0.5));
       h.s.material.opacity = 1 - smooth(seg(k, 0.7, 1));
     });
