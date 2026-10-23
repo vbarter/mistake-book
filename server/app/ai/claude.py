@@ -384,7 +384,7 @@ class ClaudeProvider(AIProvider):
             items.append(ScannedItem(**cleaned, page=min(max(page, 0), len(pages) - 1), bbox=bbox, reason=str(raw.get("reason") or "")))
         return items
 
-    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = ""):
+    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = "", on_page_done=None):
         """每张照片单独调用一次模型并发还原（互不依赖，整体耗时≈单页耗时），再合并派生题目。"""
         subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
 
@@ -404,7 +404,15 @@ class ClaudeProvider(AIProvider):
                 },
             ]
             data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000)
-            return clean_sheets(data, index)
+            sheets = clean_sheets(data, index)
+            if on_page_done:
+                with progress_lock:
+                    done_count[0] += 1
+                    on_page_done(done_count[0], len(pages))
+            return sheets
+
+        progress_lock = __import__("threading").Lock()
+        done_count = [0]
 
         if len(pages) == 1:
             results = [one(0, pages[0])]

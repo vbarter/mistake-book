@@ -7,6 +7,7 @@ import { SubjectStack, SubjectTile, Tag, WrongRing, subjectColors } from "../com
 import { folderErrors, groupByKnowledge } from "../lib/errors";
 import { createFolder, defaultFolderName, folderStats, listFolders, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
+import { useJobs } from "../lib/jobs";
 import { useCapture } from "../store/capture";
 
 type Source = "camera" | "photos";
@@ -21,9 +22,10 @@ export default function Papers() {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState<Subject | undefined>(undefined);
 
+  const jobsVersion = useJobs((s) => s.version);
   useEffect(() => {
     listFolders().then(setFolders).catch(() => setFolders([]));
-  }, []);
+  }, [jobsVersion]);
 
   const goCapture = (folderId: string | null, source: Source) => {
     reset();
@@ -77,7 +79,9 @@ export default function Papers() {
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="clock" size={14} stroke={2} />{formatDate(f.updatedAt)}</span>
                   </span>
                 </div>
-                {st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} corrected={st.corrected} />}
+                {f.papers.some((p) => p.scanJob) ? (
+                  <Tag kind="info" icon="sparkles">AI 还原中 {Math.min(...f.papers.filter((p) => p.scanJob).map((p) => p.scanJob!.progress))}%</Tag>
+                ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} corrected={st.corrected} />}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className="thumbs">

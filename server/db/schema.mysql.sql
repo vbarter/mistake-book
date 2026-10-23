@@ -102,3 +102,20 @@ CREATE TABLE IF NOT EXISTS practice_sessions (
 CREATE USER IF NOT EXISTS 'zhicuoben'@'%' IDENTIFIED BY 'zhicuoben';
 GRANT SELECT, INSERT, UPDATE, DELETE ON zhicuoben.* TO 'zhicuoben'@'%';
 FLUSH PRIVILEGES;
+
+
+-- 试卷数字化后台任务（结果保留一天，服务端按需清理）
+CREATE TABLE IF NOT EXISTS digitize_jobs (
+  id VARCHAR(32) PRIMARY KEY,
+  user_id VARCHAR(32) NOT NULL,
+  status VARCHAR(16) DEFAULT 'queued',
+  total_pages INT DEFAULT 0,
+  done_pages INT DEFAULT 0,
+  result JSON NULL,
+  error TEXT,
+  created_at DATETIME,
+  updated_at DATETIME,
+  INDEX idx_jobs_user (user_id),
+  INDEX idx_jobs_status (status),
+  INDEX idx_jobs_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

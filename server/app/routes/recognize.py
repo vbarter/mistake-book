@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import base64
 import logging
+import threading
+from datetime import datetime, timedelta
 
 from flask import Blueprint, Response, abort, current_app, jsonify, request
 
-from ..ai import AIError, Crop, get_provider
+from ..ai import AIError, Crop, get_provider, provider_name
+from ..extensions import db
+from ..models import DigitizeJob
 from ..auth_utils import current_user, login_required
 from ..constants import SUBJECTS
 from ..pdf import build_book_pdf, build_papers_pdf
@@ -107,10 +111,64 @@ def scan():
     return jsonify({"items": results, "pages": len(pages), "provider": provider.name})
 
 
+def _run_job(app, job_id: str, pages: list[Crop], subjects: list[str], grade: str, region: str) -> None:
+    """后台线程入口：自己开应用上下文再执行。"""
+    with app.app_context():
+        _run_job_here(job_id, pages, subjects, grade, region)
+
+
+def _run_job_here(job_id: str, pages: list[Crop], subjects: list[str], grade: str, region: str) -> None:
+    """执行一个数字化任务（在当前应用上下文里）：进度按页写回数据库，完成后存结果。"""
+    if True:
+        job = db.session.get(DigitizeJob, job_id)
+        if not job:
+            return
+        job.status = "running"
+        db.session.commit()
+
+        def on_page_done(done: int, total: int) -> None:
+            j = db.session.get(DigitizeJob, job_id)
+            if j:
+                j.done_pages = done
+                db.session.commit()
+
+        try:
+            page_infos, questions = get_provider().digitize_pages(pages, subjects=subjects, grade=grade, region=region, on_page_done=on_page_done)
+            out = []
+            for i, q in enumerate(questions):
+                d = q.to_dict()
+                d["index"] = i
+                out.append(d)
+            j = db.session.get(DigitizeJob, job_id)
+            j.result = {"pages": [p.to_dict() for p in page_infos], "questions": out, "provider": provider_name()}
+            j.done_pages = len(pages)
+            j.status = "done"
+            db.session.commit()
+        except AIError as e:
+            j = db.session.get(DigitizeJob, job_id)
+            j.status, j.error = "failed", str(e)
+            db.session.commit()
+        except Exception:  # noqa: BLE001
+            log.exception("digitize job %s failed", job_id)
+            j = db.session.get(DigitizeJob, job_id)
+            j.status, j.error = "failed", "AI 还原试卷出错了，请稍后重试"
+            db.session.commit()
+
+
+def _cleanup_jobs() -> None:
+    """顺手清掉一天前的任务，结果不长期保留。"""
+    cutoff = datetime.now() - timedelta(days=1)
+    DigitizeJob.query.filter(DigitizeJob.created_at < cutoff).delete(synchronize_session=False)
+    db.session.commit()
+
+
 @bp.post("/digitize")
 @login_required
 def digitize():
-    """试卷数字化：整页照片 → 按原卷版面还原的电子版（sheets → blocks），并派生可收录的题目列表。"""
+    """试卷数字化：提交任务，立刻返回任务号；识别在服务器后台跑，客户端轮询 /digitize/jobs/<id> 取进度和结果。
+
+    测试或 DIGITIZE_SYNC=1 时同步执行，返回的任务已是 done 并带 result。
+    """
     user = current_user()
     data = request.get_json(silent=True) or {}
     pages_raw = data.get("pages")
@@ -128,21 +186,39 @@ def digitize():
         pages.append(Crop(data=blob, media_type=media))
 
     subjects = list(SUBJECTS)  # 识别卷子是什么学科，不受个人资料勾选限制
-    provider = get_provider()
-    try:
-        page_infos, questions = provider.digitize_pages(pages, subjects=subjects, grade=user.grade or "5", region=str(data.get("region") or "")[:20])
-    except AIError as e:
-        return jsonify({"error": "ai_unavailable", "message": str(e)}), 502
-    except Exception:  # noqa: BLE001
-        log.exception("digitize failed")
-        return jsonify({"error": "ai_failed", "message": "AI 还原试卷出错了，请稍后重试"}), 502
+    grade = user.grade or "5"
+    region = str(data.get("region") or "")[:20]
 
-    out = []
-    for i, q in enumerate(questions):
-        d = q.to_dict()
-        d["index"] = i
-        out.append(d)
-    return jsonify({"pages": [p.to_dict() for p in page_infos], "questions": out, "provider": provider.name})  # pages = sheets
+    _cleanup_jobs()
+    job = DigitizeJob(user_id=user.id, status="queued", total_pages=len(pages), done_pages=0)
+    db.session.add(job)
+    db.session.commit()
+    job_id = job.id
+
+    app = current_app._get_current_object()  # noqa: SLF001
+    if current_app.config.get("DIGITIZE_SYNC") or current_app.config.get("TESTING"):
+        _run_job_here(job_id, pages, subjects, grade, region)
+    else:
+        threading.Thread(target=_run_job, args=(app, job_id, pages, subjects, grade, region), name=f"digitize-{job_id[:8]}", daemon=True).start()
+    job = db.session.get(DigitizeJob, job_id)
+    return jsonify(job.to_dict()), 202 if job.status in ("queued", "running") else 200
+
+
+STALE_AFTER = timedelta(minutes=10)
+
+
+@bp.get("/digitize/jobs/<job_id>")
+@login_required
+def digitize_job(job_id: str):
+    """查任务：进度、状态，完成后带结果。服务重启导致任务卡住的，超过 10 分钟没更新按失败报。"""
+    user = current_user()
+    job = db.session.get(DigitizeJob, job_id)
+    if not job or job.user_id != user.id:
+        abort(404, "任务不存在或已过期")
+    if job.status in ("queued", "running") and job.updated_at and datetime.now() - job.updated_at > STALE_AFTER:
+        job.status, job.error = "failed", "服务刚刚重启，这次还原没有完成，请重新扫描"
+        db.session.commit()
+    return jsonify(job.to_dict())
 
 
 @bp.post("/digitize/pdf")

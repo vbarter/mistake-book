@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./store/auth";
+import { startJobPoller } from "./lib/jobs";
 import { BannerHost, Spinner } from "./components/ui";
 import { TabBar } from "./components/TabBar";
 
@@ -47,6 +48,11 @@ export default function App() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+  // 登录后开始轮询服务器上的还原任务；回前台立刻问一次
+  useEffect(() => {
+    if (!token) return;
+    return startJobPoller();
+  }, [token]);
 
   if (!ready) return <Spinner />;
 

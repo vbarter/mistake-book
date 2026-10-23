@@ -155,6 +155,17 @@ export interface DigitizedPage {
   blocks: DigitizedBlock[];
 }
 
+/** 服务器后台数字化任务 */
+export interface DigitizeJob {
+  jobId: string;
+  status: "queued" | "running" | "done" | "failed";
+  progress: number;
+  totalPages: number;
+  donePages: number;
+  error: string;
+  result: { pages: DigitizedPage[]; questions: DigitizedQuestion[]; provider?: string } | null;
+}
+
 export interface DigitizedResult {
   pages: DigitizedPage[];
   questions: DigitizedQuestion[];

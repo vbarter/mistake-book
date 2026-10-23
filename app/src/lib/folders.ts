@@ -22,6 +22,8 @@ export interface Paper {
   digitized?: DigitizedResult;
   subject?: Subject; // 扫描时从卷头判断
   corrected?: Record<string, string>; // 题 index → 订正时间
+  scanJob?: { id: string; startedAt: string; parts: { page: number; x0: number; w: number }[]; progress: number; status: "queued" | "running" }; // 服务器后台还原中
+  scanError?: string; // 上次还原失败的原因
 }
 
 export interface Folder {

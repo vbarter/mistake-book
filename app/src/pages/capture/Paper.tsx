@@ -8,6 +8,7 @@ import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { Hint, IconSegmented, Tag, subjectColors } from "../../components/v2";
 import { groupByKnowledge, paperErrors, type ErrorItem } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
+import { useJobs } from "../../lib/jobs";
 import { haptic } from "../../lib/native";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
@@ -63,10 +64,11 @@ export default function Paper() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  const jobsVersion = useJobs((s) => s.version);
   const reload = useCallback(() => getFolder(folderId).then((f) => setFolder(f ?? null)), [folderId]);
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, jobsVersion]);
 
   const paper: PaperRecord | undefined = folder?.papers.find((p) => p.id === paperId);
   const digitized = paper ? validDigitized(paper.digitized) : null;
@@ -74,9 +76,9 @@ export default function Paper() {
   const groups = useMemo(() => groupByKnowledge(errors), [errors]);
   const stats = paper ? paperStats(paper) : null;
 
-  // 没扫描过的试卷直接进录入页继续
+  // 没扫描过（也不在还原中）的试卷直接进录入页继续
   useEffect(() => {
-    if (folder && paper && !digitized) {
+    if (folder && paper && !digitized && !paper.scanJob) {
       reset();
       setReturnTo(`/papers/${folderId}`);
       nav("/capture", { replace: true, state: { folderId, paperId } });
@@ -85,6 +87,20 @@ export default function Paper() {
 
   if (folder === undefined) return null;
   if (!folder || !paper || !stats) return <Empty icon="document" title="试卷不存在" action={<Button size="sm" variant="tinted" onClick={() => nav("/papers")}>回到试卷</Button>} />;
+  if (!digitized && paper.scanJob) {
+    return (
+      <div className="screen">
+        <InlineNav title="" back backLabel={folder.name} />
+        <div className="screen__content screen__content--modal" style={{ justifyContent: "center", alignItems: "center", gap: 14, textAlign: "center" }}>
+          <Icon name="sparkles" size={44} style={{ color: "var(--brand)" }} />
+          <h2 className="t-title3">AI 正在还原「{paper.name}」</h2>
+          <span className="progress" style={{ maxWidth: 260, background: "var(--brand-tint)" }}><span style={{ width: `${Math.max(6, paper.scanJob.progress)}%` }} /></span>
+          <p className="t-sub c-sec">{paper.scanJob.progress}% · 在服务器上进行，切走 App 也不影响，好了会自动显示</p>
+          <Button variant="tinted" onClick={() => nav(`/papers/${folderId}`)} style={{ height: 44 }}>先回文件夹</Button>
+        </div>
+      </div>
+    );
+  }
   if (!digitized) return null;
 
   const sheets: DigitizedPage[] = digitized.pages;

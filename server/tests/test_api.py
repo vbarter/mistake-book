@@ -317,7 +317,13 @@ def test_claude_scan_cleans_bbox(monkeypatch):
 def test_digitize_returns_full_paper(client, auth):
     r = client.post("/api/digitize", json={"pages": [{"image": TINY_PNG}]}, headers=auth)
     assert r.status_code == 200, r.get_json()
-    body = r.get_json()
+    job = r.get_json()
+    assert job["status"] == "done" and job["progress"] == 100 and job["jobId"]
+    body = job["result"]
+    # 任务可以再查一次，结果一致
+    again = client.get(f"/api/digitize/jobs/{job['jobId']}", headers=auth).get_json()
+    assert again["status"] == "done" and again["result"]["questions"] == body["questions"]
+    assert client.get("/api/digitize/jobs/nope", headers=auth).status_code == 404
     sheet = body["pages"][0]
     assert sheet["title"] == "五年级随堂练习" and sheet["score"] == "82" and sheet["label"] == "第 1 页"
     types = [b["type"] for b in sheet["blocks"]]
@@ -420,7 +426,7 @@ def test_claude_digitize_runs_one_call_per_page(monkeypatch):
 
 
 def test_digitize_pdf_export(client, auth):
-    body = client.post("/api/digitize", json={"pages": [{"image": TINY_PNG}]}, headers=auth).get_json()
+    body = client.post("/api/digitize", json={"pages": [{"image": TINY_PNG}]}, headers=auth).get_json()["result"]
     r = client.post("/api/digitize/pdf", json={"title": "五年级随堂练习", "pages": body["pages"], "questions": body["questions"]}, headers=auth)
     assert r.status_code == 200 and r.mimetype == "application/pdf" and r.data.startswith(b"%PDF") and len(r.data) > 2000
     assert client.post("/api/digitize/pdf", json={"pages": []}, headers=auth).status_code == 400

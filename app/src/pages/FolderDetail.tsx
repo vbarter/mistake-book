@@ -9,6 +9,7 @@ import { Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Ta
 import { folderErrors, groupByKnowledge, type ErrorItem } from "../lib/errors";
 import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, paperSubject, saveFolder, setCorrected, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
+import { useJobs } from "../lib/jobs";
 import { haptic } from "../lib/native";
 import { toast } from "../store/banner";
 import { useCapture } from "../store/capture";
@@ -32,10 +33,11 @@ export default function FolderDetail() {
   const [deletingPaper, setDeletingPaper] = useState<string | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<Subject | null>(null);
 
+  const jobsVersion = useJobs((s) => s.version);
   const reload = useCallback(() => getFolder(folderId).then((f) => setFolder(f ?? null)), [folderId]);
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, jobsVersion]);
 
   const stats = useMemo(() => (folder ? folderStats(folder) : null), [folder]);
   const allErrors = useMemo(() => (folder ? folderErrors(folder) : []), [folder]);
@@ -72,13 +74,20 @@ export default function FolderDetail() {
         const st = paperStats(p);
         return (
           <div key={p.id} className="card card--row">
-            <button style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textAlign: "left" }} onClick={() => nav(`/papers/${folder.id}/${p.id}`)}>
+            <button style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textAlign: "left" }} onClick={() => (p.scanJob ? toast(`还在还原中 ${p.scanJob.progress}%，好了会自动更新`) : nav(`/papers/${folder.id}/${p.id}`))}>
             <img className="thumb" src={p.pages[0]?.src} alt="" />
             <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
               <span className="t-headline ellipsis" style={{ display: "flex", alignItems: "center", gap: 6 }}>{paperSubject(p) && stats.subjects.length > 1 && <SubjectTile subject={paperSubject(p)} size="xs" />}{p.name}</span>
               <span className="t-foot c-sec">{p.pages.length} 张照片{st.scanned ? ` · ${st.total} 题` : ""} · {formatDate(p.updatedAt)}</span>
-              <span style={{ display: "flex", gap: 6 }}>
-                {st.scanned ? (
+              <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {p.scanJob ? (
+                  <>
+                    <span className="progress" style={{ flex: 1, background: "var(--brand-tint)" }}><span style={{ width: `${Math.max(6, p.scanJob.progress)}%` }} /></span>
+                    <span className="t-cap" style={{ color: "var(--brand)", fontWeight: 700, whiteSpace: "nowrap" }}>AI 还原中 {p.scanJob.progress}%</span>
+                  </>
+                ) : p.scanError ? (
+                  <Tag kind="wrong" icon="warning">还原失败 · 点开重扫</Tag>
+                ) : st.scanned ? (
                   <>
                     <Tag kind="wrong">{st.wrong} 错</Tag>
                     {st.blank > 0 && <Tag kind="pending" icon="alert">{st.blank} 空</Tag>}
@@ -90,7 +99,7 @@ export default function FolderDetail() {
                 )}
               </span>
             </span>
-            <Icon name="chevron-right" size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+            {p.scanJob ? <Icon name="sparkles" size={20} style={{ color: "var(--brand)" }} /> : <Icon name="chevron-right" size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />}
             </button>
             <button className="icon-btn" aria-label={`删除「${p.name}」`} style={{ color: "var(--tertiary)" }} onClick={() => setDeletingPaper(p.id)}>
               <Icon name="trash" size={18} />

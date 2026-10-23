@@ -1,32 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../api/client";
-import type { DigitizedResult } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
-import { addPaper, deletePaper, getFolder, saveFolder, toPage, updatePaper, validDigitized } from "../../lib/folders";
-import { haptic, pickImage, pickImages, prepareUpload, type UploadPart } from "../../lib/native";
-import { getCity } from "../../lib/prefs";
+import { addPaper, deletePaper, getFolder, toPage, updatePaper, validDigitized } from "../../lib/folders";
+import { submitScan } from "../../lib/jobs";
+import { haptic, pickImage, pickImages } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
 import { MAX_PAGES, useCapture, type CapturePage } from "../../store/capture";
 
 type Progress = { stage: string; pct: number; elapsed: number };
 type EntryState = { folderId?: string | null; paperId?: string | null; source?: "camera" | "photos" | "sample" } | null;
-
-/** 服务端按上传片段编号；把 page 换回试卷里的照片下标，并把片段内的 bbox 横向映射回整页坐标 */
-function remapParts(res: DigitizedResult, parts: UploadPart[]): Pick<DigitizedResult, "pages" | "questions"> {
-  const part = (i: number) => parts[i] ?? { page: i, x0: 0, w: 1, image: "" };
-  const mapBox = (b: number[], p: UploadPart) => (b.length === 4 ? [p.x0 + b[0] * p.w, b[1], p.x0 + b[2] * p.w, b[3]] : b);
-  const pages = res.pages.map((sheet) => {
-    const p = part(sheet.page);
-    return { ...sheet, page: p.page, blocks: sheet.blocks.map((blk) => ({ ...blk, bbox: mapBox(blk.bbox, p) })) };
-  });
-  const questions = res.questions.map((q) => {
-    const p = part(q.page);
-    return { ...q, page: p.page, bbox: mapBox(q.bbox, p) };
-  });
-  return { pages, questions };
-}
 
 /** 录入一张试卷：进入即起相机 / 相册 → 照片存进文件夹里的这张试卷 → 扫描还原电子版 → 进电子版页。 */
 export default function Capture() {
@@ -38,7 +21,6 @@ export default function Capture() {
   const [rename, setRename] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [progress, setProgress] = useState<Progress | null>(null);
-  const abortRef = useRef(false);
   const autoStarted = useRef(false);
   const autoScanRef = useRef(false);
   const entry = (loc.state as EntryState) ?? null;
@@ -77,15 +59,15 @@ export default function Capture() {
     setBusy(true);
     try {
       if (source === "sample") {
+        autoScanRef.current = true; // 先立旗再加页：加页会触发自动扫描的 effect
         await addSources([`${import.meta.env.BASE_URL}sample-paper.svg`]);
-        autoScanRef.current = true;
         return true;
       }
       if (source === "photos") {
         const list = await pickImages(MAX_PAGES);
         if (!list.length) return false;
-        await addSources(list);
         autoScanRef.current = true;
+        await addSources(list);
         return true;
       }
       const src = await pickImage("camera");
@@ -152,51 +134,16 @@ export default function Capture() {
     setRename(false);
   };
 
-  /** 扫描还原电子版：每张照片按 1568px（宽幅拆两张）上传，AI 按版面还原；结果存进试卷并进入电子版页。 */
+  /** 扫描：压缩上传后交给服务器后台还原，立刻回到文件夹；进度在试卷行上显示，切走 App 也不影响。 */
   const scan = async () => {
-    const current = useCapture.getState().pages;
-    if (current.length === 0) return;
-    abortRef.current = false;
-    setProgress({ stage: "正在压缩试卷", pct: 5, elapsed: 0 });
+    const state = useCapture.getState();
+    if (state.pages.length === 0 || !state.folderId || !state.paperId) return;
+    setProgress({ stage: "正在压缩试卷", pct: 10, elapsed: 0 });
     try {
-      const parts: UploadPart[] = [];
-      for (let i = 0; i < current.length; i++) parts.push(...(await prepareUpload(current[i].src, i)));
-      const uploads = parts.map((p) => ({ image: p.image }));
-      if (abortRef.current) return;
-      const startedAt = Date.now();
-      setProgress({ stage: "正在上传试卷", pct: 12, elapsed: 0 });
-      const ticker = setInterval(() => {
-        const elapsed = Math.round((Date.now() - startedAt) / 1000);
-        const pct = Math.round(12 + 83 * (1 - Math.exp(-elapsed / 40)));
-        const stage = elapsed < 6 ? "正在上传试卷" : elapsed < 30 ? "正在逐字还原题目与版面" : elapsed < 50 ? "正在转写手写作答与批改" : "正在为错题生成解析";
-        setProgress({ stage, pct, elapsed });
-      }, 1000);
-      let result: DigitizedResult;
-      try {
-        const region = await getCity();
-        const res = await api<DigitizedResult>("/api/digitize", { method: "POST", body: { pages: uploads, region }, timeoutMs: 240000 });
-        result = { ...remapParts(res, parts), provider: res.provider, at: new Date().toISOString() };
-      } finally {
-        clearInterval(ticker);
-      }
-      if (abortRef.current) return;
-      if (result.questions.length === 0) {
-        setProgress(null);
-        toast("没有识别到题目，请换一张更清晰的照片", "info");
-        return;
-      }
-      const fid = useCapture.getState().folderId;
-      const pid = useCapture.getState().paperId;
-      const subject = result.pages.find((s) => s.subject)?.subject;
-      if (fid && pid) {
-        await updatePaper(fid, pid, { digitized: result, scannedAt: result.at, corrected: {}, subject });
-        const folder = await getFolder(fid);
-        if (folder && !folder.subject && subject) await saveFolder({ ...folder, subject });
-      }
-      setDigitized(result);
-      setProgress({ stage: "完成", pct: 100, elapsed: Math.round((Date.now() - startedAt) / 1000) });
+      await submitScan(state.folderId, state.paperId, state.pages, (stage) => setProgress({ stage, pct: stage.includes("上传") ? 60 : 20, elapsed: 0 }));
       void haptic.success();
-      if (fid && pid) nav(`/papers/${fid}/${pid}`, { replace: true });
+      toast("已交给 AI 还原，可以先去做别的，好了会在试卷上显示", "success");
+      nav(`/papers/${state.folderId}`, { replace: true });
     } catch (e) {
       toastError(e);
     } finally {
@@ -282,12 +229,10 @@ export default function Capture() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }} role="dialog" aria-live="polite">
           <div className="card" style={{ width: "100%", maxWidth: 360, alignItems: "center", textAlign: "center", gap: 14 }}>
             <Icon name="sparkles" size={36} style={{ color: "var(--brand)" }} />
-            <h2 className="t-title3">AI 正在还原电子版</h2>
+            <h2 className="t-title3">正在提交给 AI</h2>
             <p className="t-sub c-sec">{progress.stage}…</p>
             <div className="bar" style={{ width: "100%" }}><span style={{ width: `${progress.pct}%`, background: "var(--brand)", transition: "width .9s linear" }} /></div>
-            <span className="t-foot c-sec num">{progress.elapsed > 0 ? `已用 ${progress.elapsed} 秒 · ` : ""}通常 {30 + pages.length * 20} 秒左右</span>
-            {progress.elapsed >= 40 && <span className="t-foot" style={{ color: "var(--due)", fontWeight: 500 }}>网络有点慢，正在等待服务器返回，请稍候</span>}
-            <Button variant="plain" onClick={() => { abortRef.current = true; setProgress(null); }} style={{ height: 44 }}>取消</Button>
+            <span className="t-foot c-sec">上传完成后就可以离开，还原在服务器上继续</span>
           </div>
         </div>
       )}

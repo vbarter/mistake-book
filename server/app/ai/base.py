@@ -160,8 +160,8 @@ class AIProvider:
         """整页扫描：找出页面上所有被判错的题目并识别。"""
         raise NotImplementedError
 
-    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = "") -> tuple[list[DigitizedPage], list[DigitizedQuestion]]:
-        """试卷数字化：按原卷版面还原为 sheet → blocks，并派生出可收录的题目列表。region 是学生所在城市（可空）。"""
+    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = "", on_page_done=None) -> tuple[list[DigitizedPage], list[DigitizedQuestion]]:
+        """试卷数字化：按原卷版面还原为 sheet → blocks，并派生出可收录的题目列表。region 是学生所在城市（可空）；每还原完一张照片调用 on_page_done(done, total)。"""
         raise NotImplementedError
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:

@@ -192,3 +192,33 @@ class PracticeSession(db.Model):
             "startedAt": _iso(self.started_at),
             "finishedAt": _iso(self.finished_at),
         }
+
+
+class DigitizeJob(db.Model):
+    """试卷数字化任务：客户端提交后立刻拿到任务号，识别在服务器后台跑，切 App / 杀 App 都不影响；结果保留一天。"""
+
+    __tablename__ = "digitize_jobs"
+    id = db.Column(db.String(32), primary_key=True, default=_uuid)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    status = db.Column(db.String(16), default="queued", index=True)  # queued | running | done | failed
+    total_pages = db.Column(db.Integer, default=0)
+    done_pages = db.Column(db.Integer, default=0)
+    result = db.Column(JSON, nullable=True)  # {pages, questions, provider}
+    error = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self) -> dict:
+        total = max(1, self.total_pages or 1)
+        progress = 100 if self.status == "done" else 0 if self.status == "failed" else min(95, int(5 + 90 * (self.done_pages or 0) / total))
+        return {
+            "jobId": self.id,
+            "status": self.status,
+            "progress": progress,
+            "totalPages": self.total_pages,
+            "donePages": self.done_pages,
+            "error": self.error or "",
+            "result": self.result if self.status == "done" else None,
+            "createdAt": _iso(self.created_at),
+            "updatedAt": _iso(self.updated_at),
+        }
