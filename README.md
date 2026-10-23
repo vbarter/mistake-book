@@ -149,6 +149,9 @@ Gradle 同步后直接运行。开发期 `capacitor.config.ts` 开启了明文 H
 
 ## 三、云服务器部署（已部署）
 
+> 加新表时注意：线上 MySQL 账号 `zhicuoben` 没有 CREATE 权限，`db.create_all()` 会失败（已改为只记警告不崩溃）。部署前先在服务器上用 root 执行 `db/schema.mysql.sql` 里对应的 `CREATE TABLE IF NOT EXISTS`，例如 `mysql -uroot zhicuoben < db/schema.mysql.sql`。
+
+
 后端运行在 `43.129.175.172`（OpenCloudOS 9，Python 3.11），对外地址：
 
 ```

@@ -53,6 +53,10 @@ def create_app(test_config: dict | None = None) -> Flask:
     with app.app_context():
         from . import models  # noqa: F401  确保模型注册
 
-        db.create_all()
+        try:
+            db.create_all()
+        except Exception as e:  # noqa: BLE001
+            # 线上数据库账号没有 CREATE 权限时不要把服务拖死：新表用 root 执行 db/schema.mysql.sql 里的 DDL
+            app.logger.warning("db.create_all 失败（新表请用 root 手动建）：%s", e)
 
     return app
