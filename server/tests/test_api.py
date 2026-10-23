@@ -668,6 +668,7 @@ def test_unwrap_lines_joins_wrapped_sentences():
     assert unwrap_lines("下列说法正确的是\n的一项") == "下列说法正确的是的一项"
     assert unwrap_lines("第一段。\n\n第二段。") == "第一段。\n第二段。" or unwrap_lines("第一段。\n\n第二段。") == "第一段。\n\n第二段。"
     assert unwrap_lines("题干\nA. 选项一\nB. 选项二") == "题干\nA. 选项一\nB. 选项二"
+    assert unwrap_lines("Your idea of  a one-day  walk") == "Your idea of a one-day walk"
     assert unwrap_lines("材料：\n①第一条\n②第二条") == "材料：\n①第一条\n②第二条"
     blk = clean_block({"type": "item", "number": "21", "text": "half [[21]] hour\nat the sale.", "blanks": [{"id": "21", "student": "C", "answer": "B"}]}, "english")
     assert blk.text == "half [[21]] hour at the sale."

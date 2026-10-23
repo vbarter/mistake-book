@@ -84,7 +84,7 @@ const CJK = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/;
 export function unwrapLines(text: string): string {
   const out: string[] = [];
   for (const raw of text.replace(/\r/g, "").split("\n")) {
-    const line = raw.trim();
+    const line = raw.trim().replace(/[ \t]{2,}/g, " ");
     if (!line) {
       if (out.length && out[out.length - 1] !== "") out.push("");
       continue;

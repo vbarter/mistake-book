@@ -100,7 +100,7 @@ def unwrap_lines(text: str) -> str:
     空行（真正的分段）和以选项 / 题号 / 序号开头的行保持换行。"""
     out: list[str] = []
     for raw in text.replace("\r", "").split("\n"):
-        line = raw.strip()
+        line = re.sub(r"[ \t]{2,}", " ", raw.strip())  # OCR 常把一个空格识别成两三个
         if not line:
             if out and out[-1] != "":
                 out.append("")
