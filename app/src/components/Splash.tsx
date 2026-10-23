@@ -8,17 +8,20 @@ export default function Splash({ onDone }: { onDone: () => void }) {
   const [logo, setLogo] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const doneRef = useRef(false);
+  // 只在挂载时启动一次动画；父组件重渲染换了 onDone 也不重启
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   const finish = useCallback(() => {
     if (doneRef.current) return;
     doneRef.current = true;
     setLeaving(true);
-    window.setTimeout(onDone, 420);
-  }, [onDone]);
+    window.setTimeout(() => onDoneRef.current(), 420);
+  }, []);
 
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      onDone();
+      onDoneRef.current();
       return;
     }
     let raf = 0;
@@ -32,7 +35,7 @@ export default function Splash({ onDone }: { onDone: () => void }) {
         try {
           s = createSplash(canvas);
         } catch {
-          onDone(); // 没有 WebGL：直接进 App
+          onDoneRef.current(); // 没有 WebGL：直接进 App
           return;
         }
         setCaptions(CAPTIONS.map((c) => c.text));
@@ -62,13 +65,13 @@ export default function Splash({ onDone }: { onDone: () => void }) {
           s.dispose();
         };
       })
-      .catch(() => onDone());
+      .catch(() => onDoneRef.current());
     return () => {
       disposed = true;
       cancelAnimationFrame(raf);
       cleanup?.();
     };
-  }, [finish, onDone]);
+  }, [finish]);
 
   return (
     <div className={`splash${leaving ? " splash--leaving" : ""}`}>

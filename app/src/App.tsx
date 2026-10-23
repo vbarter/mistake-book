@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./store/auth";
 import { startJobPoller } from "./lib/jobs";
@@ -22,11 +22,6 @@ import { Account, Privacy, Subjects } from "./pages/ProfilePages";
 function RequireAuth() {
   const { ready, token } = useAuth();
   const loc = useLocation();
-  // 开屏动效：每次打开 App（冷启动 / 刷新页面）都播一次，右上角可跳过；/splash 可随时重播
-  const [splash, setSplash] = useState(true);
-  const closeSplash = () => setSplash(false);
-
-  if (splash) return <Suspense fallback={null}><Splash onDone={closeSplash} /></Suspense>;
   if (!ready) return <Spinner />;
   if (!token) return <Navigate to="/welcome" replace state={{ from: loc.pathname }} />;
   return <Outlet />;
@@ -77,7 +72,7 @@ export default function App() {
 
   // 开屏动效：每次打开 App（冷启动 / 刷新页面）都播一次，右上角可跳过；/splash 可随时重播
   const [splash, setSplash] = useState(true);
-  const closeSplash = () => setSplash(false);
+  const closeSplash = useCallback(() => setSplash(false), []);
 
   if (splash) return <Suspense fallback={null}><Splash onDone={closeSplash} /></Suspense>;
   if (!ready) return <Spinner />;
