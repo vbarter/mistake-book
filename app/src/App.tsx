@@ -8,6 +8,9 @@ import { TabBar } from "./components/TabBar";
 
 const Splash = lazy(() => import("./components/Splash"));
 
+/** 开屏动画开关：暂时关闭（改成 true 即恢复每次启动播放） */
+const SHOW_SPLASH = false;
+
 import Welcome from "./pages/Welcome";
 import Setup from "./pages/Setup";
 import Login from "./pages/Login";
@@ -70,8 +73,8 @@ export default function App() {
     return () => stop?.();
   }, []);
 
-  // 开屏动效：每次打开 App（冷启动 / 刷新页面）都播一次，右上角可跳过；/splash 可随时重播
-  const [splash, setSplash] = useState(true);
+  // 开屏动效：SHOW_SPLASH 打开时每次打开 App 都播一次，右上角可跳过；/splash 可随时重播
+  const [splash, setSplash] = useState(SHOW_SPLASH);
   const closeSplash = useCallback(() => setSplash(false), []);
 
   if (splash) return <Suspense fallback={null}><Splash onDone={closeSplash} /></Suspense>;
