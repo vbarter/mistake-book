@@ -1,10 +1,13 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./store/auth";
 import { startJobPoller } from "./lib/jobs";
 import { isTabRoot, setupBackButton, setupEdgeSwipeBack } from "./lib/native";
 import { BannerHost, Spinner } from "./components/ui";
 import { TabBar } from "./components/TabBar";
+import { SPLASH_SEEN_KEY } from "./components/Splash";
+
+const Splash = lazy(() => import("./components/Splash"));
 
 import Welcome from "./pages/Welcome";
 import Setup from "./pages/Setup";
@@ -20,6 +23,24 @@ import { Account, Privacy, Subjects } from "./pages/ProfilePages";
 function RequireAuth() {
   const { ready, token } = useAuth();
   const loc = useLocation();
+  // 开屏动效：每次冷启动播一次（WebView 重开时 sessionStorage 为空）；/splash 可随时重播
+  const [splash, setSplash] = useState(() => {
+    try {
+      return !sessionStorage.getItem(SPLASH_SEEN_KEY);
+    } catch {
+      return true;
+    }
+  });
+  const closeSplash = () => {
+    try {
+      sessionStorage.setItem(SPLASH_SEEN_KEY, "1");
+    } catch {
+      /* 无痕模式等：忽略 */
+    }
+    setSplash(false);
+  };
+
+  if (splash) return <Suspense fallback={null}><Splash onDone={closeSplash} /></Suspense>;
   if (!ready) return <Spinner />;
   if (!token) return <Navigate to="/welcome" replace state={{ from: loc.pathname }} />;
   return <Outlet />;
@@ -68,6 +89,24 @@ export default function App() {
     return () => stop?.();
   }, []);
 
+  // 开屏动效：每次冷启动播一次（WebView 重开时 sessionStorage 为空）；/splash 可随时重播
+  const [splash, setSplash] = useState(() => {
+    try {
+      return !sessionStorage.getItem(SPLASH_SEEN_KEY);
+    } catch {
+      return true;
+    }
+  });
+  const closeSplash = () => {
+    try {
+      sessionStorage.setItem(SPLASH_SEEN_KEY, "1");
+    } catch {
+      /* 无痕模式等：忽略 */
+    }
+    setSplash(false);
+  };
+
+  if (splash) return <Suspense fallback={null}><Splash onDone={closeSplash} /></Suspense>;
   if (!ready) return <Spinner />;
 
   return (
@@ -80,6 +119,7 @@ export default function App() {
         <Route path="/welcome" element={token ? <Navigate to="/papers" replace /> : <Welcome />} />
         <Route path="/setup" element={<Setup />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/splash" element={<SplashReplay />} />
 
         <Route element={<RequireAuth />}>
           <Route element={<TabLayout />}>
@@ -99,4 +139,10 @@ export default function App() {
       </Routes>
     </>
   );
+}
+
+/** 重播开屏动效（我的 → 关于 / 调试用），播完回上一页 */
+function SplashReplay() {
+  const nav = useNavigate();
+  return <Suspense fallback={null}><Splash onDone={() => (window.history.length > 1 ? nav(-1) : nav("/", { replace: true }))} /></Suspense>;
 }

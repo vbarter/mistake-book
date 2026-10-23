@@ -91,3 +91,18 @@
 .swipe-item__delete:active { background: rgba(0, 0, 0, 0.12); }
 .swipe-item--drag { z-index: 5; box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18); }
 .swipe-item--drag .swipe-item__content { background: var(--card); }
+
+/* 开屏动效 */
+.splash { position: fixed; inset: 0; z-index: 1000; overflow: hidden; background: linear-gradient(180deg, #cfe8ff 0%, #e8f4ff 46%, #fff6e6 100%); transition: opacity 0.42s ease; }
+.splash--leaving { opacity: 0; pointer-events: none; }
+.splash__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.splash__skip { position: absolute; top: calc(var(--safe-top, 0px) + 14px); right: 16px; height: 32px; padding: 0 14px; border-radius: 16px; border: 0; background: rgba(45, 48, 71, 0.38); color: #fff; font-size: 14px; font-weight: 600; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.splash__captions { position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-bottom, 0px) + 7vh); height: 48px; display: grid; place-items: center; pointer-events: none; }
+.splash__caption { grid-area: 1 / 1; margin: 0; padding: 10px 18px; border-radius: 22px; background: rgba(255, 255, 255, 0.86); color: #2d3047; font-size: 17px; font-weight: 700; letter-spacing: 0.02em; box-shadow: 0 6px 18px rgba(45, 48, 71, 0.12); text-align: center; opacity: 0; transform: translateY(10px) scale(0.96); transition: opacity 0.32s ease, transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.splash__caption.on { opacity: 1; transform: none; }
+.splash__logo { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(255, 255, 255, 0.78); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+.splash__logo.on { opacity: 1; }
+.splash__icon { width: 84px; height: 84px; border-radius: 24px; display: grid; place-items: center; background: linear-gradient(135deg, #4f7cff, #3b5bdb); box-shadow: 0 12px 30px rgba(59, 91, 219, 0.35); transform: scale(0.6); transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.splash__logo.on .splash__icon { transform: none; }
+.splash__name { font-size: 34px; font-weight: 900; color: #2d3047; letter-spacing: 0.08em; }
+.splash__slogan { font-size: 15px; color: #6b7090; font-weight: 600; }
