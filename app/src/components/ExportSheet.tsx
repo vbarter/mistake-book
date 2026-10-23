@@ -1,3 +1,4 @@
+import { formatDateTime } from "../lib/format";
 import { useState } from "react";
 import { apiBlob } from "../api/client";
 import { toBookItems, type ErrorItem } from "../lib/errors";
@@ -40,7 +41,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
         await exportPdf(blob, `${title} 错题本.pdf`);
       } else {
         if (scanned.length === 0) return toast("还没有扫描过的试卷");
-        const body = { title, papers: scanned.map((p) => { const d = validDigitized(p.digitized)!; return { title: `${title} · ${p.name}`, pages: d.pages, questions: d.questions }; }) };
+        const body = { title, papers: scanned.map((p) => { const d = validDigitized(p.digitized)!; return { title: `${title} · ${p.name}`, scannedAt: p.scannedAt ? formatDateTime(p.scannedAt) : "", pages: d.pages, questions: d.questions }; }) };
         const blob = await apiBlob("/api/digitize/pdf", { method: "POST", body, timeoutMs: 90000 });
         await exportPdf(blob, `${title} 电子试卷.pdf`);
       }

@@ -9,7 +9,7 @@ import { Button, Empty, InlineNav, Sheet } from "../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
 import { folderErrors, groupByKnowledge, type ErrorItem } from "../lib/errors";
 import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, paperSubject, reorderPapers, saveFolder, setCorrected, type Folder } from "../lib/folders";
-import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
+import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
 import { scanStageText, useJobs } from "../lib/jobs";
 import { haptic } from "../lib/native";
 import { toast } from "../store/banner";
@@ -89,7 +89,7 @@ export default function FolderDetail() {
             <img className="thumb" src={p.pages[0]?.src} alt="" />
             <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
               <span className="t-headline ellipsis" style={{ display: "flex", alignItems: "center", gap: 6 }}>{paperSubject(p) && stats.subjects.length > 1 && <SubjectTile subject={paperSubject(p)} size="xs" />}{p.name}</span>
-              <span className="t-foot c-sec">{p.pages.length} 张照片{st.scanned ? ` · ${st.total} 题` : ""} · {formatDate(p.updatedAt)}</span>
+              <span className="t-foot c-sec">{p.pages.length} 张照片{st.scanned ? ` · ${st.total} 题` : ""} · {p.scannedAt ? `扫描于 ${formatDateTime(p.scannedAt)}` : `拍摄于 ${formatDate(p.createdAt)}`}</span>
               <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 {p.scanJob ? (
                   <>

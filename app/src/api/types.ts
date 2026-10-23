@@ -166,6 +166,8 @@ export interface DigitizeJob {
   startedPages?: number; // 已拿到识别槽位的照片数
   queue?: { limit: number; running: number; waiting: number }; // 全局队列：最多 limit 张同时识别
   result: { pages: DigitizedPage[]; questions: DigitizedQuestion[]; provider?: string } | null;
+  createdAt?: string; // 提交扫描的时间
+  updatedAt?: string; // 最后更新；status 为 done 时就是扫描完成的时间
 }
 
 export interface DigitizedResult {

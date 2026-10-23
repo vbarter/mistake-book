@@ -45,9 +45,11 @@ export function remapParts(res: Pick<DigitizedResult, "pages" | "questions">, pa
 async function finishJob(folderId: string, paperId: string, job: DigitizeJob, parts: ScanJob["parts"]): Promise<void> {
   const result = job.result;
   if (!result) return;
-  const digitized: DigitizedResult = { ...remapParts(result, parts), provider: result.provider, at: new Date().toISOString() };
+  // 扫描时间取服务器上任务完成的时刻（切到后台很久才拿到结果，也记真实的扫描时间）
+  const scannedAt = (job.status === "done" && job.updatedAt) || new Date().toISOString();
+  const digitized: DigitizedResult = { ...remapParts(result, parts), provider: result.provider, at: scannedAt };
   const subject = digitized.pages.find((s) => s.subject)?.subject;
-  await updatePaper(folderId, paperId, { digitized, scannedAt: digitized.at, corrected: {}, subject, scanJob: undefined, scanError: undefined });
+  await updatePaper(folderId, paperId, { digitized, scannedAt, corrected: {}, subject, scanJob: undefined, scanError: undefined });
   const folder = await getFolder(folderId);
   if (folder && !folder.subject && subject) await saveFolder({ ...folder, subject });
 }

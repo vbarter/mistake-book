@@ -6,7 +6,7 @@ import { ExportSheet } from "../../components/ExportSheet";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
-import { unwrapLines } from "../../lib/format";
+import { formatDateTime, unwrapLines } from "../../lib/format";
 import { groupBySection, paperErrors, type ErrorItem } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { scanStageText, useJobs } from "../../lib/jobs";
@@ -275,6 +275,11 @@ export default function Paper() {
           <img className="thumb" src={paper.pages[0]?.src} alt="" />
           <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
             <h1 className="t-title3 ellipsis" style={{ fontWeight: 800 }}>{paper.name}</h1>
+            {paper.scannedAt && (
+              <span className="t-foot c-sec" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <Icon name="clock" size={13} stroke={2} />扫描于 {formatDateTime(paper.scannedAt)}
+              </span>
+            )}
             <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <Tag kind="wrong">{stats.wrong} 错</Tag>
               {stats.blank > 0 && <Tag kind="pending" icon="alert">{stats.blank} 空</Tag>}
