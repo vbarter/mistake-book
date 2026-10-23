@@ -7,7 +7,7 @@ import { SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
 import { folderErrors, groupByKnowledge } from "../lib/errors";
 import { createFolder, defaultFolderName, folderStats, listFolders, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
-import { useJobs } from "../lib/jobs";
+import { scanStageText, useJobs } from "../lib/jobs";
 import { useCapture } from "../store/capture";
 
 type Source = "camera" | "photos";
@@ -87,7 +87,7 @@ export default function Papers() {
                   </span>
                 </div>
                 {f.papers.some((p) => p.scanJob) ? (
-                  <Tag kind="info" icon="sparkles">AI 还原中 {Math.min(...f.papers.filter((p) => p.scanJob).map((p) => p.scanJob!.progress))}%</Tag>
+                  <Tag kind="info" icon="sparkles">{scanStageText([...f.papers.filter((p) => p.scanJob)].sort((a, b) => a.scanJob!.progress - b.scanJob!.progress)[0].scanJob!)}</Tag>
                 ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} corrected={st.corrected} />}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

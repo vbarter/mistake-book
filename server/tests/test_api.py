@@ -484,3 +484,55 @@ def test_sheet_subject_detected_and_inherited():
         {"type": "item", "number": "3", "text": "c [[3]]", "subject": "math", "blanks": [{"id": "3", "student": "x"}]},
     ]}]}, 0)
     assert sheets[0].subject == "physics"
+
+
+
+def test_digitize_job_progress_from_worker_threads(client, auth, monkeypatch):
+    """多张照片并发时进度回调来自线程池线程：必须能写库，任务不能因此失败。"""
+    from concurrent.futures import ThreadPoolExecutor
+    from app.ai.base import AIProvider, DigitizedPage
+    from app.routes import recognize as rec
+
+    class _Threaded(AIProvider):
+        name = "threaded"
+
+        def digitize_pages(self, pages, subjects, grade, region="", on_page_done=None, on_page_start=None):
+            def one(i):
+                on_page_start(i + 1, len(pages))
+                on_page_done(i + 1, len(pages))
+                return [DigitizedPage(page=i, label=f"p{i}")]
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                groups = list(pool.map(one, range(len(pages))))
+            return [s for g in groups for s in g], []
+
+    monkeypatch.setattr(rec, "get_provider", lambda: _Threaded())
+    r = client.post("/api/digitize", json={"pages": [{"image": TINY_PNG}, {"image": TINY_PNG}]}, headers=auth)
+    job = r.get_json()
+    assert r.status_code == 200 and job["status"] == "done", job
+    assert job["donePages"] == 2 and job["totalPages"] == 2 and len(job["result"]["pages"]) == 2
+
+
+
+def test_page_queue_limits_concurrency(monkeypatch):
+    import threading, time
+    from concurrent.futures import ThreadPoolExecutor
+    from app.ai import queue as q
+
+    monkeypatch.setattr(q, "_pool", ThreadPoolExecutor(max_workers=2))
+    peak = [0]
+    cur = [0]
+    lock = threading.Lock()
+
+    def work():
+        with lock:
+            cur[0] += 1
+            peak[0] = max(peak[0], cur[0])
+        time.sleep(0.05)
+        with lock:
+            cur[0] -= 1
+        return 1
+
+    futures = [q.submit(work) for _ in range(6)]
+    assert sum(f.result() for f in futures) == 6
+    assert peak[0] <= 2  # 同时在跑的不超过槽位数
+    assert q.stats()["running"] == 0 and q.stats()["waiting"] == 0

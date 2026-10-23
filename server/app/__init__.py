@@ -50,6 +50,17 @@ def create_app(test_config: dict | None = None) -> Flask:
     def bad_request(e):
         return jsonify({"error": "bad_request", "message": getattr(e, "description", "请求有误")}), 400
 
+    # gunicorn 下把应用与各模块的日志接到 gunicorn 的 error log，后台任务里的异常才看得到
+    import logging
+
+    gunicorn_logger = logging.getLogger("gunicorn.error")
+    if gunicorn_logger.handlers:
+        root_logger = logging.getLogger()
+        root_logger.handlers = gunicorn_logger.handlers
+        root_logger.setLevel(gunicorn_logger.level or logging.INFO)
+        app.logger.handlers = gunicorn_logger.handlers
+        app.logger.setLevel(gunicorn_logger.level or logging.INFO)
+
     with app.app_context():
         from . import models  # noqa: F401  确保模型注册
 

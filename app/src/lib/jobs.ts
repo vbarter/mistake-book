@@ -13,6 +13,14 @@ export interface ScanJob {
   parts: { page: number; x0: number; w: number }[]; // 上传片段 → 原照片的映射，拿结果时用
   progress: number; // 0–100
   status: "queued" | "running";
+  startedPages?: number; // 已拿到识别槽位的照片数
+  waiting?: number; // 全局队列里排在前面等槽位的照片数
+}
+
+/** 试卷行上显示的一句话：排队中 / 还原中 */
+export function scanStageText(job: ScanJob): string {
+  if (!job.startedPages && job.waiting && job.waiting > 0) return `排队中 · 前面还有 ${job.waiting} 张`;
+  return `AI 还原中 ${job.progress}%`;
 }
 
 /** 任务有变化就 +1，页面据此重新读本机数据 */
@@ -87,8 +95,11 @@ export async function pollPendingJobs(): Promise<number> {
             useJobs.getState().bump();
           } else {
             pending += 1;
-            if (job.progress !== paper.scanJob.progress || job.status !== paper.scanJob.status) {
-              await updatePaper(folder.id, paper.id, { scanJob: { ...paper.scanJob, progress: job.progress, status: job.status } });
+            const started = job.startedPages ?? 0;
+            // 自己这张还没开始时，前面排着的 = 全局等待数 - 自己的照片数（粗略）
+            const waiting = started === 0 && job.queue ? Math.max(0, job.queue.waiting - job.totalPages) : 0;
+            if (job.progress !== paper.scanJob.progress || job.status !== paper.scanJob.status || started !== paper.scanJob.startedPages || waiting !== paper.scanJob.waiting) {
+              await updatePaper(folder.id, paper.id, { scanJob: { ...paper.scanJob, progress: job.progress, status: job.status, startedPages: started, waiting } });
               useJobs.getState().bump();
             }
           }

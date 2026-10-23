@@ -8,7 +8,7 @@ import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { Hint, IconSegmented, Tag, subjectColors } from "../../components/v2";
 import { groupByKnowledge, paperErrors, type ErrorItem } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
-import { useJobs } from "../../lib/jobs";
+import { scanStageText, useJobs } from "../../lib/jobs";
 import { haptic } from "../../lib/native";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
@@ -95,7 +95,7 @@ export default function Paper() {
           <Icon name="sparkles" size={44} style={{ color: "var(--brand)" }} />
           <h2 className="t-title3">AI 正在还原「{paper.name}」</h2>
           <span className="progress" style={{ maxWidth: 260, background: "var(--brand-tint)" }}><span style={{ width: `${Math.max(6, paper.scanJob.progress)}%` }} /></span>
-          <p className="t-sub c-sec">{paper.scanJob.progress}% · 在服务器上进行，切走 App 也不影响，好了会自动显示</p>
+          <p className="t-sub c-sec">{scanStageText(paper.scanJob)} · 在服务器上进行，切走 App 也不影响，好了会自动显示</p>
           <Button variant="tinted" onClick={() => nav(`/papers/${folderId}`)} style={{ height: 44 }}>先回文件夹</Button>
         </div>
       </div>

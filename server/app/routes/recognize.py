@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, Response, abort, current_app, jsonify, request
 
 from ..ai import AIError, Crop, get_provider, provider_name
+from ..ai import queue as page_queue
 from ..extensions import db
 from ..models import DigitizeJob
 from ..auth_utils import current_user, login_required
@@ -111,6 +112,10 @@ def scan():
     return jsonify({"items": results, "pages": len(pages), "provider": provider.name})
 
 
+# 进程内记录每个任务已拿到识别槽位的照片数（不落库，和队列一样只在本进程有效）
+_started_pages: dict[str, int] = {}
+
+
 def _run_job(app, job_id: str, pages: list[Crop], subjects: list[str], grade: str, region: str) -> None:
     """后台线程入口：自己开应用上下文再执行。"""
     with app.app_context():
@@ -125,15 +130,24 @@ def _run_job_here(job_id: str, pages: list[Crop], subjects: list[str], grade: st
             return
         job.status = "running"
         db.session.commit()
+        app = current_app._get_current_object()  # noqa: SLF001
 
         def on_page_done(done: int, total: int) -> None:
-            j = db.session.get(DigitizeJob, job_id)
-            if j:
-                j.done_pages = done
-                db.session.commit()
+            # 多张照片并发识别时这个回调来自线程池的线程，没有应用上下文，必须自己推一个再写库
+            try:
+                with app.app_context():
+                    j = db.session.get(DigitizeJob, job_id)
+                    if j:
+                        j.done_pages = done
+                        db.session.commit()
+            except Exception:  # noqa: BLE001
+                log.exception("digitize job %s progress update failed", job_id)
+
+        def on_page_start(started: int, total: int) -> None:
+            _started_pages[job_id] = started
 
         try:
-            page_infos, questions = get_provider().digitize_pages(pages, subjects=subjects, grade=grade, region=region, on_page_done=on_page_done)
+            page_infos, questions = get_provider().digitize_pages(pages, subjects=subjects, grade=grade, region=region, on_page_done=on_page_done, on_page_start=on_page_start)
             out = []
             for i, q in enumerate(questions):
                 d = q.to_dict()
@@ -144,15 +158,18 @@ def _run_job_here(job_id: str, pages: list[Crop], subjects: list[str], grade: st
             j.done_pages = len(pages)
             j.status = "done"
             db.session.commit()
+            _started_pages.pop(job_id, None)
         except AIError as e:
             j = db.session.get(DigitizeJob, job_id)
             j.status, j.error = "failed", str(e)
             db.session.commit()
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             log.exception("digitize job %s failed", job_id)
+            db.session.rollback()
             j = db.session.get(DigitizeJob, job_id)
-            j.status, j.error = "failed", "AI 还原试卷出错了，请稍后重试"
+            j.status, j.error = "failed", f"AI 还原试卷出错了，请稍后重试（{type(e).__name__}）"
             db.session.commit()
+            _started_pages.pop(job_id, None)
 
 
 def _cleanup_jobs() -> None:
@@ -201,7 +218,19 @@ def digitize():
     else:
         threading.Thread(target=_run_job, args=(app, job_id, pages, subjects, grade, region), name=f"digitize-{job_id[:8]}", daemon=True).start()
     job = db.session.get(DigitizeJob, job_id)
-    return jsonify(job.to_dict()), 202 if job.status in ("queued", "running") else 200
+    return jsonify(_job_view(job)), 202 if job.status in ("queued", "running") else 200
+
+
+def _job_view(job: DigitizeJob) -> dict:
+    """任务状态 + 进程内的实时信息：已开始识别的照片数、全局队列情况。进度按「开始算一半、完成算全部」推进。"""
+    d = job.to_dict()
+    started = max(_started_pages.get(job.id, 0), job.done_pages or 0)
+    total = max(1, job.total_pages or 1)
+    if job.status in ("queued", "running"):
+        d["progress"] = min(95, int(5 + 90 * ((job.done_pages or 0) + 0.5 * (started - (job.done_pages or 0))) / total))
+    d["startedPages"] = started
+    d["queue"] = page_queue.stats()
+    return d
 
 
 STALE_AFTER = timedelta(minutes=10)
@@ -218,7 +247,7 @@ def digitize_job(job_id: str):
     if job.status in ("queued", "running") and job.updated_at and datetime.now() - job.updated_at > STALE_AFTER:
         job.status, job.error = "failed", "服务刚刚重启，这次还原没有完成，请重新扫描"
         db.session.commit()
-    return jsonify(job.to_dict())
+    return jsonify(_job_view(job))
 
 
 @bp.post("/digitize/pdf")

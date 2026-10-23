@@ -163,6 +163,8 @@ export interface DigitizeJob {
   totalPages: number;
   donePages: number;
   error: string;
+  startedPages?: number; // 已拿到识别槽位的照片数
+  queue?: { limit: number; running: number; waiting: number }; // 全局队列：最多 limit 张同时识别
   result: { pages: DigitizedPage[]; questions: DigitizedQuestion[]; provider?: string } | null;
 }
 

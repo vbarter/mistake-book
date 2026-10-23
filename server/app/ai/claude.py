@@ -12,12 +12,12 @@ import json
 import logging
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor
 
 import anthropic
 
 from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedPage, RecognizedItem, ScannedItem, Variant
+from . import queue as page_queue
 from .digitize import clean_sheets, derive_questions
 
 log = logging.getLogger(__name__)
@@ -384,8 +384,8 @@ class ClaudeProvider(AIProvider):
             items.append(ScannedItem(**cleaned, page=min(max(page, 0), len(pages) - 1), bbox=bbox, reason=str(raw.get("reason") or "")))
         return items
 
-    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = "", on_page_done=None):
-        """每张照片单独调用一次模型并发还原（互不依赖，整体耗时≈单页耗时），再合并派生题目。"""
+    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = "", on_page_done=None, on_page_start=None):
+        """每张照片单独调用一次模型，经全局队列并发还原（整个进程最多 MAX_CONCURRENT_PAGES 张同时调模型），再合并派生题目。"""
         subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
 
         def one(index: int, page: Crop) -> list[DigitizedPage]:
@@ -403,7 +403,14 @@ class ClaudeProvider(AIProvider):
                     ),
                 },
             ]
-            data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000)
+            # 模型偶尔吐出解析不了 / 被截断的 JSON：这张照片自动重试一次，不让整个任务失败
+            try:
+                data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000)
+            except AIError as e:
+                if "无法解析" not in str(e) and "过长" not in str(e):
+                    raise
+                log.warning("digitize page %s retry after: %s", index, e)
+                data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000)
             sheets = clean_sheets(data, index)
             if on_page_done:
                 with progress_lock:
@@ -413,12 +420,16 @@ class ClaudeProvider(AIProvider):
 
         progress_lock = __import__("threading").Lock()
         done_count = [0]
+        started_count = [0]
 
-        if len(pages) == 1:
-            results = [one(0, pages[0])]
-        else:
-            with ThreadPoolExecutor(max_workers=min(4, len(pages))) as pool:
-                results = list(pool.map(lambda ip: one(*ip), enumerate(pages)))
+        def started() -> None:
+            if on_page_start:
+                with progress_lock:
+                    started_count[0] += 1
+                    on_page_start(started_count[0], len(pages))
+
+        futures = [page_queue.submit(lambda i=i, p=p: one(i, p), on_start=started) for i, p in enumerate(pages)]
+        results = [f.result() for f in futures]
         sheets = [sheet for group in results for sheet in group]
         return sheets, derive_questions(sheets)
 
