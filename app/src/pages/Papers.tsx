@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { Subject } from "../api/types";
 import { Icon } from "../components/Icon";
 import { Button, Empty, LargeNav, Sheet } from "../components/ui";
-import { SubjectStack, SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
+import { SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
 import { folderErrors, groupByKnowledge } from "../lib/errors";
 import { createFolder, defaultFolderName, folderStats, listFolders, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
@@ -71,7 +71,14 @@ export default function Papers() {
           return (
             <button key={f.id} className="card" style={{ gap: 12, textAlign: "left", width: "100%", padding: "14px 16px 14px 14px" }} onClick={() => nav(`/papers/${f.id}`)}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <SubjectStack subjects={st.subjects} size="md" />
+                <span style={{ position: "relative", flexShrink: 0, width: 48, height: 60 }}>
+                  {f.papers[0]?.pages[0]?.src ? (
+                    <img className="thumb" src={f.papers[0].pages[0].src} alt="" style={{ width: 48, height: 60 }} />
+                  ) : (
+                    <SubjectTile subject={st.subject} size="md" style={{ width: 48, height: 60, borderRadius: 10 }} />
+                  )}
+                  {f.papers[0]?.pages[0]?.src && <SubjectTile subject={st.subject} size="xs" style={{ position: "absolute", right: -6, bottom: -6, boxShadow: "0 0 0 2px var(--card)" }} />}
+                </span>
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                   <span className="t-headline ellipsis" style={{ fontWeight: 700 }}>{f.name}{st.subjects.length > 1 ? <span className="t-foot c-sec" style={{ fontWeight: 500 }}> · {st.subjects.map((s) => SUBJECT_LABEL[s]).join(" / ")}</span> : ""}</span>
                   <span className="t-foot c-sec" style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -84,11 +91,6 @@ export default function Papers() {
                 ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} corrected={st.corrected} />}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="thumbs">
-                  {f.papers.slice(0, 3).map((p) => (
-                    <img key={p.id} className="thumb thumb--sm" src={p.pages[0]?.src} alt="" />
-                  ))}
-                </span>
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
                   {kps.map(([k, items]) => (
                     <span key={k} className="tag" style={{ background: c.bg, color: c.color, height: 24 }}>{k} {items.length}</span>
