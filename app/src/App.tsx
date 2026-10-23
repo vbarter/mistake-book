@@ -9,6 +9,7 @@ import Setup from "./pages/Setup";
 import Login from "./pages/Login";
 import Today from "./pages/Today";
 import Library from "./pages/Library";
+import Papers from "./pages/Papers";
 import TopicDetail from "./pages/TopicDetail";
 import Detail from "./pages/Detail";
 import Capture from "./pages/capture/Capture";
@@ -70,6 +71,7 @@ export default function App() {
         <Route element={<RequireAuth />}>
           <Route element={<TabLayout />}>
             <Route path="/today" element={<Today />} />
+            <Route path="/papers" element={<Papers />} />
             <Route path="/library" element={<Library />} />
             <Route path="/practice" element={<Practice />} />
             <Route path="/profile" element={<Profile />} />

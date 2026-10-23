@@ -4,8 +4,7 @@ import { api } from "../../api/client";
 import type { DigitizedResult } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
-import { createFolder, defaultFolderName, deleteFolder, getFolder, listFolders, saveFolder, toPage, validDigitized, type Folder } from "../../lib/folders";
-import { formatDate } from "../../lib/format";
+import { createFolder, defaultFolderName, deleteFolder, getFolder, saveFolder, toPage } from "../../lib/folders";
 import { haptic, isNative, pickImage, pickImages, prepareUpload, type UploadPart } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
 import { MAX_PAGES, useCapture, type CapturePage } from "../../store/capture";
@@ -32,20 +31,14 @@ export default function Capture() {
   const nav = useNavigate();
   const loc = useLocation();
   const { folderId, folderName, pages, digitized, setFolder, setFolderName, setDigitized, addPage, removePage, reset, returnTo } = useCapture();
-  const [folders, setFolders] = useState<Folder[]>([]);
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState(false);
   const [rename, setRename] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState<Folder | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const abortRef = useRef(false);
   const autoStarted = useRef(false);
-
-  const refreshFolders = () => listFolders().then(setFolders).catch(() => setFolders([]));
-  useEffect(() => {
-    void refreshFolders();
-  }, [folderId, pages.length]);
+  const autoScanRef = useRef(false);
 
   /** 当前页面持久化到试卷夹（第一次加页时自动新建）。 */
   const persist = async (nextPages: CapturePage[], name = folderName) => {
@@ -77,40 +70,54 @@ export default function Capture() {
     void haptic.light();
   };
 
-  const pick = async (source: "camera" | "photos" | "sample") => {
+  /** 选图。返回是否选到了图；相册多选是一次把整份卷子选完，所以紧接着自动扫描。 */
+  const pick = async (source: "camera" | "photos" | "sample"): Promise<boolean> => {
     setBusy(true);
     try {
       if (source === "sample") {
         await addSources([`${import.meta.env.BASE_URL}sample-paper.svg`]);
-      } else if (source === "photos") {
-        const list = await pickImages(MAX_PAGES);
-        if (list.length) await addSources(list);
-      } else {
-        const src = await pickImage("camera");
-        if (src) await addSources([src]);
+        return true;
       }
+      if (source === "photos") {
+        const list = await pickImages(MAX_PAGES);
+        if (!list.length) return false;
+        await addSources(list);
+        autoScanRef.current = true;
+        return true;
+      }
+      const src = await pickImage("camera");
+      if (!src) return false;
+      await addSources([src]);
+      return true;
     } catch (e) {
       if ((e as Error).message === "permission_denied") setDenied(true);
       else toastError(e);
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
-  // 从今天页「拍照 / 从相册选」直接进入：自动打开一次
+  // 从今天页 / 试卷 Tab 直接进入：立刻起相机或相册，不再经过引导页；什么都没选就原路返回
   useEffect(() => {
-    const state = loc.state as { source?: "camera" | "photos"; first?: boolean } | null;
-    if (!autoStarted.current && pages.length === 0 && state && (state.source || (state.first && isNative))) {
+    const state = loc.state as { source?: "camera" | "photos" | "sample" } | null;
+    if (!autoStarted.current && pages.length === 0 && state?.source) {
       autoStarted.current = true;
-      void pick(state.source ?? "camera");
+      void pick(state.source).then((got) => {
+        if (!got && useCapture.getState().pages.length === 0) leave();
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const openFolder = async (f: Folder) => {
-    setFolder(f.id, f.name, f.pages.map((p) => ({ ...p, boxes: p.boxes ?? [] })), validDigitized(f.digitized));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  // 相册多选完成、页面已入夹：自动开始扫描
+  useEffect(() => {
+    if (autoScanRef.current && pages.length > 0 && folderId && !progress) {
+      autoScanRef.current = false;
+      void scan();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages.length, folderId]);
 
   const removeCurrentPage = async (id: string) => {
     const next = pages.filter((p) => p.id !== id);
@@ -133,10 +140,9 @@ export default function Capture() {
       if (existing) await saveFolder({ ...existing, name });
     }
     setRename(false);
-    void refreshFolders();
   };
 
-  /** 扫描还原电子版：每页压到 1400px 上传，AI 转写全部题目、手写作答与批改；结果存进试卷夹并进入电子版页。 */
+  /** 扫描还原电子版：每页按 1568px（宽幅拆两张）上传，AI 按版面还原；结果存进试卷并进入电子版页。 */
   const scan = async () => {
     if (pages.length === 0) return;
     abortRef.current = false;
@@ -187,13 +193,11 @@ export default function Capture() {
     reset();
   };
 
-  const otherFolders = folders.filter((f) => f.id !== folderId);
-
   return (
     <div className="screen">
       <InlineNav
         title="录入试卷"
-        subtitle={pages.length ? `${folderName || "未命名试卷夹"} · ${pages.length} 页` : "拍照或从相册多选"}
+        subtitle={pages.length ? `${folderName || "未命名试卷"} · ${pages.length} 页` : "拍照或从相册多选"}
         right={<button className="nav-btn" onClick={leave}>{pages.length ? "完成" : "取消"}</button>}
       />
       <div className="screen__content screen__content--modal" style={{ gap: 16, paddingTop: 4 }}>
@@ -205,7 +209,7 @@ export default function Capture() {
           <Empty
             icon="camera"
             title="把试卷平放，对准整页拍"
-            text="也可以从相册一次选多张；选中的试卷会放进一个试卷夹里，随时可以回来继续。"
+            text="从相册一次选完整份试卷，选好后会自动开始还原。"
             action={<Button size="xs" variant="plain" onClick={() => pick("sample")} disabled={busy}>没有试卷？用示例试卷试试</Button>}
           />
         )}
@@ -236,25 +240,7 @@ export default function Capture() {
                 </button>
               )}
             </div>
-            <span className="t-foot c-sec">已自动保存到试卷夹 · 最多 {MAX_PAGES} 页</span>
-          </div>
-        )}
-
-        {otherFolders.length > 0 && (
-          <div className="group">
-            <div className="group__header"><span>试卷夹</span><span style={{ fontWeight: 500 }}>{otherFolders.length} 个</span></div>
-            {otherFolders.map((f) => (
-              <div key={f.id} className="row" style={{ minHeight: 64 }}>
-                <img src={f.pages[0]?.src} alt="" style={{ width: 40, height: 52, objectFit: "cover", borderRadius: 6, border: "1px solid var(--separator-light)" }} />
-                <button className="row__main" style={{ textAlign: "left" }} onClick={() => openFolder(f)}>
-                  <span className="row__title ellipsis">{f.name}</span>
-                  <span className="row__sub">{f.pages.length} 页 · {formatDate(f.updatedAt)}{f.scannedAt ? " · 已扫描" : ""}</span>
-                </button>
-                <button className="icon-btn" style={{ color: "var(--wrong)" }} aria-label="删除试卷夹" onClick={() => setConfirmDelete(f)}>
-                  <Icon name="trash" size={20} />
-                </button>
-              </div>
-            ))}
+            <span className="t-foot c-sec">已自动保存到「试卷」· 最多 {MAX_PAGES} 页 · 拍完所有页再扫描</span>
           </div>
         )}
 
@@ -288,12 +274,6 @@ export default function Capture() {
       <Sheet open={rename} onClose={() => setRename(false)} title="试卷夹名称">
         <input className="input" autoFocus value={nameDraft} maxLength={30} placeholder={defaultFolderName()} onChange={(e) => setNameDraft(e.target.value)} />
         <Button onClick={saveName}>保存</Button>
-      </Sheet>
-
-      <Sheet open={Boolean(confirmDelete)} onClose={() => setConfirmDelete(null)} title={`删除「${confirmDelete?.name}」？`}>
-        <p className="t-sub c-sec">只删除本机保存的 {confirmDelete?.pages.length} 页试卷图片，已入库的错题不受影响。</p>
-        <Button variant="danger" onClick={async () => { if (confirmDelete) { await deleteFolder(confirmDelete.id); setConfirmDelete(null); void refreshFolders(); } }}>删除</Button>
-        <Button variant="plain" onClick={() => setConfirmDelete(null)}>取消</Button>
       </Sheet>
 
       {progress && (

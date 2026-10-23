@@ -1,10 +1,12 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { Overview, Subject, TodayResponse } from "../api/types";
 import { Icon } from "../components/Icon";
 import { MistakeRow } from "../components/MistakeRow";
 import { Button, Empty, IconButton, LargeNav, Ring, Spinner, SubjectChip } from "../components/ui";
-import { greetingHint, todayLabel } from "../lib/format";
+import { folderStatus, listFolders, validDigitized, type Folder } from "../lib/folders";
+import { formatDate, todayLabel } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import { useCapture } from "../store/capture";
 
@@ -16,9 +18,23 @@ export default function Today() {
     return { overview, today };
   });
 
-  const goCapture = () => {
+  const { setFolder, reset } = useCapture();
+  const [folders, setFolders] = useState<Folder[]>([]);
+  useEffect(() => {
+    listFolders().then((list) => setFolders([...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3))).catch(() => setFolders([]));
+  }, []);
+
+  // 录题只有一个入口：拍照直接起相机，相册直接起多选；进入后不再经过引导页
+  const goCapture = (source: "camera" | "photos" = "camera") => {
+    reset();
     setReturnTo("/today");
-    nav("/capture");
+    nav("/capture", { state: { source } });
+  };
+  const openFolder = (f: Folder) => {
+    const digitized = validDigitized(f.digitized);
+    setFolder(f.id, f.name, f.pages.map((p) => ({ ...p, boxes: p.boxes ?? [] })), digitized);
+    setReturnTo("/today");
+    nav(digitized ? "/capture/paper" : "/capture");
   };
 
   const o = data?.overview;
@@ -31,7 +47,7 @@ export default function Today() {
 
   return (
     <div className="screen">
-      <LargeNav title="今天" eyebrow={todayLabel()} actions={<IconButton name="camera" label="拍照录题" onClick={goCapture} />} />
+      <LargeNav title="今天" eyebrow={todayLabel()} actions={<IconButton name="camera" label="拍照录题" onClick={() => goCapture("camera")} />} />
       <div className="screen__content">
         {loading && !data && <Spinner />}
         {error && !data && (
@@ -40,12 +56,15 @@ export default function Today() {
         {o && t && (
           <>
             {/* 主卡 · 今日复习 */}
-            {o.total === 0 ? (
+            {o.total === 0 && folders.length === 0 ? (
               <div className="card" style={{ alignItems: "center", textAlign: "center", gap: 12, padding: 24 }}>
                 <Icon name="camera" size={44} style={{ color: "var(--brand)" }} />
                 <h2 className="t-title2">拍第一张试卷</h2>
-                <p className="t-sub c-sec">错题会自动整理到知识点，并安排到每天的复习里。</p>
-                <Button onClick={goCapture}>拍照录题</Button>
+                <p className="t-sub c-sec">AI 还原成电子版，找出错题，按知识点整理进每天的复习。</p>
+                <div style={{ display: "flex", gap: 10, width: "100%" }}>
+                  <Button icon="camera" onClick={() => goCapture("camera")} style={{ flex: 1 }}>拍照</Button>
+                  <Button variant="tinted" icon="photo" onClick={() => goCapture("photos")} style={{ flex: 1 }}>从相册选</Button>
+                </div>
               </div>
             ) : nothing ? (
               <div className="card" style={{ alignItems: "center", textAlign: "center", gap: 10, padding: 24 }}>
@@ -88,17 +107,33 @@ export default function Today() {
               </div>
             )}
 
-            {/* 录新错题 */}
-            <div className="card">
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-                <h3 className="t-headline">录新错题</h3>
-                <span className="t-foot c-sec ellipsis">{greetingHint()}</span>
+            {/* 最近试卷：一眼看到录过的卷子，点一下直达电子版或继续扫描；录新的用右上角相机或试卷 Tab */}
+            {folders.length > 0 && (
+              <div className="card" style={{ padding: "12px 0 0", gap: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 16px 6px" }}>
+                  <h3 className="t-headline">最近试卷</h3>
+                  <button className="t-sub" style={{ color: "var(--brand)", fontWeight: 500 }} onClick={() => nav("/papers")}>全部</button>
+                </div>
+                {folders.map((f) => {
+                  const st = folderStatus(f);
+                  return (
+                    <button key={f.id} className="row" style={{ minHeight: 60, width: "100%", textAlign: "left" }} onClick={() => openFolder(f)}>
+                      <img src={f.pages[0]?.src} alt="" style={{ width: 36, height: 48, objectFit: "cover", borderRadius: 5, border: "1px solid var(--separator-light)" }} />
+                      <span className="row__main">
+                        <span className="row__title ellipsis">{f.name}</span>
+                        <span className="row__sub">{f.pages.length} 页 · {formatDate(f.updatedAt)}</span>
+                      </span>
+                      <span className="chip chip--sm" style={{ background: st.bg, color: st.color }}>{st.label}</span>
+                      <Icon name="chevron-right" size={18} style={{ color: "var(--tertiary)" }} />
+                    </button>
+                  );
+                })}
+                <div style={{ display: "flex", gap: 10, padding: "10px 16px 14px" }}>
+                  <Button variant="tinted" size="sm" icon="camera" onClick={() => goCapture("camera")} style={{ flex: 1 }}>拍新试卷</Button>
+                  <Button variant="tinted" size="sm" icon="photo" onClick={() => goCapture("photos")} style={{ flex: 1 }}>从相册选</Button>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <Button variant="tinted" size="sm" icon="camera" onClick={goCapture} style={{ flex: 1 }}>拍照</Button>
-                <Button variant="tinted" size="sm" icon="photo" onClick={() => { setReturnTo("/today"); nav("/capture", { state: { source: "photos" } }); }} style={{ flex: 1 }}>从相册选</Button>
-              </div>
-            </div>
+            )}
 
             {/* 本周 */}
             {o.total > 0 && (

@@ -95,3 +95,12 @@ export function validDigitized(d: DigitizedResult | undefined | null): Digitized
   if (!d.pages.every((p) => Array.isArray(p.blocks)) || !d.questions.every((q) => Array.isArray(q.blankIds))) return null;
   return d;
 }
+
+/** 试卷状态：未扫描 / 已扫描（错 N 题）。给列表与今天页用。 */
+export function folderStatus(f: Folder): { label: string; color: string; bg: string; scanned: boolean; wrong: number } {
+  const d = validDigitized(f.digitized);
+  if (!d) return { label: "未扫描", color: "var(--secondary)", bg: "var(--fill-light)", scanned: false, wrong: 0 };
+  const wrong = d.questions.filter((q) => q.mark === "wrong" || q.mark === "partial").length;
+  if (wrong === 0) return { label: `已扫描 · 全对`, color: "var(--mastered)", bg: "var(--mastered-bg)", scanned: true, wrong };
+  return { label: `错 ${wrong} 题`, color: "var(--wrong)", bg: "var(--wrong-bg)", scanned: true, wrong };
+}
