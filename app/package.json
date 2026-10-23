@@ -24,6 +24,7 @@
     "@capacitor/preferences": "^7.0.0",
     "@capacitor/share": "^7.0.4",
     "@capacitor/status-bar": "^7.0.0",
+    "katex": "^0.16.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.27.0",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",
+    "@types/katex": "^0.16.7",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.170.0",

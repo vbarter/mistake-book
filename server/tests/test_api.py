@@ -765,3 +765,13 @@ def test_book_endpoint_reports_clear_error(client, auth, monkeypatch):
     body = r.get_json()
     assert r.status_code == 500 and body["error"] == "pdf_failed"
     assert "稍后重试" not in body["message"] and "错题本" in body["message"]
+
+
+def test_pdf_math_and_unrecognized_text():
+    """PDF 里：$...$ 公式转成可读写法（分数、上下标、空格命令），「□」显示成红色「未识别」。"""
+    from app.pdf import _esc
+
+    out = _esc("解得 $a=2,\\ b=-\\frac{3}{4}$，$x_{1}=x^2$，A（□）")
+    assert "\\" not in out and "$" not in out
+    assert "b=-3/4" in out and "x<sub>1</sub>" in out and "x<super>2</super>" in out
+    assert "未识别" in out and "□" not in out

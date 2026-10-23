@@ -1,6 +1,6 @@
 /** 错题汇总：把文件夹里扫描出的判错题（含未作答）收集成统一记录，供文件夹汇总、错题库和导出使用。 */
-import type { DigitizedQuestion, Subject } from "../api/types";
-import { effectiveMark, isBlank, isProblem, validDigitized, type Folder, type Paper } from "./folders";
+import type { DigitizedQuestion, Mark, Subject } from "../api/types";
+import { autoMark, effectiveMark, isBlank, isProblem, validDigitized, type Folder, type Paper } from "./folders";
 import { unwrapLines } from "./format";
 
 export type ErrorKind = "未作答" | "答错" | "半对";
@@ -17,11 +17,36 @@ export interface ErrorItem {
   subKnowledge: string[];
   kind: ErrorKind;
   q: DigitizedQuestion;
+  parts: ErrorPart[]; // 一题多问（如 18-1、18-2）时逐问的作答 / 判定 / 答案；只有一个空时为空数组
   stem: string; // 卡片上显示的题干：短文里的空只取当前空所在的那一句（q.stemText 仍是整篇，导出合并用）
   sectionLabel: string; // 所属大题，如「Ⅳ Complete the sentences…」
 }
 
 export const UNANSWERED = "未作答";
+
+/** 一题多问里的一问 */
+export interface ErrorPart {
+  label: string; // （1）（2）…
+  student: string;
+  mark: Mark;
+  answer: string;
+  analysis: string;
+  ai: boolean; // 老师没批改，AI 判的
+}
+
+/** 一道题对应的各个空：题号形如 18-1、18-2 的按小问拆开，标上（1）（2） */
+function partsOf(paper: Paper, q: DigitizedQuestion): ErrorPart[] {
+  if (q.blankIds.length < 2) return [];
+  const block = validDigitized(paper.digitized)?.pages[q.sheet]?.blocks[q.blockIndex];
+  if (!block) return [];
+  return block.blanks
+    .filter((b) => q.blankIds.includes(b.id))
+    .map((b, i) => {
+      const mark = autoMark(b.mark, b.student, b.answer, block.questionType);
+      const sub = /-(\d+)$/.exec(b.id)?.[1] ?? String(i + 1);
+      return { label: `（${sub}）`, student: b.student, mark, answer: b.answer, analysis: b.analysis, ai: Boolean(b.aiGraded) || (b.mark === "unmarked" && mark !== "unmarked") };
+    });
+}
 
 /** 短文（完形 / 选词填空）里的一个空：整篇短文只取包含当前空（裸「____」）的那一句，别的空仍带编号；不是短文或找不到就原样返回 */
 export function focusSentence(stem: string): string {
@@ -83,6 +108,7 @@ export function paperErrors(folder: Folder, paper: Paper): ErrorItem[] {
     subKnowledge: q.knowledgePoints.slice(1),
     kind: kindOf(q),
     q,
+    parts: partsOf(paper, q),
     stem: focusSentence(unwrapLines(q.stemText)),
     sectionLabel: sectionOf(paper, q),
   }));

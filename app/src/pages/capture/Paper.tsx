@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } f
 import { useNavigate, useParams } from "react-router-dom";
 import type { DigitizedBlank, DigitizedBlock, DigitizedPage, Mark } from "../../api/types";
 import { ErrorCard } from "../../components/ErrorCard";
+import { MathText, mathNodes } from "../../components/MathText";
 import { ExportSheet } from "../../components/ExportSheet";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
@@ -30,7 +31,7 @@ function renderPrint(text: string, blanks: DigitizedBlank[]): ReactNode[] {
   let i = 0;
   for (const m of text.matchAll(BLANK_RE)) {
     const start = m.index ?? 0;
-    if (start > last) out.push(<Fragment key={`t${i++}`}>{text.slice(last, start)}</Fragment>);
+    if (start > last) out.push(<Fragment key={`t${i}`}>{mathNodes(text.slice(last, start), `t${i++}`)}</Fragment>);
     const id = m[1];
     const num = byId.get(id)?.number || id.split("-")[0];
     out.push(
@@ -40,7 +41,7 @@ function renderPrint(text: string, blanks: DigitizedBlank[]): ReactNode[] {
     );
     last = start + m[0].length;
   }
-  if (last < text.length) out.push(<Fragment key={`t${i++}`}>{text.slice(last)}</Fragment>);
+  if (last < text.length) out.push(<Fragment key={`t${i}`}>{mathNodes(text.slice(last), `t${i++}`)}</Fragment>);
   return out;
 }
 
@@ -138,14 +139,14 @@ export default function Paper() {
         return (
           <div className="blk-wordbank" key={bi}>
             {block.options.map((o, i) => (
-              <span key={i}>{o}</span>
+              <span key={i}><MathText text={o} /></span>
             ))}
           </div>
         );
       case "text":
         return (
           <p className="blk-plain" key={bi}>
-            {block.text}
+            <MathText text={block.text} />
           </p>
         );
       case "passage":
@@ -162,13 +163,13 @@ export default function Paper() {
             <div className="blk-item__body">
               <p className="blk-text">
                 {renderPrint(unwrapLines(block.text), block.blanks)}
-                {block.hint && <span className="blk-hint">{block.hint}</span>}
+                {block.hint && <span className="blk-hint"><MathText text={block.hint} /></span>}
                 {block.instruction && <span className="blk-instruction">（{stripParen(block.instruction)}）</span>}
               </p>
               {block.options.length > 0 && (
                 <div className="blk-options">
                   {block.options.map((o, i) => (
-                    <span key={i}>{/^[A-H][.、．]/.test(o) ? o : `${String.fromCharCode(65 + i)}. ${o}`}</span>
+                    <span key={i}><MathText text={/^[A-H][.、．]/.test(o) ? o : `${String.fromCharCode(65 + i)}. ${o}`} /></span>
                   ))}
                 </div>
               )}
@@ -226,12 +227,12 @@ export default function Paper() {
             {rows.map((b) => (
               <div className={`ans__row${b.mark === "wrong" || b.mark === "partial" ? " ans__row--wrong" : isProblemMark(b.mark, b.student) ? " ans__row--blank" : ""}`} key={b.rowKey}>
                 <span className="ans__num">{b.number}</span>
-                <span className={`ans__hand${b.mark === "wrong" || b.mark === "partial" ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : b.student}</span>
+                <span className={`ans__hand${b.mark === "wrong" || b.mark === "partial" ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : <MathText text={b.student} />}</span>
                 <span>
                   <MarkChip mark={b.mark} student={b.student} ai={b.ai} />
                   {b.note && b.note !== UNANSWERED && <span className="t-cap" style={{ color: "var(--wrong)", display: "block" }}>{b.note}</span>}
                 </span>
-                <span className="ans__answer">{b.mark === "correct" ? "" : b.answer}</span>
+                <span className="ans__answer">{b.mark === "correct" ? "" : <MathText text={b.answer} />}</span>
               </div>
             ))}
           </div>

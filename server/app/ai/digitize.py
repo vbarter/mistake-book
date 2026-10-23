@@ -42,6 +42,8 @@ _SUBSUP = str.maketrans("₀₁₂₃₄₅₆₇₈₉⁰¹²³⁴⁵⁶⁷⁸�
 
 def _norm_answer(s: str) -> str:
     """比较作答用：全角转半角，上下标数字转普通数字（O₂ 与 O2 相同），忽略大小写、空白和首尾标点。"""
+    s = re.sub(r"\\d?frac\{([^{}]*)\}\{([^{}]*)\}", r"\1/\2", s.replace("$", ""))
+    s = re.sub(r"\\(left|right|mathrm|text|displaystyle)", "", s).replace("{", "").replace("}", "").replace("^", "")
     s = s.translate(_SUBSUP)
     s = "".join(chr(ord(c) - 0xFEE0) if 0xFF01 <= ord(c) <= 0xFF5E else c for c in s)
     s = s.strip().lower().replace("．", ".").replace("，", ",")
@@ -64,6 +66,9 @@ def auto_mark(mark: str, student: str, answer: str, question_type: str = "fill")
     ns = _norm_answer(s)
     if any(_norm_answer(x) == ns for x in alts):
         return "correct"
+    # 算式、函数式这类答案写法很多（因式分解 / 展开、分数 / 小数），字面不同不代表错：留给 AI 阅卷判等价
+    if question_type != "choice" and any(re.search(r"[=/\\]|[a-z]\d|\d[a-z]|√", _norm_answer(x)) for x in alts):
+        return mark
     # 选择题：学生只写了字母，答案写成「B. awards」这种也算对
     if len(ns) == 1 and any(_norm_answer(x)[:1] == ns and re.match(r"^[a-h][.、．\s]", _norm_answer(x)) for x in alts):
         return "correct"

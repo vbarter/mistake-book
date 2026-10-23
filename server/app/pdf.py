@@ -58,8 +58,46 @@ S_CELL_WRONG = ParagraphStyle("cellw", parent=S_CELL, textColor=colors.HexColor(
 S_CELL_OK = ParagraphStyle("cello", parent=S_CELL, textColor=colors.HexColor("#1e7a47"))
 
 
+UNRECOGNIZED = "<font color='#d92d20'>未识别</font>"  # 照片上看不清的字（识别结果里是「□」）
+
+_TEX_SYMBOLS = {
+    "cdot": "·", "times": "×", "div": "÷", "pm": "±", "mp": "∓", "leq": "≤", "le": "≤", "geq": "≥", "ge": "≥",
+    "neq": "≠", "ne": "≠", "approx": "≈", "infty": "∞", "pi": "π", "alpha": "α", "beta": "β", "gamma": "γ",
+    "theta": "θ", "lambda": "λ", "mu": "μ", "omega": "ω", "Delta": "Δ", "angle": "∠", "triangle": "△", "perp": "⊥",
+    "parallel": "∥", "circ": "°", "degree": "°", "because": "∵", "therefore": "∴", "in": "∈", "cup": "∪", "cap": "∩",
+    "Rightarrow": "⇒", "rightarrow": "→", "to": "→", "leftarrow": "←", "sim": "∽", "cong": "≌", "quad": " ", "qquad": "  ",
+}
+
+
+def _latex_markup(tex: str) -> str:
+    """把 $...$ 里的 LaTeX 转成 ReportLab 能排的文字：分数写成 a/b，上下标用 <super>/<sub>，常见符号换成 Unicode。"""
+    s = html.escape(tex, quote=False)
+    s = re.sub(r"\\(left|right|displaystyle|,|;|!|:| )", lambda m: " " if m.group(1) in (",", ";", ":", " ") else "", s)
+    s = re.sub(r"\\(?:text|mathrm|mathbf|operatorname)\{([^{}]*)\}", r"\1", s)
+    for _ in range(6):  # 由内向外展开嵌套
+        new = re.sub(r"\\d?frac\{([^{}]*)\}\{([^{}]*)\}", lambda m: (f"{m.group(1)}/{m.group(2)}" if re.fullmatch(r"[\w.]+", m.group(1)) and re.fullmatch(r"[\w.]+", m.group(2)) else f"({m.group(1)})/({m.group(2)})"), s)
+        new = re.sub(r"\\sqrt\[([^\]]*)\]\{([^{}]*)\}", r"<super>\1</super>√(\2)", new)
+        new = re.sub(r"\\sqrt\{([^{}]*)\}", lambda m: f"√{m.group(1)}" if re.fullmatch(r"[\w.]+", m.group(1)) else f"√({m.group(1)})", new)
+        new = re.sub(r"\^\{([^{}]*)\}", r"<super>\1</super>", new)
+        new = re.sub(r"_\{([^{}]*)\}", r"<sub>\1</sub>", new)
+        if new == s:
+            break
+        s = new
+    s = re.sub(r"\^([\w+\-′'])", r"<super>\1</super>", s)
+    s = re.sub(r"_([\w])", r"<sub>\1</sub>", s)
+    s = re.sub(r"\\([A-Za-z]+)", lambda m: _TEX_SYMBOLS.get(m.group(1), ""), s)
+    return s.replace("{", "").replace("}", "")
+
+
 def _esc(text: str) -> str:
-    return html.escape(text or "", quote=False).replace("\n", "<br/>")
+    """转义成 ReportLab 段落标记：$...$ 里的公式转成可读写法，「□」显示成红色「未识别」，换行保留。"""
+    out = []
+    for part in re.split(r"(\$[^$]{1,600}\$)", text or ""):
+        if len(part) >= 2 and part.startswith("$") and part.endswith("$"):
+            out.append(_latex_markup(part[1:-1]))
+        else:
+            out.append(html.escape(part, quote=False))
+    return "".join(out).replace("\n", "<br/>").replace("□", UNRECOGNIZED)
 
 
 def _blank_print(text: str, blanks: list[dict]) -> str:

@@ -110,3 +110,23 @@
 /* 点题号跳到错题卡片时闪一下 */
 @keyframes card-flash { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 20%, 60% { box-shadow: 0 0 0 3px var(--brand); } }
 .card--flash { animation: card-flash 1.5s ease; }
+
+/* 识别不了的字 / 公式 */
+.unrec { color: var(--wrong); font-weight: 700; font-size: 0.9em; margin: 0 2px; }
+.math .katex { font-size: 1.05em; }
+.math .katex-display { margin: 0.2em 0; }
+
+/* 错题卡片：作答 / 答案 / 分步解析 / 一题多问 */
+.ans-text { font-weight: 700; color: var(--label); }
+.ans-text--wrong { color: var(--wrong); }
+.ans-text--block { display: block; margin-top: 4px; padding: 8px 10px; border-radius: 10px; background: var(--card); font-family: var(--hand-font, inherit); font-weight: 600; line-height: 1.7; }
+.ans-right { color: var(--mastered); }
+.steps { display: flex; flex-direction: column; gap: 3px; }
+.steps > span { display: flex; gap: 6px; align-items: baseline; }
+.steps__no { flex-shrink: 0; width: 16px; height: 16px; border-radius: 8px; background: var(--fill); color: var(--secondary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.steps__err { color: var(--wrong); font-weight: 600; }
+.part { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px dashed var(--separator); }
+.part:first-child { border-top: 0; padding-top: 0; }
+.part__head { display: flex; align-items: center; gap: 8px; }
+.part__label { font-weight: 800; color: var(--label); }
+.part__line { display: block; }
