@@ -297,10 +297,17 @@ def digitize_pdf():
             abort(400, "题目列表格式不对")
     try:
         pdf = build_papers_pdf(title, papers)
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         log.exception("pdf failed")
-        return jsonify({"error": "pdf_failed", "message": "生成 PDF 出错了，请稍后重试"}), 500
+        return jsonify({"error": "pdf_failed", "message": _pdf_error_message("电子试卷", e)}), 500
     return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": "attachment; filename=paper.pdf"})
+
+
+def _pdf_error_message(what: str, e: Exception) -> str:
+    """给用户看的失败原因：说清楚是哪一步、能怎么办，不说「稍后重试」（这类错误重试也一样）。"""
+    if type(e).__name__ == "LayoutError":
+        return f"生成{what}失败：有一道题内容太长，一页排不下。可以先按知识点或时间分开导出。"
+    return f"生成{what}失败：排版时出错了，已记录下来。可以换个范围导出，或者联系我们处理。"
 
 
 @bp.post("/digitize/book")
@@ -317,7 +324,7 @@ def digitize_book():
     subtitle = str(data.get("subtitle") or "")[:120]
     try:
         pdf = build_book_pdf(title, subtitle, items)
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         log.exception("book pdf failed")
-        return jsonify({"error": "pdf_failed", "message": "生成错题本出错了，请稍后重试"}), 500
+        return jsonify({"error": "pdf_failed", "message": _pdf_error_message("错题本", e)}), 500
     return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": "attachment; filename=book.pdf"})

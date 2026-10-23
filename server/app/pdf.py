@@ -167,7 +167,7 @@ def _answer_part(story: list, sheets: list[dict]) -> None:
                     styles.append(("BACKGROUND", (0, len(rows) - 1), (-1, len(rows) - 1), colors.HexColor("#fff4f4")))
                 elif mark == "blank":
                     styles.append(("BACKGROUND", (0, len(rows) - 1), (-1, len(rows) - 1), colors.HexColor("#fff7ec")))
-    tbl = Table(rows, colWidths=[16 * mm, 72 * mm, 30 * mm, 52 * mm], repeatRows=1)
+    tbl = Table(rows, colWidths=[16 * mm, 72 * mm, 30 * mm, 52 * mm], repeatRows=1, splitInRow=1)
     tbl.setStyle(TableStyle(styles))
     story.append(tbl)
 
@@ -317,8 +317,23 @@ def build_book_pdf(title: str, subtitle: str, items: list[dict]) -> bytes:
     story: list = [Paragraph(_esc(title), S_TITLE), Paragraph(_esc(subtitle) if subtitle else "空白重做 + 错题修正 · 对折或遮住右半页再做左边", S_SUB)]
     rows, styles = _book_rows(items)
     width = page[0] - 28 * mm
-    tbl = Table(rows, colWidths=[width / 2, width / 2], repeatRows=1, splitByRow=1)
+    # splitInRow：一道题（比如错了 20 个空的完形填空）比一页还高时，允许在行内断开续到下一页，否则 ReportLab 直接排版失败。
+    # 表头不用 repeatRows（行内断开时会在同一页多插一次表头），第二页起改在页边距里画栏目名。
+    tbl = Table(rows, colWidths=[width / 2, width / 2], splitByRow=1, splitInRow=1)
     tbl.setStyle(TableStyle(styles))
     story.append(tbl)
-    doc.build(story)
+
+    def later_header(canvas, _doc):
+        canvas.saveState()
+        canvas.setFont(FONT, 10)
+        canvas.setFillColor(colors.HexColor("#555555"))
+        y = page[1] - 10 * mm
+        canvas.drawString(14 * mm + 8, y, "空白重做")
+        canvas.drawString(14 * mm + width / 2 + 8, y, "错题修正")
+        canvas.setStrokeColor(colors.HexColor("#bbbbbb"))
+        canvas.setLineWidth(0.5)
+        canvas.line(14 * mm, y - 2.5 * mm, 14 * mm + width, y - 2.5 * mm)
+        canvas.restoreState()
+
+    doc.build(story, onLaterPages=later_header)
     return buf.getvalue()

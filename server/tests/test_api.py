@@ -727,3 +727,41 @@ def test_grade_unmarked_blanks(monkeypatch):
     assert (blanks["37"].mark, blanks["37"].aiGraded) == ("correct", True)
     assert (blanks["38"].mark, blanks["38"].aiGraded) == ("wrong", False)
     assert blanks["39"].mark == "blank"
+
+
+def _long_cloze_item(blanks: int = 20) -> dict:
+    """一篇错得很多的完形填空：整篇短文一行，右栏 20 个空各带解析和「下次注意」，高度超过一页横版 A4。"""
+    passage = " ".join(f"Sentence {i} of the passage goes on and on ({i})____ before it finally ends." for i in range(1, blanks + 1))
+    return {
+        "number": f"1–{blanks}",
+        "stem": passage,
+        "options": [],
+        "knowledge": "完形填空",
+        "source": "测试 · 第 1 张",
+        "answers": [
+            {"number": str(i), "student": "B", "answer": "C", "kind": "答错", "analysis": "根据上下文，这里需要一个表示转折的连词，所以选 C 更符合句意和语法要求。" * 2, "tip": "做完形填空时先通读全文，再结合前后句判断。", "sub": "连词"}
+            for i in range(1, blanks + 1)
+        ],
+    }
+
+
+def test_book_pdf_splits_rows_taller_than_a_page():
+    """完形填空一行超过一页高时，错题本 PDF 要能跨页拆开，而不是排版失败。"""
+    from app.pdf import build_book_pdf
+
+    pdf = build_book_pdf("错题库 · 英语 错题本", "79 题", [_long_cloze_item(20), _long_cloze_item(30)])
+    assert pdf[:4] == b"%PDF" and len(pdf) > 5000
+
+
+def test_book_endpoint_reports_clear_error(client, auth, monkeypatch):
+    """生成失败时返回具体原因，而不是笼统的「稍后重试」。"""
+    import app.routes.recognize as rec
+
+    def boom(*a, **kw):
+        raise RuntimeError("font missing")
+
+    monkeypatch.setattr(rec, "build_book_pdf", boom)
+    r = client.post("/api/digitize/book", json={"title": "t", "items": [_long_cloze_item(3)]}, headers=auth)
+    body = r.get_json()
+    assert r.status_code == 500 and body["error"] == "pdf_failed"
+    assert "稍后重试" not in body["message"] and "错题本" in body["message"]
