@@ -80,16 +80,16 @@ export default function Library() {
 
             {view === "subject" && (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, bySubject.length))}, minmax(0, 1fr))`, gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
                   {bySubject.map(([s, list]) => {
                     const c = subjectColors(s);
                     const on = s === activeSubject;
                     return (
-                      <button key={s} className="card" style={{ gap: 8, padding: 12, border: `2px solid ${on ? c.color : "transparent"}`, textAlign: "left" }} onClick={() => setSubject(s)} aria-pressed={on}>
+                      <button key={s} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14, border: `2px solid ${on ? c.color : "transparent"}`, textAlign: "left" }} onClick={() => setSubject(s)} aria-pressed={on}>
                         <SubjectTile subject={s} size="sm" />
-                        <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                          <span className="t-sub" style={{ fontWeight: 700 }}>{SUBJECT_LABEL[s]}</span>
-                          <span className="t-cap c-sec">{list.length} 题 · {groupByKnowledge(list).length} 个知识点</span>
+                        <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                          <span className="t-sub" style={{ fontWeight: 700, lineHeight: "18px" }}>{SUBJECT_LABEL[s]}</span>
+                          <span className="t-cap c-sec" style={{ whiteSpace: "nowrap" }}>{list.length} 题 · {groupByKnowledge(list).length} 个知识点</span>
                         </span>
                       </button>
                     );

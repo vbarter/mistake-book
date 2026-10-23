@@ -4,18 +4,19 @@ import { SUBJECT_LABEL } from "../lib/format";
 import { Icon, type IconName } from "./Icon";
 
 /** 学科方块：圆角色块 + 一个大字符，学生一眼认出是哪一科 */
-const TILE: Record<Subject, { glyph: string; color: string; bg: string }> = {
-  english: { glyph: "Aa", color: "var(--english)", bg: "var(--english-bg)" },
-  math: { glyph: "π", color: "var(--math)", bg: "var(--math-bg)" },
-  chinese: { glyph: "文", color: "var(--chinese)", bg: "var(--chinese-bg)" },
-  science: { glyph: "⚗", color: "var(--science)", bg: "var(--science-bg)" },
-  physics: { glyph: "物", color: "var(--physics)", bg: "var(--physics-bg)" },
-  chemistry: { glyph: "化", color: "var(--chemistry)", bg: "var(--chemistry-bg)" },
-  biology: { glyph: "生", color: "var(--biology)", bg: "var(--biology-bg)" },
-  history: { glyph: "史", color: "var(--history)", bg: "var(--history-bg)" },
-  geography: { glyph: "地", color: "var(--geography)", bg: "var(--geography-bg)" },
-  politics: { glyph: "道", color: "var(--politics)", bg: "var(--politics-bg)" },
+const TILE: Record<Subject, { icon: IconName; color: string; bg: string }> = {
+  english: { icon: "bubble", color: "var(--english)", bg: "var(--english-bg)" },
+  math: { icon: "calculator", color: "var(--math)", bg: "var(--math-bg)" },
+  chinese: { icon: "brush", color: "var(--chinese)", bg: "var(--chinese-bg)" },
+  science: { icon: "flask", color: "var(--science)", bg: "var(--science-bg)" },
+  physics: { icon: "atom", color: "var(--physics)", bg: "var(--physics-bg)" },
+  chemistry: { icon: "tube", color: "var(--chemistry)", bg: "var(--chemistry-bg)" },
+  biology: { icon: "leaf", color: "var(--biology)", bg: "var(--biology-bg)" },
+  history: { icon: "scroll", color: "var(--history)", bg: "var(--history-bg)" },
+  geography: { icon: "map", color: "var(--geography)", bg: "var(--geography-bg)" },
+  politics: { icon: "scales", color: "var(--politics)", bg: "var(--politics-bg)" },
 };
+const TILE_ICON_SIZE = { lg: 28, md: 26, sm: 20, xs: 13 } as const;
 
 /** 文件夹里有多科时叠放两个小方块 */
 export function SubjectStack({ subjects, size = "md" }: { subjects: Subject[]; size?: "md" | "sm" }) {
@@ -37,7 +38,7 @@ export function SubjectTile({ subject, size = "md", style }: { subject: Subject 
   const t = subject ? TILE[subject] : null;
   return (
     <span className={`tile tile--${size}`} style={{ background: t?.bg ?? "var(--fill-light)", color: t?.color ?? "var(--secondary)", ...style }} aria-label={subject ? SUBJECT_LABEL[subject] : "未分学科"}>
-      {t ? (subject === "science" ? <Icon name="sparkles" size={size === "lg" ? 24 : size === "xs" ? 12 : 20} /> : t.glyph) : <Icon name="folder" size={size === "xs" ? 12 : 22} />}
+      <Icon name={t ? t.icon : "folder"} size={TILE_ICON_SIZE[size]} stroke={size === "xs" ? 2.4 : 2} />
     </span>
   );
 }

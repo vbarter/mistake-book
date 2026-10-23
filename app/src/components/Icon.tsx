@@ -5,9 +5,21 @@ export type IconName =
   | "chevron-right" | "chevron-left" | "chevron-down" | "chevron-up" | "plus" | "trash" | "ellipsis" | "bell"
   | "lock" | "export" | "search" | "refresh" | "warning" | "seal" | "target" | "chart" | "book" | "sun" | "info"
   | "viewfinder" | "loop" | "family" | "shield" | "brain"
-  | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation";
+  | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation"
+  | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales";
 
 const paths: Record<IconName, string> = {
+  // 学科图标
+  calculator: "M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM8 6h8v3H8zM8.5 12.5h.01M12 12.5h.01M15.5 12.5h.01M8.5 16h.01M12 16h.01M15.5 16h.01",
+  brush: "M15 4l5 5-8.5 8.5a3 3 0 0 1-4.2 0L7 17.2a3 3 0 0 1 0-4.2zM4 20c0-2 1-3 3-3M12 7l5 5",
+  bubble: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2zM8 9h8M8 12.5h5",
+  flask: "M9 3h6M10 3v6l-5.5 9a2 2 0 0 0 1.7 3h11.6a2 2 0 0 0 1.7-3L14 9V3M7.5 15h9",
+  atom: "M12 12m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M12 3c2.5 0 4 4 4 9s-1.5 9-4 9-4-4-4-9 1.5-9 4-9zM4.2 7.5c1.3-2.2 5.5-1.6 9.8.9s7 6 5.8 8.1-5.5 1.6-9.8-.9-7-6-5.8-8.1zM19.8 7.5c-1.3-2.2-5.5-1.6-9.8.9s-7 6-5.8 8.1 5.5 1.6 9.8-.9 7-6 5.8-8.1z",
+  tube: "M8 3h4v13a2 2 0 1 1-4 0zM13 3h4v13a2 2 0 1 1-4 0zM8 10h4M13 10h4M7 3h12",
+  leaf: "M20 4c-9 0-15 5-15 13 0 1 .2 2 .5 3 1-.3 2-.5 3-.5 8 0 12-6 11.5-15.5zM5 21c3-6 8-10 13-13",
+  scroll: "M8 4h11a2 2 0 0 1 2 2v2h-3M8 4a2 2 0 0 0-2 2v11a3 3 0 0 1-3 3h12a3 3 0 0 0 3-3V8M8 4v12M10 8h6M10 11h6M10 14h4",
+  map: "M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14",
+  scales: "M12 3v18M5 21h14M12 6l-6 2M12 6l6 2M6 8l-3 7h6zM18 8l-3 7h6z",
   folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   document: "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6",
   grid: "M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z",
