@@ -34,6 +34,33 @@ def clean_bbox(raw) -> list[float]:
     return bbox
 
 
+def _norm_answer(s: str) -> str:
+    s = s.strip().lower().replace("．", ".").replace("，", ",")
+    s = re.sub(r"\s+", " ", s)
+    return s.rstrip(".。,，;；!！?？ ")
+
+
+def auto_mark(mark: str, student: str, answer: str, question_type: str = "fill") -> str:
+    """老师没批改（unmarked）但模型给了正确答案时，自动对照学生作答判对错。
+
+    只对选择题 / 填空题这类短答案做，解答题不做；看不清（□）的不做。
+    answer 里用 / 或 ； 分隔的视为多个可接受答案。
+    """
+    if mark != "unmarked" or question_type == "solve":
+        return mark
+    s, a = student.strip(), answer.strip()
+    if not s or not a or "□" in s or len(a) > 60:
+        return mark
+    alts = [x for x in re.split(r"[/／;；]|\s或\s", a) if x.strip()]
+    ns = _norm_answer(s)
+    if any(_norm_answer(x) == ns for x in alts):
+        return "correct"
+    # 选择题：学生只写了字母，答案写成「B. awards」这种也算对
+    if len(ns) == 1 and any(_norm_answer(x)[:1] == ns and re.match(r"^[a-h][.、．\s]", _norm_answer(x)) for x in alts):
+        return "correct"
+    return "wrong"
+
+
 def clean_blank(raw: dict, fallback_number: str = "") -> DigitizedBlank | None:
     if not isinstance(raw, dict):
         return None
@@ -82,6 +109,8 @@ def clean_block(raw: dict) -> DigitizedBlock | None:
             blanks.append(DigitizedBlank(id=bid, number=number or bid.split("-")[0], mark="blank"))
     subject = raw.get("subject") if raw.get("subject") in SUBJECTS else "math"
     qtype = raw.get("questionType") if raw.get("questionType") in QUESTION_TYPES else ("choice" if raw.get("options") else "fill")
+    for b in blanks:
+        b.mark = auto_mark(b.mark, b.student, b.answer, qtype)
     block = DigitizedBlock(
         type=btype,
         text=text,

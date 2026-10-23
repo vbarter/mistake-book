@@ -372,7 +372,7 @@ def test_claude_digitize_cleans_fields(monkeypatch):
     assert passage.label == "(B)"  # 单独成块的篇号并进短文
     assert [b.id for b in passage.blanks] == ["36", "37", "38"] and passage.blanks[1].number == "37"
     item44 = sheets[0].blocks[3]
-    assert item44.subject == "math" and item44.questionType == "fill" and item44.bbox == [0.0, 0.0, 1.0, 1.0] and item44.blanks[0].mark == "unmarked"
+    assert item44.subject == "math" and item44.questionType == "fill" and item44.bbox == [0.0, 0.0, 1.0, 1.0] and item44.blanks[0].mark == "wrong"  # 没批改但答案不符，自动判错
     # 没写作答的空单独归为 blank（未作答），不算答错
     assert passage.blanks[2].id == "38" and passage.blanks[2].mark == "blank" and passage.blanks[2].note == ""
     assert [q.number for q in qs] == ["36", "37", "38", "44", "52"]
@@ -437,3 +437,22 @@ def test_book_pdf_export(client, auth):
     r = client.post("/api/digitize/book", json={"title": "嘉定二模 · 英语 错题本", "subtitle": "上海中考英语考纲 · 2 题", "items": items}, headers=auth)
     assert r.status_code == 200 and r.mimetype == "application/pdf" and r.data.startswith(b"%PDF")
     assert client.post("/api/digitize/book", json={"items": []}, headers=auth).status_code == 400
+
+
+
+def test_auto_mark_grades_ungraded_short_answers():
+    from app.ai.digitize import auto_mark, clean_sheets, derive_questions
+
+    assert auto_mark("unmarked", "B", "B", "choice") == "correct"
+    assert auto_mark("unmarked", "b", "B. awards", "choice") == "correct"
+    assert auto_mark("unmarked", "A", "C", "choice") == "wrong"
+    assert auto_mark("unmarked", "whether", "if/whether", "fill") == "correct"
+    assert auto_mark("unmarked", "bakerys", "bakeries", "fill") == "wrong"
+    assert auto_mark("unmarked", "□", "B", "choice") == "unmarked"  # 看不清不判
+    assert auto_mark("unmarked", "x", "y", "solve") == "unmarked"  # 解答题不判
+    assert auto_mark("correct", "x", "y", "fill") == "correct"  # 老师批过的不动
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "passage", "questionType": "choice", "text": "a [[1]] b [[2]] c [[3]]", "blanks": [{"id": "1", "student": "A", "answer": "A"}, {"id": "2", "student": "E", "answer": "A"}, {"id": "3", "student": "", "answer": "C"}]},
+    ]}]}, 0)
+    assert [b.mark for b in sheets[0].blocks[0].blanks] == ["correct", "wrong", "blank"]
+    assert [q.mark for q in derive_questions(sheets)] == ["correct", "wrong", "blank"]

@@ -22,6 +22,8 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from .ai.digitize import auto_mark
+
 FONT = "STSong-Light"
 BLANK_RE = re.compile(r"\[\[([^\[\]]{1,24})\]\]")
 MARK_LABEL = {"correct": "正确", "wrong": "错误", "partial": "半对", "blank": "未作答", "unmarked": "未批改"}
@@ -149,6 +151,7 @@ def _answer_part(story: list, sheets: list[dict]) -> None:
                 unanswered = not student.strip()
                 if unanswered and mark == "wrong":
                     mark = "blank"
+                mark = auto_mark(mark, student, b.get("answer") or "", block.get("questionType") or "fill")
                 st = S_CELL_WRONG if mark in ("wrong", "partial") else S_CELL_OK if mark == "correct" else S_CELL
                 verdict = MARK_LABEL.get(mark, mark)
                 note = b.get("note") or ""

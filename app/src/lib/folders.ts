@@ -3,7 +3,7 @@
  * 一次考试一个文件夹，一个文件夹装多张试卷；每张试卷有若干照片和 AI 还原的电子版。
  * 错题不再单独"收录"：扫描完的试卷里判错的题自动算进文件夹和错题库，订正状态记在试卷上。
  */
-import type { DigitizedQuestion, DigitizedResult, Subject } from "../api/types";
+import type { DigitizedQuestion, DigitizedResult, Mark, QuestionType, Subject } from "../api/types";
 
 export interface FolderPage {
   id: string;
@@ -178,8 +178,43 @@ export function validDigitized(d: DigitizedResult | undefined | null): Digitized
   return d;
 }
 
+const normAnswer = (s: string) => s.trim().toLowerCase().replace(/．/g, ".").replace(/，/g, ",").replace(/\s+/g, " ").replace(/[.。,，;；!！?？ ]+$/, "");
+
+/**
+ * 老师没批改但模型给了正确答案时，自动对照学生作答判对错（和服务端 auto_mark 同一规则，给旧扫描结果用）。
+ * 只对选择 / 填空做，看不清（□）不判；answer 里用 / 或 ； 分隔的视为多个可接受答案。
+ */
+export function autoMark(mark: Mark, student: string, answer: string, questionType: QuestionType): Mark {
+  if (mark !== "unmarked" || questionType === "solve") return mark;
+  const s = student.trim();
+  const a = answer.trim();
+  if (!s || !a || s.includes("□") || a.length > 60) return mark;
+  const alts = a.split(/[/／;；]|\s或\s/).map(normAnswer).filter(Boolean);
+  const ns = normAnswer(s);
+  if (alts.some((x) => x === ns)) return "correct";
+  if (ns.length === 1 && alts.some((x) => x[0] === ns && /^[a-h][.、．\s]/.test(x))) return "correct";
+  return "wrong";
+}
+
+/** 一题的有效判定：一题多空（作答与答案都用「；」拼接）逐空比较后聚合 */
+export function effectiveMark(q: DigitizedQuestion): Mark {
+  if (q.mark !== "unmarked") return q.mark;
+  const students = q.studentAnswer.split("；");
+  const answers = q.correctAnswer.split("；");
+  if (answers.length > 1 && students.length === answers.length) {
+    const marks = answers.map((a, i) => autoMark("unmarked", students[i] ?? "", a, q.questionType));
+    if (marks.every((m) => m === "correct")) return "correct";
+    if (marks.some((m) => m === "wrong")) return marks.some((m) => m === "correct") ? "partial" : "wrong";
+    return "unmarked";
+  }
+  return autoMark(q.mark, q.studentAnswer, q.correctAnswer, q.questionType);
+}
+
 /** 答错（含半对） */
-export const isWrong = (q: DigitizedQuestion) => q.mark === "wrong" || q.mark === "partial";
+export const isWrong = (q: DigitizedQuestion) => {
+  const m = effectiveMark(q);
+  return m === "wrong" || m === "partial";
+};
 /** 未作答：新数据是 blank；旧数据存成 wrong + 空作答 */
 export const isBlank = (q: DigitizedQuestion) => q.mark === "blank" || (q.mark === "wrong" && !q.studentAnswer.trim());
 /** 答错或未作答都需要订正 */
@@ -194,7 +229,7 @@ export function paperStats(paper: Paper): { scanned: boolean; total: number; wro
   const problems = d.questions.filter(isProblem);
   const blank = problems.filter(isBlank).length;
   const corrected = problems.filter((q) => paper.corrected?.[String(q.index)]).length;
-  return { scanned: true, total: d.questions.length, wrong: problems.length - blank, blank, problems: problems.length, correct: d.questions.filter((q) => q.mark === "correct").length, corrected };
+  return { scanned: true, total: d.questions.length, wrong: problems.length - blank, blank, problems: problems.length, correct: d.questions.filter((q) => effectiveMark(q) === "correct").length, corrected };
 }
 
 /** 一个文件夹的统计与推断信息（学科、考试信息） */

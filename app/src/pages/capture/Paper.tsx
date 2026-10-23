@@ -7,7 +7,7 @@ import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { Hint, IconSegmented, Tag, subjectColors } from "../../components/v2";
 import { groupByKnowledge, paperErrors, type ErrorItem } from "../../lib/errors";
-import { deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
+import { autoMark, deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { haptic } from "../../lib/native";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
@@ -193,7 +193,7 @@ export default function Paper() {
     <>
       <Hint icon="pencil">学生手写内容的转写，与老师批改、正确答案逐空对照。空题按未作答计入错题。</Hint>
       {sheets.map((sheet, si) => {
-        const rows = sheet.blocks.flatMap((b) => (b.type === "passage" || b.type === "item" ? b.blanks : []));
+        const rows = sheet.blocks.flatMap((b) => (b.type === "passage" || b.type === "item" ? b.blanks.map((x) => ({ ...x, mark: autoMark(x.mark, x.student, x.answer, b.questionType) })) : []));
         if (rows.length === 0) return null;
         return (
           <div className="card ans" key={si} style={{ gap: 0, padding: "10px 14px" }}>

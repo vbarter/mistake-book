@@ -1,6 +1,6 @@
 /** 错题汇总：把文件夹里扫描出的判错题（含未作答）收集成统一记录，供文件夹汇总、错题库和导出使用。 */
 import type { DigitizedQuestion, Subject } from "../api/types";
-import { isBlank, isProblem, validDigitized, type Folder, type Paper } from "./folders";
+import { effectiveMark, isBlank, isProblem, validDigitized, type Folder, type Paper } from "./folders";
 
 export type ErrorKind = "未作答" | "答错" | "半对";
 
@@ -25,7 +25,7 @@ export const UNANSWERED = "未作答";
 
 export function kindOf(q: DigitizedQuestion): ErrorKind {
   if (isBlank(q)) return "未作答";
-  return q.mark === "partial" ? "半对" : "答错";
+  return effectiveMark(q) === "partial" ? "半对" : "答错";
 }
 
 function sectionOf(paper: Paper, q: DigitizedQuestion): string {
