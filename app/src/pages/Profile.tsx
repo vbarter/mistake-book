@@ -76,7 +76,14 @@ export default function Profile() {
           <div className="group__header" style={{ padding: "0 12px 6px" }}><span>学习设置</span></div>
           <div className="group">
             <Row icon="graduation" iconColor="var(--brand)" title="年级与城市" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => nav("/profile/subjects")} />
-            <Row icon="letters" iconColor="var(--english)" title="学科" value={<span style={{ display: "flex", gap: 4 }}>{user.subjects.map((s) => <SubjectTile key={s} subject={s} size="xs" />)}</span>} onClick={() => nav("/profile/subjects")} />
+            <Row icon="letters" iconColor="var(--english)" title="学科" value={
+              // 最多露 3 个学科图标，其余用「+N」收起，免得学科多时把一行挤满
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {user.subjects.slice(0, 3).map((s) => <SubjectTile key={s} subject={s} size="xs" />)}
+                {user.subjects.length > 3 && <span className="t-foot c-sec" style={{ marginLeft: 2 }}>+{user.subjects.length - 3}</span>}
+                {user.subjects.length === 0 && <span className="t-foot c-sec">未选</span>}
+              </span>
+            } onClick={() => nav("/profile/subjects")} />
           </div>
           <p className="t-cap c-sec" style={{ padding: "6px 12px 0" }}>年级和城市决定错题按哪套考纲归类知识点；试卷上能看出来的以试卷为准。</p>
         </div>
