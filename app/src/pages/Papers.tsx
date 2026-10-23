@@ -81,38 +81,42 @@ export default function Papers() {
           const more = Math.max(0, groupByKnowledge(folderErrors(f)).length - 2);
           const c = subjectColors(st.subject);
           return (
-            <button key={f.id} className="card" style={{ gap: 12, textAlign: "left", width: "100%", padding: "14px 16px 14px 14px" }} onClick={() => nav(`/papers/${f.id}`)}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ position: "relative", flexShrink: 0, width: 48, height: 60 }}>
-                  {f.papers[0]?.pages[0]?.src ? (
-                    <img className="thumb" src={f.papers[0].pages[0].src} alt="" style={{ width: 48, height: 60 }} />
-                  ) : (
-                    <SubjectTile subject={st.subject} size="md" style={{ width: 48, height: 60, borderRadius: 10 }} />
-                  )}
-                  {f.papers[0]?.pages[0]?.src && <SubjectTile subject={st.subject} size="xs" style={{ position: "absolute", right: -6, bottom: -6, boxShadow: "0 0 0 2px var(--card)" }} />}
-                </span>
-                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span className="t-headline ellipsis" style={{ fontWeight: 700 }}>{f.name}{st.subjects.length > 1 ? <span className="t-foot c-sec" style={{ fontWeight: 500 }}> · {st.subjects.map((s) => SUBJECT_LABEL[s]).join(" / ")}</span> : ""}</span>
-                  <span className="t-foot c-sec" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="document" size={14} stroke={2} />{f.papers.length} 张</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="clock" size={14} stroke={2} />{formatDate(f.updatedAt)}</span>
+            <button key={f.id} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12, textAlign: "left", width: "100%", padding: "14px 16px 14px 14px" }} onClick={() => nav(`/papers/${f.id}`)}>
+              {/* 左：缩略图 + 标题 + 知识点；右：错题环 / 扫描状态，在整张卡片里上下居中 */}
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ position: "relative", flexShrink: 0, width: 48, height: 60 }}>
+                    {f.papers[0]?.pages[0]?.src ? (
+                      <img className="thumb" src={f.papers[0].pages[0].src} alt="" style={{ width: 48, height: 60 }} />
+                    ) : (
+                      <SubjectTile subject={st.subject} size="md" style={{ width: 48, height: 60, borderRadius: 10 }} />
+                    )}
+                    {f.papers[0]?.pages[0]?.src && <SubjectTile subject={st.subject} size="xs" style={{ position: "absolute", right: -6, bottom: -6, boxShadow: "0 0 0 2px var(--card)" }} />}
                   </span>
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span className="t-headline ellipsis" style={{ fontWeight: 700 }}>{f.name}{st.subjects.length > 1 ? <span className="t-foot c-sec" style={{ fontWeight: 500 }}> · {st.subjects.map((s) => SUBJECT_LABEL[s]).join(" / ")}</span> : ""}</span>
+                    <span className="t-foot c-sec" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="document" size={14} stroke={2} />{f.papers.length} 张</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="clock" size={14} stroke={2} />{formatDate(f.updatedAt)}</span>
+                    </span>
+                  </div>
                 </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+                    {kps.map(([k, items]) => (
+                      <span key={k} className="tag" style={{ background: c.bg, color: c.color, height: 24 }}>{k} {items.length}</span>
+                    ))}
+                    {more > 0 && <span className="tag tag--neutral">+{more}</span>}
+                    {kps.length === 0 && <span className="t-foot c-sec">{st.unscanned > 0 ? "扫一下，错题就自动归到知识点里" : "没有错题，真棒"}</span>}
+                  </span>
+                  {st.unscanned > 0 && st.problems === 0 && <Tag kind="accent">去扫描</Tag>}
+                </div>
+              </div>
+              <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
                 {f.papers.some((p) => p.scanJob) ? (
                   <Tag kind="info" icon="sparkles">{scanStageText([...f.papers.filter((p) => p.scanJob)].sort((a, b) => a.scanJob!.progress - b.scanJob!.progress)[0].scanJob!)}</Tag>
                 ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} />}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
-                  {kps.map(([k, items]) => (
-                    <span key={k} className="tag" style={{ background: c.bg, color: c.color, height: 24 }}>{k} {items.length}</span>
-                  ))}
-                  {more > 0 && <span className="tag tag--neutral">+{more}</span>}
-                  {kps.length === 0 && <span className="t-foot c-sec">{st.unscanned > 0 ? "扫一下，错题就自动归到知识点里" : "没有错题，真棒"}</span>}
-                </span>
-                {st.blank > 0 && <Tag kind="pending" icon="alert">空 {st.blank}</Tag>}
-                {st.unscanned > 0 && st.problems === 0 && <Tag kind="accent">去扫描</Tag>}
-              </div>
+              </span>
             </button>
           );
             }}
