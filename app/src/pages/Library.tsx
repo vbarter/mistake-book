@@ -66,7 +66,7 @@ export default function Library() {
 
   return (
     <div className="screen">
-      <LargeNav title="错题库" eyebrow={folders ? `${folders.length} 个文件夹 · ${errors.length} 道错题` : undefined} actions={
+      <LargeNav title="错题库" actions={
         <button aria-label="导出当前范围的错题本" className="tile" style={{ background: "var(--brand-tint)", color: "var(--brand-on-tint)", border: 0, width: 44, height: 44, borderRadius: 22 }} onClick={() => setExporting(true)} disabled={scoped.length === 0}>
           <Icon name="export" size={22} stroke={2.2} />
         </button>
@@ -95,14 +95,6 @@ export default function Library() {
                     );
                   })}
                 </div>
-                {activeSubject && (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 4px" }}>
-                    <span className="t-sub" style={{ fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 4, background: subjectColors(activeSubject).color }} />{SUBJECT_LABEL[activeSubject]}{syllabus ? ` · 按${syllabus}` : ""}
-                    </span>
-                    <span className="t-foot c-sec">错得最多的在前</span>
-                  </div>
-                )}
                 {kpList(scoped, activeSubject ?? undefined)}
               </>
             )}
