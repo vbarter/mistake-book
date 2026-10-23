@@ -142,7 +142,9 @@ def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | No
     subject = raw.get("subject") if raw.get("subject") in SUBJECTS else default_subject
     qtype = raw.get("questionType") if raw.get("questionType") in QUESTION_TYPES else ("choice" if raw.get("options") else "fill")
     for b in blanks:
+        before = b.mark
         b.mark = auto_mark(b.mark, b.student, b.answer, qtype)
+        b.aiGraded = before == "unmarked" and b.mark != "unmarked"
     block = DigitizedBlock(
         type=btype,
         text=text,
@@ -376,6 +378,7 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
                         sheet=si,
                         blockIndex=bi,
                         blankIds=[b.id for b in blanks],
+                        aiGraded=any(b.aiGraded for b in blanks),
                     )
                 )
             elif block.type == "passage":
@@ -401,6 +404,7 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
                             sheet=si,
                             blockIndex=bi,
                             blankIds=[b.id],
+                            aiGraded=b.aiGraded,
                         )
                     )
     return questions

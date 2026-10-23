@@ -17,10 +17,10 @@ import re
 import anthropic
 
 from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
-from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedPage, RecognizedItem, ScannedItem, Variant
+from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
 from . import ocr
 from . import queue as page_queue
-from .digitize import clean_sheets, derive_questions, drop_ghost_sheets
+from .digitize import _nearby_wordbank, _render_text, clean_sheets, derive_questions, drop_ghost_sheets
 
 log = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ DIGITIZE_SYSTEM_PROMPT = (
     "每个空（blank）：id 与占位一致；number 是所属题号；student 只写学生手写内容的逐字转写（涂改后以最终答案为准，看不清的字用「□」，没写就留空，不要写「无法辨认」之类的描述）；"
     "mark 按老师的批改符号判定：打勾「✓」「√」「☑」或写了对号 = correct；打叉「✗」「×」、斜杠「/」、划掉、圈出 = wrong；半勾、打分低于满分、部分扣分 = partial；完全没有批改符号 = unmarked。"
     "没有写作答的空 mark = blank（未作答，单独一类，不是答错；student 留空，绝不要把正确答案填进 student）。note 只记录老师的红笔批注或扣分，不写任何说明或推测；"
-    "answer 只写正确答案本身（mark 为 wrong、partial、blank 或 unmarked 时都要给，correct 时留空；依据不在本页、无法确定时留空，不要写任何说明文字）；analysis 是判错时面向学生的简短解析（不超过 80 字，correct 时留空）。\n"
+    "answer 只写正确答案本身（mark 为 wrong、partial、blank 或 unmarked 时都必须给出，correct 时留空；词库、原文在别的页上时，按上下文和常识给出最可能的答案，绝不留空，不要写任何说明文字）。老师没批改（unmarked）的空，由你当阅卷老师：给出 answer，并在 analysis 里写清对错依据（判对时 analysis 可留空）；analysis 是判错时面向学生的简短解析（不超过 80 字，correct 时留空）。\n"
     "passage 与 item 块还要给出：subject（学科枚举）、questionType（choice/fill/solve）、知识点 knowledgePoints（所有题都给，1 到 3 项）、判错或未作答时一句「下次注意」tip、看不清的词 uncertainSpans，"
     "以及 bbox。知识点的要求：第一项必须是 syllabus 对应考纲 / 课标里的一级知识点名称，整张卷子用统一的规范名称，便于按知识点归类记忆；后面的项才是细分点。"
     "例如英语按考纲语法与题型：名词、代词、冠词、数词、介词、连词、形容词和副词、动词时态、被动语态、非谓语动词、情态动词、构词法、简单句句型、并列句、宾语从句、定语从句、状语从句、词汇辨析、完形填空、阅读理解、选词填空、句型转换、书面表达；"
@@ -183,6 +183,36 @@ _SHEET_PROPS = {
     "syllabus": {"type": "string"},
     "blocks": {"type": "array", "items": {"type": "object", "properties": _BLOCK_PROPS, "required": list(_BLOCK_PROPS), "additionalProperties": False}},
 }
+GRADE_SYSTEM_PROMPT = (
+    "你是认真负责的阅卷老师。下面是一份试卷里老师没有批改的空，每个空给了题目上下文（【空】标出要判的位置）、可选项或词库、学生作答。"
+    "整张卷子的 OCR 文字也附在后面，词库、短文前后文可能在别的页上，请结合起来判断。"
+    "对每个空：answer 写正确答案本身（选择题写选项字母，填空写词或短语，不要写说明）；"
+    "verdict 是你对学生作答的判定：correct（对）、wrong（错）、partial（部分对，只用于多空或解答题）；"
+    "analysis 判错或部分对时写一句面向学生的解析（不超过 60 字），判对时留空。拿不准时也必须给出最可能的结论。"
+)
+
+GRADE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string"},
+                    "answer": {"type": "string"},
+                    "verdict": {"type": "string", "enum": ["correct", "wrong", "partial"]},
+                    "analysis": {"type": "string"},
+                },
+                "required": ["key", "answer", "verdict", "analysis"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["results"],
+    "additionalProperties": False,
+}
+
 DIGITIZE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -467,7 +497,64 @@ class ClaudeProvider(AIProvider):
         futures = [page_queue.submit(lambda i=i, p=p: one(i, p), on_start=started) for i, p in enumerate(pages)]
         results = [f.result() for f in futures]
         sheets = drop_ghost_sheets([sheet for group in results for sheet in group])
+        # 第二步：老师没批改、按答案也对不上的空，交给大模型统一阅卷（能看到全卷 OCR，词库在别页也能判）
+        try:
+            self.grade_unmarked(sheets)
+        except Exception as e:  # noqa: BLE001  阅卷失败不影响还原结果
+            log.warning("grade_unmarked failed: %s", e)
         return sheets, derive_questions(sheets)
+
+    def grade_unmarked(self, sheets: list[DigitizedPage], batch: int = 40) -> int:
+        """把仍是 unmarked（老师没批改、自动对答案也判不了）且学生写了作答的空交给大模型判对错；返回判了多少个。"""
+        todo: list[tuple[str, DigitizedBlank, str]] = []
+        for si, sheet in enumerate(sheets):
+            section = ""
+            for bi, block in enumerate(sheet.blocks):
+                if block.type == "section":
+                    section = " ".join(x for x in [block.label, block.title, block.instruction] if x)
+                    continue
+                if block.type not in ("item", "passage"):
+                    continue
+                options = block.options or (_nearby_wordbank(sheet.blocks, bi) if block.type == "passage" else [])
+                for b in block.blanks:
+                    if b.mark != "unmarked" or not b.student.strip():
+                        continue
+                    stem = _render_text(block.text, block.blanks, b.id).replace("____", "【空】", 1)
+                    extra = " ".join(x for x in [block.hint, f"（{block.instruction}）" if block.instruction else ""] if x)
+                    ctx = "\n".join(x for x in [
+                        f"大题：{section}" if section else "",
+                        f"题号：{b.number or b.id}（{block.questionType}）",
+                        f"题目：{stem[:1500]} {extra}".strip(),
+                        f"选项 / 词库：{'　'.join(options)}" if options else "",
+                        f"学生作答：{b.student}",
+                        f"识别时给出的参考答案：{b.answer}" if b.answer else "",
+                    ] if x)
+                    todo.append((f"s{si}b{bi}#{b.id}", b, ctx))
+        if not todo:
+            return 0
+        ocr = "\n\n".join(dict.fromkeys(s.ocrText for s in sheets if s.ocrText))[:12000]
+        graded = 0
+        for i in range(0, len(todo), batch):
+            chunk = todo[i : i + batch]
+            text = "\n\n".join(f"<blank key=\"{k}\">\n{ctx}\n</blank>" for k, _, ctx in chunk)
+            if ocr:
+                text += "\n\n整张卷子的 OCR 文字（供查找词库和上下文）：\n<ocr>\n" + ocr + "\n</ocr>"
+            data = self._call(GRADE_SYSTEM_PROMPT, [{"type": "text", "text": text}], GRADE_SCHEMA, max_tokens=8000)
+            by_key = {str(r.get("key")): r for r in data.get("results", []) if isinstance(r, dict)}
+            for key, b, _ in chunk:
+                r = by_key.get(key)
+                if not r or r.get("verdict") not in ("correct", "wrong", "partial"):
+                    continue
+                b.mark = r["verdict"]
+                b.aiGraded = True
+                ans = str(r.get("answer") or "").strip()
+                if ans and not b.answer:
+                    b.answer = ans[:200]
+                if b.mark != "correct" and not b.analysis:
+                    b.analysis = str(r.get("analysis") or "").strip()[:200]
+                graded += 1
+        log.info("ai graded %d/%d unmarked blank(s)", graded, len(todo))
+        return graded
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:
         subject = SUBJECT_LABELS.get(mistake.get("subject", ""), mistake.get("subject", ""))

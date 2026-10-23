@@ -695,3 +695,35 @@ def test_drop_ghost_sheets_from_photo_edge():
     part1 = {"label": "", "blocks": [{"type": "section", "label": "一"}, {"type": "item", "number": "1", "text": "a [[1]]", "blanks": [{"id": "1"}]}]}
     part2 = {"label": "", "blocks": [{"type": "section", "label": "二"}, {"type": "item", "number": "1", "text": "b [[1]]", "blanks": [{"id": "1"}]}]}
     assert len(derive_questions(drop_ghost_sheets(clean_sheets({"sheets": [part1, part2]}, 0)))) == 2
+
+
+def test_grade_unmarked_blanks(monkeypatch):
+    """老师没批改、按答案也判不了的空：交给大模型阅卷，结论写回 mark，并标 aiGraded；老师批过的、没作答的不送。"""
+    from app.ai.claude import ClaudeProvider
+    from app.ai.digitize import clean_sheets
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    sheets = clean_sheets({"sheets": [{"label": "第5页", "blocks": [
+        {"type": "section", "label": "II", "title": "Complete the passage"},
+        {"type": "passage", "text": "fun [[36]] and [[37]] and [[38]] and [[39]].", "blanks": [
+            {"id": "36", "number": "36", "student": "A"},                       # 没答案 → 送去判
+            {"id": "37", "number": "37", "student": "D", "answer": "D"},        # 自动对答案 → 判对
+            {"id": "38", "number": "38", "student": "B", "mark": "wrong"},       # 老师判过 → 不送
+            {"id": "39", "number": "39", "student": ""},                         # 未作答 → 不送
+        ]},
+    ]}]}, 0)
+    seen = {}
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        seen["text"] = content[0]["text"]
+        return {"results": [{"key": "s0b1#36", "answer": "C", "verdict": "wrong", "analysis": "这里要用动词 explore。"}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    assert provider.grade_unmarked(sheets) == 1
+    blanks = {b.id: b for b in sheets[0].blocks[1].blanks}
+    assert "【空】" in seen["text"] and "s0b1#36" in seen["text"] and "#38" not in seen["text"] and "#39" not in seen["text"]
+    assert (blanks["36"].mark, blanks["36"].aiGraded, blanks["36"].answer) == ("wrong", True, "C")
+    assert (blanks["37"].mark, blanks["37"].aiGraded) == ("correct", True)
+    assert (blanks["38"].mark, blanks["38"].aiGraded) == ("wrong", False)
+    assert blanks["39"].mark == "blank"

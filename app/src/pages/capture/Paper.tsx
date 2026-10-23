@@ -44,10 +44,11 @@ function renderPrint(text: string, blanks: DigitizedBlank[]): ReactNode[] {
   return out;
 }
 
-function MarkChip({ mark, student }: { mark: Mark; student: string }) {
+function MarkChip({ mark, student, ai }: { mark: Mark; student: string; ai?: boolean }) {
   if (mark === "blank" || (mark === "wrong" && unanswered(student))) return <Tag kind="pending" icon="alert">{UNANSWERED}</Tag>;
   const kind = mark === "correct" ? "correct" : mark === "wrong" ? "wrong" : mark === "partial" ? "partial" : "neutral";
-  return <Tag kind={kind} icon={mark === "unmarked" ? "info" : undefined}>{MARK_LABEL[mark]}</Tag>;
+  // 老师没批改、由 AI 阅卷的结论：标上「AI」，和老师的批改区分开
+  return <Tag kind={kind} icon={mark === "unmarked" ? "info" : ai ? "sparkles" : undefined}>{ai && mark !== "unmarked" ? `AI 判${mark === "correct" ? "对" : mark === "wrong" ? "错" : "半对"}` : MARK_LABEL[mark]}</Tag>;
 }
 
 /** 一张试卷的电子版：「试卷」是可打印的干净原题，「作答」逐空列出手写转写与批改，「错题」按试卷顺序列出（按大题分组、卡片上标知识点）。 */
@@ -205,7 +206,10 @@ export default function Paper() {
     <>
       <Hint icon="pencil">学生手写内容的转写，与老师批改、正确答案逐空对照。空题按未作答计入错题。</Hint>
       {sheets.map((sheet, si) => {
-        const rows = sheet.blocks.flatMap((b, bi) => (b.type === "passage" || b.type === "item" ? b.blanks.map((x) => ({ ...x, rowKey: `${bi}:${x.id}`, mark: autoMark(x.mark, x.student, x.answer, b.questionType) })) : []));
+        const rows = sheet.blocks.flatMap((b, bi) => (b.type === "passage" || b.type === "item" ? b.blanks.map((x) => {
+          const mark = autoMark(x.mark, x.student, x.answer, b.questionType);
+          return { ...x, rowKey: `${bi}:${x.id}`, mark, ai: Boolean(x.aiGraded) || (x.mark === "unmarked" && mark !== "unmarked") };
+        }) : []));
         if (rows.length === 0) return null;
         return (
           <div className="card ans" key={si} style={{ gap: 0, padding: "10px 14px" }}>
@@ -224,7 +228,7 @@ export default function Paper() {
                 <span className="ans__num">{b.number}</span>
                 <span className={`ans__hand${b.mark === "wrong" || b.mark === "partial" ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : b.student}</span>
                 <span>
-                  <MarkChip mark={b.mark} student={b.student} />
+                  <MarkChip mark={b.mark} student={b.student} ai={b.ai} />
                   {b.note && b.note !== UNANSWERED && <span className="t-cap" style={{ color: "var(--wrong)", display: "block" }}>{b.note}</span>}
                 </span>
                 <span className="ans__answer">{b.mark === "correct" ? "" : b.answer}</span>

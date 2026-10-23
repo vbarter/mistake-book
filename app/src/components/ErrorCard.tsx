@@ -27,7 +27,7 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span className="t-headline">第 {q.number} 题</span>
         <SubjectChip subject={q.subject} small />
-        <span className="t-cap c-sec">{QTYPE_LABEL[q.questionType]}</span>
+        <span className="t-cap c-sec">{QTYPE_LABEL[q.questionType]}{q.aiGraded ? " · AI 阅卷" : ""}</span>
         <span style={{ marginLeft: "auto" }}>
           <Tag kind={item.kind === "未作答" ? "pending" : item.kind === "半对" ? "partial" : "wrong"} icon={item.kind === "未作答" ? "alert" : item.kind === "半对" ? "warning" : "xmark"}>{item.kind}</Tag>
         </span>

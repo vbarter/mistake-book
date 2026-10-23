@@ -93,6 +93,7 @@ export interface DigitizedBlank {
   note: string;
   answer: string;
   analysis: string;
+  aiGraded?: boolean; // 老师没批改，mark 是 AI 阅卷的结论
 }
 
 export type BlockType = "section" | "passage" | "wordbank" | "item" | "text";
@@ -138,6 +139,7 @@ export interface DigitizedQuestion {
   sheet: number;
   blockIndex: number;
   blankIds: string[];
+  aiGraded?: boolean; // 有空是 AI 判的（老师没批改）
 }
 
 /** 一张电子版卷面；一张照片拍到左右两页时对应两个 sheet */

@@ -51,6 +51,7 @@ class DigitizedBlank:
     note: str = ""  # 老师红笔批注 / 扣分
     answer: str = ""  # 正确答案（判错或未批改时给出）
     analysis: str = ""  # 判错时的简短解析
+    aiGraded: bool = False  # 老师没批改，由 AI 判的对错（mark 是 AI 的结论）
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -113,6 +114,7 @@ class DigitizedQuestion:
     sheet: int = 0  # 所在 sheet（pages 列表里的下标）
     blockIndex: int = 0  # 所在版面块在 sheet.blocks 里的下标
     blankIds: list[str] = field(default_factory=list)  # 对应的空 id
+    aiGraded: bool = False  # 有空是 AI 判的（老师没批改）
 
     def to_dict(self) -> dict:
         return asdict(self)
