@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { User } from "../api/types";
 import { Button, InlineNav } from "../components/ui";
-import { isNative } from "../lib/native";
+import { isNative, isAndroid } from "../lib/native";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
 
@@ -103,15 +103,19 @@ export default function Login() {
       <InlineNav title={binding ? "绑定账号" : "登录"} back />
       <div className="screen__content screen__content--modal" style={{ gap: 20, paddingTop: 12 }}>
         <p className="t-sub c-sec">{binding ? "绑定后错题会备份到账号，换手机也不丢。" : "登录后可以同步错题、开启复习提醒。"}</p>
-        <Button variant="black" onClick={apple} disabled={busy}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.6-1-2.6-3.8zM14 5.4c.7-.8 1.1-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z" /></svg>
-          通过 Apple 登录
-        </Button>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--tertiary)" }} className="t-foot">
-          <span style={{ flex: 1, height: 1, background: "var(--separator-light)" }} />
-          或用手机号
-          <span style={{ flex: 1, height: 1, background: "var(--separator-light)" }} />
-        </div>
+        {!isAndroid && (
+          <>
+            <Button variant="black" onClick={apple} disabled={busy}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.6-1-2.6-3.8zM14 5.4c.7-.8 1.1-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z" /></svg>
+              通过 Apple 登录
+            </Button>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--tertiary)" }} className="t-foot">
+              <span style={{ flex: 1, height: 1, background: "var(--separator-light)" }} />
+              或用手机号
+              <span style={{ flex: 1, height: 1, background: "var(--separator-light)" }} />
+            </div>
+          </>
+        )}
         <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <span className="t-headline">手机号</span>
           <input className="input" inputMode="numeric" autoComplete="tel" placeholder="11 位手机号" value={phone} maxLength={11} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} />

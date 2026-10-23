@@ -1,0 +1,11 @@
+// 打包时用：./gradlew -I mirrors.init.gradle assembleRelease
+// 给所有子项目（包括 node_modules 里的 capacitor-android）在原有仓库之前加上国内镜像，直连 Google / Maven Central 不稳定时也能下载依赖。
+def mirrors = [
+    'https://maven.aliyun.com/repository/google',
+    'https://maven.aliyun.com/repository/public',
+    'https://maven.aliyun.com/repository/gradle-plugin',
+]
+beforeProject { project ->
+    project.buildscript.repositories { mirrors.each { u -> maven { url u } } }
+    project.repositories { mirrors.each { u -> maven { url u } } }
+}

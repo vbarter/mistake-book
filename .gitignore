@@ -24,3 +24,6 @@ app/android/local.properties
 
 # xcodebuild derived data
 app/ios/build/
+
+# 打好的安装包
+release/

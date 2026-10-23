@@ -224,3 +224,22 @@ mysqldump -uroot zhicuoben > /opt/zhicuoben/data/backup-$(date +%F).sql   # 备�
 - 复习提醒的本地通知推送（设置已可保存，需接入 `@capacitor/local-notifications`）。
 - Apple 登录服务端验签（`APPLE_VERIFY=1` 时需接入 Apple 公钥）；生产短信服务。
 - AI 预框当前用本地「按行墨迹分段」替代，接入 Claude 后仍由用户确认框选。
+
+
+## 安卓打包（APK）
+
+前提：装好 Android Studio（含 Android SDK，平台 API 35），以及 Java 21（`brew install openjdk@21`；Android Studio 自带的 JDK 25 太新，Gradle 8.11 跑不了）。
+
+```bash
+cd app && npm run build && npx cap sync android
+cd android
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME=$HOME/Library/Android/sdk
+./gradlew -I mirrors.init.gradle assembleRelease \
+  -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7897 -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7897
+# 产物：app/build/outputs/apk/release/app-release.apk
+```
+
+- `mirrors.init.gradle` 给所有子项目（含 node_modules 里的 capacitor-android）加阿里云镜像；本机走代理时用 `-D...proxy...` 把代理传给 Gradle，不走代理就去掉。
+- 发布签名：证书在 `~/.zhicuoben-keys/zhicuoben-release.jks`，密码写在 `app/android/keystore.properties`（不进 git，备份在 `~/.zhicuoben-keys/keystore.properties.backup`）。**证书丢了就无法给已安装的用户发更新，务必另存一份到安全的地方。**
+- 安卓上不显示 Apple 登录（插件不支持），用手机号登录；版本号在 `app/android/app/build.gradle` 的 versionCode / versionName。

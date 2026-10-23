@@ -2,6 +2,8 @@ import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 
 export const isNative = Capacitor.isNativePlatform();
+/** 安卓原生：没有 Apple 登录，相机 / 相册走安卓权限 */
+export const isAndroid = Capacitor.getPlatform() === "android";
 
 export const haptic = {
   async light() {

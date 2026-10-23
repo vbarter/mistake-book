@@ -8,7 +8,7 @@ import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_GROUPS, SUBJECT_LABEL } fr
 import { getCity, setCity } from "../lib/prefs";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
-import { isNative } from "../lib/native";
+import { isNative, isAndroid } from "../lib/native";
 
 /* ---------- 年级、城市与学科 ---------- */
 export function Subjects() {
@@ -87,7 +87,7 @@ export function Account() {
       <div className="screen__content screen__content--modal" style={{ paddingTop: 8 }}>
         <div className="group">
           <Row icon="person" iconColor="var(--label)" title="登录方式" chevron={false} value={user?.loginMethod === "apple" ? "Apple" : user?.loginMethod === "phone" ? `手机 ${user.phone?.slice(0, 3)}****${user.phone?.slice(-4)}` : "游客（仅本机）"} />
-          {user?.loginMethod === "guest" && <Row icon="lock" iconColor="var(--brand)" title="绑定手机号或 Apple" sub="绑定后错题会备份到账号" onClick={() => nav("/login")} />}
+          {user?.loginMethod === "guest" && <Row icon="lock" iconColor="var(--brand)" title={isAndroid ? "绑定手机号" : "绑定手机号或 Apple"} sub="绑定后错题会备份到账号" onClick={() => nav("/login")} />}
         </div>
         {isNative && (
           <div className="group">
