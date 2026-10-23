@@ -5,7 +5,7 @@ import { ErrorCard } from "../../components/ErrorCard";
 import { ExportSheet } from "../../components/ExportSheet";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
-import { Hint, IconSegmented, Tag, subjectColors } from "../../components/v2";
+import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
 import { groupByKnowledge, paperErrors, type ErrorItem } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { scanStageText, useJobs } from "../../lib/jobs";
@@ -63,6 +63,7 @@ export default function Paper() {
   const [name, setName] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [filter, setFilter] = useState<ErrorFilter>("all");
 
   const jobsVersion = useJobs((s) => s.version);
   const reload = useCallback(() => getFolder(folderId).then((f) => setFolder(f ?? null)), [folderId]);
@@ -73,7 +74,8 @@ export default function Paper() {
   const paper: PaperRecord | undefined = folder?.papers.find((p) => p.id === paperId);
   const digitized = paper ? validDigitized(paper.digitized) : null;
   const errors = useMemo(() => (folder && paper ? paperErrors(folder, paper) : []), [folder, paper]);
-  const groups = useMemo(() => groupByKnowledge(errors), [errors]);
+  const shown = useMemo(() => applyErrorFilter(errors, filter), [errors, filter]);
+  const groups = useMemo(() => groupByKnowledge(shown), [shown]);
   const stats = paper ? paperStats(paper) : null;
 
   // 没扫描过（也不在还原中）的试卷直接进录入页继续
@@ -243,13 +245,11 @@ export default function Paper() {
   // ---------------------------------------------------------------- 错题
   const errorsTab = (
     <>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Tag kind="wrong" icon="xmark">答错 {errors.filter((e) => e.kind !== "未作答").length}</Tag>
-        <Tag kind="pending" icon="alert">未作答 {errors.filter((e) => e.kind === "未作答").length}</Tag>
-        <Tag kind="correct">已订正 {stats.corrected}</Tag>
-      </div>
+      <ErrorFilterTags value={filter} onChange={setFilter} counts={{ wrong: errors.filter((e) => e.kind !== "未作答" && !e.corrected).length, blank: errors.filter((e) => e.kind === "未作答" && !e.corrected).length, corrected: stats.corrected }} />
       {errors.length === 0 ? (
         <Empty icon="seal" title="这张试卷没有错题，也没有空题" text="真棒。" />
+      ) : shown.length === 0 ? (
+        <Empty icon="seal" title="这一类没有题" action={<Button size="xs" variant="plain" onClick={() => setFilter("all")}>看全部</Button>} />
       ) : (
         <>
           <Hint icon="list">按知识点分组，做完一题就勾掉。勾选会同步到文件夹和错题库。</Hint>

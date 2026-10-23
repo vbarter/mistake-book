@@ -5,7 +5,7 @@ import { ErrorCard } from "../components/ErrorCard";
 import { ExportSheet } from "../components/ExportSheet";
 import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
-import { Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag } from "../components/v2";
+import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
 import { folderErrors, groupByKnowledge, type ErrorItem } from "../lib/errors";
 import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, paperSubject, saveFolder, setCorrected, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
@@ -32,6 +32,7 @@ export default function FolderDetail() {
   const [exporting, setExporting] = useState(false);
   const [deletingPaper, setDeletingPaper] = useState<string | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<Subject | null>(null);
+  const [filter, setFilter] = useState<ErrorFilter>("all");
 
   const jobsVersion = useJobs((s) => s.version);
   const reload = useCallback(() => getFolder(folderId).then((f) => setFolder(f ?? null)), [folderId]);
@@ -43,7 +44,8 @@ export default function FolderDetail() {
   const allErrors = useMemo(() => (folder ? folderErrors(folder) : []), [folder]);
   const errorSubjects = useMemo(() => [...new Set(allErrors.map((e) => e.subject))], [allErrors]);
   const errors = useMemo(() => (subjectFilter && errorSubjects.includes(subjectFilter) ? allErrors.filter((e) => e.subject === subjectFilter) : allErrors), [allErrors, subjectFilter, errorSubjects]);
-  const groups = useMemo(() => groupByKnowledge(errors), [errors]);
+  const shown = useMemo(() => applyErrorFilter(errors, filter), [errors, filter]);
+  const groups = useMemo(() => groupByKnowledge(shown), [shown]);
 
   if (folder === undefined) return null;
   if (folder === null || !stats) return <Empty icon="folder" title="文件夹不存在" action={<Button size="sm" variant="tinted" onClick={() => nav("/papers")}>回到试卷</Button>} />;
@@ -123,12 +125,9 @@ export default function FolderDetail() {
           ))}
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Tag kind="wrong" icon="xmark">答错 {errors.filter((e) => e.kind !== "未作答").length}</Tag>
-        <Tag kind="pending" icon="alert">未作答 {errors.filter((e) => e.kind === "未作答").length}</Tag>
-        <Tag kind="correct">已订正 {stats.corrected}</Tag>
-      </div>
+      <ErrorFilterTags value={filter} onChange={setFilter} counts={{ wrong: errors.filter((e) => e.kind !== "未作答" && !e.corrected).length, blank: errors.filter((e) => e.kind === "未作答" && !e.corrected).length, corrected: errors.filter((e) => e.corrected).length }} />
       {errors.length === 0 && <Empty icon="seal" title={stats.unscanned > 0 ? "先扫描试卷" : "这个文件夹没有错题，也没有空题"} text={stats.unscanned > 0 ? "扫描后错题会自动出现在这里。" : "真棒。"} />}
+      {errors.length > 0 && shown.length === 0 && <Empty icon="seal" title="这一类没有题" action={<Button size="xs" variant="plain" onClick={() => setFilter("all")}>看全部</Button>} />}
       {groups.map(([k, items]) => {
         const done = items.filter((i) => i.corrected).length;
         const pct = Math.round((done / items.length) * 100);
@@ -155,10 +154,10 @@ export default function FolderDetail() {
           </div>
         );
       })}
-      {errors.length > 0 && (
+      {shown.length > 0 && (
         <>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 4px 0" }}>
-            <span className="t-sub" style={{ fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="list" size={16} stroke={2.2} />逐题 · {errors.length}</span>
+            <span className="t-sub" style={{ fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="list" size={16} stroke={2.2} />逐题 · {shown.length}</span>
             <span className="t-foot c-sec">做完一题就勾掉</span>
           </div>
           {groups.map(([k, items]) => (

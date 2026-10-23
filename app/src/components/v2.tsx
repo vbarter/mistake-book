@@ -138,3 +138,34 @@ export function Hint({ icon = "info", children }: { icon?: IconName; children: R
     </div>
   );
 }
+
+export type ErrorFilter = "all" | "wrong" | "blank" | "corrected";
+
+/** 错题列表上方的三个可点标签：答错 / 未作答 / 已订正，点一下只看这一类，再点取消 */
+export function ErrorFilterTags({ value, onChange, counts }: { value: ErrorFilter; onChange: (v: ErrorFilter) => void; counts: { wrong: number; blank: number; corrected: number } }) {
+  const items: { key: Exclude<ErrorFilter, "all">; label: string; kind: "wrong" | "pending" | "correct"; icon: IconName; count: number }[] = [
+    { key: "wrong", label: "答错", kind: "wrong", icon: "xmark", count: counts.wrong },
+    { key: "blank", label: "未作答", kind: "pending", icon: "alert", count: counts.blank },
+    { key: "corrected", label: "已订正", kind: "correct", icon: "check", count: counts.corrected },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} role="group" aria-label="筛选">
+      {items.map((it) => {
+        const on = value === it.key;
+        return (
+          <button key={it.key} className={`tag tag--${it.kind}`} aria-pressed={on} onClick={() => onChange(on ? "all" : it.key)} style={{ height: 30, padding: "0 11px", fontSize: 13, border: `1.5px solid ${on ? "currentColor" : "transparent"}`, opacity: value !== "all" && !on ? 0.55 : 1 }}>
+            <Icon name={it.icon} size={12} stroke={3} />
+            {it.label} {it.count}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function applyErrorFilter<T extends { kind: string; corrected: boolean }>(items: T[], f: ErrorFilter): T[] {
+  if (f === "all") return items;
+  if (f === "corrected") return items.filter((i) => i.corrected);
+  if (f === "blank") return items.filter((i) => i.kind === "未作答" && !i.corrected);
+  return items.filter((i) => i.kind !== "未作答" && !i.corrected);
+}
