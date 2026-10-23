@@ -43,26 +43,46 @@ export default function Library() {
     await reload();
   };
 
-  const kpList = (items: ErrorItem[], subj?: Subject) =>
-    groupByKnowledge(items).map(([k, list]) => {
-      const done = list.filter((i) => i.corrected).length;
-      const open = openKey === `${scopeLabel}:${k}`;
-      const sources = new Set(list.map((i) => i.folderId)).size;
-      return (
-        <div key={k} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <button className="card card--row" style={{ minHeight: 60, padding: "10px 14px" }} onClick={() => setOpenKey(open ? null : `${scopeLabel}:${k}`)} aria-expanded={open}>
-            <KnowledgeIcon name={k} subject={subj ?? list[0].subject} />
-            <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-              <span className="t-headline">{k}</span>
-              <span className="t-cap c-sec">来自 {sources} 个文件夹 · {done === list.length ? "全部订正" : done > 0 ? `已订正 ${done}` : "还没订正"}</span>
-            </span>
-            <span className={`tag ${done === list.length ? "tag--correct" : "tag--wrong"}`} style={{ fontWeight: 800 }}>{list.length}</span>
-            <Icon name={open ? "chevron-down" : "chevron-right"} size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-          </button>
-          {open && list.map((i) => <ErrorCard key={i.key} item={i} onToggle={(next) => toggle(i, next)} showSource />)}
+  /** 某个学科下的知识点：一张分组卡，卡头是学科，行是知识点，点开行展开逐题 */
+  const kpGroup = (items: ErrorItem[], subj: Subject) => {
+    const groups = groupByKnowledge(items);
+    const c = subjectColors(subj);
+    return (
+      <div className="card" style={{ padding: 0, gap: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: c.bg }}>
+          <SubjectTile subject={subj} size="sm" style={{ background: "var(--card)" }} />
+          <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+            <span className="t-headline" style={{ color: c.color }}>{SUBJECT_LABEL[subj]}</span>
+            <span className="t-cap" style={{ color: c.color, opacity: 0.8 }}>{items.length} 题 · {groups.length} 个知识点 · 错得多的在前</span>
+          </span>
+          <span className="t-cap" style={{ color: c.color, fontWeight: 700 }}>已订正 {items.filter((i) => i.corrected).length}</span>
         </div>
-      );
-    });
+        {groups.map(([k, list], idx) => {
+          const done = list.filter((i) => i.corrected).length;
+          const open = openKey === `${subj}:${k}`;
+          const sources = new Set(list.map((i) => i.folderId)).size;
+          return (
+            <div key={k} style={{ borderTop: idx === 0 ? "none" : "1px solid var(--separator-light)" }}>
+              <button className="row" style={{ minHeight: 60, padding: "10px 14px", width: "100%", background: open ? "var(--fill-light)" : "transparent" }} onClick={() => setOpenKey(open ? null : `${subj}:${k}`)} aria-expanded={open}>
+                <KnowledgeIcon name={k} subject={subj} />
+                <span className="row__main" style={{ gap: 2 }}>
+                  <span className="row__title">{k}</span>
+                  <span className="row__sub">来自 {sources} 个文件夹 · {done === list.length ? "全部订正" : done > 0 ? `已订正 ${done}` : "还没订正"}</span>
+                </span>
+                <span className={`tag ${done === list.length ? "tag--correct" : "tag--wrong"}`} style={{ fontWeight: 800 }}>{list.length}</span>
+                <Icon name={open ? "chevron-down" : "chevron-right"} size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+              </button>
+              {open && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "4px 10px 12px", background: "var(--fill-light)" }}>
+                  {list.map((i) => <ErrorCard key={i.key} item={i} onToggle={(next) => toggle(i, next)} showSource />)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="screen">
@@ -80,22 +100,20 @@ export default function Library() {
 
             {view === "subject" && (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "2px 0" }}>
                   {bySubject.map(([s, list]) => {
                     const c = subjectColors(s);
                     const on = s === activeSubject;
                     return (
-                      <button key={s} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14, border: `2px solid ${on ? c.color : "transparent"}`, textAlign: "left" }} onClick={() => setSubject(s)} aria-pressed={on}>
-                        <SubjectTile subject={s} size="sm" />
-                        <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-                          <span className="t-sub" style={{ fontWeight: 700, lineHeight: "18px" }}>{SUBJECT_LABEL[s]}</span>
-                          <span className="t-cap c-sec" style={{ whiteSpace: "nowrap" }}>{list.length} 题 · {groupByKnowledge(list).length} 个知识点</span>
-                        </span>
+                      <button key={s} className="chip" style={{ height: 40, padding: "0 14px 0 8px", gap: 8, borderRadius: 20, flexShrink: 0, background: on ? c.color : "var(--card)", color: on ? "#fff" : "var(--label)", border: `1.5px solid ${on ? c.color : "var(--separator-light)"}` }} onClick={() => setSubject(s)} aria-pressed={on}>
+                        <SubjectTile subject={s} size="xs" style={on ? { background: "rgba(255,255,255,.22)", color: "#fff" } : undefined} />
+                        {SUBJECT_LABEL[s]}
+                        <span style={{ fontSize: 12, fontWeight: 700, opacity: on ? 0.9 : 0.6 }}>{list.length}</span>
                       </button>
                     );
                   })}
                 </div>
-                {kpList(scoped, activeSubject ?? undefined)}
+                {activeSubject && kpGroup(scoped, activeSubject)}
               </>
             )}
 
