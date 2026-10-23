@@ -127,6 +127,7 @@ class DigitizedPage:
     title: str = ""
     score: str = ""
     note: str = ""  # 卷面上的其他文字（订正提醒等）
+    subject: str = ""  # 整张卷子的学科（从卷头判断），题块的 subject 默认继承它
     examLevel: str = ""  # 考试类型：单元测 / 期中 / 期末 / 中考模拟 / 中考 / 高考 …
     examGrade: str = ""  # 年级 / 学段，如 "九年级"
     region: str = ""  # 地区，如 "上海"

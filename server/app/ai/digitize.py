@@ -34,7 +34,13 @@ def clean_bbox(raw) -> list[float]:
     return bbox
 
 
+_SUBSUP = str.maketrans("₀₁₂₃₄₅₆₇₈₉⁰¹²³⁴⁵⁶⁷⁸⁹", "01234567890123456789")
+
+
 def _norm_answer(s: str) -> str:
+    """比较作答用：全角转半角，上下标数字转普通数字（O₂ 与 O2 相同），忽略大小写、空白和首尾标点。"""
+    s = s.translate(_SUBSUP)
+    s = "".join(chr(ord(c) - 0xFEE0) if 0xFF01 <= ord(c) <= 0xFF5E else c for c in s)
     s = s.strip().lower().replace("．", ".").replace("，", ",")
     s = re.sub(r"\s+", " ", s)
     return s.rstrip(".。,，;；!！?？ ")
@@ -85,8 +91,8 @@ def clean_blank(raw: dict, fallback_number: str = "") -> DigitizedBlank | None:
     )
 
 
-def clean_block(raw: dict) -> DigitizedBlock | None:
-    """中转模式下模型可能多给或少给字段：只保留已知字段并补默认值；空块丢弃。"""
+def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | None:
+    """中转模式下模型可能多给或少给字段：只保留已知字段并补默认值；空块丢弃。学科缺失时继承卷面学科。"""
     if not isinstance(raw, dict):
         return None
     btype = raw.get("type") if raw.get("type") in BLOCK_TYPES else "text"
@@ -107,7 +113,7 @@ def clean_block(raw: dict) -> DigitizedBlock | None:
         if bid not in seen:
             seen.add(bid)
             blanks.append(DigitizedBlank(id=bid, number=number or bid.split("-")[0], mark="blank"))
-    subject = raw.get("subject") if raw.get("subject") in SUBJECTS else "math"
+    subject = raw.get("subject") if raw.get("subject") in SUBJECTS else default_subject
     qtype = raw.get("questionType") if raw.get("questionType") in QUESTION_TYPES else ("choice" if raw.get("options") else "fill")
     for b in blanks:
         b.mark = auto_mark(b.mark, b.student, b.answer, qtype)
@@ -163,9 +169,18 @@ def _merge_labels(blocks: list[DigitizedBlock]) -> list[DigitizedBlock]:
 
 
 def clean_sheet(raw: dict, page: int) -> DigitizedPage:
-    blocks = _merge_labels([b for b in (clean_block(x) for x in (raw.get("blocks") or [])) if b])
+    subject = raw.get("subject") if raw.get("subject") in SUBJECTS else ""
+    blocks = _merge_labels([b for b in (clean_block(x, subject or "math") for x in (raw.get("blocks") or [])) if b])
+    if not subject:
+        # 卷面没判出学科时按题块多数推断
+        counts: dict[str, int] = {}
+        for b in blocks:
+            if b.type in ("passage", "item"):
+                counts[b.subject] = counts.get(b.subject, 0) + 1
+        subject = max(counts, key=counts.get) if counts else ""
     return DigitizedPage(
         page=page,
+        subject=subject,
         label=_str(raw.get("label")).strip(),
         title=_str(raw.get("title")).strip(),
         score=_str(raw.get("score")).strip(),

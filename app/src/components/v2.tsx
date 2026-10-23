@@ -9,7 +9,25 @@ const TILE: Record<Subject, { glyph: string; color: string; bg: string }> = {
   math: { glyph: "π", color: "var(--math)", bg: "var(--math-bg)" },
   chinese: { glyph: "文", color: "var(--chinese)", bg: "var(--chinese-bg)" },
   science: { glyph: "⚗", color: "var(--science)", bg: "var(--science-bg)" },
+  physics: { glyph: "物", color: "var(--physics)", bg: "var(--physics-bg)" },
+  chemistry: { glyph: "化", color: "var(--chemistry)", bg: "var(--chemistry-bg)" },
+  biology: { glyph: "生", color: "var(--biology)", bg: "var(--biology-bg)" },
+  history: { glyph: "史", color: "var(--history)", bg: "var(--history-bg)" },
+  geography: { glyph: "地", color: "var(--geography)", bg: "var(--geography-bg)" },
+  politics: { glyph: "道", color: "var(--politics)", bg: "var(--politics-bg)" },
 };
+
+/** 文件夹里有多科时叠放两个小方块 */
+export function SubjectStack({ subjects, size = "md" }: { subjects: Subject[]; size?: "md" | "sm" }) {
+  if (subjects.length <= 1) return <SubjectTile subject={subjects[0] ?? null} size={size} />;
+  const big = size === "md" ? 52 : 38;
+  return (
+    <span style={{ position: "relative", width: big, height: big, flexShrink: 0, display: "inline-block" }} aria-label={subjects.map((s) => SUBJECT_LABEL[s]).join("、")}>
+      <SubjectTile subject={subjects[1]} size="sm" style={{ position: "absolute", right: 0, bottom: 0, width: big * 0.72, height: big * 0.72, fontSize: big * 0.3 }} />
+      <SubjectTile subject={subjects[0]} size="sm" style={{ position: "absolute", left: 0, top: 0, width: big * 0.72, height: big * 0.72, fontSize: big * 0.3, boxShadow: "0 0 0 2px var(--card)" }} />
+    </span>
+  );
+}
 
 export function subjectColors(s: Subject | null | undefined): { color: string; bg: string } {
   return s ? { color: TILE[s].color, bg: TILE[s].bg } : { color: "var(--secondary)", bg: "var(--fill-light)" };

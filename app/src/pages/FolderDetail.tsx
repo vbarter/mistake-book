@@ -5,9 +5,9 @@ import { ErrorCard } from "../components/ErrorCard";
 import { ExportSheet } from "../components/ExportSheet";
 import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
-import { Hint, IconSegmented, KnowledgeIcon, Stat, SubjectTile, Tag } from "../components/v2";
+import { Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag } from "../components/v2";
 import { folderErrors, groupByKnowledge, type ErrorItem } from "../lib/errors";
-import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, saveFolder, setCorrected, type Folder } from "../lib/folders";
+import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, paperSubject, saveFolder, setCorrected, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
 import { haptic } from "../lib/native";
 import { toast } from "../store/banner";
@@ -30,6 +30,7 @@ export default function FolderDetail() {
   const [addSheet, setAddSheet] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deletingPaper, setDeletingPaper] = useState<string | null>(null);
+  const [subjectFilter, setSubjectFilter] = useState<Subject | null>(null);
 
   const reload = useCallback(() => getFolder(folderId).then((f) => setFolder(f ?? null)), [folderId]);
   useEffect(() => {
@@ -37,7 +38,9 @@ export default function FolderDetail() {
   }, [reload]);
 
   const stats = useMemo(() => (folder ? folderStats(folder) : null), [folder]);
-  const errors = useMemo(() => (folder ? folderErrors(folder) : []), [folder]);
+  const allErrors = useMemo(() => (folder ? folderErrors(folder) : []), [folder]);
+  const errorSubjects = useMemo(() => [...new Set(allErrors.map((e) => e.subject))], [allErrors]);
+  const errors = useMemo(() => (subjectFilter && errorSubjects.includes(subjectFilter) ? allErrors.filter((e) => e.subject === subjectFilter) : allErrors), [allErrors, subjectFilter, errorSubjects]);
   const groups = useMemo(() => groupByKnowledge(errors), [errors]);
 
   if (folder === undefined) return null;
@@ -72,7 +75,7 @@ export default function FolderDetail() {
             <button style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textAlign: "left" }} onClick={() => nav(`/papers/${folder.id}/${p.id}`)}>
             <img className="thumb" src={p.pages[0]?.src} alt="" />
             <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-              <span className="t-headline ellipsis">{p.name}</span>
+              <span className="t-headline ellipsis" style={{ display: "flex", alignItems: "center", gap: 6 }}>{paperSubject(p) && stats.subjects.length > 1 && <SubjectTile subject={paperSubject(p)} size="xs" />}{p.name}</span>
               <span className="t-foot c-sec">{p.pages.length} 张照片{st.scanned ? ` · ${st.total} 题` : ""} · {formatDate(p.updatedAt)}</span>
               <span style={{ display: "flex", gap: 6 }}>
                 {st.scanned ? (
@@ -101,6 +104,16 @@ export default function FolderDetail() {
 
   const errorsTab = (
     <>
+      {errorSubjects.length > 1 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className={`chip chip--select${!subjectFilter ? " on" : ""}`} onClick={() => setSubjectFilter(null)}>全部 {allErrors.length}</button>
+          {errorSubjects.map((s) => (
+            <button key={s} className={`chip chip--select${subjectFilter === s ? " on" : ""}`} onClick={() => setSubjectFilter(s)} style={{ gap: 6 }}>
+              <SubjectTile subject={s} size="xs" />{SUBJECT_LABEL[s]} {allErrors.filter((e) => e.subject === s).length}
+            </button>
+          ))}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Tag kind="wrong" icon="xmark">答错 {errors.filter((e) => e.kind !== "未作答").length}</Tag>
         <Tag kind="pending" icon="alert">未作答 {errors.filter((e) => e.kind === "未作答").length}</Tag>
@@ -157,7 +170,7 @@ export default function FolderDetail() {
       <InlineNav title="" back backLabel="试卷" right={<button className="icon-btn" aria-label="更多" style={{ color: "var(--brand)" }} onClick={() => setMenu(true)}><Icon name="ellipsis" size={24} /></button>} />
       <div className="screen__content screen__content--modal" style={{ gap: 12, paddingTop: 0, paddingBottom: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <SubjectTile subject={stats.subject} size="lg" />
+          {stats.subjects.length > 1 ? <SubjectStack subjects={stats.subjects} size="md" /> : <SubjectTile subject={stats.subject} size="lg" />}
           <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
             <h1 className="t-title2 ellipsis" style={{ fontWeight: 800 }}>{folder.name}</h1>
             <span className="t-foot c-sec" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="pin" size={14} stroke={2} />{stats.exam || (stats.subject ? SUBJECT_LABEL[stats.subject] : "扫描后自动识别考试信息")}</span>
@@ -212,7 +225,7 @@ export default function FolderDetail() {
         <Button variant="plain" onClick={() => setDeletingPaper(null)}>取消</Button>
       </Sheet>
 
-      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={folder.name} subtitle={stats.syllabus ? `按${stats.syllabus}归类` : stats.exam} errors={errors} papers={folder.papers} />
+      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={subjectFilter ? `${folder.name} · ${SUBJECT_LABEL[subjectFilter]}` : folder.name} subtitle={stats.syllabus ? `按${stats.syllabus}归类` : stats.exam} errors={errors} papers={subjectFilter ? folder.papers.filter((p) => paperSubject(p) === subjectFilter) : folder.papers} />
     </div>
   );
 }

@@ -20,6 +20,7 @@ export interface Paper {
   pages: FolderPage[];
   scannedAt?: string;
   digitized?: DigitizedResult;
+  subject?: Subject; // 扫描时从卷头判断
   corrected?: Record<string, string>; // 题 index → 订正时间
 }
 
@@ -178,7 +179,18 @@ export function validDigitized(d: DigitizedResult | undefined | null): Digitized
   return d;
 }
 
-const normAnswer = (s: string) => s.trim().toLowerCase().replace(/．/g, ".").replace(/，/g, ",").replace(/\s+/g, " ").replace(/[.。,，;；!！?？ ]+$/, "");
+const SUBSUP: Record<string, string> = Object.fromEntries([..."₀₁₂₃₄₅₆₇₈₉"].map((c, i) => [c, String(i)]).concat([..."⁰¹²³⁴⁵⁶⁷⁸⁹"].map((c, i) => [c, String(i)])));
+/** 比较作答用：全角转半角，上下标数字转普通数字（O₂ 与 O2 相同），忽略大小写、空白和首尾标点 */
+const normAnswer = (s: string) =>
+  [...s]
+    .map((c) => SUBSUP[c] ?? (c.charCodeAt(0) >= 0xff01 && c.charCodeAt(0) <= 0xff5e ? String.fromCharCode(c.charCodeAt(0) - 0xfee0) : c))
+    .join("")
+    .trim()
+    .toLowerCase()
+    .replace(/．/g, ".")
+    .replace(/，/g, ",")
+    .replace(/\s+/g, " ")
+    .replace(/[.。,，;；!！?？ ]+$/, "");
 
 /**
  * 老师没批改但模型给了正确答案时，自动对照学生作答判对错（和服务端 auto_mark 同一规则，给旧扫描结果用）。
@@ -233,7 +245,19 @@ export function paperStats(paper: Paper): { scanned: boolean; total: number; wro
 }
 
 /** 一个文件夹的统计与推断信息（学科、考试信息） */
-export function folderStats(folder: Folder): { papers: number; unscanned: number; wrong: number; blank: number; problems: number; corrected: number; subject: Subject | null; exam: string; syllabus: string } {
+/** 一张试卷的学科：扫描时存下的卷面学科，旧数据按题目多数推断 */
+export function paperSubject(paper: Paper): Subject | null {
+  if (paper.subject) return paper.subject;
+  const d = validDigitized(paper.digitized);
+  if (!d) return null;
+  const fromSheet = d.pages.find((s) => s.subject)?.subject;
+  if (fromSheet) return fromSheet;
+  const counts = new Map<Subject, number>();
+  for (const q of d.questions) counts.set(q.subject, (counts.get(q.subject) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+export function folderStats(folder: Folder): { papers: number; unscanned: number; wrong: number; blank: number; problems: number; corrected: number; subject: Subject | null; subjects: Subject[]; exam: string; syllabus: string } {
   let wrong = 0;
   let blank = 0;
   let corrected = 0;
@@ -247,15 +271,17 @@ export function folderStats(folder: Folder): { papers: number; unscanned: number
     wrong += st.wrong;
     blank += st.blank;
     corrected += st.corrected;
+    const ps = paperSubject(p);
+    if (ps) subjectCount.set(ps, (subjectCount.get(ps) ?? 0) + 1);
     const d = validDigitized(p.digitized);
     if (d) {
-      for (const q of d.questions) subjectCount.set(q.subject, (subjectCount.get(q.subject) ?? 0) + 1);
       const sheet = d.pages.find((s) => s.examLevel || s.region || s.examGrade);
       if (sheet && !exam) exam = [sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).join(" · ");
       const sy = d.pages.find((s) => s.syllabus)?.syllabus;
       if (sy && !syllabus) syllabus = sy;
     }
   }
-  const guessed = [...subjectCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  return { papers: folder.papers.length, unscanned, wrong, blank, problems: wrong + blank, corrected, subject: folder.subject ?? guessed, exam, syllabus };
+  const ranked = [...subjectCount.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s);
+  const subjects = folder.subject ? [folder.subject, ...ranked.filter((s) => s !== folder.subject)] : ranked;
+  return { papers: folder.papers.length, unscanned, wrong, blank, problems: wrong + blank, corrected, subject: subjects[0] ?? null, subjects, exam, syllabus };
 }

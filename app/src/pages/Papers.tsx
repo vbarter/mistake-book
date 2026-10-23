@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { Subject } from "../api/types";
 import { Icon } from "../components/Icon";
 import { Button, Empty, LargeNav, Sheet } from "../components/ui";
-import { Hint, SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
+import { Hint, SubjectStack, SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
 import { folderErrors, groupByKnowledge } from "../lib/errors";
 import { createFolder, defaultFolderName, folderStats, listFolders, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
@@ -77,9 +77,9 @@ export default function Papers() {
           return (
             <button key={f.id} className="card" style={{ gap: 12, textAlign: "left", width: "100%", padding: "14px 16px 14px 14px" }} onClick={() => nav(`/papers/${f.id}`)}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <SubjectTile subject={st.subject} size="md" />
+                <SubjectStack subjects={st.subjects} size="md" />
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span className="t-headline ellipsis" style={{ fontWeight: 700 }}>{f.name}</span>
+                  <span className="t-headline ellipsis" style={{ fontWeight: 700 }}>{f.name}{st.subjects.length > 1 ? <span className="t-foot c-sec" style={{ fontWeight: 500 }}> · {st.subjects.map((s) => SUBJECT_LABEL[s]).join(" / ")}</span> : ""}</span>
                   <span className="t-foot c-sec" style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="document" size={14} stroke={2} />{f.papers.length} 张</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="clock" size={14} stroke={2} />{formatDate(f.updatedAt)}</span>

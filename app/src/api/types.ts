@@ -1,4 +1,4 @@
-export type Subject = "math" | "chinese" | "english" | "science";
+export type Subject = "math" | "chinese" | "english" | "science" | "physics" | "chemistry" | "biology" | "history" | "geography" | "politics";
 export type Reason = "concept" | "misread" | "method" | "calculation" | "careless";
 export type QuestionType = "choice" | "fill" | "solve";
 export type Mastery = "due" | "learning" | "mastered";
@@ -147,6 +147,7 @@ export interface DigitizedPage {
   title: string;
   score: string;
   note: string;
+  subject?: Subject; // 整张卷子的学科（卷头判断）
   examLevel: string; // 考试类型：单元测 / 期中 / 中考模拟 / 高考 …
   examGrade: string; // 年级 / 学段
   region: string; // 地区

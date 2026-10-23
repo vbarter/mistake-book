@@ -127,7 +127,7 @@ def digitize():
         blob, media = _decode(image)
         pages.append(Crop(data=blob, media_type=media))
 
-    subjects = [s for s in (user.subjects or SUBJECTS) if s in SUBJECTS] or SUBJECTS
+    subjects = list(SUBJECTS)  # 识别卷子是什么学科，不受个人资料勾选限制
     provider = get_provider()
     try:
         page_infos, questions = provider.digitize_pages(pages, subjects=subjects, grade=user.grade or "5", region=str(data.get("region") or "")[:20])

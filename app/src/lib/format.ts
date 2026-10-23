@@ -1,7 +1,13 @@
 import type { Mastery, QuestionType, Rating, Reason, Subject } from "../api/types";
 
-export const SUBJECTS: Subject[] = ["math", "chinese", "english", "science"];
-export const SUBJECT_LABEL: Record<Subject, string> = { math: "数学", chinese: "语文", english: "英语", science: "科学" };
+export const SUBJECTS: Subject[] = ["math", "chinese", "english", "science", "physics", "chemistry", "biology", "history", "geography", "politics"];
+export const SUBJECT_LABEL: Record<Subject, string> = { math: "数学", chinese: "语文", english: "英语", science: "科学", physics: "物理", chemistry: "化学", biology: "生物", history: "历史", geography: "地理", politics: "道法" };
+/** 小学只有前四科；初高中换成理化生史地道 */
+export const SUBJECT_GROUPS: { label: string; subjects: Subject[] }[] = [
+  { label: "基础", subjects: ["math", "chinese", "english"] },
+  { label: "小学", subjects: ["science"] },
+  { label: "初高中", subjects: ["physics", "chemistry", "biology", "history", "geography", "politics"] },
+];
 export const REASONS: Reason[] = ["concept", "misread", "method", "calculation", "careless"];
 export const REASON_LABEL: Record<Reason, string> = {
   concept: "概念不清",

@@ -34,6 +34,18 @@
   --english-bg: #efe8fb;
   --science: #0b6b6b;
   --science-bg: #ddf3f3;
+  --physics: #1f55c4;
+  --physics-bg: #e3ebfb;
+  --chemistry: #0e7c5c;
+  --chemistry-bg: #ddf5ea;
+  --biology: #4d7c0f;
+  --biology-bg: #ecf7dc;
+  --history: #8a4b00;
+  --history-bg: #fff0e3;
+  --geography: #0369a1;
+  --geography-bg: #e0f2fe;
+  --politics: #b42323;
+  --politics-bg: #fbe9e9;
 
   --radius-card: 16px;
   --radius-btn: 14px;
@@ -83,5 +95,17 @@
     --english-bg: #2a1f45;
     --science: #7fdede;
     --science-bg: #123838;
+    --physics: #9dbaff;
+    --physics-bg: #1a2740;
+    --chemistry: #7fe0b8;
+    --chemistry-bg: #10342a;
+    --biology: #b6e07a;
+    --biology-bg: #243312;
+    --history: #ffd59e;
+    --history-bg: #3a2a16;
+    --geography: #8fd3ff;
+    --geography-bg: #0f2a3a;
+    --politics: #ff8080;
+    --politics-bg: #3a1616;
   }
 }

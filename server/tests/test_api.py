@@ -448,6 +448,8 @@ def test_auto_mark_grades_ungraded_short_answers():
     assert auto_mark("unmarked", "A", "C", "choice") == "wrong"
     assert auto_mark("unmarked", "whether", "if/whether", "fill") == "correct"
     assert auto_mark("unmarked", "bakerys", "bakeries", "fill") == "wrong"
+    assert auto_mark("unmarked", "O2", "O₂", "fill") == "correct"  # 下标数字
+    assert auto_mark("unmarked", "ＣＯ２", "CO₂", "fill") == "correct"  # 全角
     assert auto_mark("unmarked", "□", "B", "choice") == "unmarked"  # 看不清不判
     assert auto_mark("unmarked", "x", "y", "solve") == "unmarked"  # 解答题不判
     assert auto_mark("correct", "x", "y", "fill") == "correct"  # 老师批过的不动
@@ -456,3 +458,23 @@ def test_auto_mark_grades_ungraded_short_answers():
     ]}]}, 0)
     assert [b.mark for b in sheets[0].blocks[0].blanks] == ["correct", "wrong", "blank"]
     assert [q.mark for q in derive_questions(sheets)] == ["correct", "wrong", "blank"]
+
+
+
+def test_sheet_subject_detected_and_inherited():
+    from app.ai.digitize import clean_sheets
+
+    # 卷面判出化学：题块没写学科时继承
+    sheets = clean_sheets({"sheets": [{"subject": "chemistry", "blocks": [
+        {"type": "item", "number": "1", "text": "写出氧气的化学式 [[1]]", "blanks": [{"id": "1", "student": "O2", "mark": "correct"}]},
+        {"type": "item", "number": "2", "text": "x [[2]]", "subject": "math", "blanks": [{"id": "2", "student": "", "answer": "1"}]},
+    ]}]}, 0)
+    assert sheets[0].subject == "chemistry"
+    assert [b.subject for b in sheets[0].blocks] == ["chemistry", "math"]
+    # 卷面没判出：按题块多数推断
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "item", "number": "1", "text": "a [[1]]", "subject": "physics", "blanks": [{"id": "1", "student": "x"}]},
+        {"type": "item", "number": "2", "text": "b [[2]]", "subject": "physics", "blanks": [{"id": "2", "student": "x"}]},
+        {"type": "item", "number": "3", "text": "c [[3]]", "subject": "math", "blanks": [{"id": "3", "student": "x"}]},
+    ]}]}, 0)
+    assert sheets[0].subject == "physics"

@@ -1,5 +1,9 @@
-SUBJECTS = ["math", "chinese", "english", "science"]
-SUBJECT_LABELS = {"math": "数学", "chinese": "语文", "english": "英语", "science": "科学"}
+# 小学到高中全部学科；science 是小学科学，初高中用 physics / chemistry / biology
+SUBJECTS = ["math", "chinese", "english", "science", "physics", "chemistry", "biology", "history", "geography", "politics"]
+SUBJECT_LABELS = {
+    "math": "数学", "chinese": "语文", "english": "英语", "science": "科学",
+    "physics": "物理", "chemistry": "化学", "biology": "生物", "history": "历史", "geography": "地理", "politics": "道法",
+}
 
 REASONS = ["concept", "misread", "method", "calculation", "careless"]
 REASON_LABELS = {

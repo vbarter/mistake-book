@@ -200,7 +200,7 @@ class MockProvider(AIProvider):
                 DigitizedBlock(type="item", number="7", text="用“因为……所以……”造句。[[7]]", subject="chinese", questionType="solve", bbox=[0.06, 0.92, 0.95, 0.98], blanks=[DigitizedBlank(id="7", number="7", student="因为今天下雨，所以我们没有去春游。", mark="correct", note="✓")]),
                 DigitizedBlock(type="text", text="第 1 页 共 1 页", bbox=[0.40, 0.98, 0.60, 1.0]),
             ]
-            sheets.append(DigitizedPage(page=p, label=f"第 {p + 1} 页", title="五年级随堂练习", score="82", note="订正提醒：注意题目中的“剩下的”和“last weekend”，它们会影响解题方法。", examLevel="日常练习", examGrade="五年级", region="", syllabus="小学五年级课标", blocks=blocks))
+            sheets.append(DigitizedPage(page=p, label=f"第 {p + 1} 页", title="五年级随堂练习", score="82", note="订正提醒：注意题目中的“剩下的”和“last weekend”，它们会影响解题方法。", subject="math", examLevel="日常练习", examGrade="五年级", region="", syllabus="小学五年级课标", blocks=blocks))
         return sheets, derive_questions(sheets)
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:

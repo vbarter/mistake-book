@@ -4,7 +4,7 @@ import { api } from "../../api/client";
 import type { DigitizedResult } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
-import { addPaper, deletePaper, getFolder, toPage, updatePaper, validDigitized } from "../../lib/folders";
+import { addPaper, deletePaper, getFolder, saveFolder, toPage, updatePaper, validDigitized } from "../../lib/folders";
 import { haptic, pickImage, pickImages, prepareUpload, type UploadPart } from "../../lib/native";
 import { getCity } from "../../lib/prefs";
 import { toast, toastError } from "../../store/banner";
@@ -187,7 +187,12 @@ export default function Capture() {
       }
       const fid = useCapture.getState().folderId;
       const pid = useCapture.getState().paperId;
-      if (fid && pid) await updatePaper(fid, pid, { digitized: result, scannedAt: result.at, corrected: {} });
+      const subject = result.pages.find((s) => s.subject)?.subject;
+      if (fid && pid) {
+        await updatePaper(fid, pid, { digitized: result, scannedAt: result.at, corrected: {}, subject });
+        const folder = await getFolder(fid);
+        if (folder && !folder.subject && subject) await saveFolder({ ...folder, subject });
+      }
       setDigitized(result);
       setProgress({ stage: "完成", pct: 100, elapsed: Math.round((Date.now() - startedAt) / 1000) });
       void haptic.success();

@@ -4,7 +4,7 @@ import { getApiBase, setApiBase } from "../api/client";
 import type { Subject } from "../api/types";
 import { Button, InlineNav, Row, Sheet } from "../components/ui";
 import { SubjectTile } from "../components/v2";
-import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_LABEL } from "../lib/format";
+import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_GROUPS, SUBJECT_LABEL } from "../lib/format";
 import { getCity, setCity } from "../lib/prefs";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
@@ -52,19 +52,22 @@ export function Subjects() {
           <input className="input" value={city} maxLength={20} placeholder="例如：上海" onChange={(e) => setCityDraft(e.target.value)} />
           <span className="t-foot c-sec">错题会按这个城市的考纲归类知识点；试卷上能看出地区的以试卷为准。</span>
         </div>
-        <div className="group">
-          <div className="group__header"><span>学科</span><span style={{ fontWeight: 500 }}>至少保留一科</span></div>
-          {SUBJECTS.map((s) => {
-            const on = subjects.includes(s);
-            return (
-              <label key={s} className="row" style={{ minHeight: 52 }}>
-                <SubjectTile subject={s} size="sm" />
-                <span className="row__main"><span className="row__title">{SUBJECT_LABEL[s]}</span></span>
-                <input type="checkbox" checked={on} style={{ width: 24, height: 24 }} onChange={() => setSubjects((cur) => (on ? (cur.length > 1 ? cur.filter((x) => x !== s) : cur) : [...cur, s]))} />
-              </label>
-            );
-          })}
-        </div>
+        {SUBJECT_GROUPS.map((g) => (
+          <div className="group" key={g.label}>
+            <div className="group__header"><span>学科 · {g.label}</span>{g.label === "基础" && <span style={{ fontWeight: 500 }}>至少保留一科</span>}</div>
+            {g.subjects.map((s) => {
+              const on = subjects.includes(s);
+              return (
+                <label key={s} className="row" style={{ minHeight: 52 }}>
+                  <SubjectTile subject={s} size="sm" />
+                  <span className="row__main"><span className="row__title">{SUBJECT_LABEL[s]}</span></span>
+                  <input type="checkbox" checked={on} style={{ width: 24, height: 24 }} onChange={() => setSubjects((cur) => (on ? (cur.length > 1 ? cur.filter((x) => x !== s) : cur) : [...cur, s]))} />
+                </label>
+              );
+            })}
+          </div>
+        ))}
+        <p className="t-foot c-sec">这里勾选的学科只影响错题库的排序，扫描时会自动识别卷子是哪一科。</p>
         <div style={{ marginTop: "auto" }}><Button onClick={save} disabled={busy}>保存</Button></div>
       </div>
     </div>
