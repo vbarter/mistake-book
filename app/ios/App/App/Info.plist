@@ -35,6 +35,8 @@
 	<string>保存裁剪后的题目图片到相册（可选）</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>从相册选择试卷照片，识别其中的错题</string>
+	<key>PHPhotoLibraryPreventAutomaticLimitedAccessAlert</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
