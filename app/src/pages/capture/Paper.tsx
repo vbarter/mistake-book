@@ -6,7 +6,7 @@ import { ExportSheet } from "../../components/ExportSheet";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
-import { groupByKnowledge, paperErrors, type ErrorItem } from "../../lib/errors";
+import { groupBySection, paperErrors, type ErrorItem } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { scanStageText, useJobs } from "../../lib/jobs";
 import { haptic } from "../../lib/native";
@@ -50,7 +50,7 @@ function MarkChip({ mark, student }: { mark: Mark; student: string }) {
   return <Tag kind={kind} icon={mark === "unmarked" ? "info" : undefined}>{MARK_LABEL[mark]}</Tag>;
 }
 
-/** 一张试卷的电子版：「试卷」是可打印的干净原题，「作答」逐空列出手写转写与批改，「错题」按知识点列出并可勾选已订正。 */
+/** 一张试卷的电子版：「试卷」是可打印的干净原题，「作答」逐空列出手写转写与批改，「错题」按试卷顺序列出（按大题分组、卡片上标知识点）并可勾选已订正。 */
 export default function Paper() {
   const nav = useNavigate();
   const { folderId = "", paperId = "" } = useParams();
@@ -75,7 +75,7 @@ export default function Paper() {
   const digitized = paper ? validDigitized(paper.digitized) : null;
   const errors = useMemo(() => (folder && paper ? paperErrors(folder, paper) : []), [folder, paper]);
   const shown = useMemo(() => applyErrorFilter(errors, filter), [errors, filter]);
-  const groups = useMemo(() => groupByKnowledge(shown), [shown]);
+  const groups = useMemo(() => groupBySection(shown), [shown]);
   const stats = paper ? paperStats(paper) : null;
 
   // 没扫描过（也不在还原中）的试卷直接进录入页继续
@@ -252,12 +252,12 @@ export default function Paper() {
         <Empty icon="seal" title="这一类没有题" action={<Button size="xs" variant="plain" onClick={() => setFilter("all")}>看全部</Button>} />
       ) : (
         <>
-          <Hint icon="list">按知识点分组，做完一题就勾掉。勾选会同步到文件夹和错题库。</Hint>
+          <Hint icon="list">按试卷顺序列出，做完一题就勾掉。勾选会同步到文件夹和错题库。</Hint>
           {groups.map(([k, items]) => (
             <div key={k} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <span className="t-headline" style={{ marginTop: 4 }}>{k} · {items.length} 题</span>
+              {k && <span className="t-headline" style={{ marginTop: 4 }}>{k} · {items.length} 题</span>}
               {items.map((i) => (
-                <ErrorCard key={i.key} item={i} onToggle={(next) => toggle(i, next)} />
+                <ErrorCard key={i.key} item={i} showKnowledge onToggle={(next) => toggle(i, next)} />
               ))}
             </div>
           ))}

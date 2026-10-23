@@ -2,11 +2,12 @@ import type { ErrorItem } from "../lib/errors";
 import { QTYPE_LABEL } from "../lib/format";
 import { Icon } from "./Icon";
 import { SubjectChip } from "./ui";
-import { Tag } from "./v2";
+import { Tag, subjectColors } from "./v2";
 
-/** 一道错题：左侧勾选「已订正」，题干、作答与正确答案、解析、细分知识点 */
-export function ErrorCard({ item, onToggle, showSource }: { item: ErrorItem; onToggle: (next: boolean) => void; showSource?: boolean }) {
+/** 一道错题：左侧勾选「已订正」，题干、作答与正确答案、解析、细分知识点；showKnowledge 在没按知识点分组的列表里把知识点标在卡片上 */
+export function ErrorCard({ item, onToggle, showSource, showKnowledge }: { item: ErrorItem; onToggle: (next: boolean) => void; showSource?: boolean; showKnowledge?: boolean }) {
   const q = item.q;
+  const c = subjectColors(q.subject);
   const student = q.studentAnswer.trim() || "未作答";
   return (
     <div className="card" style={{ gap: 8, border: item.corrected ? "1.5px solid var(--mastered)" : "1.5px solid transparent", opacity: item.corrected ? 0.85 : 1 }}>
@@ -21,10 +22,13 @@ export function ErrorCard({ item, onToggle, showSource }: { item: ErrorItem; onT
           {item.corrected ? <Tag kind="correct">已订正</Tag> : <Tag kind={item.kind === "未作答" ? "pending" : item.kind === "半对" ? "partial" : "wrong"} icon={item.kind === "未作答" ? "alert" : item.kind === "半对" ? "warning" : "xmark"}>{item.kind}</Tag>}
         </span>
       </div>
-      {(showSource || item.sectionLabel) && (
-        <span className="t-cap c-sec">{[showSource ? `${item.folderName} · ${item.paperName}` : "", item.sectionLabel].filter(Boolean).join(" · ")}</span>
+      {(showSource || item.sectionLabel || showKnowledge) && (
+        <span className="t-cap c-sec" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {showKnowledge && <span className="tag" style={{ background: c.bg, color: c.color, height: 22 }}>{item.knowledge}</span>}
+          {[showSource ? `${item.folderName} · ${item.paperName}` : "", item.sectionLabel].filter(Boolean).join(" · ")}
+        </span>
       )}
-      <p className="t-sub" style={{ whiteSpace: "pre-wrap" }}>{q.stemText}</p>
+      <p className="t-sub" style={{ whiteSpace: "pre-wrap" }}>{item.stem}</p>
       {q.options.length > 0 && <p className="t-foot c-sec">{q.options.join("　")}</p>}
       <div className="blk-feedback">
         <span>作答：<b style={{ color: item.kind === "未作答" ? "var(--accent-on)" : "var(--wrong)" }}>{student}</b>　正确：<b style={{ color: "var(--mastered)" }}>{q.correctAnswer || "—"}</b></span>

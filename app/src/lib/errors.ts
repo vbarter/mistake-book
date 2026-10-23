@@ -18,10 +18,41 @@ export interface ErrorItem {
   corrected: boolean;
   correctedAt?: string;
   q: DigitizedQuestion;
+  stem: string; // 卡片上显示的题干：短文里的空只取当前空所在的那一句（q.stemText 仍是整篇，导出合并用）
   sectionLabel: string; // 所属大题，如「Ⅳ Complete the sentences…」
 }
 
 export const UNANSWERED = "未作答";
+
+/** 短文（完形 / 选词填空）里的一个空：整篇短文只取包含当前空（裸「____」）的那一句，别的空仍带编号；不是短文或找不到就原样返回 */
+export function focusSentence(stem: string): string {
+  if (!/\(\d+\)____/.test(stem)) return stem;
+  const m = /(^|[^)])____/.exec(stem);
+  if (!m) return stem;
+  const at = m.index + m[1].length;
+  // 句号后面跟空格 / 引号 / 结尾才算句子结束；数字后的点（3.5）不算
+  const isEnd = (i: number) => /[.!?。！？]/.test(stem[i]) && !/\d/.test(stem[i - 1] ?? "") && (i + 1 >= stem.length || /[\s"”’)]/.test(stem[i + 1]));
+  let start = 0;
+  for (let i = at - 1; i >= 0; i--) {
+    if (stem[i] === "\n" || isEnd(i)) {
+      start = i + 1;
+      break;
+    }
+  }
+  let end = stem.length;
+  for (let i = at; i < stem.length; i++) {
+    if (stem[i] === "\n") {
+      end = i;
+      break;
+    }
+    if (isEnd(i)) {
+      end = i + 1;
+      while (end < stem.length && /["”’)]/.test(stem[end])) end++;
+      break;
+    }
+  }
+  return stem.slice(start, end).trim() || stem;
+}
 
 export function kindOf(q: DigitizedQuestion): ErrorKind {
   if (isBlank(q)) return "未作答";
@@ -55,6 +86,7 @@ export function paperErrors(folder: Folder, paper: Paper): ErrorItem[] {
     corrected: Boolean(paper.corrected?.[String(q.index)]),
     correctedAt: paper.corrected?.[String(q.index)],
     q,
+    stem: focusSentence(q.stemText),
     sectionLabel: sectionOf(paper, q),
   }));
 }
@@ -72,6 +104,17 @@ export function groupByKnowledge(items: ErrorItem[]): [string, ErrorItem[]][] {
   const map = new Map<string, ErrorItem[]>();
   for (const it of items) map.set(it.knowledge, [...(map.get(it.knowledge) ?? []), it]);
   return [...map.entries()].sort((a, b) => b[1].length - a[1].length);
+}
+
+/** 按所属大题分组，保持试卷顺序（和「作答」页一致）；没有大题的放在它们出现的位置 */
+export function groupBySection(items: ErrorItem[]): [string, ErrorItem[]][] {
+  const out: [string, ErrorItem[]][] = [];
+  for (const it of items) {
+    const last = out[out.length - 1];
+    if (last && last[0] === it.sectionLabel) last[1].push(it);
+    else out.push([it.sectionLabel, [it]]);
+  }
+  return out;
 }
 
 /** 按月份分组（新的在前），组内按文件夹 */
