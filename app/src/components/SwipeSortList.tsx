@@ -26,7 +26,7 @@ interface Props<T> {
 type Drag = { kind: "drag"; key: string; index: number; startY: number; y: number; startScroll: number; tops: number[]; heights: number[]; target: number; el: HTMLElement; scroller: HTMLElement };
 type Gesture =
   | { kind: "idle" }
-  | { kind: "pending"; key: string; x: number; y: number; timer: number; el: HTMLElement }
+  | { kind: "pending"; key: string; x: number; y: number; timer: number; el: HTMLElement; pointerId: number }
   | { kind: "swipe"; key: string; x: number; from: number }
   | Drag;
 
@@ -148,6 +148,11 @@ export function SwipeSortList<T>({ items, keyOf, render, onReorder, onDelete, ga
       heights.push(r?.height ?? 0);
     });
     g.current = { kind: "drag", key: p.key, index, startY: p.y, y: p.y, startScroll: scroller.scrollTop, tops, heights, target: index, el: p.el, scroller };
+    try {
+      p.el.setPointerCapture(p.pointerId);
+    } catch {
+      /* 手指已经抬起等情况：忽略 */
+    }
     moved.current = true;
     setDragKey(p.key);
     haptic();
@@ -185,12 +190,12 @@ export function SwipeSortList<T>({ items, keyOf, render, onReorder, onDelete, ga
       moved.current = true; // 这一下只是收起别的行
       return;
     }
+    // 这里先不抓 pointer capture：抓了之后 click 会落在外层容器上，卡片自己的 onClick 就收不到了；等真的变成滑动 / 拖动再抓
     const el = e.currentTarget;
-    el.setPointerCapture?.(e.pointerId);
     const timer = window.setTimeout(() => {
       if (g.current.kind === "pending" && g.current.timer === timer) startDrag(g.current);
     }, LONG_PRESS_MS);
-    g.current = { kind: "pending", key, x: e.clientX, y: e.clientY, timer, el };
+    g.current = { kind: "pending", key, x: e.clientX, y: e.clientY, timer, el, pointerId: e.pointerId };
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLElement>) => {
@@ -201,6 +206,7 @@ export function SwipeSortList<T>({ items, keyOf, render, onReorder, onDelete, ga
       if (Math.abs(dx) < MOVE_SLOP && Math.abs(dy) < MOVE_SLOP) return;
       window.clearTimeout(cur.timer);
       if (Math.abs(dx) > Math.abs(dy)) {
+        cur.el.setPointerCapture?.(e.pointerId);
         g.current = { kind: "swipe", key: cur.key, x: cur.x, from: open === cur.key ? -ACTION_W : 0 };
         moved.current = true;
       } else {
