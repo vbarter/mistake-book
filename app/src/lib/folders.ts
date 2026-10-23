@@ -152,6 +152,17 @@ export async function deleteFolder(id: string): Promise<void> {
   await tx("readwrite", (s) => s.delete(id));
 }
 
+/** 用户拖动调整文件夹里试卷的先后；不改 updatedAt */
+export async function reorderPapers(folderId: string, ids: string[]): Promise<Folder | undefined> {
+  const folder = await getFolder(folderId);
+  if (!folder) return undefined;
+  const byId = new Map(folder.papers.map((p) => [p.id, p]));
+  const papers = [...ids.map((id) => byId.get(id)).filter((p): p is Paper => Boolean(p)), ...folder.papers.filter((p) => !ids.includes(p.id))];
+  const next = { ...folder, papers };
+  await tx("readwrite", (s) => s.put(next));
+  return next;
+}
+
 /** 往文件夹里加一张试卷（没有文件夹就先建一个） */
 export async function addPaper(folderId: string | null, pages: FolderPage[], name?: string): Promise<{ folder: Folder; paper: Paper }> {
   const folder = (folderId && (await getFolder(folderId))) || (await createFolder(defaultFolderName()));

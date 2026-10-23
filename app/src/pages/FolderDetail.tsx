@@ -8,7 +8,7 @@ import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
 import { folderErrors, groupByKnowledge, type ErrorItem } from "../lib/errors";
-import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, paperSubject, saveFolder, setCorrected, type Folder } from "../lib/folders";
+import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, paperSubject, reorderPapers, saveFolder, setCorrected, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
 import { scanStageText, useJobs } from "../lib/jobs";
 import { haptic } from "../lib/native";
@@ -77,6 +77,10 @@ export default function FolderDetail() {
         items={folder.papers}
         keyOf={(p) => p.id}
         onDelete={(p) => setDeletingPaper(p.id)}
+        onReorder={(ids) => {
+          setFolder({ ...folder, papers: ids.map((id) => folder.papers.find((p) => p.id === id)!) });
+          void reorderPapers(folder.id, ids);
+        }}
         gap={12}
         render={(p) => {
         const st = paperStats(p);
