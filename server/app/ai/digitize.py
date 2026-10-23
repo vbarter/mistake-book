@@ -316,6 +316,28 @@ def drop_ghost_sheets(sheets: list[DigitizedPage]) -> list[DigitizedPage]:
     return out or sheets
 
 
+def sheets_from_dicts(pages: list) -> list[DigitizedPage]:
+    """App 回传的电子版（DigitizedPage.to_dict 的结构）还原成对象；不认识的字段忽略，用于对已存的试卷补做 AI 阅卷。"""
+    from dataclasses import fields
+
+    def pick(cls, d: dict) -> dict:
+        names = {f.name for f in fields(cls)}
+        return {k: v for k, v in d.items() if k in names}
+
+    out: list[DigitizedPage] = []
+    for p in pages or []:
+        if not isinstance(p, dict):
+            continue
+        blocks = []
+        for b in p.get("blocks") or []:
+            if not isinstance(b, dict):
+                continue
+            blanks = [DigitizedBlank(**pick(DigitizedBlank, x)) for x in (b.get("blanks") or []) if isinstance(x, dict) and x.get("id")]
+            blocks.append(DigitizedBlock(**{**pick(DigitizedBlock, b), "blanks": blanks}))
+        out.append(DigitizedPage(**{**pick(DigitizedPage, p), "blocks": blocks}))
+    return out
+
+
 # ---------------------------------------------------------------- derive questions
 
 

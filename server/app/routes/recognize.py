@@ -10,6 +10,7 @@ from flask import Blueprint, Response, abort, current_app, jsonify, request
 
 from ..ai import AIError, Crop, get_provider, provider_name
 from ..ai import queue as page_queue
+from ..ai.digitize import derive_questions, sheets_from_dicts
 from ..extensions import db
 from ..models import DigitizeJob
 from ..auth_utils import current_user, login_required
@@ -301,6 +302,25 @@ def digitize_pdf():
         log.exception("pdf failed")
         return jsonify({"error": "pdf_failed", "message": _pdf_error_message("电子试卷", e)}), 500
     return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": "attachment; filename=paper.pdf"})
+
+
+@bp.post("/digitize/grade")
+@login_required
+def digitize_grade():
+    """给已经存在 App 里的电子版补做 AI 阅卷：老师没批改、学生写了作答的空交给大模型判对错，返回判完的卷面和题目。"""
+    data = request.get_json(silent=True) or {}
+    pages = data.get("pages")
+    if not isinstance(pages, list) or not pages:
+        abort(400, "缺少电子版内容")
+    sheets = sheets_from_dicts(pages)
+    provider = get_provider()
+    graded = provider.grade_unmarked(sheets) if hasattr(provider, "grade_unmarked") else 0
+    questions = []
+    for i, q in enumerate(derive_questions(sheets)):
+        d = q.to_dict()
+        d["index"] = i
+        questions.append(d)
+    return jsonify({"pages": [s.to_dict() for s in sheets], "questions": questions, "graded": graded})
 
 
 def _pdf_error_message(what: str, e: Exception) -> str:

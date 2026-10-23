@@ -789,3 +789,34 @@ def test_photo_quality_and_empty_fragments():
     kept = drop_ghost_sheets(sheets)
     assert [q.number for q in derive_questions(kept)] == ["35"]
     assert unreadable("□□ □") and unreadable("$□$") and not unreadable("A□") and not unreadable("")
+
+
+def test_grade_endpoint_regrades_stored_paper(client, auth, monkeypatch):
+    """App 回传已存的电子版：没批改、有作答的空送 AI 阅卷，返回判完的卷面和题目（带 index）。"""
+    from app.ai import get_provider
+    from app.ai.claude import ClaudeProvider
+    import app.routes.recognize as rec
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    calls = []
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        calls.append(content[0]["text"])
+        # 第一轮只判了 36，37 漏判 → 第二轮补判
+        if len(calls) == 1:
+            return {"results": [{"key": "s0b0#36", "answer": "C", "verdict": "wrong", "analysis": "应选 C。"}]}
+        return {"results": [{"key": "s0b0#37", "answer": "A", "verdict": "correct", "analysis": ""}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    monkeypatch.setattr(rec, "get_provider", lambda: provider)
+    pages = [{"page": 0, "label": "第5页", "subject": "english", "blocks": [
+        {"type": "passage", "text": "fun [[36]] and [[37]].", "questionType": "choice", "subject": "english",
+         "blanks": [{"id": "36", "number": "36", "student": "B", "mark": "unmarked", "answer": "", "analysis": "", "note": ""},
+                    {"id": "37", "number": "37", "student": "A", "mark": "unmarked", "answer": "", "analysis": "", "note": ""}]}]}]
+    r = client.post("/api/digitize/grade", json={"pages": pages}, headers=auth)
+    assert r.status_code == 200, r.get_json()
+    body = r.get_json()
+    marks = {b["id"]: (b["mark"], b["aiGraded"]) for b in body["pages"][0]["blocks"][0]["blanks"]}
+    assert marks == {"36": ("wrong", True), "37": ("correct", True)} and body["graded"] == 2 and len(calls) == 2
+    assert [q["index"] for q in body["questions"]] == [0, 1]

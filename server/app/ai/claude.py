@@ -509,8 +509,26 @@ class ClaudeProvider(AIProvider):
             log.warning("grade_unmarked failed: %s", e)
         return sheets, derive_questions(sheets)
 
-    def grade_unmarked(self, sheets: list[DigitizedPage], batch: int = 40) -> int:
-        """把仍是 unmarked（老师没批改、自动对答案也判不了）且学生写了作答的空交给大模型判对错；返回判了多少个。"""
+    def grade_unmarked(self, sheets: list[DigitizedPage], batch: int = 40, rounds: int = 2) -> int:
+        """把仍是 unmarked（老师没批改、自动对答案也判不了）且学生写了作答的空交给大模型判对错；
+        第一轮漏判或调用失败的再送一轮。返回判了多少个。"""
+        total = 0
+        for r in range(rounds):
+            try:
+                n = self._grade_round(sheets, batch)
+            except Exception as e:  # noqa: BLE001
+                log.warning("grade round %d failed: %s", r + 1, e)
+                continue
+            total += n
+            if n == 0 or not self._ungraded(sheets):
+                break
+        return total
+
+    @staticmethod
+    def _ungraded(sheets: list[DigitizedPage]) -> int:
+        return sum(1 for s in sheets for blk in s.blocks if blk.type in ("item", "passage") for b in blk.blanks if b.mark == "unmarked" and b.student.strip() and not unreadable(b.student))
+
+    def _grade_round(self, sheets: list[DigitizedPage], batch: int) -> int:
         todo: list[tuple[str, DigitizedBlank, str]] = []
         for si, sheet in enumerate(sheets):
             section = ""

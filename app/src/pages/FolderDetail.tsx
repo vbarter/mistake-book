@@ -10,7 +10,7 @@ import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack
 import { folderErrors, groupByKnowledge } from "../lib/errors";
 import { deleteFolder, deletePaper, folderStats, getFolder, paperQuality, paperStats, paperSubject, reorderPapers, saveFolder, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
-import { scanStageText, useJobs } from "../lib/jobs";
+import { gradeIfNeeded, scanStageText, useJobs } from "../lib/jobs";
 import { toast } from "../store/banner";
 import { useCapture } from "../store/capture";
 
@@ -39,6 +39,14 @@ export default function FolderDetail() {
   useEffect(() => {
     void reload();
   }, [reload, jobsVersion]);
+  // 有老师没批改的题：自动交给大模型补判（一张一张来）
+  useEffect(() => {
+    if (!folder) return;
+    void (async () => {
+      for (const p of folder.papers) await gradeIfNeeded(folder.id, p);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folder?.id]);
 
   const stats = useMemo(() => (folder ? folderStats(folder) : null), [folder]);
   const allErrors = useMemo(() => (folder ? folderErrors(folder) : []), [folder]);

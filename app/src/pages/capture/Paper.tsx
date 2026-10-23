@@ -10,7 +10,7 @@ import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectCol
 import { formatDateTime, unwrapLines } from "../../lib/format";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperStats, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
-import { scanStageText, useJobs } from "../../lib/jobs";
+import { gradeIfNeeded, isGrading, scanStageText, useJobs } from "../../lib/jobs";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
 
@@ -46,7 +46,8 @@ function renderPrint(text: string, blanks: DigitizedBlank[]): ReactNode[] {
 }
 
 /** 作答表格的判定列：对 ✅、错 ❌（老师批的和 AI 判的一样显示） */
-function MarkChip({ mark, student }: { mark: Mark; student: string }) {
+function MarkChip({ mark, student, grading }: { mark: Mark; student: string; grading?: boolean }) {
+  if (mark === "unmarked" && grading && student.trim() && !isUnreadable(student)) return <Tag kind="info" icon="sparkles">批改中</Tag>;
   if (mark === "blank" || (mark === "wrong" && unanswered(student))) return <Tag kind="pending" icon="alert">{UNANSWERED}</Tag>;
   // 学生作答整个看不清、老师也没批：判不了，提示重拍而不是「未批改」
   if (mark === "unmarked" && isUnreadable(student)) return <Tag kind="pending" icon="alert">看不清</Tag>;
@@ -78,6 +79,11 @@ export default function Paper() {
 
   const paper: PaperRecord | undefined = folder?.papers.find((p) => p.id === paperId);
   const digitized = paper ? validDigitized(paper.digitized) : null;
+  const grading = paper ? isGrading(paper.id) : false;
+  useEffect(() => {
+    if (folder && paper) void gradeIfNeeded(folder.id, paper);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paper?.id, Boolean(folder)]);
   const errors = useMemo(() => (folder && paper ? paperErrors(folder, paper) : []), [folder, paper]);
   const shown = useMemo(() => applyErrorFilter(errors, filter), [errors, filter]);
   const groups = useMemo(() => groupBySection(shown), [shown]);
@@ -233,7 +239,7 @@ export default function Paper() {
                 <span className="ans__num">{b.number}</span>
                 <span className={`ans__hand${b.mark === "wrong" || b.mark === "partial" ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : <MathText text={b.student} />}</span>
                 <span>
-                  <MarkChip mark={b.mark} student={b.student} />
+                  <MarkChip mark={b.mark} student={b.student} grading={grading} />
                   {b.note && b.note !== UNANSWERED && <span className="t-cap" style={{ color: "var(--wrong)", display: "block" }}>{b.note}</span>}
                 </span>
                 <span className="ans__answer">{b.mark === "correct" ? "" : <MathText text={b.answer} />}</span>

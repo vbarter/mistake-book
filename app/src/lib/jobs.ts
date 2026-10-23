@@ -1,8 +1,8 @@
 /** 扫描任务：提交给服务器后台跑，任务号记在本机试卷记录上；回前台 / 重开 App 时轮询进度，完成后把电子版落库。 */
 import { create } from "zustand";
 import { api } from "../api/client";
-import type { DigitizeJob, DigitizedResult } from "../api/types";
-import { getFolder, listFolders, saveFolder, updatePaper, type Paper } from "./folders";
+import type { DigitizeJob, DigitizedQuestion, DigitizedResult } from "../api/types";
+import { autoMark, getFolder, isUnreadable, listFolders, saveFolder, updatePaper, validDigitized, type Paper } from "./folders";
 import { isNative, prepareUpload, type UploadPart } from "./native";
 import { getCity } from "./prefs";
 import type { CapturePage } from "../store/capture";
@@ -157,3 +157,36 @@ export function startJobPoller(): () => void {
 }
 
 export const isScanning = (p: Paper) => Boolean(p.scanJob);
+
+// ---------------------------------------------------------------- 补做 AI 阅卷
+
+const grading = new Set<string>();
+
+/** 有没有老师没批改、按答案也判不了、学生又写了（看得清的）作答的空 */
+export function needsGrading(paper: Paper): boolean {
+  const d = validDigitized(paper.digitized);
+  if (!d || paper.scanJob) return false;
+  return d.pages.some((s) =>
+    s.blocks.some((b) => (b.type === "item" || b.type === "passage") && b.blanks.some((x) => x.student.trim() && !isUnreadable(x.student) && autoMark(x.mark, x.student, x.answer, b.questionType) === "unmarked")),
+  );
+}
+
+/** 这张试卷正在补做阅卷（界面上把「未批改」显示成「批改中」） */
+export const isGrading = (paperId: string) => grading.has(paperId);
+
+/** 还有没批改的空就交给服务器的大模型补判；判完写回本机。每张试卷只自动补一次（gradedAt），失败下次打开再试。 */
+export async function gradeIfNeeded(folderId: string, paper: Paper): Promise<void> {
+  if (grading.has(paper.id) || paper.gradedAt || !needsGrading(paper)) return;
+  const d = validDigitized(paper.digitized)!;
+  grading.add(paper.id);
+  useJobs.getState().bump();
+  try {
+    const res = await api<{ pages: DigitizedResult["pages"]; questions: DigitizedQuestion[]; graded: number }>("/api/digitize/grade", { method: "POST", body: { pages: d.pages }, timeoutMs: 240000 });
+    await updatePaper(folderId, paper.id, { digitized: { ...paper.digitized!, pages: res.pages, questions: res.questions }, gradedAt: new Date().toISOString() });
+  } catch {
+    /* 网络等问题：下次打开再试 */
+  } finally {
+    grading.delete(paper.id);
+    useJobs.getState().bump();
+  }
+}
