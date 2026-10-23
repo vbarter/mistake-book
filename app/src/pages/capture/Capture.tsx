@@ -60,6 +60,11 @@ export default function Capture() {
       if (source === "photos") {
         const list = await pickImages(0); // 0 = 不限张数
         if (!list.length) return false;
+        // 新建时一次选了多张：每张照片各建一张试卷、各自扫描，在列表里分别显示进度（服务器全局队列最多 5 张同时识别，其余排队）
+        if (list.length > 1 && !useCapture.getState().paperId && useCapture.getState().pages.length === 0) {
+          await scanEach(list);
+          return true;
+        }
         autoScanRef.current = true;
         await addSources(list);
         return true;
@@ -126,6 +131,30 @@ export default function Capture() {
     setPaperName(name);
     if (folderId && paperId) await updatePaper(folderId, paperId, { name });
     setRename(false);
+  };
+
+  /** 相册多选：一张照片一张试卷，逐张建好并提交扫描，全部提交后回到文件夹看各自的进度 */
+  const scanEach = async (sources: string[]) => {
+    let folder = targetFolder;
+    let ok = 0;
+    for (let i = 0; i < sources.length; i++) {
+      setProgress({ stage: `正在上传第 ${i + 1} / ${sources.length} 张`, pct: Math.round(((i + 0.5) / sources.length) * 100), elapsed: 0 });
+      try {
+        const page = await toPage(sources[i]);
+        const { folder: f, paper } = await addPaper(folder, [page]);
+        folder = f.id;
+        await submitScan(f.id, paper.id, [page]);
+        ok += 1;
+      } catch (e) {
+        toastError(e);
+      }
+    }
+    setProgress(null);
+    if (!folder) return;
+    void haptic.success();
+    if (ok) toast(`已开始扫描 ${ok} 张试卷，可以先去做别的，好了会在列表里显示`, "success");
+    reset();
+    nav(`/papers/${folder}`, { replace: true });
   };
 
   /** 扫描：压缩上传后交给服务器后台还原，立刻回到文件夹；进度在试卷行上显示，切走 App 也不影响。 */

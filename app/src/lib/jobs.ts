@@ -15,11 +15,13 @@ export interface ScanJob {
   status: "queued" | "running";
   startedPages?: number; // 已拿到识别槽位的照片数
   waiting?: number; // 全局队列里排在前面等槽位的照片数
+  queued?: boolean; // 自己的照片还没开始识别，在排队
 }
 
 /** 试卷行上显示的一句话：排队中 / 扫描中 */
 export function scanStageText(job: ScanJob): string {
   if (!job.startedPages && job.waiting && job.waiting > 0) return `排队中 · 前面还有 ${job.waiting} 张`;
+  if (!job.startedPages && job.queued) return "排队中";
   return `扫描中 ${job.progress}%`;
 }
 
@@ -69,7 +71,8 @@ export async function submitScan(folderId: string, paperId: string, pages: Captu
     return { id: job.jobId, startedAt: new Date().toISOString(), parts, progress: 100, status: "running" };
   }
   if (job.status === "failed") throw new Error(job.error || "扫描出错了");
-  const scanJob: ScanJob = { id: job.jobId, startedAt: new Date().toISOString(), parts, progress: job.progress, status: job.status };
+  const queued = (job.startedPages ?? 0) === 0 && Boolean(job.queue && job.queue.running >= job.queue.limit);
+  const scanJob: ScanJob = { id: job.jobId, startedAt: new Date().toISOString(), parts, progress: job.progress, status: job.status, queued };
   await updatePaper(folderId, paperId, { scanJob, scanError: undefined });
   useJobs.getState().bump();
   return scanJob;
@@ -100,8 +103,9 @@ export async function pollPendingJobs(): Promise<number> {
             const started = job.startedPages ?? 0;
             // 自己这张还没开始时，前面排着的 = 全局等待数 - 自己的照片数（粗略）
             const waiting = started === 0 && job.queue ? Math.max(0, job.queue.waiting - job.totalPages) : 0;
-            if (job.progress !== paper.scanJob.progress || job.status !== paper.scanJob.status || started !== paper.scanJob.startedPages || waiting !== paper.scanJob.waiting) {
-              await updatePaper(folder.id, paper.id, { scanJob: { ...paper.scanJob, progress: job.progress, status: job.status, startedPages: started, waiting } });
+            const queued = started === 0 && Boolean(job.queue && job.queue.running >= job.queue.limit);
+            if (job.progress !== paper.scanJob.progress || job.status !== paper.scanJob.status || started !== paper.scanJob.startedPages || waiting !== paper.scanJob.waiting || queued !== paper.scanJob.queued) {
+              await updatePaper(folder.id, paper.id, { scanJob: { ...paper.scanJob, progress: job.progress, status: job.status, startedPages: started, waiting, queued } });
               useJobs.getState().bump();
             }
           }
