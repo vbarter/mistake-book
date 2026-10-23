@@ -20,6 +20,17 @@ mistake-book/
     └── android/         Android Studio 工程
 ```
 
+## 2.0 产品结构（当前版本）
+
+三个 Tab，一条主路径：**拍试卷 → AI 还原电子版 → 错题按知识点汇总 → 导出**。
+
+- **试卷**（`pages/Papers.tsx`、`FolderDetail.tsx`、`capture/Paper.tsx`、`capture/Capture.tsx`）：一次考试一个文件夹，一个文件夹装多张试卷（`lib/folders.ts`：Folder → Paper → 照片 + 电子版 + 订正记录，存本机 IndexedDB，1.x 的"一夹一卷"记录会自动迁移）。文件夹页分"试卷 / 错题汇总"两段，错题跨试卷按考纲一级知识点合并（`lib/errors.ts`），点题号或卡片勾选"已订正"，进度回流到文件夹卡的进度环。单张试卷页分"试卷（可打印原题）/ 作答 / 错题"三段。
+- **错题库**（`pages/Library.tsx`）：所有文件夹的错题，按学科（学科 → 知识点 → 题）或按时间（月份 → 文件夹 → 题），右上角导出当前范围。
+- **我的**（`pages/Profile.tsx`、`ProfilePages.tsx`）：昵称、年级（1–12，含高中）与所在城市（本机保存，扫描时作为考纲提示传给 `/api/digitize` 的 `region`）、学科、本机数据、隐私、账号、关于。周目标、复习提醒、家长视图、练习与每日复习已从界面去掉；服务端对应接口保留但前端不再调用。
+- **导出**（`components/ExportSheet.tsx`）两种 PDF：错题本 `POST /api/digitize/book`（横向 A4，左栏空白重做、右栏原答案 / 正确答案 / 解析，按知识点分组，短文的几个空合成一题）；原始电子试卷 `POST /api/digitize/pdf`（可一次传多张 `papers`，合成一个文件）。原生端走系统分享面板可直接打印。
+- 视觉：`styles/v2.css` + `components/v2.tsx`（学科方块、状态标签、错题进度环、带图标分段控件）。设计稿见 Claude 画板「知错本 2.0 产品路径」。
+- 下面"录题流程（v1.0 第二版）""关键规则"等段落描述的是 1.x 的今天 / 复习 / 练习链路，接口仍在，界面已下线。
+
 ## 一、本地运行
 
 ### 1. 后端
