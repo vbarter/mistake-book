@@ -658,3 +658,16 @@ def test_baidu_ocr_lines_and_token_refresh(monkeypatch):
     assert ocr.BAIDU_TOKEN_URL in calls and "access_token=fresh" in calls[-1]
     assert ocr.health() == "baidu:online"
     assert ocr.baidu_lines({"words_result": [{"words": "a"}, {"words": "b"}]}) == "a\nb"
+
+
+def test_unwrap_lines_joins_wrapped_sentences():
+    """OCR 排版换行合回一行；分段、选项、序号行保留换行；中文相连不加空格。"""
+    from app.ai.digitize import unwrap_lines, clean_block
+
+    assert unwrap_lines("Our handmade bookmarks were sold out within half [[21]] hour\nat the charity sale.") == "Our handmade bookmarks were sold out within half [[21]] hour at the charity sale."
+    assert unwrap_lines("下列说法正确的是\n的一项") == "下列说法正确的是的一项"
+    assert unwrap_lines("第一段。\n\n第二段。") == "第一段。\n第二段。" or unwrap_lines("第一段。\n\n第二段。") == "第一段。\n\n第二段。"
+    assert unwrap_lines("题干\nA. 选项一\nB. 选项二") == "题干\nA. 选项一\nB. 选项二"
+    assert unwrap_lines("材料：\n①第一条\n②第二条") == "材料：\n①第一条\n②第二条"
+    blk = clean_block({"type": "item", "number": "21", "text": "half [[21]] hour\nat the sale.", "blanks": [{"id": "21", "student": "C", "answer": "B"}]}, "english")
+    assert blk.text == "half [[21]] hour at the sale."

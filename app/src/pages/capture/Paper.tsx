@@ -6,6 +6,7 @@ import { ExportSheet } from "../../components/ExportSheet";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
+import { unwrapLines } from "../../lib/format";
 import { groupBySection, paperErrors, type ErrorItem } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { scanStageText, useJobs } from "../../lib/jobs";
@@ -157,7 +158,7 @@ export default function Paper() {
         return (
           <div className="blk-passage" key={bi}>
             {block.label && <span className="blk-passage__label">{block.label}</span>}
-            <p className="blk-text">{renderPrint(block.text, block.blanks)}</p>
+            <p className="blk-text">{renderPrint(unwrapLines(block.text), block.blanks)}</p>
           </div>
         );
       case "item":
@@ -166,7 +167,7 @@ export default function Paper() {
             <span className="blk-item__num">{block.number}.</span>
             <div className="blk-item__body">
               <p className="blk-text">
-                {renderPrint(block.text, block.blanks)}
+                {renderPrint(unwrapLines(block.text), block.blanks)}
                 {block.hint && <span className="blk-hint">{block.hint}</span>}
                 {block.instruction && <span className="blk-instruction">（{stripParen(block.instruction)}）</span>}
               </p>

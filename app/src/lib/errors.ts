@@ -1,6 +1,7 @@
 /** 错题汇总：把文件夹里扫描出的判错题（含未作答）收集成统一记录，供文件夹汇总、错题库和导出使用。 */
 import type { DigitizedQuestion, Subject } from "../api/types";
 import { effectiveMark, isBlank, isProblem, validDigitized, type Folder, type Paper } from "./folders";
+import { unwrapLines } from "./format";
 
 export type ErrorKind = "未作答" | "答错" | "半对";
 
@@ -86,7 +87,7 @@ export function paperErrors(folder: Folder, paper: Paper): ErrorItem[] {
     corrected: Boolean(paper.corrected?.[String(q.index)]),
     correctedAt: paper.corrected?.[String(q.index)],
     q,
-    stem: focusSentence(q.stemText),
+    stem: focusSentence(unwrapLines(q.stemText)),
     sectionLabel: sectionOf(paper, q),
   }));
 }
@@ -161,13 +162,13 @@ export function toBookItems(items: ErrorItem[]): BookItem[] {
         continue;
       }
       // 短文：把当前空的「____」也标上编号，整篇只放一次
-      const stem = q.stemText.replace(/(^|[^)])____/, `$1(${q.number})____`);
+      const stem = unwrapLines(q.stemText).replace(/(^|[^)])____/, `$1(${q.number})____`);
       const item: BookItem = { number: q.number, stem, options: q.options, knowledge: it.knowledge, source, answers: [answer] };
       byBlock.set(key, item);
       out.push(item);
       continue;
     }
-    out.push({ number: q.number, stem: q.stemText, options: q.options, knowledge: it.knowledge, source, answers: [answer] });
+    out.push({ number: q.number, stem: unwrapLines(q.stemText), options: q.options, knowledge: it.knowledge, source, answers: [answer] });
   }
   return out;
 }

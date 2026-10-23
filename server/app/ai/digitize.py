@@ -91,6 +91,29 @@ def clean_blank(raw: dict, fallback_number: str = "") -> DigitizedBlank | None:
     )
 
 
+_LINE_START = re.compile(r"^\s*(?:[A-H][.、．)）]|\(?\d{1,3}[.)）、．]|[①-⑳]|[一二三四五六七八九十]+[、.．]|[(（]\d{1,3}[)）])")
+_CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]")
+
+
+def unwrap_lines(text: str) -> str:
+    """把 OCR 带来的「排版换行」合回一行：一句话被折成两行时合并（中文直接相连，其它用空格）；
+    空行（真正的分段）和以选项 / 题号 / 序号开头的行保持换行。"""
+    out: list[str] = []
+    for raw in text.replace("\r", "").split("\n"):
+        line = raw.strip()
+        if not line:
+            if out and out[-1] != "":
+                out.append("")
+            continue
+        if out and out[-1] != "" and not _LINE_START.match(line):
+            prev = out[-1]
+            glue = "" if (_CJK.search(prev[-1]) and _CJK.search(line[0])) else " "
+            out[-1] = prev + glue + line
+        else:
+            out.append(line)
+    return "\n".join(out).strip()
+
+
 def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | None:
     """中转模式下模型可能多给或少给字段：只保留已知字段并补默认值；空块丢弃。学科缺失时继承卷面学科。"""
     if not isinstance(raw, dict):
@@ -105,7 +128,7 @@ def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | No
         if blank and blank.id not in seen:
             seen.add(blank.id)
             blanks.append(blank)
-    text = _str(raw.get("text"))
+    text = unwrap_lines(_str(raw.get("text")))
     if number and btype == "item":
         text = re.sub(r"^\s*" + re.escape(number) + r"\s*[.．、]\s*", "", text, count=1)
     # 文本里引用了但 blanks 里没有的占位，补一个空记录，保证渲染时每个占位都有落点

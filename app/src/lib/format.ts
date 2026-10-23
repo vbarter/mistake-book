@@ -76,3 +76,24 @@ export function greetingHint(): string {
 export function letter(i: number): string {
   return String.fromCharCode(65 + i);
 }
+
+const LINE_START = /^\s*(?:[A-H][.、．)）]|\(?\d{1,3}[.)）、．]|[①-⑳]|[一二三四五六七八九十]+[、.．]|[(（]\d{1,3}[)）])/;
+const CJK = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/;
+
+/** 把 OCR 带来的排版换行合回一行（老数据用；新扫描的服务端已处理）：一句话被折成两行时合并，空行和以选项 / 题号 / 序号开头的行保持换行 */
+export function unwrapLines(text: string): string {
+  const out: string[] = [];
+  for (const raw of text.replace(/\r/g, "").split("\n")) {
+    const line = raw.trim();
+    if (!line) {
+      if (out.length && out[out.length - 1] !== "") out.push("");
+      continue;
+    }
+    const prev = out[out.length - 1];
+    if (prev && !LINE_START.test(line)) {
+      const glue = CJK.test(prev[prev.length - 1]) && CJK.test(line[0]) ? "" : " ";
+      out[out.length - 1] = prev + glue + line;
+    } else out.push(line);
+  }
+  return out.join("\n").trim();
+}
