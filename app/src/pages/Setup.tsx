@@ -37,7 +37,7 @@ export default function Setup() {
   };
 
   return (
-    <div className="screen screen--card">
+    <div className="screen screen--card screen--narrow">
       <InlineNav title="告诉我一点点" back />
       <div className="screen__content screen__content--modal" style={{ gap: 24, paddingTop: 12 }}>
         <p className="t-sub c-sec">只用来选年级知识点和安排学科，不收集学校和姓名。</p>

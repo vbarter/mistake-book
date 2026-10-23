@@ -175,7 +175,7 @@ export default function Capture() {
               </span>
               <span className="t-foot" style={{ color: "var(--brand)" }}>重命名</span>
             </button>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+            <div className="thumb-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
               {pages.map((p, i) => (
                 <div key={p.id} style={{ position: "relative" }}>
                   <img src={p.src} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 10, border: "1px solid var(--separator-light)" }} />

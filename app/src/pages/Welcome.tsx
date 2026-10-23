@@ -11,8 +11,8 @@ const features: { icon: IconName; title: string; text: string }[] = [
 export default function Welcome() {
   const nav = useNavigate();
   return (
-    <div className="screen screen--card">
-      <div className="screen__content screen__content--modal" style={{ padding: "calc(var(--safe-top) + 48px) 24px calc(var(--safe-bottom) + 24px)", gap: 28 }}>
+    <div className="screen screen--card screen--narrow">
+      <div className="screen__content screen__content--modal" style={{ paddingTop: "calc(var(--safe-top) + 48px)", paddingLeft: 24, paddingRight: 24, paddingBottom: "calc(var(--safe-bottom) + 24px)", gap: 28 }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, paddingTop: 16 }}>
           <div style={{ width: 96, height: 96, borderRadius: 26, background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
             <Icon name="camera" size={52} />

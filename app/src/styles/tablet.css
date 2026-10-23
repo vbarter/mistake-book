@@ -1,0 +1,54 @@
+/* iPad / 平板适配（宽度 ≥ 768px）
+ *
+ * 思路和 iPad 原生应用一致：
+ * - 正文收在居中的阅读宽度里（--content-w），两侧留白，卡片和按钮不再被拉成整屏长条
+ * - 底部操作栏和导航栏的背景仍然铺满，里面的内容和正文对齐
+ * - 底部弹出的 Sheet 变成居中对话框；Tab 栏图标和文字横排、居中
+ * - 横屏同样适用，内容宽度不变，只是两侧留白更多
+ */
+@media (min-width: 768px) {
+  :root { --content-w: 820px; }
+  /* 每个页面按自己的 --content-w 算两侧留白（窄页面覆盖 --content-w 后这里会重新计算） */
+  :root, .screen { --gutter: max(32px, calc((100vw - var(--content-w)) / 2)); }
+
+  /* 欢迎、登录、首次设置这类表单页：更窄的一栏，按钮不会太长 */
+  .screen--narrow { --content-w: 560px; }
+
+  /* 导航：大标题、行内导航和正文左右对齐 */
+  .nav { padding-left: var(--gutter); padding-right: var(--gutter); padding-top: calc(var(--safe-top) + 14px); }
+  .nav--inline { padding-left: calc(var(--gutter) - 8px); padding-right: calc(var(--gutter) - 8px); }
+  .nav__side { min-width: 120px; }
+
+  /* 正文 */
+  /* 有些页面写了行内 padding，平板上左右边距以这里为准 */
+  .screen__content { padding-left: var(--gutter) !important; padding-right: var(--gutter) !important; }
+
+  /* 底部操作栏：背景铺满，按钮收在内容宽度里，主次按钮不再拉到整屏 */
+  .bottom-bar { margin-left: calc(-1 * var(--gutter)); margin-right: calc(-1 * var(--gutter)); padding-left: var(--gutter); padding-right: var(--gutter); }
+
+  /* Sheet → 对话框：水平居中、靠上放（和 iPad 表单弹窗一样），弹出键盘时不会被挡住 */
+  .sheet-backdrop { align-items: flex-start; justify-content: center; padding: max(56px, 9vh) 32px 32px; }
+  .sheet { width: min(560px, 100%); border-radius: 22px; padding: 20px 24px 24px; max-height: 82vh; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22); animation: dialog-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .sheet__grabber { display: none; }
+  @keyframes dialog-in { from { transform: scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* 横幅提示居中，不再横跨整屏 */
+  .banner-host { left: 50%; right: auto; width: min(560px, calc(100vw - 48px)); transform: translateX(-50%); }
+
+  /* Tab 栏：iPad 风格，图标和文字横排，整体居中 */
+  .tabbar { justify-content: center; gap: 8px; }
+  .tab { flex: 0 0 168px; flex-direction: row; gap: 8px; font-size: 14px; font-weight: 600; }
+
+  /* 拍照页的照片缩略图：一行放更多 */
+  .thumb-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+
+  /* 电子试卷字号略大，更接近纸面阅读 */
+  body .blk-text { font-size: 16px; line-height: 28px; } /* body 前缀：paper.css 在试卷页按需加载，要比它优先 */
+}
+
+/* 大屏横屏（≥ 1180px，如 iPad Pro 横屏）：内容再宽一些 */
+@media (min-width: 1180px) {
+  :root { --content-w: 900px; }
+  .screen--narrow { --content-w: 560px; }
+  .thumb-grid { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+}

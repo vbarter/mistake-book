@@ -99,7 +99,7 @@ export default function Login() {
   };
 
   return (
-    <div className="screen screen--card">
+    <div className="screen screen--card screen--narrow">
       <InlineNav title={binding ? "绑定账号" : "登录"} back />
       <div className="screen__content screen__content--modal" style={{ gap: 20, paddingTop: 12 }}>
         <p className="t-sub c-sec">{binding ? "绑定后错题会备份到账号，换手机也不丢。" : "登录后可以同步错题、开启复习提醒。"}</p>
