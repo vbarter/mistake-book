@@ -130,3 +130,6 @@
 .part__head { display: flex; align-items: center; gap: 8px; }
 .part__label { font-weight: 800; color: var(--label); }
 .part__line { display: block; }
+
+/* 判定：✅ / ❌ */
+.verdict { font-size: 18px; line-height: 1; display: inline-block; }

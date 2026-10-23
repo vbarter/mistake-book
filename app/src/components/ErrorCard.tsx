@@ -22,11 +22,12 @@ export function jumpToError(key: string) {
 
 const unanswered = (s: string) => !s.trim() || s.trim() === "未作答";
 
-function Verdict({ mark, student, ai }: { mark: Mark; student: string; ai?: boolean }) {
+/** 判定：对 ✅、错 ❌，不区分是老师批的还是 AI 判的 */
+export function Verdict({ mark, student }: { mark: Mark; student: string }) {
   if (mark === "blank" || unanswered(student)) return <Tag kind="pending" icon="alert">未作答</Tag>;
-  if (mark === "correct") return <Tag kind="correct" icon={ai ? "sparkles" : "check"}>{ai ? "AI 判对" : "对"}</Tag>;
-  if (mark === "partial") return <Tag kind="partial" icon={ai ? "sparkles" : "warning"}>{ai ? "AI 判半对" : "半对"}</Tag>;
-  if (mark === "wrong") return <Tag kind="wrong" icon={ai ? "sparkles" : "xmark"}>{ai ? "AI 判错" : "错"}</Tag>;
+  if (mark === "correct") return <span className="verdict" role="img" aria-label="对">✅</span>;
+  if (mark === "wrong") return <span className="verdict" role="img" aria-label="错">❌</span>;
+  if (mark === "partial") return <Tag kind="partial" icon="warning">半对</Tag>;
   return <Tag kind="neutral" icon="info">未批改</Tag>;
 }
 
@@ -58,7 +59,7 @@ function PartRow({ p }: { p: ErrorPart }) {
     <div className="part">
       <div className="part__head">
         <span className="part__label">{p.label}</span>
-        <Verdict mark={p.mark} student={p.student} ai={p.ai} />
+        <Verdict mark={p.mark} student={p.student} />
       </div>
       <span className="part__line">作答：<Answer text={p.student} wrong={wrong} /></span>
       {p.mark !== "correct" && <span className="part__line">正确：<b className="ans-right">{p.answer ? <MathText text={p.answer} /> : "—"}</b></span>}
@@ -77,7 +78,7 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span className="t-headline">第 {q.number} 题</span>
         <SubjectChip subject={q.subject} small />
-        <span className="t-cap c-sec">{QTYPE_LABEL[q.questionType]}{q.aiGraded ? " · AI 阅卷" : ""}</span>
+        <span className="t-cap c-sec">{QTYPE_LABEL[q.questionType]}</span>
         <span style={{ marginLeft: "auto" }}>
           <Tag kind={item.kind === "未作答" ? "pending" : item.kind === "半对" ? "partial" : "wrong"} icon={item.kind === "未作答" ? "alert" : item.kind === "半对" ? "warning" : "xmark"}>{item.kind}</Tag>
         </span>

@@ -45,11 +45,12 @@ function renderPrint(text: string, blanks: DigitizedBlank[]): ReactNode[] {
   return out;
 }
 
-function MarkChip({ mark, student, ai }: { mark: Mark; student: string; ai?: boolean }) {
+/** 作答表格的判定列：对 ✅、错 ❌（老师批的和 AI 判的一样显示） */
+function MarkChip({ mark, student }: { mark: Mark; student: string }) {
   if (mark === "blank" || (mark === "wrong" && unanswered(student))) return <Tag kind="pending" icon="alert">{UNANSWERED}</Tag>;
-  const kind = mark === "correct" ? "correct" : mark === "wrong" ? "wrong" : mark === "partial" ? "partial" : "neutral";
-  // 老师没批改、由 AI 阅卷的结论：标上「AI」，和老师的批改区分开
-  return <Tag kind={kind} icon={mark === "unmarked" ? "info" : ai ? "sparkles" : undefined}>{ai && mark !== "unmarked" ? `AI 判${mark === "correct" ? "对" : mark === "wrong" ? "错" : "半对"}` : MARK_LABEL[mark]}</Tag>;
+  if (mark === "correct") return <span className="verdict" role="img" aria-label="对">✅</span>;
+  if (mark === "wrong") return <span className="verdict" role="img" aria-label="错">❌</span>;
+  return <Tag kind={mark === "partial" ? "partial" : "neutral"} icon={mark === "unmarked" ? "info" : undefined}>{MARK_LABEL[mark]}</Tag>;
 }
 
 /** 一张试卷的电子版：「试卷」是可打印的干净原题，「作答」逐空列出手写转写与批改，「错题」按试卷顺序列出（按大题分组、卡片上标知识点）。 */
@@ -229,7 +230,7 @@ export default function Paper() {
                 <span className="ans__num">{b.number}</span>
                 <span className={`ans__hand${b.mark === "wrong" || b.mark === "partial" ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : <MathText text={b.student} />}</span>
                 <span>
-                  <MarkChip mark={b.mark} student={b.student} ai={b.ai} />
+                  <MarkChip mark={b.mark} student={b.student} />
                   {b.note && b.note !== UNANSWERED && <span className="t-cap" style={{ color: "var(--wrong)", display: "block" }}>{b.note}</span>}
                 </span>
                 <span className="ans__answer">{b.mark === "correct" ? "" : <MathText text={b.answer} />}</span>
