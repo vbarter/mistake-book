@@ -5,7 +5,7 @@ import { ErrorCard } from "../components/ErrorCard";
 import { ExportSheet } from "../components/ExportSheet";
 import { Icon } from "../components/Icon";
 import { Empty, LargeNav } from "../components/ui";
-import { Hint, IconSegmented, KnowledgeIcon, SubjectTile, subjectColors } from "../components/v2";
+import { IconSegmented, KnowledgeIcon, SubjectTile, subjectColors } from "../components/v2";
 import { allErrors, groupByKnowledge, groupByMonth, groupBySubject, type ErrorItem } from "../lib/errors";
 import { listFolders, setCorrected, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL } from "../lib/format";
@@ -151,7 +151,6 @@ export default function Library() {
               </>
             )}
 
-            <Hint>{view === "subject" ? "「按时间」是月份 → 文件夹 → 题。" : "「按学科」是学科 → 知识点 → 题。"}右上角导出的是当前范围：{scopeLabel}。</Hint>
           </>
         )}
       </div>
