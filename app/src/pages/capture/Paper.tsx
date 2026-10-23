@@ -205,7 +205,7 @@ export default function Paper() {
     <>
       <Hint icon="pencil">学生手写内容的转写，与老师批改、正确答案逐空对照。空题按未作答计入错题。</Hint>
       {sheets.map((sheet, si) => {
-        const rows = sheet.blocks.flatMap((b) => (b.type === "passage" || b.type === "item" ? b.blanks.map((x) => ({ ...x, mark: autoMark(x.mark, x.student, x.answer, b.questionType) })) : []));
+        const rows = sheet.blocks.flatMap((b, bi) => (b.type === "passage" || b.type === "item" ? b.blanks.map((x) => ({ ...x, rowKey: `${bi}:${x.id}`, mark: autoMark(x.mark, x.student, x.answer, b.questionType) })) : []));
         if (rows.length === 0) return null;
         return (
           <div className="card ans" key={si} style={{ gap: 0, padding: "10px 14px" }}>
@@ -220,7 +220,7 @@ export default function Paper() {
               <span>正确答案</span>
             </div>
             {rows.map((b) => (
-              <div className={`ans__row${b.mark === "wrong" || b.mark === "partial" ? " ans__row--wrong" : isProblemMark(b.mark, b.student) ? " ans__row--blank" : ""}`} key={b.id}>
+              <div className={`ans__row${b.mark === "wrong" || b.mark === "partial" ? " ans__row--wrong" : isProblemMark(b.mark, b.student) ? " ans__row--blank" : ""}`} key={b.rowKey}>
                 <span className="ans__num">{b.number}</span>
                 <span className={`ans__hand${b.mark === "wrong" || b.mark === "partial" ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : b.student}</span>
                 <span>

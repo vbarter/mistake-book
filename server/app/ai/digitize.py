@@ -5,10 +5,13 @@
 """
 from __future__ import annotations
 
+import logging
 import re
 
 from ..constants import QUESTION_TYPES, SUBJECTS
 from .base import BLOCK_TYPES, DigitizedBlank, DigitizedBlock, DigitizedPage, DigitizedQuestion
+
+log = logging.getLogger(__name__)
 
 MARKS = ("correct", "wrong", "partial", "blank", "unmarked")  # blank = 未作答，单独一类，不算答错
 UNANSWERED = "未作答"
@@ -221,6 +224,70 @@ def clean_sheets(data: dict, page: int) -> list[DigitizedPage]:
     sheets = [clean_sheet(s, page) for s in (data.get("sheets") or []) if isinstance(s, dict)]
     sheets = [s for s in sheets if s.blocks]
     return sheets or [DigitizedPage(page=page)]
+
+
+def _block_numbers(blk: DigitizedBlock) -> set[str]:
+    if blk.type == "item":
+        return {blk.number.strip()} if blk.number.strip() else set()
+    if blk.type == "passage":
+        return {(b.number or b.id).strip() for b in blk.blanks if (b.number or b.id)}
+    return set()
+
+
+def _text_key(text: str) -> str:
+    """比较两道小题是不是同一题：只留字母数字和汉字，取前 12 个字。"""
+    return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", BLANK_RE.sub("", text or "")).lower()[:12]
+
+
+def drop_ghost_sheets(sheets: list[DigitizedPage]) -> list[DigitizedPage]:
+    """去掉照片边缘残片带来的重复题。
+
+    照片边缘常拍进半截相邻页，模型会把它当成一张没有页码的卷面，还会把残缺短文的空错编成正常卷面上已有的题号。
+    规则：别的卷面有页码、这张没有（或这张既没页码也没大题标题）时视为可疑卷面；
+    可疑卷面里，短文只要有一个空号和正常卷面重复就整段丢掉（编号已不可信），小题题号和题干都相同才丢；
+    丢完没有题的可疑卷面整张去掉。题号分大题重新编号的正常卷面不受影响。"""
+    if len(sheets) < 2:
+        return sheets
+    labeled_any = any(s.label.strip() for s in sheets)
+
+    def suspect(s: DigitizedPage) -> bool:
+        return not s.label.strip() and (labeled_any or not any(b.type == "section" for b in s.blocks))
+
+    solid_nums: set[str] = set()
+    solid_items: dict[str, set[str]] = {}
+    for s in sheets:
+        if suspect(s):
+            continue
+        for blk in s.blocks:
+            solid_nums |= _block_numbers(blk)
+            if blk.type == "item" and blk.number.strip():
+                solid_items.setdefault(blk.number.strip(), set()).add(_text_key(blk.text))
+    if not solid_nums:
+        return sheets
+
+    out: list[DigitizedPage] = []
+    dropped = 0
+    for s in sheets:
+        if not suspect(s):
+            out.append(s)
+            continue
+        keep = []
+        for blk in s.blocks:
+            if blk.type == "passage" and _block_numbers(blk) & solid_nums:
+                dropped += 1
+                continue
+            if blk.type == "item" and _text_key(blk.text) in solid_items.get(blk.number.strip(), set()):
+                dropped += 1
+                continue
+            keep.append(blk)
+        had_questions = any(b.type in ("item", "passage") for b in s.blocks)
+        if had_questions and not any(b.type in ("item", "passage") for b in keep):
+            continue  # 整张都是重复内容：去掉
+        s.blocks = keep
+        out.append(s)
+    if dropped:
+        log.info("dropped %d duplicate block(s) from photo-edge fragments", dropped)
+    return out or sheets
 
 
 # ---------------------------------------------------------------- derive questions

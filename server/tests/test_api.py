@@ -672,3 +672,26 @@ def test_unwrap_lines_joins_wrapped_sentences():
     assert unwrap_lines("材料：\n①第一条\n②第二条") == "材料：\n①第一条\n②第二条"
     blk = clean_block({"type": "item", "number": "21", "text": "half [[21]] hour\nat the sale.", "blanks": [{"id": "21", "student": "C", "answer": "B"}]}, "english")
     assert blk.text == "half [[21]] hour at the sale."
+
+
+def test_drop_ghost_sheets_from_photo_edge():
+    """照片边缘的半截相邻页：没有页码的卷面里，和正常卷面空号重复的短文整段丢，重复的小题丢，其余真题保留。"""
+    from app.ai.digitize import clean_sheets, derive_questions, drop_ghost_sheets
+
+    real = {"label": "第4页", "blocks": [{"type": "section", "label": "II", "title": "Complete the passage"}, {"type": "item", "number": "35", "text": "What a day [[35]]", "blanks": [{"id": "35"}]}, {"type": "passage", "text": "fun [[36]] and [[37]].", "blanks": [{"id": "36", "number": "36", "student": "A"}, {"id": "37", "number": "37", "student": ""}]}]}
+    ghost = {"label": "", "blocks": [
+        {"type": "passage", "text": "environment. Guid [[36]] the club [[37]] and [[39]]", "blanks": [{"id": "36", "number": "36"}, {"id": "37", "number": "37"}, {"id": "39", "number": "39"}]},
+        {"type": "item", "number": "35", "text": "What a day [[35]]", "blanks": [{"id": "35"}]},
+        {"type": "section", "label": "N", "title": "Complet"},
+        {"type": "item", "number": "44", "text": "There are some nice [[44]]", "blanks": [{"id": "44"}]},
+    ]}
+    kept = drop_ghost_sheets(clean_sheets({"sheets": [real, ghost]}, 0))
+    assert [q.number for q in derive_questions(kept)] == ["35", "36", "37", "44"]
+
+    # 只剩重复内容的残片卷面整张去掉
+    only_dup = {"label": "", "blocks": [ghost["blocks"][0]]}
+    assert [s.label for s in drop_ghost_sheets(clean_sheets({"sheets": [real, only_dup]}, 0))] == ["第4页"]
+    # 都没有页码、各有大题标题、分大题重新编号：都保留
+    part1 = {"label": "", "blocks": [{"type": "section", "label": "一"}, {"type": "item", "number": "1", "text": "a [[1]]", "blanks": [{"id": "1"}]}]}
+    part2 = {"label": "", "blocks": [{"type": "section", "label": "二"}, {"type": "item", "number": "1", "text": "b [[1]]", "blanks": [{"id": "1"}]}]}
+    assert len(derive_questions(drop_ghost_sheets(clean_sheets({"sheets": [part1, part2]}, 0)))) == 2

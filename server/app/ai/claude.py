@@ -20,7 +20,7 @@ from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedPage, RecognizedItem, ScannedItem, Variant
 from . import ocr
 from . import queue as page_queue
-from .digitize import clean_sheets, derive_questions
+from .digitize import clean_sheets, derive_questions, drop_ghost_sheets
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +117,7 @@ DIGITIZE_SYSTEM_PROMPT = (
     "OCR 文字里的 LaTeX 标记要这样处理：\\underline{...} 表示原卷划线，正文只保留划线里的文字，并在 instruction 里注明划线部分（如「对划线部分提问：With the help of these games」）；"
     "\\text{...}、\\( \\) 这类包装只是排版，去掉只留内容；真正的数学公式（分数、根号、上下标、方程）保留 LaTeX 写法。\n"
     "输出 sheets：照片里拍到几页卷面就输出几个 sheet（左右两页拍在一张照片里就是两个 sheet，先左后右）。"
+    "照片边缘只拍到一部分的相邻页（文字被照片边缘截断、句子不完整）不要还原，不要为它单独建 sheet，也不要把它的题号记到别的空上；同一题号在整张照片里只能出现一次。"
     "每个 sheet 给出页码文字 label（如「第5页」）、卷头标题 title、卷面总分或得分 score（原样文字）、不属于任何块的零散文字 note，"
     "并根据卷头、页眉页脚、题型判断整张卷子的学科 subject（学科枚举，如「九年级化学」就是 chemistry；题块的 subject 默认和它一致，只有卷子里夹了别科内容才单独标）和考试信息：examLevel（单元测 / 期中 / 期末 / 中考模拟 / 中考 / 高考模拟 / 高考 / 竞赛 / 日常练习）、examGrade（年级或学段，如「九年级」）、"
     "region（地区，如「上海」；嘉定区、浦东新区等区名要写成所属城市）、syllabus（知识点归类依据的考纲或课标名称，如「上海中考英语考纲」「人教版五年级数学课标」）；判断不了的用学生资料里的年级，region 留空。\n"
@@ -465,7 +466,7 @@ class ClaudeProvider(AIProvider):
 
         futures = [page_queue.submit(lambda i=i, p=p: one(i, p), on_start=started) for i, p in enumerate(pages)]
         results = [f.result() for f in futures]
-        sheets = [sheet for group in results for sheet in group]
+        sheets = drop_ghost_sheets([sheet for group in results for sheet in group])
         return sheets, derive_questions(sheets)
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:

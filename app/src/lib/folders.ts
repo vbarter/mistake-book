@@ -199,7 +199,65 @@ export function toPage(src: string): Promise<FolderPage> {
 export function validDigitized(d: DigitizedResult | undefined | null): DigitizedResult | null {
   if (!d || !Array.isArray(d.pages) || !Array.isArray(d.questions)) return null;
   if (!d.pages.every((p) => Array.isArray(p.blocks)) || !d.questions.every((q) => Array.isArray(q.blankIds))) return null;
-  return d;
+  return dropGhostSheets(d);
+}
+
+/** 和服务端 drop_ghost_sheets 同一规则，让以前扫描、带着照片边缘残片的试卷不用重扫也能去重：
+ *  别的卷面有页码、这张没有（或这张既没页码也没大题标题）时视为可疑卷面；可疑卷面里和正常卷面空号重复的短文整段丢，
+ *  题号和题干都相同的小题丢；丢完没题的可疑卷面整张去掉。对应的题目一起去掉，sheet 下标重排。 */
+function dropGhostSheets(d: DigitizedResult): DigitizedResult {
+  type Sheet = DigitizedResult["pages"][number];
+  type Block = Sheet["blocks"][number];
+  if (d.pages.length < 2) return d;
+  const blockNums = (b: Block): string[] =>
+    (b.type === "item" ? [b.number] : b.type === "passage" ? b.blanks.map((x) => x.number || x.id) : []).map((n) => String(n ?? "").trim()).filter(Boolean);
+  const textKey = (t: string) => (t || "").replace(/\[\[[^\]]*\]\]/g, "").replace(/[^0-9A-Za-z\u4e00-\u9fff]/g, "").toLowerCase().slice(0, 12);
+  const labeledAny = d.pages.some((s) => (s.label || "").trim());
+  const suspect = (s: Sheet) => !(s.label || "").trim() && (labeledAny || !s.blocks.some((b) => b.type === "section"));
+  const solidNums = new Set<string>();
+  const solidItems = new Map<string, Set<string>>();
+  d.pages.forEach((s) => {
+    if (suspect(s)) return;
+    s.blocks.forEach((b) => {
+      blockNums(b).forEach((n) => solidNums.add(n));
+      if (b.type === "item" && b.number?.trim()) {
+        const set = solidItems.get(b.number.trim()) ?? new Set<string>();
+        set.add(textKey(b.text));
+        solidItems.set(b.number.trim(), set);
+      }
+    });
+  });
+  if (solidNums.size === 0) return d;
+
+  const isQ = (b: Block) => b.type === "item" || b.type === "passage";
+  const droppedBlocks = new Map<number, Set<number>>(); // sheet → 被丢掉的块下标
+  const droppedSheets = new Set<number>();
+  const pages = d.pages.map((s, si) => {
+    if (!suspect(s)) return s;
+    const gone = new Set<number>();
+    s.blocks.forEach((b, bi) => {
+      if (b.type === "passage" && blockNums(b).some((n) => solidNums.has(n))) gone.add(bi);
+      if (b.type === "item" && solidItems.get((b.number || "").trim())?.has(textKey(b.text))) gone.add(bi);
+    });
+    if (gone.size === 0) return s;
+    droppedBlocks.set(si, gone);
+    const keep = s.blocks.filter((_, bi) => !gone.has(bi));
+    if (s.blocks.some(isQ) && !keep.some(isQ)) droppedSheets.add(si);
+    return { ...s, blocks: keep };
+  });
+  if (droppedBlocks.size === 0) return d;
+
+  // 题目跟着去掉；blockIndex 按剩下的块重排，sheet 下标按剩下的卷面重排
+  const sheetMap = new Map<number, number>();
+  pages.forEach((_, i) => { if (!droppedSheets.has(i)) sheetMap.set(i, sheetMap.size); });
+  const blockShift = (si: number, bi: number) => [...(droppedBlocks.get(si) ?? [])].filter((x) => x < bi).length;
+  return {
+    ...d,
+    pages: pages.filter((_, i) => !droppedSheets.has(i)),
+    questions: d.questions
+      .filter((q) => q.sheet === undefined || (!droppedSheets.has(q.sheet) && !droppedBlocks.get(q.sheet)?.has(q.blockIndex)))
+      .map((q) => (q.sheet === undefined ? q : { ...q, sheet: sheetMap.get(q.sheet)!, blockIndex: q.blockIndex - blockShift(q.sheet, q.blockIndex) })),
+  };
 }
 
 const SUBSUP: Record<string, string> = Object.fromEntries([..."₀₁₂₃₄₅₆₇₈₉"].map((c, i) => [c, String(i)]).concat([..."⁰¹²³⁴⁵⁶⁷⁸⁹"].map((c, i) => [c, String(i)])));
