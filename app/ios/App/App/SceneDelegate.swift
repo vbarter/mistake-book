@@ -16,6 +16,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
     }
 
+    /// 打开 iOS 原生的边缘右滑返回手势：WKWebView 默认关闭，开启后和前端路由的历史记录配合，手势带系统的滑动动画。
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        guard let bridge = window?.rootViewController as? CAPBridgeViewController, let webView = bridge.webView else { return }
+        if !webView.allowsBackForwardNavigationGestures {
+            webView.allowsBackForwardNavigationGestures = true
+        }
+    }
+
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         guard let url = URLContexts.first?.url else { return }
         _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, open: url, options: [:])

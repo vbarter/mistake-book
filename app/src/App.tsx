@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./store/auth";
 import { startJobPoller } from "./lib/jobs";
+import { isTabRoot, setupBackButton, setupEdgeSwipeBack } from "./lib/native";
 import { BannerHost, Spinner } from "./components/ui";
 import { TabBar } from "./components/TabBar";
 
@@ -41,6 +42,13 @@ function ScrollToTop() {
   return null;
 }
 
+/** 边缘右滑返回（网页层兜底；iOS 原生手势先识别时这里不会触发） */
+function EdgeSwipeBack() {
+  const nav = useNavigate();
+  useEffect(() => setupEdgeSwipeBack(() => nav(-1), () => isTabRoot(window.location.pathname) || window.history.length <= 1), [nav]);
+  return null;
+}
+
 export default function App() {
   const bootstrap = useAuth((s) => s.bootstrap);
   const ready = useAuth((s) => s.ready);
@@ -53,12 +61,19 @@ export default function App() {
     if (!token) return;
     return startJobPoller();
   }, [token]);
+  // Android 返回键
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    setupBackButton().then((fn) => { stop = fn; });
+    return () => stop?.();
+  }, []);
 
   if (!ready) return <Spinner />;
 
   return (
     <>
       <ScrollToTop />
+      <EdgeSwipeBack />
       <BannerHost />
       <Routes>
         <Route path="/" element={<Navigate to={token ? "/papers" : "/welcome"} replace />} />

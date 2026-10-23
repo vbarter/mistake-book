@@ -176,3 +176,63 @@ export async function exportPdf(blob: Blob, filename: string): Promise<void> {
   }
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
+
+/** Android 返回键 / 返回手势：有历史就后退，在首页就退出 App。iOS 用 WKWebView 的原生边缘滑动返回（原生壳里打开）。 */
+export async function setupBackButton(): Promise<() => void> {
+  if (!isNative) return () => {};
+  try {
+    const { App } = await import("@capacitor/app");
+    const handle = await App.addListener("backButton", ({ canGoBack }) => {
+      if (canGoBack && window.history.length > 1) window.history.back();
+      else void App.exitApp();
+    });
+    return () => { void handle.remove(); };
+  } catch {
+    return () => {};
+  }
+}
+
+const TAB_ROOTS = new Set(["/papers", "/library", "/profile", "/welcome", "/", "/setup", "/login"]);
+
+/**
+ * 网页层的边缘右滑返回：从屏幕左边缘 28px 内按下、横向拖过 70px 且基本水平，松手就后退一页。
+ * iOS 上原生 WKWebView 的滑动返回手势先识别到时会给页面 touchcancel，这里就不再处理，不会退两次；
+ * 原生没接管（Android / 网页）时由这里兜底。Tab 根页面不处理。
+ */
+export function setupEdgeSwipeBack(onBack: () => void, isRoot: () => boolean): () => void {
+  let tracking = false;
+  let startX = 0;
+  let startY = 0;
+  let armed = false;
+  const onStart = (e: TouchEvent) => {
+    const t = e.touches[0];
+    if (!t || t.clientX > 28 || isRoot()) { tracking = false; return; }
+    tracking = true; armed = false; startX = t.clientX; startY = t.clientY;
+  };
+  const onMove = (e: TouchEvent) => {
+    if (!tracking) return;
+    const t = e.touches[0];
+    if (!t) return;
+    const dx = t.clientX - startX;
+    const dy = Math.abs(t.clientY - startY);
+    if (dy > 50 && dx < 40) tracking = false;
+    else if (dx > 70 && dy < 50) armed = true;
+  };
+  const onEnd = () => {
+    if (tracking && armed) onBack();
+    tracking = false; armed = false;
+  };
+  const onCancel = () => { tracking = false; armed = false; };
+  document.addEventListener("touchstart", onStart, { passive: true });
+  document.addEventListener("touchmove", onMove, { passive: true });
+  document.addEventListener("touchend", onEnd, { passive: true });
+  document.addEventListener("touchcancel", onCancel, { passive: true });
+  return () => {
+    document.removeEventListener("touchstart", onStart);
+    document.removeEventListener("touchmove", onMove);
+    document.removeEventListener("touchend", onEnd);
+    document.removeEventListener("touchcancel", onCancel);
+  };
+}
+
+export const isTabRoot = (pathname: string) => TAB_ROOTS.has(pathname);
