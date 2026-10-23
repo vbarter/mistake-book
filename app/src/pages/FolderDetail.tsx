@@ -7,11 +7,10 @@ import { SwipeSortList } from "../components/SwipeSortList";
 import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
-import { folderErrors, groupByKnowledge, type ErrorItem } from "../lib/errors";
-import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, paperSubject, reorderPapers, saveFolder, setCorrected, type Folder } from "../lib/folders";
+import { folderErrors, groupByKnowledge } from "../lib/errors";
+import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, paperSubject, reorderPapers, saveFolder, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
 import { scanStageText, useJobs } from "../lib/jobs";
-import { haptic } from "../lib/native";
 import { toast } from "../store/banner";
 import { useCapture } from "../store/capture";
 
@@ -58,12 +57,6 @@ export default function FolderDetail() {
     nav("/capture", { state: { folderId: folder.id, source } });
   };
 
-  const toggle = async (item: ErrorItem, next: boolean) => {
-    await setCorrected(item.folderId, item.paperId, item.q.index, next);
-    void haptic.selection();
-    await reload();
-  };
-
   const saveMeta = async () => {
     await saveFolder({ ...folder, name: name.trim() || folder.name, subject });
     setRename(false);
@@ -103,7 +96,6 @@ export default function FolderDetail() {
                     <Tag kind="wrong">{st.wrong} 错</Tag>
                     {st.blank > 0 && <Tag kind="pending" icon="alert">{st.blank} 空</Tag>}
                     <Tag kind="correct">{st.correct} 对</Tag>
-                    {st.problems > 0 && st.corrected >= st.problems && <Tag kind="correct" icon="checkcircle">全部订正</Tag>}
                   </>
                 ) : (
                   <Tag kind="pending">待扫描</Tag>
@@ -131,12 +123,11 @@ export default function FolderDetail() {
           ))}
         </div>
       )}
-      <ErrorFilterTags value={filter} onChange={setFilter} counts={{ wrong: errors.filter((e) => e.kind !== "未作答" && !e.corrected).length, blank: errors.filter((e) => e.kind === "未作答" && !e.corrected).length, corrected: errors.filter((e) => e.corrected).length }} />
+      <ErrorFilterTags value={filter} onChange={setFilter} counts={{ wrong: errors.filter((e) => e.kind !== "未作答").length, blank: errors.filter((e) => e.kind === "未作答").length }} />
       {errors.length === 0 && <Empty icon="seal" title={stats.unscanned > 0 ? "先扫描试卷" : "这个文件夹没有错题，也没有空题"} text={stats.unscanned > 0 ? "扫描后错题会自动出现在这里。" : "真棒。"} />}
       {errors.length > 0 && shown.length === 0 && <Empty icon="seal" title="这一类没有题" action={<Button size="xs" variant="plain" onClick={() => setFilter("all")}>看全部</Button>} />}
       {groups.map(([k, items]) => {
-        const done = items.filter((i) => i.corrected).length;
-        const pct = Math.round((done / items.length) * 100);
+        const blank = items.filter((i) => i.kind === "未作答").length;
         const papers = new Set(items.map((i) => i.paperId)).size;
         return (
           <div key={k} className="card" style={{ gap: 10, padding: "12px 14px" }}>
@@ -144,17 +135,15 @@ export default function FolderDetail() {
               <KnowledgeIcon name={k} subject={items[0].subject} />
               <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
                 <span className="kp__name">{k}</span>
-                <span className="kp__meta">{items.length} 题{papers > 1 ? ` · 来自 ${papers} 张试卷` : ""} · {done === items.length ? "全部订正" : done > 0 ? `已订正 ${done}` : "还没订正"}</span>
+                <span className="kp__meta">{items.length} 题{blank > 0 ? `（未作答 ${blank}）` : ""}{papers > 1 ? ` · 来自 ${papers} 张试卷` : ""}</span>
               </span>
-              <span className="t-cap" style={{ fontWeight: 700, color: done === items.length ? "var(--mastered)" : "var(--secondary)" }}>{done === items.length ? <Icon name="checkcircle" size={18} stroke={2.4} /> : `${pct}%`}</span>
+              <span className="tag tag--wrong" style={{ fontWeight: 800 }}>{items.length}</span>
             </div>
-            <span className="progress"><span style={{ width: `${pct}%`, background: done === items.length ? "var(--mastered)" : "var(--brand)" }} /></span>
             <div className="nums">
               {items.map((i) => (
-                <button key={i.key} className={`num-chip${i.corrected ? " num-chip--done" : i.kind === "未作答" ? " num-chip--blank" : ""}`} onClick={() => toggle(i, !i.corrected)} aria-label={`第 ${i.q.number} 题（${i.kind}），${i.corrected ? "已订正，点击撤销" : "点击标记已订正"}`}>
-                  {i.corrected && <Icon name="check" size={11} stroke={3.2} />}
+                <span key={i.key} className={`num-chip${i.kind === "未作答" ? " num-chip--blank" : ""}`} aria-label={`第 ${i.q.number} 题（${i.kind}）`}>
                   {i.q.number}
-                </button>
+                </span>
               ))}
             </div>
           </div>
@@ -164,13 +153,12 @@ export default function FolderDetail() {
         <>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 4px 0" }}>
             <span className="t-sub" style={{ fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="list" size={16} stroke={2.2} />逐题 · {shown.length}</span>
-            <span className="t-foot c-sec">做完一题就勾掉</span>
           </div>
           {groups.map(([k, items]) => (
             <div key={k} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <span className="t-headline" style={{ marginTop: 4 }}>{k} · {items.length} 题</span>
               {items.map((i) => (
-                <ErrorCard key={i.key} item={i} onToggle={(next) => toggle(i, next)} showSource={folder.papers.length > 1} />
+                <ErrorCard key={i.key} item={i} showSource={folder.papers.length > 1} />
               ))}
             </div>
           ))}
@@ -190,10 +178,9 @@ export default function FolderDetail() {
             <span className="t-foot c-sec" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="pin" size={14} stroke={2} />{stats.exam || (stats.subject ? SUBJECT_LABEL[stats.subject] : "扫描后自动识别考试信息")}</span>
           </div>
         </div>
-        <div className="stats">
+        <div className="stats" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
           <Stat label="错题" value={stats.wrong} icon="xcircle" color="var(--wrong)" />
           <Stat label="未作答" value={stats.blank} icon="alert" color="var(--accent-on)" />
-          <Stat label="已订正" value={stats.corrected} icon="checkcircle" color="var(--mastered)" />
         </div>
         <IconSegmented value={tab} onChange={setTab} options={[{ value: "papers", label: `试卷 ${stats.papers}`, icon: "document" }, { value: "errors", label: `错题汇总 ${stats.problems}`, icon: "list" }]} />
 
@@ -228,13 +215,13 @@ export default function FolderDetail() {
       </Sheet>
 
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title={`删除「${folder.name}」？`}>
-        <p className="t-sub c-sec">会删掉里面 {folder.papers.length} 张试卷的照片、电子版和订正记录，不能恢复。</p>
+        <p className="t-sub c-sec">会删掉里面 {folder.papers.length} 张试卷的照片和电子版，不能恢复。</p>
         <Button variant="danger" onClick={async () => { await deleteFolder(folder.id); toast("已删除"); nav("/papers", { replace: true }); }}>删除</Button>
         <Button variant="plain" onClick={() => setConfirmDelete(false)}>取消</Button>
       </Sheet>
 
       <Sheet open={Boolean(deletingPaper)} onClose={() => setDeletingPaper(null)} title="删除这张试卷？">
-        <p className="t-sub c-sec">照片、电子版和订正记录会一起删掉。</p>
+        <p className="t-sub c-sec">照片和电子版会一起删掉。</p>
         <Button variant="danger" onClick={async () => { if (deletingPaper) await deletePaper(folder.id, deletingPaper); setDeletingPaper(null); await reload(); }}>删除</Button>
         <Button variant="plain" onClick={() => setDeletingPaper(null)}>取消</Button>
       </Sheet>

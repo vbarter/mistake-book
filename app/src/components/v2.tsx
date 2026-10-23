@@ -55,16 +55,16 @@ export function Tag({ kind, icon, children, style }: { kind: "wrong" | "correct"
   );
 }
 
-/** 错题进度环：红色是还没订正的，全订正变绿 */
-export function WrongRing({ wrong, corrected, size = 48 }: { wrong: number; corrected: number; size?: number }) {
+/** 错题数小圆环：有错题是红色，没有错题是绿色 */
+export function WrongRing({ wrong, size = 48 }: { wrong: number; size?: number }) {
   const r = (size - 8) / 2;
   const c = 2 * Math.PI * r;
-  const done = wrong === 0 ? 1 : corrected / wrong;
-  const all = wrong > 0 && corrected >= wrong;
-  const color = all || wrong === 0 ? "var(--mastered)" : "var(--wrong)";
-  const track = all || wrong === 0 ? "var(--mastered-bg)" : "var(--wrong-bg)";
+  const done = 1;
+  const all = false;
+  const color = wrong === 0 ? "var(--mastered)" : "var(--wrong)";
+  const track = wrong === 0 ? "var(--mastered-bg)" : "var(--wrong-bg)";
   return (
-    <span style={{ position: "relative", width: size, height: size, flexShrink: 0, display: "inline-block" }} aria-label={`错 ${wrong} 题，已订正 ${corrected}`}>
+    <span style={{ position: "relative", width: size, height: size, flexShrink: 0, display: "inline-block" }} aria-label={`错 ${wrong} 题`}>
       <svg aria-hidden="true" width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: "absolute", inset: 0 }}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth="5" />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${c * Math.max(0.02, done)} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
@@ -139,14 +139,13 @@ export function Hint({ icon = "info", children }: { icon?: IconName; children: R
   );
 }
 
-export type ErrorFilter = "all" | "wrong" | "blank" | "corrected";
+export type ErrorFilter = "all" | "wrong" | "blank";
 
-/** 错题列表上方的三个可点标签：答错 / 未作答 / 已订正，点一下只看这一类，再点取消 */
-export function ErrorFilterTags({ value, onChange, counts }: { value: ErrorFilter; onChange: (v: ErrorFilter) => void; counts: { wrong: number; blank: number; corrected: number } }) {
-  const items: { key: Exclude<ErrorFilter, "all">; label: string; kind: "wrong" | "pending" | "correct"; icon: IconName; count: number }[] = [
+/** 错题列表上方的两个可点标签：答错 / 未作答，点一下只看这一类，再点取消 */
+export function ErrorFilterTags({ value, onChange, counts }: { value: ErrorFilter; onChange: (v: ErrorFilter) => void; counts: { wrong: number; blank: number } }) {
+  const items: { key: Exclude<ErrorFilter, "all">; label: string; kind: "wrong" | "pending"; icon: IconName; count: number }[] = [
     { key: "wrong", label: "答错", kind: "wrong", icon: "xmark", count: counts.wrong },
     { key: "blank", label: "未作答", kind: "pending", icon: "alert", count: counts.blank },
-    { key: "corrected", label: "已订正", kind: "correct", icon: "check", count: counts.corrected },
   ];
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} role="group" aria-label="筛选">
@@ -163,9 +162,8 @@ export function ErrorFilterTags({ value, onChange, counts }: { value: ErrorFilte
   );
 }
 
-export function applyErrorFilter<T extends { kind: string; corrected: boolean }>(items: T[], f: ErrorFilter): T[] {
+export function applyErrorFilter<T extends { kind: string }>(items: T[], f: ErrorFilter): T[] {
   if (f === "all") return items;
-  if (f === "corrected") return items.filter((i) => i.corrected);
-  if (f === "blank") return items.filter((i) => i.kind === "未作答" && !i.corrected);
-  return items.filter((i) => i.kind !== "未作答" && !i.corrected);
+  if (f === "blank") return items.filter((i) => i.kind === "未作答");
+  return items.filter((i) => i.kind !== "未作答");
 }

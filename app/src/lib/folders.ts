@@ -1,7 +1,7 @@
 /** 文件夹 → 试卷 → 照片：本地 IndexedDB 存储，不上传服务器。
  *
  * 一次考试一个文件夹，一个文件夹装多张试卷；每张试卷有若干照片和 AI 还原的电子版。
- * 错题不再单独"收录"：扫描完的试卷里判错的题自动算进文件夹和错题库，订正状态记在试卷上。
+ * 错题不再单独"收录"：扫描完的试卷里判错的题（含未作答）自动算进文件夹和错题库。
  */
 import type { DigitizedQuestion, DigitizedResult, Mark, QuestionType, Subject } from "../api/types";
 
@@ -21,7 +21,7 @@ export interface Paper {
   scannedAt?: string;
   digitized?: DigitizedResult;
   subject?: Subject; // 扫描时从卷头判断
-  corrected?: Record<string, string>; // 题 index → 订正时间
+  corrected?: Record<string, string>; // 已停用（订正功能已去掉），老数据里可能还有，读时忽略
   scanJob?: { id: string; startedAt: string; parts: { page: number; x0: number; w: number }[]; progress: number; status: "queued" | "running"; startedPages?: number; waiting?: number }; // 服务器后台还原中
   scanError?: string; // 上次还原失败的原因
 }
@@ -185,17 +185,6 @@ export async function deletePaper(folderId: string, paperId: string): Promise<Fo
   return saveFolder({ ...folder, papers: folder.papers.filter((p) => p.id !== paperId) });
 }
 
-/** 标记 / 取消某题已订正 */
-export async function setCorrected(folderId: string, paperId: string, questionIndex: number, on: boolean): Promise<Folder | undefined> {
-  const folder = await getFolder(folderId);
-  const paper = folder?.papers.find((p) => p.id === paperId);
-  if (!folder || !paper) return folder;
-  const corrected = { ...(paper.corrected ?? {}) };
-  if (on) corrected[String(questionIndex)] = new Date().toISOString();
-  else delete corrected[String(questionIndex)];
-  return updatePaper(folderId, paperId, { corrected });
-}
-
 /** 把 dataURL 变成照片记录（读出尺寸）。 */
 export function toPage(src: string): Promise<FolderPage> {
   return new Promise((resolve, reject) => {
@@ -263,19 +252,18 @@ export const isWrong = (q: DigitizedQuestion) => {
 };
 /** 未作答：新数据是 blank；旧数据存成 wrong + 空作答 */
 export const isBlank = (q: DigitizedQuestion) => q.mark === "blank" || (q.mark === "wrong" && !q.studentAnswer.trim());
-/** 答错或未作答都需要订正 */
+/** 答错或未作答都算错题 */
 export const isProblem = (q: DigitizedQuestion) => isBlank(q) || isWrong(q);
 /** 真正答错（排除未作答） */
 export const isReallyWrong = (q: DigitizedQuestion) => isWrong(q) && !isBlank(q);
 
 /** 一张试卷的统计 */
-export function paperStats(paper: Paper): { scanned: boolean; total: number; wrong: number; blank: number; problems: number; correct: number; corrected: number } {
+export function paperStats(paper: Paper): { scanned: boolean; total: number; wrong: number; blank: number; problems: number; correct: number } {
   const d = validDigitized(paper.digitized);
-  if (!d) return { scanned: false, total: 0, wrong: 0, blank: 0, problems: 0, correct: 0, corrected: 0 };
+  if (!d) return { scanned: false, total: 0, wrong: 0, blank: 0, problems: 0, correct: 0 };
   const problems = d.questions.filter(isProblem);
   const blank = problems.filter(isBlank).length;
-  const corrected = problems.filter((q) => paper.corrected?.[String(q.index)]).length;
-  return { scanned: true, total: d.questions.length, wrong: problems.length - blank, blank, problems: problems.length, correct: d.questions.filter((q) => effectiveMark(q) === "correct").length, corrected };
+  return { scanned: true, total: d.questions.length, wrong: problems.length - blank, blank, problems: problems.length, correct: d.questions.filter((q) => effectiveMark(q) === "correct").length };
 }
 
 /** 一个文件夹的统计与推断信息（学科、考试信息） */
@@ -291,10 +279,9 @@ export function paperSubject(paper: Paper): Subject | null {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
-export function folderStats(folder: Folder): { papers: number; unscanned: number; wrong: number; blank: number; problems: number; corrected: number; subject: Subject | null; subjects: Subject[]; exam: string; syllabus: string } {
+export function folderStats(folder: Folder): { papers: number; unscanned: number; wrong: number; blank: number; problems: number; subject: Subject | null; subjects: Subject[]; exam: string; syllabus: string } {
   let wrong = 0;
   let blank = 0;
-  let corrected = 0;
   let unscanned = 0;
   const subjectCount = new Map<Subject, number>();
   let exam = "";
@@ -304,7 +291,6 @@ export function folderStats(folder: Folder): { papers: number; unscanned: number
     if (!st.scanned) unscanned += 1;
     wrong += st.wrong;
     blank += st.blank;
-    corrected += st.corrected;
     const ps = paperSubject(p);
     if (ps) subjectCount.set(ps, (subjectCount.get(ps) ?? 0) + 1);
     const d = validDigitized(p.digitized);
@@ -317,5 +303,5 @@ export function folderStats(folder: Folder): { papers: number; unscanned: number
   }
   const ranked = [...subjectCount.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s);
   const subjects = folder.subject ? [folder.subject, ...ranked.filter((s) => s !== folder.subject)] : ranked;
-  return { papers: folder.papers.length, unscanned, wrong, blank, problems: wrong + blank, corrected, subject: subjects[0] ?? null, subjects, exam, syllabus };
+  return { papers: folder.papers.length, unscanned, wrong, blank, problems: wrong + blank, subject: subjects[0] ?? null, subjects, exam, syllabus };
 }

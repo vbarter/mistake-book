@@ -9,7 +9,6 @@ import { Icon } from "./Icon";
 import { Button, Sheet } from "./ui";
 import { Tag } from "./v2";
 
-type Scope = "all" | "open";
 
 /**
  * 导出面板：两种文件。
@@ -18,15 +17,13 @@ type Scope = "all" | "open";
  */
 export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: { open: boolean; onClose: () => void; title: string; subtitle?: string; errors: ErrorItem[]; papers?: Paper[] }) {
   const [kind, setKind] = useState<"book" | "paper">("book");
-  const [scope, setScope] = useState<Scope>("all");
   const [withWrong, setWithWrong] = useState(true);
   const [withBlank, setWithBlank] = useState(true);
   const [busy, setBusy] = useState(false);
   const wrongErrors = errors.filter((e) => e.kind !== "未作答");
   const blankErrors = errors.filter((e) => e.kind === "未作答");
   const typed = errors.filter((e) => (e.kind === "未作答" ? withBlank : withWrong));
-  const openErrors = typed.filter((e) => !e.corrected);
-  const chosen = scope === "all" ? typed : openErrors;
+  const chosen = typed;
   const scanned = (papers ?? []).filter((p) => validDigitized(p.digitized));
   const bookPages = Math.max(1, Math.ceil(toBookItems(chosen).length / 3));
 
@@ -37,7 +34,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
         const items = toBookItems(chosen);
         if (items.length === 0) return toast("这个范围里没有错题");
         const typeLabel = withWrong && withBlank ? "错题 + 未作答" : withBlank ? "只含未作答" : "只含错题";
-        const blob = await apiBlob("/api/digitize/book", { method: "POST", body: { title: `${title} 错题本`, subtitle: [subtitle, `${chosen.length} 题`, typeLabel, scope === "open" ? "只含未订正" : ""].filter(Boolean).join(" · "), items }, timeoutMs: 90000 });
+        const blob = await apiBlob("/api/digitize/book", { method: "POST", body: { title: `${title} 错题本`, subtitle: [subtitle, `${chosen.length} 题`, typeLabel].filter(Boolean).join(" · "), items }, timeoutMs: 90000 });
         await exportPdf(blob, `${title} 错题本.pdf`);
       } else {
         if (scanned.length === 0) return toast("还没有扫描过的试卷");
@@ -107,10 +104,6 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
             <button className={`chip chip--select${withBlank ? " on" : ""}`} aria-pressed={withBlank} onClick={() => setWithBlank((v) => !(v && withWrong) ? true : !v)} style={{ gap: 6 }}>
               <Icon name="alert" size={14} stroke={2.2} />未作答 {blankErrors.length}
             </button>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className={`chip chip--select${scope === "all" ? " on" : ""}`} onClick={() => setScope("all")}>全部 {typed.length}</button>
-            <button className={`chip chip--select${scope === "open" ? " on" : ""}`} onClick={() => setScope("open")}>只要没订正的 {openErrors.length}</button>
           </div>
         </div>
       )}

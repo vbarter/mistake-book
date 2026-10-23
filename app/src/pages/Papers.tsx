@@ -100,7 +100,7 @@ export default function Papers() {
                 </div>
                 {f.papers.some((p) => p.scanJob) ? (
                   <Tag kind="info" icon="sparkles">{scanStageText([...f.papers.filter((p) => p.scanJob)].sort((a, b) => a.scanJob!.progress - b.scanJob!.progress)[0].scanJob!)}</Tag>
-                ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} corrected={st.corrected} />}
+                ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} />}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
@@ -111,7 +111,6 @@ export default function Papers() {
                   {kps.length === 0 && <span className="t-foot c-sec">{st.unscanned > 0 ? "扫一下，错题就自动归到知识点里" : "没有错题，真棒"}</span>}
                 </span>
                 {st.blank > 0 && <Tag kind="pending" icon="alert">空 {st.blank}</Tag>}
-                {st.problems > 0 && st.corrected > 0 && <Tag kind="correct">{st.corrected >= st.problems ? "全部订正" : `已订正 ${st.corrected}`}</Tag>}
                 {st.unscanned > 0 && st.problems === 0 && <Tag kind="accent">去扫描</Tag>}
               </div>
             </button>

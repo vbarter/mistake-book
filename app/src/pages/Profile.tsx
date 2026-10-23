@@ -30,7 +30,7 @@ export default function Profile() {
     const errors = allErrors(folders);
     const papers = folders.reduce((n, f) => n + f.papers.length, 0);
     const bytes = folders.reduce((n, f) => n + f.papers.reduce((m, p) => m + p.pages.reduce((k, pg) => k + pg.src.length * 0.75, 0), 0), 0);
-    return { papers, wrong: errors.length, corrected: errors.filter((e) => e.corrected).length, mb: Math.round(bytes / 1048576) };
+    return { papers, wrong: errors.filter((e) => e.kind !== "未作答").length, blank: errors.filter((e) => e.kind === "未作答").length, mb: Math.round(bytes / 1048576) };
   }, [folders]);
 
   if (!user) return null;
@@ -68,8 +68,8 @@ export default function Profile() {
 
         <div className="stats">
           <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--brand)" }}>{stats.papers}</span><span className="stat__label">张试卷</span></div>
-          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--wrong)" }}>{stats.wrong}</span><span className="stat__label">道错题</span></div>
-          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--mastered)" }}>{stats.corrected}</span><span className="stat__label">已订正</span></div>
+          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--wrong)" }}>{stats.wrong}</span><span className="stat__label">道答错</span></div>
+          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--accent-on)" }}>{stats.blank}</span><span className="stat__label">道未作答</span></div>
         </div>
 
         <div>

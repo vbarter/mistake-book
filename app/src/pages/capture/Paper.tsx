@@ -7,10 +7,9 @@ import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
 import { formatDateTime, unwrapLines } from "../../lib/format";
-import { groupBySection, paperErrors, type ErrorItem } from "../../lib/errors";
-import { autoMark, deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
+import { groupBySection, paperErrors } from "../../lib/errors";
+import { autoMark, deletePaper, getFolder, paperStats, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { scanStageText, useJobs } from "../../lib/jobs";
-import { haptic } from "../../lib/native";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
 
@@ -51,7 +50,7 @@ function MarkChip({ mark, student }: { mark: Mark; student: string }) {
   return <Tag kind={kind} icon={mark === "unmarked" ? "info" : undefined}>{MARK_LABEL[mark]}</Tag>;
 }
 
-/** 一张试卷的电子版：「试卷」是可打印的干净原题，「作答」逐空列出手写转写与批改，「错题」按试卷顺序列出（按大题分组、卡片上标知识点）并可勾选已订正。 */
+/** 一张试卷的电子版：「试卷」是可打印的干净原题，「作答」逐空列出手写转写与批改，「错题」按试卷顺序列出（按大题分组、卡片上标知识点）。 */
 export default function Paper() {
   const nav = useNavigate();
   const { folderId = "", paperId = "" } = useParams();
@@ -109,12 +108,6 @@ export default function Paper() {
   const sheets: DigitizedPage[] = digitized.pages;
   const subject = digitized.questions[0]?.subject;
   const colors = subjectColors(subject);
-
-  const toggle = async (item: ErrorItem, next: boolean) => {
-    await setCorrected(item.folderId, item.paperId, item.q.index, next);
-    void haptic.selection();
-    await reload();
-  };
 
   const rescan = () => {
     setMenu(false);
@@ -246,19 +239,19 @@ export default function Paper() {
   // ---------------------------------------------------------------- 错题
   const errorsTab = (
     <>
-      <ErrorFilterTags value={filter} onChange={setFilter} counts={{ wrong: errors.filter((e) => e.kind !== "未作答" && !e.corrected).length, blank: errors.filter((e) => e.kind === "未作答" && !e.corrected).length, corrected: stats.corrected }} />
+      <ErrorFilterTags value={filter} onChange={setFilter} counts={{ wrong: errors.filter((e) => e.kind !== "未作答").length, blank: errors.filter((e) => e.kind === "未作答").length }} />
       {errors.length === 0 ? (
         <Empty icon="seal" title="这张试卷没有错题，也没有空题" text="真棒。" />
       ) : shown.length === 0 ? (
         <Empty icon="seal" title="这一类没有题" action={<Button size="xs" variant="plain" onClick={() => setFilter("all")}>看全部</Button>} />
       ) : (
         <>
-          <Hint icon="list">按试卷顺序列出，做完一题就勾掉。勾选会同步到文件夹和错题库。</Hint>
+          <Hint icon="list">按试卷顺序列出，同样的错题也会汇总到文件夹和错题库。</Hint>
           {groups.map(([k, items]) => (
             <div key={k} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {k && <span className="t-headline" style={{ marginTop: 4 }}>{k} · {items.length} 题</span>}
               {items.map((i) => (
-                <ErrorCard key={i.key} item={i} showKnowledge onToggle={(next) => toggle(i, next)} />
+                <ErrorCard key={i.key} item={i} showKnowledge />
               ))}
             </div>
           ))}
@@ -296,7 +289,7 @@ export default function Paper() {
 
         <div className="bottom-bar" style={{ marginTop: "auto" }}>
           <Button variant="outline" icon="export" onClick={() => setExporting(true)} style={{ flex: 1 }}>导出这张</Button>
-          <Button icon="pencil" onClick={() => setTab("errors")} style={{ flex: 1.3 }} disabled={stats.problems === 0}>订正 · {stats.problems - stats.corrected}</Button>
+          <Button icon="xcircle" onClick={() => setTab("errors")} style={{ flex: 1.3 }} disabled={stats.problems === 0}>看错题 · {stats.problems}</Button>
         </div>
       </div>
 
@@ -313,7 +306,7 @@ export default function Paper() {
       </Sheet>
 
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="删除这张试卷？">
-        <p className="t-sub c-sec">照片、电子版和订正记录会一起删掉。</p>
+        <p className="t-sub c-sec">照片和电子版会一起删掉。</p>
         <Button variant="danger" onClick={async () => { await deletePaper(folderId, paperId); nav(`/papers/${folderId}`, { replace: true }); }}>删除</Button>
         <Button variant="plain" onClick={() => setConfirmDelete(false)}>取消</Button>
       </Sheet>

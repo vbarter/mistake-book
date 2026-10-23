@@ -1,25 +1,21 @@
 import type { ErrorItem } from "../lib/errors";
 import { QTYPE_LABEL } from "../lib/format";
-import { Icon } from "./Icon";
 import { SubjectChip } from "./ui";
 import { Tag, subjectColors } from "./v2";
 
-/** 一道错题：左侧勾选「已订正」，题干、作答与正确答案、解析、细分知识点；showKnowledge 在没按知识点分组的列表里把知识点标在卡片上 */
-export function ErrorCard({ item, onToggle, showSource, showKnowledge }: { item: ErrorItem; onToggle: (next: boolean) => void; showSource?: boolean; showKnowledge?: boolean }) {
+/** 一道错题：题干、作答与正确答案、解析、细分知识点；showKnowledge 在没按知识点分组的列表里把知识点标在卡片上 */
+export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem; showSource?: boolean; showKnowledge?: boolean }) {
   const q = item.q;
   const c = subjectColors(q.subject);
   const student = q.studentAnswer.trim() || "未作答";
   return (
-    <div className="card" style={{ gap: 8, border: item.corrected ? "1.5px solid var(--mastered)" : "1.5px solid transparent", opacity: item.corrected ? 0.85 : 1 }}>
+    <div className="card" style={{ gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <button role="checkbox" aria-checked={item.corrected} aria-label={`第 ${q.number} 题${item.corrected ? "已订正" : "未订正"}`} className={`pick${item.corrected ? " on" : ""}`} style={item.corrected ? { background: "var(--mastered)" } : undefined} onClick={() => onToggle(!item.corrected)}>
-          {item.corrected && <Icon name="check" size={14} stroke={2.8} />}
-        </button>
         <span className="t-headline">第 {q.number} 题</span>
         <SubjectChip subject={q.subject} small />
         <span className="t-cap c-sec">{QTYPE_LABEL[q.questionType]}</span>
         <span style={{ marginLeft: "auto" }}>
-          {item.corrected ? <Tag kind="correct">已订正</Tag> : <Tag kind={item.kind === "未作答" ? "pending" : item.kind === "半对" ? "partial" : "wrong"} icon={item.kind === "未作答" ? "alert" : item.kind === "半对" ? "warning" : "xmark"}>{item.kind}</Tag>}
+          <Tag kind={item.kind === "未作答" ? "pending" : item.kind === "半对" ? "partial" : "wrong"} icon={item.kind === "未作答" ? "alert" : item.kind === "半对" ? "warning" : "xmark"}>{item.kind}</Tag>
         </span>
       </div>
       {(showSource || item.sectionLabel || showKnowledge) && (

@@ -7,9 +7,8 @@ import { Icon } from "../components/Icon";
 import { Empty, LargeNav } from "../components/ui";
 import { IconSegmented, KnowledgeIcon, SubjectTile, subjectColors } from "../components/v2";
 import { allErrors, groupByKnowledge, groupByMonth, groupBySubject, type ErrorItem } from "../lib/errors";
-import { listFolders, setCorrected, type Folder } from "../lib/folders";
+import { listFolders, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL } from "../lib/format";
-import { haptic } from "../lib/native";
 
 type View = "subject" | "time";
 
@@ -37,12 +36,6 @@ export default function Library() {
   const scopeLabel = view === "subject" ? (activeSubject ? SUBJECT_LABEL[activeSubject] : "全部") : (activeMonth ?? "全部");
   const syllabus = scoped.find((e) => e.q)?.q ? (folders ?? []).flatMap((f) => f.papers).find((p) => p.digitized?.pages.some((s) => s.syllabus))?.digitized?.pages.find((s) => s.syllabus)?.syllabus : "";
 
-  const toggle = async (item: ErrorItem, next: boolean) => {
-    await setCorrected(item.folderId, item.paperId, item.q.index, next);
-    void haptic.selection();
-    await reload();
-  };
-
   /** 某个学科下的知识点：一张分组卡，卡头是学科，行是知识点，点开行展开逐题 */
   const kpGroup = (items: ErrorItem[], subj: Subject) => {
     const groups = groupByKnowledge(items);
@@ -55,10 +48,8 @@ export default function Library() {
             <span className="t-headline" style={{ color: c.color }}>{SUBJECT_LABEL[subj]}</span>
             <span className="t-cap" style={{ color: c.color, opacity: 0.8 }}>{items.length} 题 · {groups.length} 个知识点 · 错得多的在前</span>
           </span>
-          <span className="t-cap" style={{ color: c.color, fontWeight: 700 }}>已订正 {items.filter((i) => i.corrected).length}</span>
         </div>
         {groups.map(([k, list], idx) => {
-          const done = list.filter((i) => i.corrected).length;
           const open = openKey === `${subj}:${k}`;
           const sources = new Set(list.map((i) => i.folderId)).size;
           return (
@@ -67,14 +58,14 @@ export default function Library() {
                 <KnowledgeIcon name={k} subject={subj} />
                 <span className="row__main" style={{ gap: 2 }}>
                   <span className="row__title">{k}</span>
-                  <span className="row__sub">来自 {sources} 个文件夹 · {done === list.length ? "全部订正" : done > 0 ? `已订正 ${done}` : "还没订正"}</span>
+                  <span className="row__sub">来自 {sources} 个文件夹{list.some((i) => i.kind === "未作答") ? ` · 未作答 ${list.filter((i) => i.kind === "未作答").length}` : ""}</span>
                 </span>
-                <span className={`tag ${done === list.length ? "tag--correct" : "tag--wrong"}`} style={{ fontWeight: 800 }}>{list.length}</span>
+                <span className="tag tag--wrong" style={{ fontWeight: 800 }}>{list.length}</span>
                 <Icon name={open ? "chevron-down" : "chevron-right"} size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
               </button>
               {open && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "4px 10px 12px", background: "var(--fill-light)" }}>
-                  {list.map((i) => <ErrorCard key={i.key} item={i} onToggle={(next) => toggle(i, next)} showSource />)}
+                  {list.map((i) => <ErrorCard key={i.key} item={i} showSource />)}
                 </div>
               )}
             </div>
@@ -126,7 +117,6 @@ export default function Library() {
                 </div>
                 {Object.entries(scoped.reduce<Record<string, ErrorItem[]>>((acc, e) => { (acc[e.folderId] ??= []).push(e); return acc; }, {})).map(([fid, list]) => {
                   const f = folders?.find((x) => x.id === fid);
-                  const done = list.filter((i) => i.corrected).length;
                   const open = openKey === `f:${fid}`;
                   return (
                     <div key={fid} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -134,15 +124,15 @@ export default function Library() {
                         <SubjectTile subject={list[0].subject} size="sm" />
                         <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                           <span className="t-headline ellipsis">{f?.name ?? list[0].folderName}</span>
-                          <span className="t-cap c-sec">{new Set(list.map((i) => i.paperId)).size} 张试卷 · {done === list.length ? "全部订正" : done > 0 ? `已订正 ${done}` : "还没订正"}</span>
+                          <span className="t-cap c-sec">{new Set(list.map((i) => i.paperId)).size} 张试卷 · {list.length} 道错题</span>
                         </span>
-                        <span className={`tag ${done === list.length ? "tag--correct" : "tag--wrong"}`} style={{ fontWeight: 800 }}>{list.length}</span>
+                        <span className="tag tag--wrong" style={{ fontWeight: 800 }}>{list.length}</span>
                         <Icon name={open ? "chevron-down" : "chevron-right"} size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                       </button>
                       {open && (
                         <>
                           <button className="t-foot" style={{ color: "var(--brand)", fontWeight: 600, textAlign: "left", padding: "0 4px" }} onClick={() => nav(`/papers/${fid}`)}>打开这个文件夹 ›</button>
-                          {list.map((i) => <ErrorCard key={i.key} item={i} onToggle={(next) => toggle(i, next)} showSource />)}
+                          {list.map((i) => <ErrorCard key={i.key} item={i} showSource />)}
                         </>
                       )}
                     </div>

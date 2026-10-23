@@ -16,8 +16,6 @@ export interface ErrorItem {
   knowledge: string; // 考纲一级知识点（knowledgePoints[0]）
   subKnowledge: string[];
   kind: ErrorKind;
-  corrected: boolean;
-  correctedAt?: string;
   q: DigitizedQuestion;
   stem: string; // 卡片上显示的题干：短文里的空只取当前空所在的那一句（q.stemText 仍是整篇，导出合并用）
   sectionLabel: string; // 所属大题，如「Ⅳ Complete the sentences…」
@@ -84,8 +82,6 @@ export function paperErrors(folder: Folder, paper: Paper): ErrorItem[] {
     knowledge: q.knowledgePoints[0] || "（未标注知识点）",
     subKnowledge: q.knowledgePoints.slice(1),
     kind: kindOf(q),
-    corrected: Boolean(paper.corrected?.[String(q.index)]),
-    correctedAt: paper.corrected?.[String(q.index)],
     q,
     stem: focusSentence(unwrapLines(q.stemText)),
     sectionLabel: sectionOf(paper, q),
