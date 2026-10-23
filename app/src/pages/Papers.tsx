@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Subject } from "../api/types";
 import { Icon } from "../components/Icon";
 import { Button, Empty, LargeNav, Sheet } from "../components/ui";
-import { Hint, SubjectStack, SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
+import { SubjectStack, SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
 import { folderErrors, groupByKnowledge } from "../lib/errors";
 import { createFolder, defaultFolderName, folderStats, listFolders, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
-import { useAuth } from "../store/auth";
 import { useCapture } from "../store/capture";
 
 type Source = "camera" | "photos";
@@ -15,7 +14,6 @@ type Source = "camera" | "photos";
 /** 试卷 Tab：一次考试一个文件夹。点开看里面的试卷和错题汇总；底栏一步录新试卷（先选文件夹或新建）。 */
 export default function Papers() {
   const nav = useNavigate();
-  const user = useAuth((s) => s.user);
   const { reset, setReturnTo } = useCapture();
   const [folders, setFolders] = useState<Folder[] | null>(null);
   const [pick, setPick] = useState<Source | null>(null); // 选文件夹面板
@@ -26,12 +24,6 @@ export default function Papers() {
   useEffect(() => {
     listFolders().then(setFolders).catch(() => setFolders([]));
   }, []);
-
-  const totalPapers = useMemo(() => (folders ?? []).reduce((n, f) => n + f.papers.length, 0), [folders]);
-  const weekPapers = useMemo(() => {
-    const since = Date.now() - 7 * 86400000;
-    return (folders ?? []).reduce((n, f) => n + f.papers.filter((p) => new Date(p.createdAt).getTime() >= since).length, 0);
-  }, [folders]);
 
   const goCapture = (folderId: string | null, source: Source) => {
     reset();
@@ -59,7 +51,7 @@ export default function Papers() {
 
   return (
     <div className="screen">
-      <LargeNav title="我的试卷" eyebrow={folders && folders.length ? `嗨，${user?.nickname ?? "同学"} · 这周录了 ${weekPapers} 张卷子` : `嗨，${user?.nickname ?? "同学"}`} actions={
+      <LargeNav title="我的试卷" actions={
         <button aria-label="新建文件夹" className="tile tile--sm" style={{ background: "var(--brand-tint)", color: "var(--brand-on-tint)", border: 0, width: 44, height: 44, borderRadius: 22 }} onClick={() => { setName(""); setSubject(undefined); setCreating({ source: null }); }}>
           <Icon name="plus" size={22} stroke={2.4} />
         </button>
@@ -107,10 +99,6 @@ export default function Papers() {
             </button>
           );
         })}
-
-        {folders && folders.length > 0 && (
-          <Hint icon="folder">一次考试一个文件夹。拍新试卷时先选文件夹，或者直接新建一个。</Hint>
-        )}
 
         <div className="bottom-bar bottom-bar--tab" style={{ marginTop: "auto" }}>
           <Button icon="camera" onClick={() => startCapture("camera")} style={{ flex: 1.25 }}>拍试卷</Button>
