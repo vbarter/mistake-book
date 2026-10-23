@@ -182,7 +182,7 @@ class MockProvider(AIProvider):
                 items.append(ScannedItem(**sample.to_dict(), page=p, bbox=SAMPLE_BBOXES[i % len(SAMPLE_BBOXES)], reason="有红叉"))
         return items
 
-    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str):
+    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = ""):
         """示例试卷的版面块电子版：两个大题 + 一篇带内嵌空格的短文，共派生 7 题（1 半对 / 3 错 / 3 对）。"""
         sheets: list[DigitizedPage] = []
         for p in range(len(pages)):

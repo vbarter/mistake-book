@@ -4,14 +4,16 @@ import { api } from "../../api/client";
 import type { DigitizedResult } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
-import { createFolder, defaultFolderName, deleteFolder, getFolder, saveFolder, toPage } from "../../lib/folders";
-import { haptic, isNative, pickImage, pickImages, prepareUpload, type UploadPart } from "../../lib/native";
+import { addPaper, deletePaper, getFolder, toPage, updatePaper, validDigitized } from "../../lib/folders";
+import { haptic, pickImage, pickImages, prepareUpload, type UploadPart } from "../../lib/native";
+import { getCity } from "../../lib/prefs";
 import { toast, toastError } from "../../store/banner";
 import { MAX_PAGES, useCapture, type CapturePage } from "../../store/capture";
 
 type Progress = { stage: string; pct: number; elapsed: number };
+type EntryState = { folderId?: string | null; paperId?: string | null; source?: "camera" | "photos" | "sample" } | null;
 
-/** 服务端按上传片段编号；把 page 换回试卷夹里的页下标，并把片段内的 bbox 横向映射回整页坐标 */
+/** 服务端按上传片段编号；把 page 换回试卷里的照片下标，并把片段内的 bbox 横向映射回整页坐标 */
 function remapParts(res: DigitizedResult, parts: UploadPart[]): Pick<DigitizedResult, "pages" | "questions"> {
   const part = (i: number) => parts[i] ?? { page: i, x0: 0, w: 1, image: "" };
   const mapBox = (b: number[], p: UploadPart) => (b.length === 4 ? [p.x0 + b[0] * p.w, b[1], p.x0 + b[2] * p.w, b[3]] : b);
@@ -26,11 +28,11 @@ function remapParts(res: DigitizedResult, parts: UploadPart[]): Pick<DigitizedRe
   return { pages, questions };
 }
 
-/** 录入试卷：拍照 / 相册多选 → 自动归入试卷夹（本地保存）→ 整页扫描识别错题 → 核对。 */
+/** 录入一张试卷：进入即起相机 / 相册 → 照片存进文件夹里的这张试卷 → 扫描还原电子版 → 进电子版页。 */
 export default function Capture() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { folderId, folderName, pages, digitized, setFolder, setFolderName, setDigitized, addPage, removePage, reset, returnTo } = useCapture();
+  const { folderId, paperId, paperName, pages, digitized, setPaper, setPaperName, setDigitized, addPage, removePage, reset, returnTo } = useCapture();
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState(false);
   const [rename, setRename] = useState(false);
@@ -39,43 +41,44 @@ export default function Capture() {
   const abortRef = useRef(false);
   const autoStarted = useRef(false);
   const autoScanRef = useRef(false);
+  const entry = (loc.state as EntryState) ?? null;
+  const targetFolder = folderId ?? entry?.folderId ?? null;
 
-  /** 当前页面持久化到试卷夹（第一次加页时自动新建）。 */
-  const persist = async (nextPages: CapturePage[], name = folderName) => {
+  /** 照片落盘：第一次加页时在文件夹里建这张试卷；之后更新照片并作废旧电子版 */
+  const persist = async (nextPages: CapturePage[]) => {
     if (nextPages.length === 0) return;
-    if (!folderId) {
-      const f = await createFolder(name || defaultFolderName(), nextPages.map(({ id, src, width, height }) => ({ id, src, width, height })));
-      setFolder(f.id, f.name, nextPages);
+    const photos = nextPages.map(({ id, src, width, height }) => ({ id, src, width, height }));
+    const state = useCapture.getState();
+    if (!state.paperId) {
+      const { folder, paper } = await addPaper(targetFolder, photos);
+      setPaper(folder.id, paper.id, paper.name, nextPages);
       return;
     }
-    const existing = await getFolder(folderId);
-    // 页面变了，旧的电子版不再对应，一并清掉
-    if (existing) await saveFolder({ ...existing, name: name || existing.name, pages: nextPages.map(({ id, src, width, height }) => ({ id, src, width, height })), digitized: undefined });
+    if (state.folderId) await updatePaper(state.folderId, state.paperId, { pages: photos, digitized: undefined, scannedAt: undefined, corrected: {} });
   };
 
   const addSources = async (sources: string[]) => {
-    const room = MAX_PAGES - pages.length;
+    const current = useCapture.getState().pages;
+    const room = MAX_PAGES - current.length;
     if (room <= 0) {
-      toast(`一个试卷夹最多 ${MAX_PAGES} 页`);
+      toast(`一张试卷最多 ${MAX_PAGES} 张照片`);
       return;
     }
     const added: CapturePage[] = [];
-    for (const src of sources.slice(0, room)) {
-      const p = await toPage(src);
-      added.push({ ...p, boxes: [] });
-    }
-    if (sources.length > room) toast(`只保留前 ${room} 张，一个试卷夹最多 ${MAX_PAGES} 页`);
+    for (const src of sources.slice(0, room)) added.push(await toPage(src));
+    if (sources.length > room) toast(`只保留前 ${room} 张，一张试卷最多 ${MAX_PAGES} 张照片`);
     added.forEach(addPage);
-    await persist([...pages, ...added]);
+    await persist([...current, ...added]);
     void haptic.light();
   };
 
-  /** 选图。返回是否选到了图；相册多选是一次把整份卷子选完，所以紧接着自动扫描。 */
+  /** 选图。返回是否选到了图；相册多选是一次把整张卷子选完，所以紧接着自动扫描。 */
   const pick = async (source: "camera" | "photos" | "sample"): Promise<boolean> => {
     setBusy(true);
     try {
       if (source === "sample") {
         await addSources([`${import.meta.env.BASE_URL}sample-paper.svg`]);
+        autoScanRef.current = true;
         return true;
       }
       if (source === "photos") {
@@ -98,58 +101,66 @@ export default function Capture() {
     }
   };
 
-  // 从今天页 / 试卷 Tab 直接进入：立刻起相机或相册，不再经过引导页；什么都没选就原路返回
+  const leave = () => {
+    nav(returnTo, { replace: true });
+    reset();
+  };
+
+  // 进入：带 paperId 是回来继续一张已有的试卷；带 source 是立刻起相机 / 相册，什么都没选就原路返回
   useEffect(() => {
-    const state = loc.state as { source?: "camera" | "photos" | "sample" } | null;
-    if (!autoStarted.current && pages.length === 0 && state?.source) {
-      autoStarted.current = true;
-      void pick(state.source).then((got) => {
+    if (autoStarted.current) return;
+    autoStarted.current = true;
+    (async () => {
+      if (entry?.paperId && entry.folderId && pages.length === 0) {
+        const folder = await getFolder(entry.folderId);
+        const paper = folder?.papers.find((p) => p.id === entry.paperId);
+        if (folder && paper) setPaper(folder.id, paper.id, paper.name, paper.pages, validDigitized(paper.digitized));
+      }
+      if (entry?.source && useCapture.getState().pages.length === 0) {
+        const got = await pick(entry.source);
         if (!got && useCapture.getState().pages.length === 0) leave();
-      });
-    }
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 相册多选完成、页面已入夹：自动开始扫描
+  // 相册多选完成、试卷已建：自动开始扫描
   useEffect(() => {
-    if (autoScanRef.current && pages.length > 0 && folderId && !progress) {
+    if (autoScanRef.current && pages.length > 0 && paperId && !progress) {
       autoScanRef.current = false;
       void scan();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pages.length, folderId]);
+  }, [pages.length, paperId]);
 
   const removeCurrentPage = async (id: string) => {
     const next = pages.filter((p) => p.id !== id);
     removePage(id);
-    if (folderId) {
-      const existing = await getFolder(folderId);
-      if (existing) await saveFolder({ ...existing, pages: existing.pages.filter((p) => p.id !== id), digitized: undefined });
+    if (!folderId || !paperId) return;
+    if (next.length === 0) {
+      await deletePaper(folderId, paperId);
+      setPaper(folderId, null, "", []);
+      return;
     }
-    if (next.length === 0 && folderId) {
-      await deleteFolder(folderId);
-      setFolder(null, "", []);
-    }
+    await updatePaper(folderId, paperId, { pages: next.map(({ id: pid, src, width, height }) => ({ id: pid, src, width, height })), digitized: undefined, scannedAt: undefined, corrected: {} });
   };
 
   const saveName = async () => {
-    const name = nameDraft.trim() || defaultFolderName();
-    setFolderName(name);
-    if (folderId) {
-      const existing = await getFolder(folderId);
-      if (existing) await saveFolder({ ...existing, name });
-    }
+    const name = nameDraft.trim() || paperName;
+    setPaperName(name);
+    if (folderId && paperId) await updatePaper(folderId, paperId, { name });
     setRename(false);
   };
 
-  /** 扫描还原电子版：每页按 1568px（宽幅拆两张）上传，AI 按版面还原；结果存进试卷并进入电子版页。 */
+  /** 扫描还原电子版：每张照片按 1568px（宽幅拆两张）上传，AI 按版面还原；结果存进试卷并进入电子版页。 */
   const scan = async () => {
-    if (pages.length === 0) return;
+    const current = useCapture.getState().pages;
+    if (current.length === 0) return;
     abortRef.current = false;
     setProgress({ stage: "正在压缩试卷", pct: 5, elapsed: 0 });
     try {
       const parts: UploadPart[] = [];
-      for (let i = 0; i < pages.length; i++) parts.push(...(await prepareUpload(pages[i].src, i)));
+      for (let i = 0; i < current.length; i++) parts.push(...(await prepareUpload(current[i].src, i)));
       const uploads = parts.map((p) => ({ image: p.image }));
       if (abortRef.current) return;
       const startedAt = Date.now();
@@ -162,7 +173,8 @@ export default function Capture() {
       }, 1000);
       let result: DigitizedResult;
       try {
-        const res = await api<DigitizedResult>("/api/digitize", { method: "POST", body: { pages: uploads }, timeoutMs: 240000 });
+        const region = await getCity();
+        const res = await api<DigitizedResult>("/api/digitize", { method: "POST", body: { pages: uploads, region }, timeoutMs: 240000 });
         result = { ...remapParts(res, parts), provider: res.provider, at: new Date().toISOString() };
       } finally {
         clearInterval(ticker);
@@ -173,14 +185,13 @@ export default function Capture() {
         toast("没有识别到题目，请换一张更清晰的照片", "info");
         return;
       }
-      if (folderId) {
-        const existing = await getFolder(folderId);
-        if (existing) await saveFolder({ ...existing, digitized: result, scannedAt: result.at });
-      }
+      const fid = useCapture.getState().folderId;
+      const pid = useCapture.getState().paperId;
+      if (fid && pid) await updatePaper(fid, pid, { digitized: result, scannedAt: result.at, corrected: {} });
       setDigitized(result);
       setProgress({ stage: "完成", pct: 100, elapsed: Math.round((Date.now() - startedAt) / 1000) });
       void haptic.success();
-      nav("/capture/paper");
+      if (fid && pid) nav(`/papers/${fid}/${pid}`, { replace: true });
     } catch (e) {
       toastError(e);
     } finally {
@@ -188,16 +199,11 @@ export default function Capture() {
     }
   };
 
-  const leave = () => {
-    nav(returnTo, { replace: true });
-    reset();
-  };
-
   return (
     <div className="screen">
       <InlineNav
         title="录入试卷"
-        subtitle={pages.length ? `${folderName || "未命名试卷"} · ${pages.length} 页` : "拍照或从相册多选"}
+        subtitle={pages.length ? `${paperName || "新试卷"} · ${pages.length} 张照片` : "拍照或从相册多选"}
         right={<button className="nav-btn" onClick={leave}>{pages.length ? "完成" : "取消"}</button>}
       />
       <div className="screen__content screen__content--modal" style={{ gap: 16, paddingTop: 4 }}>
@@ -209,26 +215,26 @@ export default function Capture() {
           <Empty
             icon="camera"
             title="把试卷平放，对准整页拍"
-            text="从相册一次选完整份试卷，选好后会自动开始还原。"
+            text="从相册一次选完整张试卷，选好后会自动开始还原。"
             action={<Button size="xs" variant="plain" onClick={() => pick("sample")} disabled={busy}>没有试卷？用示例试卷试试</Button>}
           />
         )}
 
         {pages.length > 0 && (
           <div className="card" style={{ gap: 12 }}>
-            <button style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", textAlign: "left", minHeight: 36 }} onClick={() => { setNameDraft(folderName); setRename(true); }} aria-label="重命名试卷夹">
+            <button style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", textAlign: "left", minHeight: 36 }} onClick={() => { setNameDraft(paperName); setRename(true); }} aria-label="重命名试卷">
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Icon name="book" size={20} style={{ color: "var(--brand)" }} />
-                <span className="t-headline">{folderName || "未命名试卷夹"}</span>
+                <Icon name="document" size={20} style={{ color: "var(--brand)" }} />
+                <span className="t-headline">{paperName || "新试卷"}</span>
               </span>
               <span className="t-foot" style={{ color: "var(--brand)" }}>重命名</span>
             </button>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
               {pages.map((p, i) => (
                 <div key={p.id} style={{ position: "relative" }}>
-                  <img src={p.src} alt={`第 ${i + 1} 页`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 10, border: "1px solid var(--separator-light)" }} />
-                  <span className="chip chip--sm" style={{ position: "absolute", left: 6, top: 6, background: "rgba(0,0,0,.55)", color: "#fff" }}>第 {i + 1} 页</span>
-                  <button className="icon-btn" style={{ position: "absolute", right: 0, bottom: 0, width: 36, height: 36, color: "#fff", background: "rgba(0,0,0,.45)", borderRadius: "10px 0 10px 0" }} aria-label="删除这页" onClick={() => removeCurrentPage(p.id)}>
+                  <img src={p.src} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 10, border: "1px solid var(--separator-light)" }} />
+                  <span className="chip chip--sm" style={{ position: "absolute", left: 6, top: 6, background: "rgba(0,0,0,.55)", color: "#fff" }}>第 {i + 1} 张</span>
+                  <button className="icon-btn" style={{ position: "absolute", right: 0, bottom: 0, width: 36, height: 36, color: "#fff", background: "rgba(0,0,0,.45)", borderRadius: "10px 0 10px 0" }} aria-label="删除这张照片" onClick={() => removeCurrentPage(p.id)}>
                     <Icon name="trash" size={16} />
                   </button>
                 </div>
@@ -236,11 +242,11 @@ export default function Capture() {
               {pages.length < MAX_PAGES && (
                 <button style={{ aspectRatio: "3 / 4", borderRadius: 10, border: "1.5px dashed var(--separator)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, color: "var(--brand)" }} onClick={() => pick("photos")} disabled={busy}>
                   <Icon name="plus" size={24} stroke={2.2} />
-                  <span className="t-foot">加页</span>
+                  <span className="t-foot">加照片</span>
                 </button>
               )}
             </div>
-            <span className="t-foot c-sec">已自动保存到「试卷」· 最多 {MAX_PAGES} 页 · 拍完所有页再扫描</span>
+            <span className="t-foot c-sec">已自动保存 · 一张试卷最多 {MAX_PAGES} 张照片 · 拍完所有页再扫描</span>
           </div>
         )}
 
@@ -249,30 +255,21 @@ export default function Capture() {
             <Button variant="tinted" icon="camera" onClick={() => pick("camera")} disabled={busy || pages.length >= MAX_PAGES} style={{ flex: 1 }}>{pages.length ? "再拍一页" : "拍照"}</Button>
             <Button variant="tinted" icon="photo" onClick={() => pick("photos")} disabled={busy || pages.length >= MAX_PAGES} style={{ flex: 1 }}>从相册选</Button>
           </div>
-          {digitized && pages.length > 0 ? (
-            <Button icon="book" onClick={() => nav("/capture/paper")} disabled={busy}>
-              查看电子版 · {digitized.questions.length} 题
-            </Button>
+          {digitized && pages.length > 0 && folderId && paperId ? (
+            <Button icon="document" onClick={() => nav(`/papers/${folderId}/${paperId}`)} disabled={busy}>查看电子版 · {digitized.questions.length} 题</Button>
           ) : (
             <Button icon="sparkles" onClick={scan} disabled={pages.length === 0 || busy}>
-              {busy ? "处理中…" : `扫描还原电子版${pages.length > 1 ? `（${pages.length} 页）` : ""}`}
+              {busy ? "处理中…" : `扫描还原电子版${pages.length > 1 ? `（${pages.length} 张照片）` : ""}`}
             </Button>
           )}
-          {pages.length > 0 && (
-            <div style={{ display: "flex", justifyContent: "center", gap: 24 }}>
-              {digitized && (
-                <button className="t-sub" style={{ color: "var(--brand)", fontWeight: 500, minHeight: 36 }} onClick={scan}>重新扫描</button>
-              )}
-              <button className="t-sub" style={{ color: "var(--brand)", fontWeight: 500, minHeight: 36 }} onClick={() => nav("/capture/crop")}>
-                改用手动框选
-              </button>
-            </div>
+          {digitized && pages.length > 0 && (
+            <button className="t-sub" style={{ color: "var(--brand)", fontWeight: 500, minHeight: 36 }} onClick={scan}>重新扫描</button>
           )}
         </div>
       </div>
 
-      <Sheet open={rename} onClose={() => setRename(false)} title="试卷夹名称">
-        <input className="input" autoFocus value={nameDraft} maxLength={30} placeholder={defaultFolderName()} onChange={(e) => setNameDraft(e.target.value)} />
+      <Sheet open={rename} onClose={() => setRename(false)} title="试卷名称">
+        <input className="input" autoFocus value={nameDraft} maxLength={30} placeholder="例如：第 5–6 页 · 词汇与句型" onChange={(e) => setNameDraft(e.target.value)} />
         <Button onClick={saveName}>保存</Button>
       </Sheet>
 

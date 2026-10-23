@@ -9,7 +9,7 @@ from flask import Blueprint, Response, abort, current_app, jsonify, request
 from ..ai import AIError, Crop, get_provider
 from ..auth_utils import current_user, login_required
 from ..constants import SUBJECTS
-from ..pdf import build_pdf
+from ..pdf import build_book_pdf, build_papers_pdf
 
 bp = Blueprint("recognize", __name__)
 log = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ def digitize():
     subjects = [s for s in (user.subjects or SUBJECTS) if s in SUBJECTS] or SUBJECTS
     provider = get_provider()
     try:
-        page_infos, questions = provider.digitize_pages(pages, subjects=subjects, grade=user.grade or "5")
+        page_infos, questions = provider.digitize_pages(pages, subjects=subjects, grade=user.grade or "5", region=str(data.get("region") or "")[:20])
     except AIError as e:
         return jsonify({"error": "ai_unavailable", "message": str(e)}), 502
     except Exception:  # noqa: BLE001
@@ -150,16 +150,41 @@ def digitize():
 def digitize_pdf():
     """电子版试卷 → 可打印 PDF：原题干净还原 + 作答与批改对照表 + 错题汇总。前端把扫描结果原样传回。"""
     data = request.get_json(silent=True) or {}
-    sheets = data.get("pages")
-    questions = data.get("questions") or []
-    if not isinstance(sheets, list) or not sheets or not all(isinstance(s, dict) for s in sheets):
-        abort(400, "缺少电子版内容")
-    if not isinstance(questions, list):
-        abort(400, "题目列表格式不对")
     title = str(data.get("title") or "")[:80]
+    papers = data.get("papers")
+    if papers is None:
+        papers = [{"title": title, "pages": data.get("pages"), "questions": data.get("questions") or []}]
+    if not isinstance(papers, list) or not papers or len(papers) > 20:
+        abort(400, "缺少电子版内容")
+    for paper in papers:
+        sheets = paper.get("pages") if isinstance(paper, dict) else None
+        if not isinstance(sheets, list) or not sheets or not all(isinstance(s, dict) for s in sheets):
+            abort(400, "缺少电子版内容")
+        if not isinstance(paper.get("questions", []), list):
+            abort(400, "题目列表格式不对")
     try:
-        pdf = build_pdf(title, sheets, questions)
+        pdf = build_papers_pdf(title, papers)
     except Exception:  # noqa: BLE001
         log.exception("pdf failed")
         return jsonify({"error": "pdf_failed", "message": "生成 PDF 出错了，请稍后重试"}), 500
     return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": "attachment; filename=paper.pdf"})
+
+
+@bp.post("/digitize/book")
+@login_required
+def digitize_book():
+    """错题本 PDF（横向）：左半页空白重做，右半页错题修正。items 由前端按文件夹 / 学科 / 时间范围整理好传来。"""
+    data = request.get_json(silent=True) or {}
+    items = data.get("items")
+    if not isinstance(items, list) or not items or not all(isinstance(x, dict) for x in items):
+        abort(400, "没有可导出的错题")
+    if len(items) > 400:
+        abort(400, "一次最多导出 400 题")
+    title = str(data.get("title") or "错题本")[:80]
+    subtitle = str(data.get("subtitle") or "")[:120]
+    try:
+        pdf = build_book_pdf(title, subtitle, items)
+    except Exception:  # noqa: BLE001
+        log.exception("book pdf failed")
+        return jsonify({"error": "pdf_failed", "message": "生成错题本出错了，请稍后重试"}), 500
+    return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": "attachment; filename=book.pdf"})

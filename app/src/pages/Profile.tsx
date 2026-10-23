@@ -1,25 +1,41 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
-import type { Overview } from "../api/types";
 import { Icon } from "../components/Icon";
 import { Button, LargeNav, Row, Sheet } from "../components/ui";
+import { SubjectTile } from "../components/v2";
+import { allErrors } from "../lib/errors";
+import { listFolders, type Folder } from "../lib/folders";
 import { GRADE_LABEL, SUBJECT_LABEL } from "../lib/format";
-import { useAsync } from "../lib/useAsync";
+import { getCity } from "../lib/prefs";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
-import { ParentGate } from "./ProfilePages";
 
+const BUILD = "1.0 (9)";
+
+/** 我的：账号、年级与城市（决定知识点按哪套考纲归类）、学科、本机数据与隐私、关于。 */
 export default function Profile() {
   const nav = useNavigate();
   const { user, updateProfile } = useAuth();
-  const { data } = useAsync(() => api<Overview>("/api/stats/overview"));
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [city, setCityState] = useState("");
   const [editName, setEditName] = useState(false);
   const [name, setName] = useState(user?.nickname ?? "");
-  const [gate, setGate] = useState<null | (() => void)>(null);
+
+  useEffect(() => {
+    listFolders().then(setFolders).catch(() => setFolders([]));
+    getCity().then(setCityState);
+  }, []);
+
+  const stats = useMemo(() => {
+    const errors = allErrors(folders);
+    const papers = folders.reduce((n, f) => n + f.papers.length, 0);
+    const bytes = folders.reduce((n, f) => n + f.papers.reduce((m, p) => m + p.pages.reduce((k, pg) => k + pg.src.length * 0.75, 0), 0), 0);
+    return { papers, wrong: errors.length, corrected: errors.filter((e) => e.corrected).length, mb: Math.round(bytes / 1048576) };
+  }, [folders]);
 
   if (!user) return null;
-  const topSubject = data?.subjects.length ? [...data.subjects].sort((a, b) => b.total - a.total)[0] : null;
+  const grade = GRADE_LABEL[user.grade] ?? `${user.grade} 年级`;
+  const gradeShort = Number(user.grade) >= 10 ? grade : Number(user.grade) >= 7 ? `初${"一二三"[Number(user.grade) - 7]}` : grade.replace("年级", "");
 
   const saveName = async () => {
     try {
@@ -34,64 +50,57 @@ export default function Profile() {
   return (
     <div className="screen">
       <LargeNav title="我的" />
-      <div className="screen__content" style={{ gap: 16, paddingTop: 6 }}>
-        <div className="card" style={{ gap: 14 }}>
-          <button style={{ display: "flex", alignItems: "center", gap: 14, textAlign: "left", width: "100%" }} onClick={() => { setName(user.nickname); setEditName(true); }}>
-            <span style={{ width: 56, height: 56, borderRadius: 28, background: "var(--brand-tint)", color: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 700, flexShrink: 0 }}>
-              {user.nickname.slice(-1)}
+      <div className="screen__content" style={{ gap: 14, paddingTop: 6 }}>
+        <button className="card card--row" style={{ padding: 16 }} onClick={() => { setName(user.nickname); setEditName(true); }}>
+          <span style={{ position: "relative", flexShrink: 0 }}>
+            <span aria-hidden="true" style={{ width: 60, height: 60, borderRadius: 30, background: "var(--avatar-bg)", color: "var(--avatar-fg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800 }}>{user.nickname.slice(-1)}</span>
+            <span style={{ position: "absolute", right: -4, bottom: -2, fontSize: 10, fontWeight: 800, color: "#fff", background: "var(--brand)", border: "2px solid var(--card)", borderRadius: 9, padding: "1px 6px" }}>{gradeShort}</span>
+          </span>
+          <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+            <span className="t-title3 ellipsis" style={{ fontWeight: 800 }}>{user.nickname}</span>
+            <span className="t-foot c-sec" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="pin" size={13} stroke={2.2} />{[city, grade].filter(Boolean).join(" · ")}</span>
+            <span className="t-cap" style={{ color: user.loginMethod === "guest" ? "var(--secondary)" : "var(--mastered)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <Icon name={user.loginMethod === "guest" ? "info" : "checkcircle"} size={12} stroke={2.6} />{user.loginMethod === "apple" ? "Apple 账号已绑定" : user.loginMethod === "phone" ? "手机号已绑定" : "游客，建议绑定账号"}
             </span>
-            <span style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
-              <span className="t-title3 ellipsis">{user.nickname}</span>
-              <span className="t-sub c-sec">{GRADE_LABEL[user.grade] ?? `${user.grade} 年级`}{data?.streakDays ? ` · 已连续学习 ${data.streakDays} 天` : ""}</span>
-            </span>
-            <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-          </button>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, textAlign: "center" }}>
-            <button style={{ background: "var(--fill-light)", borderRadius: 10, padding: "10px 0", display: "flex", flexDirection: "column" }} onClick={() => nav("/library")}>
-              <span className="num t-title2">{data?.total ?? "–"}</span><span className="t-foot c-sec">错题</span>
-            </button>
-            <button style={{ background: "var(--mastered-bg)", borderRadius: 10, padding: "10px 0", display: "flex", flexDirection: "column", color: "var(--mastered)" }} onClick={() => nav("/library")}>
-              <span className="num t-title2">{data?.mastered ?? "–"}</span><span className="t-foot">已掌握</span>
-            </button>
-            <button style={{ background: "var(--due-bg)", borderRadius: 10, padding: "10px 0", display: "flex", flexDirection: "column", color: "var(--due)" }} onClick={() => nav("/today")}>
-              <span className="num t-title2">{data?.due ?? "–"}</span><span className="t-foot">待复习</span>
-            </button>
-          </div>
+          </span>
+          <Icon name="chevron-right" size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+        </button>
+
+        <div className="stats">
+          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--brand)" }}>{stats.papers}</span><span className="stat__label">张试卷</span></div>
+          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--wrong)" }}>{stats.wrong}</span><span className="stat__label">道错题</span></div>
+          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--mastered)" }}>{stats.corrected}</span><span className="stat__label">已订正</span></div>
         </div>
 
         <div>
-          <div className="group__header" style={{ padding: "0 16px 6px" }}><span>学习</span></div>
+          <div className="group__header" style={{ padding: "0 12px 6px" }}><span>学习设置</span></div>
           <div className="group">
-            <Row icon="chart" iconColor="var(--brand)" title="学科分布" value={topSubject ? `${SUBJECT_LABEL[topSubject.subject]}最多` : "—"} onClick={() => nav("/profile/stats")} />
-            <Row icon="target" iconColor="var(--mastered)" title="本周目标" value={`复习 ${user.weeklyGoal} 题 · ${data?.weekReviewed ?? 0}/${user.weeklyGoal}`} onClick={() => nav("/profile/goal")} />
-            <Row icon="bell" iconColor="var(--due)" title="复习提醒" value={user.reviewReminder.enabled ? `每天 ${String(user.reviewReminder.hour).padStart(2, "0")}:${String(user.reviewReminder.minute).padStart(2, "0")}` : "关闭"} onClick={() => nav("/profile/reminder")} />
+            <Row icon="graduation" iconColor="var(--brand)" title="年级与城市" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => nav("/profile/subjects")} />
+            <Row icon="letters" iconColor="var(--english)" title="学科" value={<span style={{ display: "flex", gap: 4 }}>{user.subjects.map((s) => <SubjectTile key={s} subject={s} size="xs" />)}</span>} onClick={() => nav("/profile/subjects")} />
           </div>
+          <p className="t-cap c-sec" style={{ padding: "6px 12px 0" }}>年级和城市决定错题按哪套考纲归类知识点；试卷上能看出来的以试卷为准。</p>
         </div>
 
         <div>
-          <div className="group__header" style={{ padding: "0 16px 6px" }}><span>设置</span></div>
+          <div className="group__header" style={{ padding: "0 12px 6px" }}><span>数据与隐私</span></div>
           <div className="group">
-            <Row icon="book" iconColor="#7a4dd8" title="学科与年级" value={`${user.subjects.length} 科 · ${GRADE_LABEL[user.grade] ?? ""}`} onClick={() => nav("/profile/subjects")} />
-            <Row icon="family" iconColor="#0e8a8a" title="家长查看" value={<Icon name="lock" size={16} style={{ color: "var(--tertiary)" }} />} onClick={() => setGate(() => () => nav("/profile/parent"))} />
-            <Row icon="export" iconColor="var(--secondary)" title="导出全部错题" onClick={() => setGate(() => () => toast("导出 PDF 将在下个版本提供"))} />
+            <Row icon="photo" iconColor="var(--accent-on)" title="本机试卷照片" value={`${stats.papers} 张 · ${stats.mb} MB`} chevron={false} />
+            <Row icon="shield" iconColor="var(--mastered)" title="隐私与权限" onClick={() => nav("/profile/privacy")} />
+            <Row icon="person" iconColor="var(--label)" title="账号与登录" value={user.loginMethod === "apple" ? "Apple" : user.loginMethod === "phone" ? "手机号" : "游客"} onClick={() => nav("/profile/account")} />
           </div>
+          <p className="t-cap c-sec" style={{ padding: "6px 12px 0" }}>试卷照片和电子版只保存在这台设备上，不上传。</p>
         </div>
 
-        <div>
-          <div className="group__header" style={{ padding: "0 16px 6px" }}><span>账号</span></div>
-          <div className="group">
-            <Row icon="person" iconColor="var(--label)" title="账号与登录" value={user.loginMethod === "apple" ? "Apple" : user.loginMethod === "phone" ? "手机号" : "未登录"} onClick={() => nav("/profile/account")} />
-            <Row icon="shield" iconColor="var(--brand)" title="隐私与数据" onClick={() => nav("/profile/privacy")} />
-          </div>
+        <div className="group">
+          <Row icon="info" iconColor="var(--secondary)" title="关于知错本" value={BUILD} chevron={false} />
         </div>
-        <span className="t-foot c-sec" style={{ textAlign: "center" }}>知错本 1.0</span>
+        <span className="t-cap c-sec" style={{ textAlign: "center" }}>{SUBJECT_LABEL.english}、{SUBJECT_LABEL.math}、{SUBJECT_LABEL.chinese}、{SUBJECT_LABEL.science} · 小学到高中</span>
       </div>
 
       <Sheet open={editName} onClose={() => setEditName(false)} title="怎么称呼你">
         <input className="input" autoFocus value={name} maxLength={16} onChange={(e) => setName(e.target.value)} />
         <Button onClick={saveName} disabled={!name.trim()}>保存</Button>
       </Sheet>
-      <ParentGate open={Boolean(gate)} onClose={() => setGate(null)} onPass={() => { const fn = gate; setGate(null); fn?.(); }} />
     </div>
   );
 }

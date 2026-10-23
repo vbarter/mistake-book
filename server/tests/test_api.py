@@ -424,3 +424,16 @@ def test_digitize_pdf_export(client, auth):
     r = client.post("/api/digitize/pdf", json={"title": "五年级随堂练习", "pages": body["pages"], "questions": body["questions"]}, headers=auth)
     assert r.status_code == 200 and r.mimetype == "application/pdf" and r.data.startswith(b"%PDF") and len(r.data) > 2000
     assert client.post("/api/digitize/pdf", json={"pages": []}, headers=auth).status_code == 400
+
+
+
+def test_book_pdf_export(client, auth):
+    items = [
+        {"number": "48", "stem": "My family has a ____ of making Zongzi. (traditional)", "options": [], "knowledge": "构词法", "source": "嘉定二模 · 第 1 张",
+         "answers": [{"number": "48", "student": "", "answer": "tradition", "analysis": "冠词 a 后缺名词", "kind": "未作答", "tip": "形容词变名词", "sub": "形容词变名词"}]},
+        {"number": "36–37", "stem": "Students win (36)____ and make (37)____.", "options": ["A. repairs", "B. awards"], "knowledge": "选词填空", "source": "嘉定二模 · 第 1 张",
+         "answers": [{"number": "36", "student": "A", "answer": "B", "analysis": "", "kind": "答错", "tip": "", "sub": ""}, {"number": "37", "student": "", "answer": "A", "analysis": "", "kind": "未作答", "tip": "", "sub": ""}]},
+    ]
+    r = client.post("/api/digitize/book", json={"title": "嘉定二模 · 英语 错题本", "subtitle": "上海中考英语考纲 · 2 题", "items": items}, headers=auth)
+    assert r.status_code == 200 and r.mimetype == "application/pdf" and r.data.startswith(b"%PDF")
+    assert client.post("/api/digitize/book", json={"items": []}, headers=auth).status_code == 400

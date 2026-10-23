@@ -13,7 +13,12 @@ export const REASON_LABEL: Record<Reason, string> = {
 export const MASTERY_LABEL: Record<Mastery, string> = { due: "待复习", learning: "巩固中", mastered: "已掌握" };
 export const QTYPE_LABEL: Record<QuestionType, string> = { choice: "选择题", fill: "填空题", solve: "解答题" };
 export const RATING_LABEL: Record<Rating, string> = { forgot: "忘了", fuzzy: "模糊", remembered: "记得" };
-export const GRADE_LABEL: Record<string, string> = { "3": "三年级", "4": "四年级", "5": "五年级", "6": "六年级" };
+export const GRADE_LABEL: Record<string, string> = { "1": "一年级", "2": "二年级", "3": "三年级", "4": "四年级", "5": "五年级", "6": "六年级", "7": "七年级", "8": "八年级", "9": "九年级", "10": "高一", "11": "高二", "12": "高三" };
+export const GRADE_GROUPS: { label: string; grades: string[] }[] = [
+  { label: "小学", grades: ["1", "2", "3", "4", "5", "6"] },
+  { label: "初中", grades: ["7", "8", "9"] },
+  { label: "高中", grades: ["10", "11", "12"] },
+];
 
 export function subjectStyle(s: Subject): { color: string; background: string } {
   return { color: `var(--${s})`, background: `var(--${s}-bg)` };

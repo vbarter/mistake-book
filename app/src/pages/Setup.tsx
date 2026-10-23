@@ -28,7 +28,7 @@ export default function Setup() {
         body: { profile: { nickname: nickname || "小同学", grade, subjects } },
       });
       await setSession(res.token, res.user);
-      nav("/capture", { replace: true, state: { first: true } });
+      nav("/papers", { replace: true });
     } catch (e) {
       toastError(e);
     } finally {

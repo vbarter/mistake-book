@@ -15,7 +15,7 @@ from collections import OrderedDict
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
@@ -201,11 +201,100 @@ def _summary_part(story: list, sheets: list[dict], questions: list[dict]) -> Non
 
 
 def build_pdf(title: str, sheets: list[dict], questions: list[dict]) -> bytes:
+    return build_papers_pdf(title, [{"title": title, "pages": sheets, "questions": questions}])
+
+
+def build_papers_pdf(title: str, papers: list[dict]) -> bytes:
+    """一张或多张试卷合成一个 PDF：每张依次是 试卷打印版 → 作答与批改 → 错题汇总。"""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=16 * mm, title=title or "电子版试卷")
     story: list = []
-    _paper_part(story, sheets, title)
-    _answer_part(story, sheets)
-    _summary_part(story, sheets, questions)
+    for i, paper in enumerate(papers):
+        if i > 0:
+            story.append(PageBreak())
+        sheets = paper.get("pages") or []
+        _paper_part(story, sheets, str(paper.get("title") or title))
+        _answer_part(story, sheets)
+        _summary_part(story, sheets, paper.get("questions") or [])
+    doc.build(story)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------- 错题本（横向：空白重做 | 错题修正）
+
+S_BOOK_H = ParagraphStyle("bookh", fontName=FONT, fontSize=11, leading=15, textColor=colors.HexColor("#333333"))
+S_BOOK_KP = ParagraphStyle("bookkp", fontName=FONT, fontSize=11.5, leading=16, textColor=colors.HexColor("#1f55c4"), spaceBefore=2)
+S_BOOK_STEM = ParagraphStyle("bookstem", fontName=FONT, fontSize=11, leading=19)
+S_BOOK_META = ParagraphStyle("bookmeta", fontName=FONT, fontSize=8.5, leading=11, textColor=colors.HexColor("#8e8e93"))
+S_BOOK_ANS = ParagraphStyle("bookans", fontName=FONT, fontSize=10.5, leading=15)
+S_BOOK_NOTE = ParagraphStyle("booknote", fontName=FONT, fontSize=9.5, leading=13.5, textColor=colors.HexColor("#555555"))
+
+KIND_COLOR = {"未作答": "#b42323", "答错": "#b35300", "半对": "#b35300"}
+
+
+def _blank_lines(text: str) -> str:
+    """重做区：题干里的「____」换成更长的横线，留足书写空间。"""
+    return _esc(text).replace("____", "＿＿＿＿＿＿")
+
+
+def _book_rows(items: list[dict]):
+    rows = [[Paragraph("空白重做", S_BOOK_H), Paragraph("错题修正", S_BOOK_H)]]
+    styles = [
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.black),
+        ("LINEAFTER", (0, 0), (0, -1), 0.5, colors.HexColor("#bbbbbb")),
+        ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#dddddd")),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+    ]
+    current_kp = None
+    for it in items:
+        kp = str(it.get("knowledge") or "（未标注知识点）")
+        if kp != current_kp:
+            current_kp = kp
+            rows.append([Paragraph(f"◆ {_esc(kp)}", S_BOOK_KP), Paragraph("", S_BOOK_KP)])
+            r = len(rows) - 1
+            styles.append(("SPAN", (0, r), (1, r)))
+            styles.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#f2f5fc")))
+            styles.append(("LINEBELOW", (0, r), (-1, r), 0, colors.white))
+        number = _esc(str(it.get("number") or ""))
+        left = [Paragraph(f"{number}. {_blank_lines(str(it.get('stem') or ''))}", S_BOOK_STEM)]
+        opts = it.get("options") or []
+        if opts:
+            labeled = [o if re.match(r"^[A-H][.、．]", str(o)) else f"{chr(65 + i)}. {o}" for i, o in enumerate(opts)]
+            left.append(Paragraph("　".join(_esc(str(o)) for o in labeled), S_BOOK_NOTE))
+        if it.get("source"):
+            left.append(Paragraph(_esc(str(it["source"])), S_BOOK_META))
+        left.append(Spacer(1, 18))  # 书写留白
+        right = []
+        for a in it.get("answers") or []:
+            kind = str(a.get("kind") or "答错")
+            student = str(a.get("student") or "").strip() or UNANSWERED
+            color = KIND_COLOR.get(kind, "#b35300")
+            line = f"{_esc(str(a.get('number') or ''))}.　原答案：<font color='{color}'>{_esc(student)}</font>　正确：<font color='#1e7a47'>{_esc(str(a.get('answer') or '—'))}</font>"
+            if a.get("sub"):
+                line += f"　<font color='#8e8e93' size='8.5'>{_esc(str(a['sub']))}</font>"
+            right.append(Paragraph(line, S_BOOK_ANS))
+            if a.get("analysis"):
+                right.append(Paragraph(_esc(str(a["analysis"])), S_BOOK_NOTE))
+            if a.get("tip"):
+                right.append(Paragraph(f"下次注意：{_esc(str(a['tip']))}", S_BOOK_NOTE))
+        rows.append([left, right or [Paragraph("", S_BOOK_ANS)]])
+    return rows, styles
+
+
+def build_book_pdf(title: str, subtitle: str, items: list[dict]) -> bytes:
+    """横向 A4：每行一道错题，左栏只有原题（空格留白），右栏原答案 / 正确答案 / 解析；按知识点分组。"""
+    buf = io.BytesIO()
+    page = landscape(A4)
+    doc = SimpleDocTemplate(buf, pagesize=page, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=14 * mm, bottomMargin=14 * mm, title=title)
+    story: list = [Paragraph(_esc(title), S_TITLE), Paragraph(_esc(subtitle) if subtitle else "空白重做 + 错题修正 · 对折或遮住右半页再做左边", S_SUB)]
+    rows, styles = _book_rows(items)
+    width = page[0] - 28 * mm
+    tbl = Table(rows, colWidths=[width / 2, width / 2], repeatRows=1, splitByRow=1)
+    tbl.setStyle(TableStyle(styles))
+    story.append(tbl)
     doc.build(story)
     return buf.getvalue()

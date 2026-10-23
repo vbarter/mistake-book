@@ -1,26 +1,24 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
-import { apiBlob } from "../../api/client";
-import type { DigitizedBlank, DigitizedBlock, DigitizedPage, DigitizedQuestion, Mark, RecognizedItem } from "../../api/types";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import type { DigitizedBlank, DigitizedBlock, DigitizedPage, Mark } from "../../api/types";
+import { ErrorCard } from "../../components/ErrorCard";
+import { ExportSheet } from "../../components/ExportSheet";
 import { Icon } from "../../components/Icon";
-import { Button, InlineNav, SubjectChip } from "../../components/ui";
-import { cropToDataUrl } from "../../lib/boxes";
-import { QTYPE_LABEL } from "../../lib/format";
-import { exportPdf, haptic } from "../../lib/native";
-import { toast, toastError } from "../../store/banner";
+import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
+import { Hint, IconSegmented, Tag, subjectColors } from "../../components/v2";
+import { groupByKnowledge, paperErrors, type ErrorItem } from "../../lib/errors";
+import { deletePaper, getFolder, paperStats, setCorrected, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
+import { haptic } from "../../lib/native";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
 
 type Tab = "paper" | "answers" | "errors";
-type Kind = "未作答" | "答错" | "半对";
 
 const MARK_LABEL: Record<Mark, string> = { correct: "正确", wrong: "错误", partial: "半对", unmarked: "未批改" };
 const BLANK_RE = /\[\[([^[\]]{1,24})\]\]/g;
 const UNANSWERED = "未作答";
-
-const isWrong = (m: Mark) => m === "wrong" || m === "partial";
-const unanswered = (student: string) => !student.trim();
-const kindOf = (q: DigitizedQuestion): Kind => (q.mark === "partial" ? "半对" : unanswered(q.studentAnswer) ? UNANSWERED : "答错");
+const isWrongMark = (m: Mark) => m === "wrong" || m === "partial";
+const unanswered = (s: string) => !s.trim();
 const stripParen = (s: string) => s.replace(/^[（(]|[）)]$/g, "");
 
 /** 打印版：把 [[id]] 占位换成只带空号的空格，不带任何手写内容 */
@@ -46,109 +44,64 @@ function renderPrint(text: string, blanks: DigitizedBlank[]): ReactNode[] {
 }
 
 function MarkChip({ mark, student }: { mark: Mark; student: string }) {
-  const label = mark === "wrong" && unanswered(student) ? UNANSWERED : MARK_LABEL[mark];
-  return <span className={`mark-chip mark-chip--${mark}`}>{label}</span>;
+  if (mark === "wrong" && unanswered(student)) return <Tag kind="wrong" icon="alert">{UNANSWERED}</Tag>;
+  const kind = mark === "correct" ? "correct" : mark === "wrong" ? "wrong" : mark === "partial" ? "partial" : "neutral";
+  return <Tag kind={kind} icon={mark === "unmarked" ? "info" : undefined}>{MARK_LABEL[mark]}</Tag>;
 }
 
-/** 电子版试卷：「试卷」原题干净可打印，「作答」逐空列出手写转写与批改，「错题汇总」按类型 / 大题 / 知识点归类并可收进错题本。 */
+/** 一张试卷的电子版：「试卷」是可打印的干净原题，「作答」逐空列出手写转写与批改，「错题」按知识点列出并可勾选已订正。 */
 export default function Paper() {
   const nav = useNavigate();
-  const { pages, digitized, folderName, setItems } = useCapture();
+  const { folderId = "", paperId = "" } = useParams();
+  const { reset, setReturnTo } = useCapture();
+  const [folder, setFolder] = useState<Folder | null | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("paper");
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [busy, setBusy] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [rename, setRename] = useState(false);
+  const [name, setName] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  const reload = useCallback(() => getFolder(folderId).then((f) => setFolder(f ?? null)), [folderId]);
   useEffect(() => {
-    if (!digitized || pages.length === 0) nav("/capture", { replace: true });
-  }, [digitized, pages.length, nav]);
+    void reload();
+  }, [reload]);
 
+  const paper: PaperRecord | undefined = folder?.papers.find((p) => p.id === paperId);
+  const digitized = paper ? validDigitized(paper.digitized) : null;
+  const errors = useMemo(() => (folder && paper ? paperErrors(folder, paper) : []), [folder, paper]);
+  const groups = useMemo(() => groupByKnowledge(errors), [errors]);
+  const stats = paper ? paperStats(paper) : null;
+
+  // 没扫描过的试卷直接进录入页继续
   useEffect(() => {
-    if (digitized) setSelected(new Set(digitized.questions.filter((q) => isWrong(q.mark)).map((q) => q.index)));
-  }, [digitized]);
-
-  const wrong = useMemo(() => (digitized?.questions ?? []).filter((q) => isWrong(q.mark)), [digitized]);
-  // 错题按知识点一级分类归组（knowledgePoints[0] 是考纲 / 课标里的规范名称），组内按题号顺序
-  const groups = useMemo(() => {
-    const byKp = new Map<string, DigitizedQuestion[]>();
-    for (const q of wrong) {
-      const kp = q.knowledgePoints[0] || "（未标注知识点）";
-      byKp.set(kp, [...(byKp.get(kp) ?? []), q]);
+    if (folder && paper && !digitized) {
+      reset();
+      setReturnTo(`/papers/${folderId}`);
+      nav("/capture", { replace: true, state: { folderId, paperId } });
     }
-    return [...byKp.entries()].sort((a, b) => b[1].length - a[1].length);
-  }, [wrong]);
-  const exam = useMemo(() => {
-    const pick = (k: "region" | "examGrade" | "examLevel" | "syllabus") => digitized?.pages.find((s) => s[k])?.[k] ?? "";
-    return { line: [pick("region"), pick("examGrade"), pick("examLevel")].filter(Boolean).join(" · "), syllabus: pick("syllabus") };
-  }, [digitized]);
+  }, [folder, paper, digitized, folderId, paperId, nav, reset, setReturnTo]);
 
+  if (folder === undefined) return null;
+  if (!folder || !paper || !stats) return <Empty icon="document" title="试卷不存在" action={<Button size="sm" variant="tinted" onClick={() => nav("/papers")}>回到试卷</Button>} />;
   if (!digitized) return null;
+
   const sheets: DigitizedPage[] = digitized.pages;
-  const total = digitized.questions.length;
+  const subject = digitized.questions[0]?.subject;
+  const colors = subjectColors(subject);
 
-  const toggle = (idx: number) => {
-    setSelected((s) => {
-      const n = new Set(s);
-      if (n.has(idx)) n.delete(idx);
-      else n.add(idx);
-      return n;
-    });
+  const toggle = async (item: ErrorItem, next: boolean) => {
+    await setCorrected(item.folderId, item.paperId, item.q.index, next);
     void haptic.selection();
+    await reload();
   };
 
-  const doExport = async () => {
-    setExporting(true);
-    try {
-      const blob = await apiBlob("/api/digitize/pdf", { method: "POST", body: { title: folderName, pages: sheets, questions: digitized.questions }, timeoutMs: 60000 });
-      await exportPdf(blob, `${folderName || "试卷"}.pdf`);
-      void haptic.success();
-    } catch (e) {
-      if (!/cancel/i.test(String((e as Error).message))) toastError(e);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const importSelected = async () => {
-    const chosen = digitized.questions.filter((q) => selected.has(q.index));
-    if (chosen.length === 0) return toast("先勾选要收进错题本的题");
-    setBusy(true);
-    try {
-      const items: RecognizedItem[] = [];
-      for (const q of chosen) {
-        const p = pages[q.page];
-        const [x0, y0, x1, y1] = q.bbox;
-        const stemImage = p
-          ? await cropToDataUrl(p.src, { id: "c", x: x0 * p.width, y: y0 * p.height, w: Math.max(40, (x1 - x0) * p.width), h: Math.max(30, (y1 - y0) * p.height) }, 1000, 0.8)
-          : "";
-        items.push({
-          subject: q.subject,
-          knowledgePoints: q.knowledgePoints,
-          stemText: q.stemText,
-          questionType: q.questionType,
-          options: q.options,
-          uncertainSpans: q.uncertainSpans,
-          studentAnswer: q.studentAnswer,
-          correctAnswer: q.correctAnswer,
-          analysis: q.analysis,
-          tip: q.tip,
-          aiGenerated: true,
-          stemImage,
-          reasons: [],
-          note: "",
-          page: q.page,
-          bbox: q.bbox,
-          reason: q.mark === "correct" ? "答对的题，主动收录" : kindOf(q) === UNANSWERED ? "未作答" : q.teacherNote ? `老师批改：${q.teacherNote}` : MARK_LABEL[q.mark],
-        });
-      }
-      setItems(items);
-      void haptic.success();
-      nav("/capture/review");
-    } catch (e) {
-      toastError(e);
-    } finally {
-      setBusy(false);
-    }
+  const rescan = () => {
+    setMenu(false);
+    reset();
+    setReturnTo(`/papers/${folderId}/${paperId}`);
+    nav("/capture", { state: { folderId, paperId } });
   };
 
   // ---------------------------------------------------------------- 试卷（打印版）
@@ -157,12 +110,15 @@ export default function Paper() {
       case "section":
         return (
           <div className="blk-section" key={bi}>
-            <div className="blk-section__title">
-              {block.label && `${block.label}. `}
-              {block.title}
-              {block.points && <span className="blk-section__points">（{stripParen(block.points)}）</span>}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="sec-bar" style={{ background: colors.color }} />
+              <span className="blk-section__title" style={{ flex: 1 }}>
+                {block.label && `${block.label}. `}
+                {block.title}
+              </span>
+              {block.points && <span className="t-cap c-sec">{stripParen(block.points)}</span>}
             </div>
-            {block.instruction && <div className="blk-section__instruction">{block.instruction}</div>}
+            {block.instruction && <div className="blk-section__instruction" style={{ marginLeft: 12 }}>{block.instruction}</div>}
           </div>
         );
       case "wordbank":
@@ -213,13 +169,14 @@ export default function Paper() {
 
   const paperTab = (
     <>
-      <p className="t-foot c-sec">打印版只有原题，空格留白；学生作答与批改在「作答」页单独列出。</p>
+      <Hint icon="printer">打印版只有原题，空格留白。手写和批改在「作答」里。</Hint>
       {sheets.map((sheet, si) => (
         <div className="paper" key={si}>
           <div className="paper__head">
             {sheet.title && <div className="paper__title">{sheet.title}</div>}
             <div className="paper__meta">
               {sheet.label && <span>{sheet.label}</span>}
+              {[sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).length > 0 && <span>{[sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).join(" · ")}</span>}
               {sheet.score && <span className="paper__score">{sheet.score}</span>}
             </div>
           </div>
@@ -227,13 +184,14 @@ export default function Paper() {
           {sheet.note && <p className="paper__note">{sheet.note}</p>}
         </div>
       ))}
+      {showOriginal && paper.pages.map((p, i) => <img key={p.id} src={p.src} alt={`原图 ${i + 1}`} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--separator-light)" }} />)}
     </>
   );
 
   // ---------------------------------------------------------------- 作答
   const answersTab = (
     <>
-      <p className="t-foot c-sec">学生手写内容的转写，与老师批改、正确答案逐空对照。空题按未作答计入错题。</p>
+      <Hint icon="pencil">学生手写内容的转写，与老师批改、正确答案逐空对照。空题按未作答计入错题。</Hint>
       {sheets.map((sheet, si) => {
         const rows = sheet.blocks.flatMap((b) => (b.type === "passage" || b.type === "item" ? b.blanks : []));
         if (rows.length === 0) return null;
@@ -250,9 +208,9 @@ export default function Paper() {
               <span>正确答案</span>
             </div>
             {rows.map((b) => (
-              <div className={`ans__row${isWrong(b.mark) ? " ans__row--wrong" : ""}`} key={b.id}>
+              <div className={`ans__row${isWrongMark(b.mark) ? " ans__row--wrong" : ""}`} key={b.id}>
                 <span className="ans__num">{b.number}</span>
-                <span className={`ans__hand${isWrong(b.mark) ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : b.student}</span>
+                <span className={`ans__hand${isWrongMark(b.mark) ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : b.student}</span>
                 <span>
                   <MarkChip mark={b.mark} student={b.student} />
                   {b.note && b.note !== UNANSWERED && <span className="t-cap" style={{ color: "var(--wrong)", display: "block" }}>{b.note}</span>}
@@ -266,54 +224,26 @@ export default function Paper() {
     </>
   );
 
-  // ---------------------------------------------------------------- 错题汇总
+  // ---------------------------------------------------------------- 错题
   const errorsTab = (
     <>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <span className="chip" style={{ background: "var(--wrong-bg)", color: "var(--wrong)" }}>错 {wrong.length} / {total} 题</span>
-        {exam.line && <span className="chip chip--sm" style={{ background: "var(--fill-light)", color: "var(--secondary)" }}>{exam.line}</span>}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Tag kind="wrong" icon="alert">未作答 {errors.filter((e) => e.kind === "未作答").length}</Tag>
+        <Tag kind="partial" icon="xmark">答错 {errors.filter((e) => e.kind !== "未作答").length}</Tag>
+        <Tag kind="correct">已订正 {stats.corrected}</Tag>
       </div>
-      {exam.syllabus && <p className="t-foot c-sec">按{exam.syllabus}的知识点归类，同类错题放在一起便于记忆</p>}
-      {wrong.length === 0 ? (
-        <div className="card"><p className="t-body">本卷没有错题。</p></div>
+      {errors.length === 0 ? (
+        <Empty icon="seal" title="这张试卷没有错题" text="真棒。" />
       ) : (
         <>
-          <div className="card" style={{ gap: 8 }}>
-            <h3 className="t-headline">按知识点</h3>
-            {groups.map(([k, qs]) => (
-              <div className="grp" key={k}><span className="grp__name">{k}（{qs.length}）</span><span className="grp__nums">{qs.map((q) => q.number).join("、")}</span></div>
-            ))}
-          </div>
-          <p className="t-foot c-sec">逐题核对，勾选的题会收进错题本（默认全选）</p>
-          {groups.map(([k, qs]) => (
-            <Fragment key={k}>
-              <h3 className="t-headline" style={{ marginTop: 4 }}>{k} · {qs.length} 题</h3>
-              {qs.map((q) => {
-                const on = selected.has(q.index);
-                const subKps = q.knowledgePoints.slice(1);
-                return (
-                  <div key={q.index} className="card" style={{ gap: 8, border: on ? "1.5px solid var(--brand)" : "1.5px solid transparent" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <button role="checkbox" aria-checked={on} aria-label={`收录第 ${q.number} 题`} className={`pick${on ? " on" : ""}`} onClick={() => toggle(q.index)}>
-                        {on && <Icon name="check" size={14} stroke={2.8} />}
-                      </button>
-                      <span className="t-headline">第 {q.number} 题</span>
-                      <SubjectChip subject={q.subject} small />
-                      <span className="t-cap c-sec">{QTYPE_LABEL[q.questionType]}</span>
-                      <span className={`mark-chip mark-chip--${q.mark}`} style={{ marginLeft: "auto" }}>{kindOf(q)}</span>
-                    </div>
-                    <p className="t-sub" style={{ whiteSpace: "pre-wrap" }}>{q.stemText}</p>
-                    {q.options.length > 0 && <p className="t-foot c-sec">{q.options.join("　")}</p>}
-                    <div className="blk-feedback">
-                      <span>作答：<b style={{ color: "var(--wrong)" }}>{unanswered(q.studentAnswer) ? UNANSWERED : q.studentAnswer}</b>　正确：<b style={{ color: "var(--mastered)" }}>{q.correctAnswer || "—"}</b></span>
-                      {q.analysis && <span>{q.analysis}</span>}
-                      {q.tip && <span>下次注意：{q.tip}</span>}
-                      {subKps.length > 0 && <span className="t-cap">细分：{subKps.join("、")}</span>}
-                    </div>
-                  </div>
-                );
-              })}
-            </Fragment>
+          <Hint icon="list">按知识点分组，做完一题就勾掉。勾选会同步到文件夹和错题库。</Hint>
+          {groups.map(([k, items]) => (
+            <div key={k} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <span className="t-headline" style={{ marginTop: 4 }}>{k} · {items.length} 题</span>
+              {items.map((i) => (
+                <ErrorCard key={i.key} item={i} onToggle={(next) => toggle(i, next)} />
+              ))}
+            </div>
           ))}
         </>
       )}
@@ -322,30 +252,50 @@ export default function Paper() {
 
   return (
     <div className="screen">
-      <InlineNav title="电子版试卷" subtitle={`${folderName || "试卷"} · ${total} 题 · 错 ${wrong.length} 题`} back backLabel="试卷" right={<button className="nav-btn" onClick={() => nav("/capture")}>重新扫描</button>} />
-      <div className="screen__content screen__content--modal" style={{ gap: 12, paddingTop: 4, paddingBottom: 0 }}>
-        <div className="seg" role="tablist">
-          {(["paper", "answers", "errors"] as Tab[]).map((t) => (
-            <button key={t} role="tab" aria-selected={tab === t} className={`seg__item${tab === t ? " on" : ""}`} onClick={() => setTab(t)}>
-              {t === "paper" ? "试卷" : t === "answers" ? "作答" : `错题汇总 ${wrong.length}`}
-            </button>
-          ))}
+      <InlineNav title="" back backLabel={folder.name} right={<button className="icon-btn" aria-label="更多" style={{ color: "var(--brand)" }} onClick={() => setMenu(true)}><Icon name="ellipsis" size={24} /></button>} />
+      <div className="screen__content screen__content--modal" style={{ gap: 12, paddingTop: 0, paddingBottom: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <img className="thumb" src={paper.pages[0]?.src} alt="" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
+            <h1 className="t-title3 ellipsis" style={{ fontWeight: 800 }}>{paper.name}</h1>
+            <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <Tag kind="wrong">{stats.wrong} 错</Tag>
+              <Tag kind="correct">{stats.correct} 对</Tag>
+              <Tag kind="neutral" icon="document">{sheets.length} 个卷面</Tag>
+            </span>
+          </div>
         </div>
+        <IconSegmented value={tab} onChange={setTab} options={[{ value: "paper", label: "试卷", icon: "document" }, { value: "answers", label: "作答", icon: "pencil" }, { value: "errors", label: `错题 ${stats.wrong}`, icon: "xcircle" }]} />
 
         {tab === "paper" && paperTab}
         {tab === "answers" && answersTab}
         {tab === "errors" && errorsTab}
 
-        <div className="bottom-bar">
-          <Button variant="tinted" onClick={doExport} disabled={exporting} style={{ flex: 1 }}>
-            <Icon name="export" size={18} stroke={2} />
-            {exporting ? "生成中…" : "导出 PDF"}
-          </Button>
-          <Button onClick={importSelected} disabled={busy || selected.size === 0} style={{ flex: 1.4 }}>
-            {busy ? "准备中…" : `收进错题本 · ${selected.size}`}
-          </Button>
+        <div className="bottom-bar" style={{ marginTop: "auto" }}>
+          <Button variant="outline" icon="export" onClick={() => setExporting(true)} style={{ flex: 1 }}>导出这张</Button>
+          <Button icon="pencil" onClick={() => setTab("errors")} style={{ flex: 1.3 }} disabled={stats.wrong === 0}>订正错题 · {stats.wrong - stats.corrected}</Button>
         </div>
       </div>
+
+      <Sheet open={menu} onClose={() => setMenu(false)} title={paper.name}>
+        <Button variant="tinted" icon="refresh" onClick={rescan}>重新扫描 / 改照片</Button>
+        <Button variant="tinted" icon="photo" onClick={() => { setMenu(false); setShowOriginal((v) => !v); setTab("paper"); }}>{showOriginal ? "收起原图" : "查看原图"}</Button>
+        <Button variant="tinted" icon="pencil" onClick={() => { setMenu(false); setName(paper.name); setRename(true); }}>重命名</Button>
+        <Button variant="danger" icon="trash" onClick={() => { setMenu(false); setConfirmDelete(true); }}>删除这张试卷</Button>
+      </Sheet>
+
+      <Sheet open={rename} onClose={() => setRename(false)} title="试卷名称">
+        <input className="input" autoFocus value={name} maxLength={30} onChange={(e) => setName(e.target.value)} />
+        <Button onClick={async () => { await updatePaper(folderId, paperId, { name: name.trim() || paper.name }); setRename(false); await reload(); }}>保存</Button>
+      </Sheet>
+
+      <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="删除这张试卷？">
+        <p className="t-sub c-sec">照片、电子版和订正记录会一起删掉。</p>
+        <Button variant="danger" onClick={async () => { await deletePaper(folderId, paperId); nav(`/papers/${folderId}`, { replace: true }); }}>删除</Button>
+        <Button variant="plain" onClick={() => setConfirmDelete(false)}>取消</Button>
+      </Sheet>
+
+      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={`${folder.name} · ${paper.name}`} subtitle={sheets.find((s) => s.syllabus)?.syllabus ? `按${sheets.find((s) => s.syllabus)!.syllabus}归类` : undefined} errors={errors} papers={[paper]} />
     </div>
   );
 }

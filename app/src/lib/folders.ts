@@ -1,23 +1,46 @@
-/** 试卷夹：本地 IndexedDB 存储，一夹多页（整页图片）。不上传服务器，只在本机保存。 */
-import type { DigitizedResult } from "../api/types";
-import type { Box } from "./boxes";
+/** 文件夹 → 试卷 → 照片：本地 IndexedDB 存储，不上传服务器。
+ *
+ * 一次考试一个文件夹，一个文件夹装多张试卷；每张试卷有若干照片和 AI 还原的电子版。
+ * 错题不再单独"收录"：扫描完的试卷里判错的题自动算进文件夹和错题库，订正状态记在试卷上。
+ */
+import type { DigitizedQuestion, DigitizedResult, Subject } from "../api/types";
 
 export interface FolderPage {
   id: string;
   src: string; // dataURL
   width: number;
   height: number;
-  boxes?: Box[]; // 手动框选时缓存
 }
 
-export interface Folder {
+export interface Paper {
   id: string;
   name: string;
   createdAt: string;
   updatedAt: string;
   pages: FolderPage[];
   scannedAt?: string;
-  digitized?: DigitizedResult; // AI 还原的电子版（与 pages 一一对应）
+  digitized?: DigitizedResult;
+  corrected?: Record<string, string>; // 题 index → 订正时间
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  subject?: Subject; // 不设时按扫描结果推断
+  createdAt: string;
+  updatedAt: string;
+  papers: Paper[];
+}
+
+/** 1.x 的记录：一个夹就是一张试卷 */
+interface LegacyFolder {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  pages: FolderPage[];
+  scannedAt?: string;
+  digitized?: DigitizedResult;
 }
 
 const DB = "zhicuoben";
@@ -55,13 +78,39 @@ export function defaultFolderName(): string {
   return `${d.getMonth() + 1}月${d.getDate()}日 试卷`;
 }
 
+export function defaultPaperName(folder: Folder | null | undefined): string {
+  return `第 ${(folder?.papers.length ?? 0) + 1} 张`;
+}
+
+/** 旧结构（一夹一卷）升级为文件夹里的一张试卷；旧电子版没有版面块的一律当未扫描 */
+function normalize(raw: Folder | LegacyFolder): { folder: Folder; migrated: boolean } {
+  if (Array.isArray((raw as Folder).papers)) {
+    const f = raw as Folder;
+    return { folder: { ...f, papers: f.papers.map((p) => ({ ...p, digitized: validDigitized(p.digitized) ?? undefined, corrected: p.corrected ?? {} })) }, migrated: false };
+  }
+  const old = raw as LegacyFolder;
+  const digitized = validDigitized(old.digitized) ?? undefined;
+  const paper: Paper = { id: newId(), name: "第 1 张", createdAt: old.createdAt, updatedAt: old.updatedAt, pages: old.pages ?? [], scannedAt: digitized ? old.scannedAt : undefined, digitized, corrected: {} };
+  return { folder: { id: old.id, name: old.name, createdAt: old.createdAt, updatedAt: old.updatedAt, papers: paper.pages.length ? [paper] : [] }, migrated: true };
+}
+
 export async function listFolders(): Promise<Folder[]> {
-  const all = await tx<Folder[]>("readonly", (s) => s.getAll());
-  return all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const all = await tx<(Folder | LegacyFolder)[]>("readonly", (s) => s.getAll());
+  const out: Folder[] = [];
+  for (const raw of all) {
+    const { folder, migrated } = normalize(raw);
+    if (migrated) await tx("readwrite", (s) => s.put(folder));
+    out.push(folder);
+  }
+  return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export async function getFolder(id: string): Promise<Folder | undefined> {
-  return tx<Folder | undefined>("readonly", (s) => s.get(id));
+  const raw = await tx<Folder | LegacyFolder | undefined>("readonly", (s) => s.get(id));
+  if (!raw) return undefined;
+  const { folder, migrated } = normalize(raw);
+  if (migrated) await tx("readwrite", (s) => s.put(folder));
+  return folder;
 }
 
 export async function saveFolder(folder: Folder): Promise<Folder> {
@@ -70,16 +119,49 @@ export async function saveFolder(folder: Folder): Promise<Folder> {
   return next;
 }
 
-export async function createFolder(name: string, pages: FolderPage[] = []): Promise<Folder> {
+export async function createFolder(name: string, subject?: Subject): Promise<Folder> {
   const now = new Date().toISOString();
-  return saveFolder({ id: newId(), name: name.trim() || defaultFolderName(), createdAt: now, updatedAt: now, pages });
+  return saveFolder({ id: newId(), name: name.trim() || defaultFolderName(), subject, createdAt: now, updatedAt: now, papers: [] });
 }
 
 export async function deleteFolder(id: string): Promise<void> {
   await tx("readwrite", (s) => s.delete(id));
 }
 
-/** 把 dataURL 变成页面记录（读出尺寸）。 */
+/** 往文件夹里加一张试卷（没有文件夹就先建一个） */
+export async function addPaper(folderId: string | null, pages: FolderPage[], name?: string): Promise<{ folder: Folder; paper: Paper }> {
+  const folder = (folderId && (await getFolder(folderId))) || (await createFolder(defaultFolderName()));
+  const now = new Date().toISOString();
+  const paper: Paper = { id: newId(), name: name?.trim() || defaultPaperName(folder), createdAt: now, updatedAt: now, pages, corrected: {} };
+  const saved = await saveFolder({ ...folder, papers: [...folder.papers, paper] });
+  return { folder: saved, paper };
+}
+
+export async function updatePaper(folderId: string, paperId: string, patch: Partial<Paper>): Promise<Folder | undefined> {
+  const folder = await getFolder(folderId);
+  if (!folder) return undefined;
+  const now = new Date().toISOString();
+  return saveFolder({ ...folder, papers: folder.papers.map((p) => (p.id === paperId ? { ...p, ...patch, updatedAt: now } : p)) });
+}
+
+export async function deletePaper(folderId: string, paperId: string): Promise<Folder | undefined> {
+  const folder = await getFolder(folderId);
+  if (!folder) return undefined;
+  return saveFolder({ ...folder, papers: folder.papers.filter((p) => p.id !== paperId) });
+}
+
+/** 标记 / 取消某题已订正 */
+export async function setCorrected(folderId: string, paperId: string, questionIndex: number, on: boolean): Promise<Folder | undefined> {
+  const folder = await getFolder(folderId);
+  const paper = folder?.papers.find((p) => p.id === paperId);
+  if (!folder || !paper) return folder;
+  const corrected = { ...(paper.corrected ?? {}) };
+  if (on) corrected[String(questionIndex)] = new Date().toISOString();
+  else delete corrected[String(questionIndex)];
+  return updatePaper(folderId, paperId, { corrected });
+}
+
+/** 把 dataURL 变成照片记录（读出尺寸）。 */
 export function toPage(src: string): Promise<FolderPage> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -89,18 +171,46 @@ export function toPage(src: string): Promise<FolderPage> {
   });
 }
 
-/** 旧版本存的电子版没有版面块（blocks）或空 id（blankIds），当作未扫描，打开后重新扫描即可 */
+/** 旧版本存的电子版没有版面块（blocks）或空 id（blankIds），当作未扫描，重扫即可 */
 export function validDigitized(d: DigitizedResult | undefined | null): DigitizedResult | null {
   if (!d || !Array.isArray(d.pages) || !Array.isArray(d.questions)) return null;
   if (!d.pages.every((p) => Array.isArray(p.blocks)) || !d.questions.every((q) => Array.isArray(q.blankIds))) return null;
   return d;
 }
 
-/** 试卷状态：未扫描 / 已扫描（错 N 题）。给列表与今天页用。 */
-export function folderStatus(f: Folder): { label: string; color: string; bg: string; scanned: boolean; wrong: number } {
-  const d = validDigitized(f.digitized);
-  if (!d) return { label: "未扫描", color: "var(--secondary)", bg: "var(--fill-light)", scanned: false, wrong: 0 };
-  const wrong = d.questions.filter((q) => q.mark === "wrong" || q.mark === "partial").length;
-  if (wrong === 0) return { label: `已扫描 · 全对`, color: "var(--mastered)", bg: "var(--mastered-bg)", scanned: true, wrong };
-  return { label: `错 ${wrong} 题`, color: "var(--wrong)", bg: "var(--wrong-bg)", scanned: true, wrong };
+export const isWrong = (q: DigitizedQuestion) => q.mark === "wrong" || q.mark === "partial";
+
+/** 一张试卷的统计 */
+export function paperStats(paper: Paper): { scanned: boolean; total: number; wrong: number; correct: number; corrected: number } {
+  const d = validDigitized(paper.digitized);
+  if (!d) return { scanned: false, total: 0, wrong: 0, correct: 0, corrected: 0 };
+  const wrongQs = d.questions.filter(isWrong);
+  const corrected = wrongQs.filter((q) => paper.corrected?.[String(q.index)]).length;
+  return { scanned: true, total: d.questions.length, wrong: wrongQs.length, correct: d.questions.filter((q) => q.mark === "correct").length, corrected };
+}
+
+/** 一个文件夹的统计与推断信息（学科、考试信息） */
+export function folderStats(folder: Folder): { papers: number; unscanned: number; wrong: number; corrected: number; subject: Subject | null; exam: string; syllabus: string } {
+  let wrong = 0;
+  let corrected = 0;
+  let unscanned = 0;
+  const subjectCount = new Map<Subject, number>();
+  let exam = "";
+  let syllabus = "";
+  for (const p of folder.papers) {
+    const st = paperStats(p);
+    if (!st.scanned) unscanned += 1;
+    wrong += st.wrong;
+    corrected += st.corrected;
+    const d = validDigitized(p.digitized);
+    if (d) {
+      for (const q of d.questions) subjectCount.set(q.subject, (subjectCount.get(q.subject) ?? 0) + 1);
+      const sheet = d.pages.find((s) => s.examLevel || s.region || s.examGrade);
+      if (sheet && !exam) exam = [sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).join(" · ");
+      const sy = d.pages.find((s) => s.syllabus)?.syllabus;
+      if (sy && !syllabus) syllabus = sy;
+    }
+  }
+  const guessed = [...subjectCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  return { papers: folder.papers.length, unscanned, wrong, corrected, subject: folder.subject ?? guessed, exam, syllabus };
 }

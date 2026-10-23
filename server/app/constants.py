@@ -14,4 +14,4 @@ QUESTION_TYPES = ["choice", "fill", "solve"]
 
 RATINGS = ["forgot", "fuzzy", "remembered"]
 
-GRADES = ["3", "4", "5", "6"]
+GRADES = [str(i) for i in range(1, 13)]  # 1–9 小学初中，10–12 高一到高三

@@ -1,79 +1,149 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { Subject } from "../api/types";
 import { Icon } from "../components/Icon";
 import { Button, Empty, LargeNav, Sheet } from "../components/ui";
-import { deleteFolder, folderStatus, listFolders, validDigitized, type Folder } from "../lib/folders";
-import { formatDate } from "../lib/format";
+import { Hint, SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
+import { folderErrors, groupByKnowledge } from "../lib/errors";
+import { createFolder, defaultFolderName, folderStats, listFolders, type Folder } from "../lib/folders";
+import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
+import { useAuth } from "../store/auth";
 import { useCapture } from "../store/capture";
 
-/** 试卷 Tab：所有录入过的试卷一目了然，点一下直达电子版或继续扫描；底部两个按钮一步开始录新试卷。 */
+type Source = "camera" | "photos";
+
+/** 试卷 Tab：一次考试一个文件夹。点开看里面的试卷和错题汇总；底栏一步录新试卷（先选文件夹或新建）。 */
 export default function Papers() {
   const nav = useNavigate();
-  const { setFolder, setReturnTo, reset } = useCapture();
+  const user = useAuth((s) => s.user);
+  const { reset, setReturnTo } = useCapture();
   const [folders, setFolders] = useState<Folder[] | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<Folder | null>(null);
+  const [pick, setPick] = useState<Source | null>(null); // 选文件夹面板
+  const [creating, setCreating] = useState<{ source: Source | null } | null>(null);
+  const [name, setName] = useState("");
+  const [subject, setSubject] = useState<Subject | undefined>(undefined);
 
-  const refresh = () => listFolders().then((list) => setFolders([...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))).catch(() => setFolders([]));
   useEffect(() => {
-    void refresh();
+    listFolders().then(setFolders).catch(() => setFolders([]));
   }, []);
 
-  const capture = (source: "camera" | "photos") => {
+  const totalPapers = useMemo(() => (folders ?? []).reduce((n, f) => n + f.papers.length, 0), [folders]);
+  const weekPapers = useMemo(() => {
+    const since = Date.now() - 7 * 86400000;
+    return (folders ?? []).reduce((n, f) => n + f.papers.filter((p) => new Date(p.createdAt).getTime() >= since).length, 0);
+  }, [folders]);
+
+  const goCapture = (folderId: string | null, source: Source) => {
     reset();
-    setReturnTo("/papers");
-    nav("/capture", { state: { source } });
+    setReturnTo(folderId ? `/papers/${folderId}` : "/papers");
+    nav("/capture", { state: { folderId, source } });
   };
 
-  const open = (f: Folder) => {
-    const digitized = validDigitized(f.digitized);
-    setFolder(f.id, f.name, f.pages.map((p) => ({ ...p, boxes: p.boxes ?? [] })), digitized);
-    setReturnTo("/papers");
-    nav(digitized ? "/capture/paper" : "/capture");
+  const startCapture = (source: Source) => {
+    if (!folders || folders.length === 0) {
+      setName(defaultFolderName());
+      setSubject(undefined);
+      setCreating({ source });
+      return;
+    }
+    setPick(source);
+  };
+
+  const confirmCreate = async () => {
+    const f = await createFolder(name || defaultFolderName(), subject);
+    setCreating(null);
+    setPick(null);
+    if (creating?.source) goCapture(f.id, creating.source);
+    else nav(`/papers/${f.id}`);
   };
 
   return (
     <div className="screen">
-      <LargeNav title="试卷" eyebrow={folders && folders.length ? `${folders.length} 份` : undefined} />
-      <div className="screen__content" style={{ paddingBottom: 0 }}>
+      <LargeNav title="我的试卷" eyebrow={folders && folders.length ? `嗨，${user?.nickname ?? "同学"} · 这周录了 ${weekPapers} 张卷子` : `嗨，${user?.nickname ?? "同学"}`} actions={
+        <button aria-label="新建文件夹" className="tile tile--sm" style={{ background: "var(--brand-tint)", color: "var(--brand-on-tint)", border: 0, width: 44, height: 44, borderRadius: 22 }} onClick={() => { setName(""); setSubject(undefined); setCreating({ source: null }); }}>
+          <Icon name="plus" size={22} stroke={2.4} />
+        </button>
+      } />
+      <div className="screen__content" style={{ paddingBottom: 0, gap: 12 }}>
         {folders && folders.length === 0 && (
-          <Empty icon="book" title="还没有录入试卷" text="拍下整页试卷或从相册多选，AI 会还原成电子版，找出错题并按知识点归类。" action={<Button size="xs" variant="plain" onClick={() => { reset(); setReturnTo("/papers"); nav("/capture", { state: { source: "sample" } }); }}>没有试卷？用示例试卷试试</Button>} />
+          <Empty icon="folder" title="还没有试卷" text="拍下整页试卷或从相册多选，AI 会还原成电子版，找出错题并按知识点归类。" />
         )}
+
+        {folders?.map((f) => {
+          const st = folderStats(f);
+          const kps = groupByKnowledge(folderErrors(f)).slice(0, 2);
+          const more = Math.max(0, groupByKnowledge(folderErrors(f)).length - 2);
+          const c = subjectColors(st.subject);
+          return (
+            <button key={f.id} className="card" style={{ gap: 12, textAlign: "left", width: "100%", padding: "14px 16px 14px 14px" }} onClick={() => nav(`/papers/${f.id}`)}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <SubjectTile subject={st.subject} size="md" />
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span className="t-headline ellipsis" style={{ fontWeight: 700 }}>{f.name}</span>
+                  <span className="t-foot c-sec" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="document" size={14} stroke={2} />{f.papers.length} 张</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="clock" size={14} stroke={2} />{formatDate(f.updatedAt)}</span>
+                  </span>
+                </div>
+                {st.unscanned > 0 && st.wrong === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.wrong} corrected={st.corrected} />}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="thumbs">
+                  {f.papers.slice(0, 3).map((p) => (
+                    <img key={p.id} className="thumb thumb--sm" src={p.pages[0]?.src} alt="" />
+                  ))}
+                </span>
+                <span style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+                  {kps.map(([k, items]) => (
+                    <span key={k} className="tag" style={{ background: c.bg, color: c.color, height: 24 }}>{k} {items.length}</span>
+                  ))}
+                  {more > 0 && <span className="tag tag--neutral">+{more}</span>}
+                  {kps.length === 0 && <span className="t-foot c-sec">{st.unscanned > 0 ? "扫一下，错题就自动归到知识点里" : "没有错题，真棒"}</span>}
+                </span>
+                {st.wrong > 0 && st.corrected > 0 && <Tag kind="correct">{st.corrected >= st.wrong ? "全部订正" : `已订正 ${st.corrected}`}</Tag>}
+                {st.unscanned > 0 && st.wrong === 0 && <Tag kind="accent">去扫描</Tag>}
+              </div>
+            </button>
+          );
+        })}
 
         {folders && folders.length > 0 && (
-          <div className="group">
-            {folders.map((f) => {
-              const st = folderStatus(f);
-              return (
-                <div key={f.id} className="row" style={{ minHeight: 72 }}>
-                  <img src={f.pages[0]?.src} alt="" style={{ width: 44, height: 58, objectFit: "cover", borderRadius: 6, border: "1px solid var(--separator-light)" }} />
-                  <button className="row__main" style={{ textAlign: "left", gap: 4 }} onClick={() => open(f)}>
-                    <span className="row__title ellipsis">{f.name}</span>
-                    <span className="row__sub" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                      <span>{f.pages.length} 页 · {formatDate(f.updatedAt)}</span>
-                      <span className="chip chip--sm" style={{ background: st.bg, color: st.color }}>{st.label}</span>
-                    </span>
-                  </button>
-                  <Icon name="chevron-right" size={18} style={{ color: "var(--tertiary)" }} />
-                  <button className="icon-btn" style={{ color: "var(--tertiary)" }} aria-label={`删除「${f.name}」`} onClick={() => setConfirmDelete(f)}>
-                    <Icon name="trash" size={19} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+          <Hint icon="folder">一次考试一个文件夹。拍新试卷时先选文件夹，或者直接新建一个。</Hint>
         )}
 
-        {/* Tab 页里的底栏要浮在 Tab 栏之上 */}
-        <div className="bottom-bar" style={{ marginTop: "auto", bottom: "calc(var(--tabbar-h) + var(--safe-bottom))", paddingBottom: 12 }}>
-          <Button icon="camera" onClick={() => capture("camera")} style={{ flex: 1 }}>拍试卷</Button>
-          <Button variant="tinted" icon="photo" onClick={() => capture("photos")} style={{ flex: 1 }}>从相册选</Button>
+        <div className="bottom-bar bottom-bar--tab" style={{ marginTop: "auto" }}>
+          <Button icon="camera" onClick={() => startCapture("camera")} style={{ flex: 1.25 }}>拍试卷</Button>
+          <Button variant="tinted" icon="photo" onClick={() => startCapture("photos")} style={{ flex: 1 }}>相册</Button>
         </div>
       </div>
 
-      <Sheet open={Boolean(confirmDelete)} onClose={() => setConfirmDelete(null)} title={`删除「${confirmDelete?.name}」？`}>
-        <p className="t-sub c-sec">只删除本机保存的 {confirmDelete?.pages.length} 页试卷图片和电子版，已收进错题本的题不受影响。</p>
-        <Button variant="danger" onClick={async () => { if (confirmDelete) { await deleteFolder(confirmDelete.id); setConfirmDelete(null); void refresh(); } }}>删除</Button>
-        <Button variant="plain" onClick={() => setConfirmDelete(null)}>取消</Button>
+      <Sheet open={Boolean(pick)} onClose={() => setPick(null)} title="放进哪个文件夹？">
+        <div className="group">
+          {folders?.map((f) => {
+            const st = folderStats(f);
+            return (
+              <button key={f.id} className="row" style={{ minHeight: 56 }} onClick={() => { const s = pick!; setPick(null); goCapture(f.id, s); }}>
+                <SubjectTile subject={st.subject} size="sm" />
+                <span className="row__main"><span className="row__title">{f.name}</span><span className="row__sub">{f.papers.length} 张试卷</span></span>
+                <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+              </button>
+            );
+          })}
+        </div>
+        <Button variant="tinted" icon="plus" onClick={() => { setName(defaultFolderName()); setSubject(undefined); setCreating({ source: pick }); }}>新建文件夹</Button>
+      </Sheet>
+
+      <Sheet open={Boolean(creating)} onClose={() => setCreating(null)} title="新建文件夹">
+        <input className="input" autoFocus value={name} maxLength={30} placeholder={defaultFolderName()} onChange={(e) => setName(e.target.value)} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {SUBJECTS.map((s) => (
+            <button key={s} className={`chip chip--select${subject === s ? " on" : ""}`} onClick={() => setSubject(subject === s ? undefined : s)} style={{ gap: 6 }}>
+              <SubjectTile subject={s} size="xs" />{SUBJECT_LABEL[s]}
+            </button>
+          ))}
+        </div>
+        <span className="t-foot c-sec">学科可以不选，扫描后会自动判断。</span>
+        <Button onClick={confirmCreate}>{creating?.source ? "建好并开始拍" : "建好"}</Button>
       </Sheet>
     </div>
   );

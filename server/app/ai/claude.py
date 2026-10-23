@@ -220,6 +220,17 @@ def extract_json(text: str) -> dict:
     raise json.JSONDecodeError("no JSON object found", text, 0)
 
 
+def grade_label(grade: str) -> str:
+    """1–9 年级直接说几年级，10–12 换成高一到高三。"""
+    try:
+        g = int(grade)
+    except (TypeError, ValueError):
+        return f"{grade}年级"
+    if g >= 10:
+        return ["高一", "高二", "高三"][min(g, 12) - 10]
+    return f"{'一二三四五六七八九'[g - 1] if 1 <= g <= 9 else g}年级"
+
+
 def is_relay_base_url(url: str | None) -> bool:
     return bool(url) and "anthropic.com" not in url
 
@@ -369,7 +380,7 @@ class ClaudeProvider(AIProvider):
             items.append(ScannedItem(**cleaned, page=min(max(page, 0), len(pages) - 1), bbox=bbox, reason=str(raw.get("reason") or "")))
         return items
 
-    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str):
+    def digitize_pages(self, pages: list[Crop], subjects: list[str], grade: str, region: str = ""):
         """每张照片单独调用一次模型并发还原（互不依赖，整体耗时≈单页耗时），再合并派生题目。"""
         subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
 
@@ -382,7 +393,8 @@ class ClaudeProvider(AIProvider):
                 {
                     "type": "text",
                     "text": (
-                        f"学生年级：{grade}年级。可选学科：{subject_names}（subject 字段用英文枚举）。"
+                        f"学生年级：{grade_label(grade)}。" + (f"学生所在城市：{region}（卷面看不出地区时按此地考纲归类）。" if region else "")
+                        + f"可选学科：{subject_names}（subject 字段用英文枚举）。"
                         "请按原卷版面把这张照片完整还原为 sheets，保持阅读顺序与格式。"
                     ),
                 },

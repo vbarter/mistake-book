@@ -1,0 +1,81 @@
+/* 2.0 视觉：更圆、更软、有图标。学科方块、状态标签、进度环、浮起的主按钮。 */
+:root {
+  --bg: #f4f5fa;
+  --radius-card: 20px;
+  --radius-btn: 18px;
+  --accent: #ff8a3d;
+  --accent-bg: #fff0e3;
+  --accent-on: #b35300;
+  --avatar-bg: #ffe3c2;
+  --avatar-fg: #8a4b00;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "SF Pro Text", "PingFang SC", "Helvetica Neue", "Noto Sans CJK SC", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --accent: #ff9f5a;
+    --accent-bg: #3a2614;
+    --accent-on: #ffb27a;
+    --avatar-bg: #3a2a16;
+    --avatar-fg: #ffd59e;
+  }
+}
+
+.btn--primary { box-shadow: 0 6px 16px rgba(47, 111, 237, 0.28); }
+.btn--outline { background: var(--card); color: var(--brand); border: 1.5px solid #d6e2fb; }
+@media (prefers-color-scheme: dark) { .btn--outline { border-color: #2b3a5c; } }
+
+/* 学科方块：圆角色块 + 一个大字符 */
+.tile { border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: -0.02em; flex-shrink: 0; }
+.tile--lg { width: 56px; height: 56px; border-radius: 18px; font-size: 22px; }
+.tile--md { width: 52px; height: 52px; font-size: 20px; }
+.tile--sm { width: 38px; height: 38px; border-radius: 12px; font-size: 15px; }
+.tile--xs { width: 24px; height: 24px; border-radius: 8px; font-size: 11px; }
+
+/* 状态标签：颜色 + 图标 */
+.tag { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px; border-radius: 12px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.tag--wrong { background: var(--wrong-bg); color: var(--wrong); }
+.tag--correct { background: var(--mastered-bg); color: var(--mastered); }
+.tag--partial, .tag--pending { background: var(--accent-bg); color: var(--accent-on); }
+.tag--info { background: var(--brand-tint); color: var(--brand-on-tint); }
+.tag--neutral { background: var(--fill-light); color: var(--secondary); }
+.tag--accent { background: var(--accent); color: #fff; }
+
+/* 列表卡 */
+.card--row { flex-direction: row; align-items: center; gap: 12px; padding: 12px 14px; min-height: 72px; text-align: left; width: 100%; }
+.thumb { width: 44px; height: 58px; border-radius: 8px; background: var(--fill); object-fit: cover; flex-shrink: 0; border: 2px solid var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.thumb--sm { width: 34px; height: 44px; border-radius: 6px; }
+.thumbs { display: flex; }
+.thumbs .thumb--sm + .thumb--sm { margin-left: -10px; }
+
+/* 统计三格 */
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stat { background: var(--card); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.stat__label { font-size: 12px; color: var(--secondary); display: inline-flex; align-items: center; gap: 4px; }
+.stat__value { font-size: 22px; line-height: 26px; font-weight: 800; }
+
+/* 进度条 */
+.progress { height: 6px; border-radius: 3px; background: var(--fill-light); overflow: hidden; display: block; width: 100%; }
+.progress > span { display: block; height: 100%; border-radius: 3px; background: var(--brand); transition: width 0.3s ease; }
+
+/* 分段控件带图标 */
+.seg--icons { border-radius: 12px; padding: 3px; gap: 3px; }
+.seg--icons .seg__item { display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 14px; padding: 8px 0; border-radius: 10px; color: var(--secondary); }
+.seg--icons .seg__item.on { color: var(--label); font-weight: 700; }
+
+/* 底栏按钮浮在 Tab 栏之上 */
+.bottom-bar--tab { bottom: calc(var(--tabbar-h) + var(--safe-bottom)); padding-bottom: 12px; }
+
+/* 题号小圆牌（电子版空格里） */
+.blank__num { font-size: 10px; font-weight: 700; color: #fff; background: #8e8e93; border-radius: 7px; padding: 1px 5px; line-height: 12px; }
+
+/* 知识点分组行 */
+.kp { display: flex; align-items: center; gap: 10px; }
+.kp__name { font-size: 17px; font-weight: 700; }
+.kp__meta { font-size: 12px; color: var(--secondary); }
+.nums { display: flex; flex-wrap: wrap; gap: 6px; }
+.num-chip { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 14px; font-size: 13px; font-weight: 700; background: var(--wrong-bg); color: var(--wrong); }
+.num-chip--done { background: var(--mastered-bg); color: var(--mastered); }
+
+/* 大题标题左侧色条 */
+.sec-bar { width: 4px; height: 18px; border-radius: 2px; flex-shrink: 0; }

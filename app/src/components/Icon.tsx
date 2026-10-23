@@ -4,9 +4,22 @@ export type IconName =
   | "house" | "books" | "pencil" | "person" | "camera" | "photo" | "sparkles" | "clock" | "check" | "xmark"
   | "chevron-right" | "chevron-left" | "chevron-down" | "chevron-up" | "plus" | "trash" | "ellipsis" | "bell"
   | "lock" | "export" | "search" | "refresh" | "warning" | "seal" | "target" | "chart" | "book" | "sun" | "info"
-  | "viewfinder" | "loop" | "family" | "shield" | "brain";
+  | "viewfinder" | "loop" | "family" | "shield" | "brain"
+  | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation";
 
 const paths: Record<IconName, string> = {
+  folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+  document: "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6",
+  grid: "M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z",
+  pin: "M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
+  printer: "M6 9V4h12v5M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6z",
+  list: "M4 6h16M4 12h10M4 18h7M18 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+  xcircle: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9 9l6 6M15 9l-6 6",
+  checkcircle: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6",
+  alert: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 8v5M12 16h.01",
+  arrows: "M4 9h12l-3-3M20 15H8l3 3",
+  letters: "M4 7h7M7.5 7v10M13 17l3.5-9 3.5 9M14.5 14h4",
+  graduation: "M3 9l9-4 9 4-9 4zM7 11v4c0 1.5 2.5 3 5 3s5-1.5 5-3v-4",
   house: "M3 11.5 12 4l9 7.5M5 10v10h14V10",
   books: "M4 4h4v16H4zM10 4h4v16h-4zM16.5 5l3.5.8-3 14-3.5-.8z",
   pencil: "M4 20h4l10-10-4-4L4 16zM12.5 7.5l4 4",

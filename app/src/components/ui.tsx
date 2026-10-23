@@ -67,7 +67,7 @@ export function Button({
   ariaLabel,
 }: {
   children?: ReactNode;
-  variant?: "primary" | "tinted" | "plain" | "danger" | "black";
+  variant?: "primary" | "tinted" | "plain" | "danger" | "black" | "outline";
   size?: "sm" | "xs";
   onClick?: () => void;
   disabled?: boolean;
