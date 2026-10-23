@@ -135,6 +135,8 @@ class DigitizedPage:
     region: str = ""  # 地区，如 "上海"
     syllabus: str = ""  # 知识点归类依据的考纲 / 课标名称，如 "上海中考英语考纲"
     ocrText: str = ""  # OCR 模型逐行识别出的原文（印刷文字，公式为 LaTeX），同一张照片的几个 sheet 相同
+    photoIssues: list[str] = field(default_factory=list)  # 照片问题：blurry 模糊 / cropped 不完整 / dark 太暗 / glare 反光 / tilted 歪斜 / covered 遮挡折痕
+    photoNote: str = ""  # 哪里受影响，如「右下角反光，第 38–40 题看不清」
     blocks: list[DigitizedBlock] = field(default_factory=list)
 
     def to_dict(self) -> dict:

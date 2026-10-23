@@ -143,6 +143,8 @@ export interface DigitizedQuestion {
 }
 
 /** 一张电子版卷面；一张照片拍到左右两页时对应两个 sheet */
+export type PhotoIssue = "blurry" | "cropped" | "dark" | "glare" | "tilted" | "covered";
+
 export interface DigitizedPage {
   page: number;
   label: string;
@@ -154,6 +156,8 @@ export interface DigitizedPage {
   examGrade: string; // 年级 / 学段
   region: string; // 地区
   syllabus: string; // 知识点归类依据的考纲 / 课标
+  photoIssues?: PhotoIssue[]; // 照片问题（新扫描才有）
+  photoNote?: string; // 哪里受影响
   blocks: DigitizedBlock[];
 }
 

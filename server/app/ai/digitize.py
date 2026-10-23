@@ -13,7 +13,8 @@ from .base import BLOCK_TYPES, DigitizedBlank, DigitizedBlock, DigitizedPage, Di
 
 log = logging.getLogger(__name__)
 
-MARKS = ("correct", "wrong", "partial", "blank", "unmarked")  # blank = 未作答，单独一类，不算答错
+MARKS = ("correct", "wrong", "partial", "blank", "unmarked")
+PHOTO_ISSUES = ("blurry", "cropped", "dark", "glare", "tilted", "covered")  # blank = 未作答，单独一类，不算答错
 UNANSWERED = "未作答"
 BLANK_RE = re.compile(r"\[\[([^\[\]]{1,24})\]\]")
 
@@ -222,6 +223,8 @@ def clean_sheet(raw: dict, page: int) -> DigitizedPage:
         examGrade=_str(raw.get("examGrade")).strip(),
         region=_str(raw.get("region")).strip(),
         syllabus=_str(raw.get("syllabus")).strip(),
+        photoIssues=[x for x in (raw.get("photoIssues") or []) if x in PHOTO_ISSUES][:4] if isinstance(raw.get("photoIssues"), list) else [],
+        photoNote=_str(raw.get("photoNote")).strip()[:60],
         blocks=blocks,
     )
 
@@ -244,6 +247,18 @@ def _block_numbers(blk: DigitizedBlock) -> set[str]:
 def _text_key(text: str) -> str:
     """比较两道小题是不是同一题：只留字母数字和汉字，取前 12 个字。"""
     return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", BLANK_RE.sub("", text or "")).lower()[:12]
+
+
+def unreadable(student: str) -> bool:
+    """学生作答整个看不清：去掉空白和标点后只剩「□」。"""
+    core = re.sub(r"[\s,，.。;；:：()（）$\\]", "", student or "")
+    return bool(core) and set(core) <= {"□"}
+
+
+def _is_empty_fragment(blk: DigitizedBlock) -> bool:
+    """题干去掉空格占位、□ 和标点后不到 6 个字，并且每个空的作答都是空的或看不清。"""
+    content = re.sub(r"[\s\W_□]", "", BLANK_RE.sub("", blk.text or ""))
+    return len(content) < 6 and all(not b.student.strip() or unreadable(b.student) for b in blk.blanks)
 
 
 def drop_ghost_sheets(sheets: list[DigitizedPage]) -> list[DigitizedPage]:
@@ -280,6 +295,10 @@ def drop_ghost_sheets(sheets: list[DigitizedPage]) -> list[DigitizedPage]:
             continue
         keep = []
         for blk in s.blocks:
+            # 残片上既没有题目原文、学生作答又全都看不清的题：只是照片边缘的半行字，丢掉
+            if blk.type in ("item", "passage") and _is_empty_fragment(blk):
+                dropped += 1
+                continue
             if blk.type == "passage" and _block_numbers(blk) & solid_nums:
                 dropped += 1
                 continue

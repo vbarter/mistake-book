@@ -8,7 +8,7 @@ import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
 import { folderErrors, groupByKnowledge } from "../lib/errors";
-import { deleteFolder, deletePaper, folderStats, getFolder, paperStats, paperSubject, reorderPapers, saveFolder, type Folder } from "../lib/folders";
+import { deleteFolder, deletePaper, folderStats, getFolder, paperQuality, paperStats, paperSubject, reorderPapers, saveFolder, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
 import { scanStageText, useJobs } from "../lib/jobs";
 import { toast } from "../store/banner";
@@ -103,6 +103,7 @@ export default function FolderDetail() {
               </span>
             </span>
             {p.scanJob && <Icon name="sparkles" size={20} style={{ color: "var(--brand)" }} />}
+            {!p.scanJob && paperQuality(p).warn && <span className="quality-tag"><Icon name="alert" size={13} stroke={2.4} />{paperQuality(p).label}</span>}
             </button>
         );
         }}

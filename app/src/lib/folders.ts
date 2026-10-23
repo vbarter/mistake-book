@@ -3,7 +3,7 @@
  * 一次考试一个文件夹，一个文件夹装多张试卷；每张试卷有若干照片和 AI 还原的电子版。
  * 错题不再单独"收录"：扫描完的试卷里判错的题（含未作答）自动算进文件夹和错题库。
  */
-import type { DigitizedQuestion, DigitizedResult, Mark, QuestionType, Subject } from "../api/types";
+import type { DigitizedQuestion, DigitizedResult, Mark, PhotoIssue, QuestionType, Subject } from "../api/types";
 
 export interface FolderPage {
   id: string;
@@ -196,6 +196,33 @@ export function toPage(src: string): Promise<FolderPage> {
 }
 
 /** 旧版本存的电子版没有版面块（blocks）或空 id（blankIds），当作未扫描，重扫即可 */
+/** 学生作答整个看不清：去掉空白和标点后只剩「□」 */
+export function isUnreadable(student: string | undefined): boolean {
+  const core = (student || "").replace(/[\s,，.。;；:：()（）$\\]/g, "");
+  return core.length > 0 && [...core].every((c) => c === "□");
+}
+
+export const PHOTO_ISSUE_LABEL: Record<PhotoIssue, string> = { blurry: "模糊", cropped: "不完整", dark: "太暗", glare: "反光", tilted: "歪斜", covered: "有遮挡" };
+
+/** 一张试卷的拍摄质量：识别时模型报告的问题 + 看不清的字有多少。warn 时在试卷行和试卷页提示重拍 */
+export function paperQuality(paper: Paper): { warn: boolean; label: string; detail: string; issues: PhotoIssue[]; unreadable: number } {
+  const d = validDigitized(paper.digitized);
+  if (!d) return { warn: false, label: "", detail: "", issues: [], unreadable: 0 };
+  const issues = [...new Set(d.pages.flatMap((s) => s.photoIssues ?? []))];
+  const notes = [...new Set(d.pages.map((s) => s.photoNote ?? "").filter(Boolean))];
+  let unreadable = 0;
+  for (const s of d.pages)
+    for (const b of s.blocks) {
+      unreadable += ((b.text || "").match(/□/g) ?? []).length;
+      for (const x of b.blanks) if (x.student.includes("□")) unreadable += 1;
+    }
+  const warn = issues.length > 0 || unreadable >= 3;
+  const label = issues.includes("cropped") ? "拍得不完整" : "拍得不清楚";
+  const what = issues.length ? `照片${issues.map((x) => PHOTO_ISSUE_LABEL[x]).join("、")}` : "";
+  const detail = [what, ...notes, unreadable ? `有 ${unreadable} 处内容没识别出来` : ""].filter(Boolean).join("；");
+  return { warn, label, detail, issues, unreadable };
+}
+
 export function validDigitized(d: DigitizedResult | undefined | null): DigitizedResult | null {
   if (!d || !Array.isArray(d.pages) || !Array.isArray(d.questions)) return null;
   if (!d.pages.every((p) => Array.isArray(p.blocks)) || !d.questions.every((q) => Array.isArray(q.blankIds))) return null;
@@ -230,12 +257,16 @@ function dropGhostSheets(d: DigitizedResult): DigitizedResult {
   if (solidNums.size === 0) return d;
 
   const isQ = (b: Block) => b.type === "item" || b.type === "passage";
+  // 残片上既没有题目原文、学生作答又全都看不清的题（照片边缘的半行字）
+  const emptyFragment = (b: Block) =>
+    isQ(b) && (b.text || "").replace(/\[\[[^\]]*\]\]/g, "").replace(/[\s\p{P}\p{S}_□]/gu, "").length < 6 && b.blanks.every((x) => !x.student.trim() || isUnreadable(x.student));
   const droppedBlocks = new Map<number, Set<number>>(); // sheet → 被丢掉的块下标
   const droppedSheets = new Set<number>();
   const pages = d.pages.map((s, si) => {
     if (!suspect(s)) return s;
     const gone = new Set<number>();
     s.blocks.forEach((b, bi) => {
+      if (emptyFragment(b)) gone.add(bi);
       if (b.type === "passage" && blockNums(b).some((n) => solidNums.has(n))) gone.add(bi);
       if (b.type === "item" && solidItems.get((b.number || "").trim())?.has(textKey(b.text))) gone.add(bi);
     });

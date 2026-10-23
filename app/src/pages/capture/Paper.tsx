@@ -9,7 +9,7 @@ import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
 import { formatDateTime, unwrapLines } from "../../lib/format";
 import { groupBySection, paperErrors } from "../../lib/errors";
-import { autoMark, deletePaper, getFolder, paperStats, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
+import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperStats, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { scanStageText, useJobs } from "../../lib/jobs";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
@@ -48,6 +48,8 @@ function renderPrint(text: string, blanks: DigitizedBlank[]): ReactNode[] {
 /** 作答表格的判定列：对 ✅、错 ❌（老师批的和 AI 判的一样显示） */
 function MarkChip({ mark, student }: { mark: Mark; student: string }) {
   if (mark === "blank" || (mark === "wrong" && unanswered(student))) return <Tag kind="pending" icon="alert">{UNANSWERED}</Tag>;
+  // 学生作答整个看不清、老师也没批：判不了，提示重拍而不是「未批改」
+  if (mark === "unmarked" && isUnreadable(student)) return <Tag kind="pending" icon="alert">看不清</Tag>;
   if (mark === "correct") return <span className="verdict" role="img" aria-label="对">✅</span>;
   if (mark === "wrong") return <span className="verdict" role="img" aria-label="错">❌</span>;
   return <Tag kind={mark === "partial" ? "partial" : "neutral"} icon={mark === "unmarked" ? "info" : undefined}>{MARK_LABEL[mark]}</Tag>;
@@ -80,6 +82,7 @@ export default function Paper() {
   const shown = useMemo(() => applyErrorFilter(errors, filter), [errors, filter]);
   const groups = useMemo(() => groupBySection(shown), [shown]);
   const stats = paper ? paperStats(paper) : null;
+  const quality = paper ? paperQuality(paper) : null;
 
   // 没扫描过（也不在还原中）的试卷直接进录入页继续
   useEffect(() => {
@@ -287,6 +290,16 @@ export default function Paper() {
             </span>
           </div>
         </div>
+        {quality?.warn && (
+          <div className="quality-card">
+            <Icon name="alert" size={18} stroke={2.2} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <b>这张{quality.label}</b>
+              <span className="t-foot" style={{ display: "block" }}>{quality.detail}。重拍一张清楚、完整的，识别和批改会更准。</span>
+            </span>
+            <Button size="xs" variant="tinted" icon="camera" onClick={rescan}>重拍</Button>
+          </div>
+        )}
         <IconSegmented value={tab} onChange={setTab} options={[{ value: "paper", label: "试卷", icon: "document" }, { value: "answers", label: "作答", icon: "pencil" }, { value: "errors", label: `错题 ${stats.problems}`, icon: "xcircle" }]} />
 
         {tab === "paper" && paperTab}

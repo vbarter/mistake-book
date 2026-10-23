@@ -133,3 +133,9 @@
 
 /* 判定：✅ / ❌ */
 .verdict { font-size: 18px; line-height: 1; display: inline-block; }
+
+/* 拍摄质量提示 */
+.quality-tag { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--accent-bg, #fff0e3); color: var(--accent-on, #b35300); font-size: 12px; font-weight: 700; }
+.quality-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--accent-bg, #fff0e3); color: var(--accent-on, #b35300); }
+.quality-card b { font-size: 15px; }
+.quality-card .t-foot { color: inherit; opacity: 0.9; margin-top: 2px; }

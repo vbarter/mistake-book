@@ -20,7 +20,7 @@ from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
 from . import ocr
 from . import queue as page_queue
-from .digitize import _nearby_wordbank, _render_text, clean_sheets, derive_questions, drop_ghost_sheets
+from .digitize import _nearby_wordbank, _render_text, clean_sheets, derive_questions, drop_ghost_sheets, unreadable
 
 log = logging.getLogger(__name__)
 
@@ -119,6 +119,7 @@ DIGITIZE_SYSTEM_PROMPT = (
     "\\text{...}、\\( \\) 这类包装只是排版，去掉只留内容。\n"
     "公式的写法：数学、物理、化学的公式和表达式（分数、根号、上下标、方程、函数式、坐标运算等）一律写成 LaTeX 并用 $ 包起来，如 $y=-\\frac{3}{4}x^2+\\frac{3}{2}x+\\frac{9}{4}$、$A(-1,0)$、$\\sqrt{2}$、$\\mathrm{H_2O}$；普通文字、单独的数字和选项字母不要加 $。题干 text、学生作答 student、answer、analysis 都遵守。\n"
     "输出 sheets：照片里拍到几页卷面就输出几个 sheet（左右两页拍在一张照片里就是两个 sheet，先左后右）。"
+    "每个 sheet 还要评估这页照片的拍摄质量：photoIssues 列出影响识别的问题（blurry 模糊失焦、cropped 卷面有题被拍到照片外或被裁掉、dark 太暗、glare 反光、tilted 严重倾斜变形、covered 被手指物品遮挡或折痕），拍得好就给空数组；photoNote 用一句话（不超过 30 字）说明哪里受影响，如「右下角反光，第 38–40 题看不清」「底部被裁掉，第 21 题以后不完整」，没有问题留空。只报告真正影响识别的问题，轻微的不报。"
     "照片边缘只拍到一部分的相邻页（文字被照片边缘截断、句子不完整）不要还原，不要为它单独建 sheet，也不要把它的题号记到别的空上；同一题号在整张照片里只能出现一次。"
     "每个 sheet 给出页码文字 label（如「第5页」）、卷头标题 title、卷面总分或得分 score（原样文字）、不属于任何块的零散文字 note，"
     "并根据卷头、页眉页脚、题型判断整张卷子的学科 subject（学科枚举，如「九年级化学」就是 chemistry；题块的 subject 默认和它一致，只有卷子里夹了别科内容才单独标）和考试信息：examLevel（单元测 / 期中 / 期末 / 中考模拟 / 中考 / 高考模拟 / 高考 / 竞赛 / 日常练习）、examGrade（年级或学段，如「九年级」）、"
@@ -183,6 +184,8 @@ _SHEET_PROPS = {
     "examGrade": {"type": "string"},
     "region": {"type": "string"},
     "syllabus": {"type": "string"},
+    "photoIssues": {"type": "array", "items": {"type": "string", "enum": ["blurry", "cropped", "dark", "glare", "tilted", "covered"]}},
+    "photoNote": {"type": "string"},
     "blocks": {"type": "array", "items": {"type": "object", "properties": _BLOCK_PROPS, "required": list(_BLOCK_PROPS), "additionalProperties": False}},
 }
 GRADE_SYSTEM_PROMPT = (
@@ -519,7 +522,8 @@ class ClaudeProvider(AIProvider):
                     continue
                 options = block.options or (_nearby_wordbank(sheet.blocks, bi) if block.type == "passage" else [])
                 for b in block.blanks:
-                    if b.mark != "unmarked" or not b.student.strip():
+                    # 没写的不送；整个看不清的也不送（猜不出来，界面显示「看不清」并提示重拍）
+                    if b.mark != "unmarked" or not b.student.strip() or unreadable(b.student):
                         continue
                     stem = _render_text(block.text, block.blanks, b.id).replace("____", "【空】", 1)
                     extra = " ".join(x for x in [block.hint, f"（{block.instruction}）" if block.instruction else ""] if x)

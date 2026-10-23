@@ -775,3 +775,17 @@ def test_pdf_math_and_unrecognized_text():
     assert "\\" not in out and "$" not in out
     assert "b=-3/4" in out and "x<sub>1</sub>" in out and "x<super>2</super>" in out
     assert "未识别" in out and "□" not in out
+
+
+def test_photo_quality_and_empty_fragments():
+    """sheet 带照片质量；残片上没有题干、作答全看不清的题被丢掉；看不清的作答不送 AI 阅卷。"""
+    from app.ai.digitize import clean_sheets, derive_questions, drop_ghost_sheets, unreadable
+
+    real = {"label": "第4页", "photoIssues": ["glare", "bogus"], "photoNote": "右下角反光，第 36 题看不清", "blocks": [
+        {"type": "item", "number": "35", "text": "What a day [[35]]", "blanks": [{"id": "35", "student": "A"}]}]}
+    strip = {"label": "", "blocks": [{"type": "item", "number": "40", "text": "[[40]]", "blanks": [{"id": "40", "student": "□"}]}]}
+    sheets = clean_sheets({"sheets": [real, strip]}, 0)
+    assert sheets[0].photoIssues == ["glare"] and sheets[0].photoNote.startswith("右下角")
+    kept = drop_ghost_sheets(sheets)
+    assert [q.number for q in derive_questions(kept)] == ["35"]
+    assert unreadable("□□ □") and unreadable("$□$") and not unreadable("A□") and not unreadable("")
