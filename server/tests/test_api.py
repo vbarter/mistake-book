@@ -606,3 +606,55 @@ def test_ocr_disabled_without_config(monkeypatch):
     monkeypatch.delenv("OCR_BASE_URL", raising=False)
     monkeypatch.delenv("OCR_AUTH", raising=False)
     assert ocr.enabled() is False and ocr.health() == "disabled"
+
+
+def test_ocr_provider_switch(monkeypatch):
+    """OCR_PROVIDER 开关：paddle / baidu / off；留空自动挑配置齐全的一套。"""
+    from app.ai import ocr
+
+    assert ocr.provider() == "off" and ocr.enabled() is False
+    monkeypatch.setenv("BAIDU_OCR_API_KEY", "k")
+    monkeypatch.setenv("BAIDU_OCR_SECRET_KEY", "s")
+    assert ocr.provider() == "baidu" and ocr.enabled()
+    monkeypatch.setenv("OCR_BASE_URL", "https://ocr.example")
+    monkeypatch.setenv("OCR_AUTH", "u:p")
+    assert ocr.provider() == "paddle"  # 自动模式 paddle 优先
+    monkeypatch.setenv("OCR_PROVIDER", "baidu")
+    assert ocr.provider() == "baidu"
+    monkeypatch.setenv("OCR_PROVIDER", "off")
+    assert ocr.enabled() is False and ocr.health() == "disabled"
+    monkeypatch.setenv("OCR_PROVIDER", "paddle")
+    monkeypatch.delenv("OCR_AUTH")
+    assert ocr.enabled() is False and ocr.health() == "paddle:unconfigured"
+
+
+def test_baidu_ocr_lines_and_token_refresh(monkeypatch):
+    """百度 doc_analysis：手写行加 [手写] 前缀；token 失效（110）自动刷新重试。"""
+    from app.ai import ocr
+
+    monkeypatch.setenv("OCR_PROVIDER", "baidu")
+    monkeypatch.setenv("BAIDU_OCR_API_KEY", "k")
+    monkeypatch.setenv("BAIDU_OCR_SECRET_KEY", "s")
+    monkeypatch.setattr(ocr, "_baidu_token_cache", {"value": "stale", "expires": 9e12})
+    calls = []
+
+    def fake_request(url, headers, body, timeout):
+        calls.append(url)
+        if url == ocr.BAIDU_TOKEN_URL:
+            return {"access_token": "fresh", "expires_in": 2592000}
+        if "access_token=stale" in url:
+            return {"error_code": 110, "error_msg": "Access token invalid or no longer valid"}
+        return {
+            "results": [
+                {"words_type": "print", "words": {"word": "1. 方程 x^{2}-5x+6=0 的两个根为____。"}},
+                {"words_type": "handwriting", "words": {"word": "2, 3"}},
+                {"words_type": "print", "words": {"word": "  "}},
+            ]
+        }
+
+    monkeypatch.setattr(ocr, "_json_request", fake_request)
+    text = ocr.ocr_image(b"img")
+    assert text == "1. 方程 x^{2}-5x+6=0 的两个根为____。\n[手写] 2, 3"
+    assert ocr.BAIDU_TOKEN_URL in calls and "access_token=fresh" in calls[-1]
+    assert ocr.health() == "baidu:online"
+    assert ocr.baidu_lines({"words_result": [{"words": "a"}, {"words": "b"}]}) == "a\nb"

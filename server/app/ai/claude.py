@@ -113,7 +113,7 @@ SCAN_SCHEMA = {
 DIGITIZE_SYSTEM_PROMPT = (
     "你是一位教师助手，负责把试卷照片逐字逐段还原成电子版，并且保持与原卷一致的版面结构。你会收到一张试卷照片，"
     "有时还会附上 OCR 模型逐行识别出的印刷文字：题目、选项、大题说明、页眉页脚等印刷内容以 OCR 文字为准逐字照抄，不要改写；"
-    "照片用来判断版面结构（分栏、分块、空格位置）、学生手写作答和老师批改符号，这些 OCR 文字里没有。"
+    "照片用来判断版面结构（分栏、分块、空格位置）、学生手写作答和老师批改符号。OCR 文字里以「[手写]」开头的行是 OCR 猜测的学生手写内容，这个猜测可能出错（整行印刷题干也可能被标成手写），一律以照片为准：照片里是印刷的仍照抄为题干，是学生手写的就填进 student，不要因为带了 [手写] 标记就漏掉题目。"
     "OCR 文字里的 LaTeX 标记要这样处理：\\underline{...} 表示原卷划线，正文只保留划线里的文字，并在 instruction 里注明划线部分（如「对划线部分提问：With the help of these games」）；"
     "\\text{...}、\\( \\) 这类包装只是排版，去掉只留内容；真正的数学公式（分数、根号、上下标、方程）保留 LaTeX 写法。\n"
     "输出 sheets：照片里拍到几页卷面就输出几个 sheet（左右两页拍在一张照片里就是两个 sheet，先左后右）。"
@@ -406,7 +406,7 @@ class ClaudeProvider(AIProvider):
         subject_names = "、".join(SUBJECT_LABELS[s] for s in subjects if s in SUBJECT_LABELS)
 
         def one(index: int, page: Crop) -> list[DigitizedPage]:
-            # 第一步：OCR 模型把印刷文字逐行识别出来（几秒钟）；失败就退回让大模型直接看图
+            # 第一步：OCR（paddle / baidu，见 ai/ocr.py）把文字逐行识别出来（几秒钟）；失败就退回让大模型直接看图
             ocr_text = ""
             if ocr.enabled():
                 try:
@@ -422,7 +422,7 @@ class ClaudeProvider(AIProvider):
                 },
             ]
             if ocr_text:
-                content.append({"type": "text", "text": "OCR 模型逐行识别出的印刷文字（公式为 LaTeX，印刷内容以此为准逐字照抄）：\n<ocr>\n" + ocr_text[:20000] + "\n</ocr>"})
+                content.append({"type": "text", "text": "OCR 模型逐行识别出的文字（已按分栏排序，栏间空行；公式为 LaTeX；印刷内容以此为准逐字照抄；以 [手写] 开头的行是 OCR 猜测的学生手写，可能有误，以照片为准）：\n<ocr>\n" + ocr_text[:20000] + "\n</ocr>"})
             content += [
                 {
                     "type": "text",
