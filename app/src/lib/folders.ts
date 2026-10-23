@@ -178,20 +178,29 @@ export function validDigitized(d: DigitizedResult | undefined | null): Digitized
   return d;
 }
 
+/** 答错（含半对） */
 export const isWrong = (q: DigitizedQuestion) => q.mark === "wrong" || q.mark === "partial";
+/** 未作答：新数据是 blank；旧数据存成 wrong + 空作答 */
+export const isBlank = (q: DigitizedQuestion) => q.mark === "blank" || (q.mark === "wrong" && !q.studentAnswer.trim());
+/** 答错或未作答都需要订正 */
+export const isProblem = (q: DigitizedQuestion) => isBlank(q) || isWrong(q);
+/** 真正答错（排除未作答） */
+export const isReallyWrong = (q: DigitizedQuestion) => isWrong(q) && !isBlank(q);
 
 /** 一张试卷的统计 */
-export function paperStats(paper: Paper): { scanned: boolean; total: number; wrong: number; correct: number; corrected: number } {
+export function paperStats(paper: Paper): { scanned: boolean; total: number; wrong: number; blank: number; problems: number; correct: number; corrected: number } {
   const d = validDigitized(paper.digitized);
-  if (!d) return { scanned: false, total: 0, wrong: 0, correct: 0, corrected: 0 };
-  const wrongQs = d.questions.filter(isWrong);
-  const corrected = wrongQs.filter((q) => paper.corrected?.[String(q.index)]).length;
-  return { scanned: true, total: d.questions.length, wrong: wrongQs.length, correct: d.questions.filter((q) => q.mark === "correct").length, corrected };
+  if (!d) return { scanned: false, total: 0, wrong: 0, blank: 0, problems: 0, correct: 0, corrected: 0 };
+  const problems = d.questions.filter(isProblem);
+  const blank = problems.filter(isBlank).length;
+  const corrected = problems.filter((q) => paper.corrected?.[String(q.index)]).length;
+  return { scanned: true, total: d.questions.length, wrong: problems.length - blank, blank, problems: problems.length, correct: d.questions.filter((q) => q.mark === "correct").length, corrected };
 }
 
 /** 一个文件夹的统计与推断信息（学科、考试信息） */
-export function folderStats(folder: Folder): { papers: number; unscanned: number; wrong: number; corrected: number; subject: Subject | null; exam: string; syllabus: string } {
+export function folderStats(folder: Folder): { papers: number; unscanned: number; wrong: number; blank: number; problems: number; corrected: number; subject: Subject | null; exam: string; syllabus: string } {
   let wrong = 0;
+  let blank = 0;
   let corrected = 0;
   let unscanned = 0;
   const subjectCount = new Map<Subject, number>();
@@ -201,6 +210,7 @@ export function folderStats(folder: Folder): { papers: number; unscanned: number
     const st = paperStats(p);
     if (!st.scanned) unscanned += 1;
     wrong += st.wrong;
+    blank += st.blank;
     corrected += st.corrected;
     const d = validDigitized(p.digitized);
     if (d) {
@@ -212,5 +222,5 @@ export function folderStats(folder: Folder): { papers: number; unscanned: number
     }
   }
   const guessed = [...subjectCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  return { papers: folder.papers.length, unscanned, wrong, corrected, subject: folder.subject ?? guessed, exam, syllabus };
+  return { papers: folder.papers.length, unscanned, wrong, blank, problems: wrong + blank, corrected, subject: folder.subject ?? guessed, exam, syllabus };
 }

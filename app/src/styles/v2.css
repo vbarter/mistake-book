@@ -76,6 +76,7 @@
 .nums { display: flex; flex-wrap: wrap; gap: 6px; }
 .num-chip { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 14px; font-size: 13px; font-weight: 700; background: var(--wrong-bg); color: var(--wrong); }
 .num-chip--done { background: var(--mastered-bg); color: var(--mastered); }
+.num-chip--blank { background: var(--accent-bg); color: var(--accent-on); }
 
 /* 大题标题左侧色条 */
 .sec-bar { width: 4px; height: 18px; border-radius: 2px; flex-shrink: 0; }

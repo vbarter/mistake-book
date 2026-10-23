@@ -14,10 +14,10 @@ import "../../styles/paper.css";
 
 type Tab = "paper" | "answers" | "errors";
 
-const MARK_LABEL: Record<Mark, string> = { correct: "正确", wrong: "错误", partial: "半对", unmarked: "未批改" };
+const MARK_LABEL: Record<Mark, string> = { correct: "正确", wrong: "错误", partial: "半对", blank: "未作答", unmarked: "未批改" };
 const BLANK_RE = /\[\[([^[\]]{1,24})\]\]/g;
 const UNANSWERED = "未作答";
-const isWrongMark = (m: Mark) => m === "wrong" || m === "partial";
+const isProblemMark = (m: Mark, student: string) => m === "blank" || (m === "wrong" && unanswered(student));
 const unanswered = (s: string) => !s.trim();
 const stripParen = (s: string) => s.replace(/^[（(]|[）)]$/g, "");
 
@@ -44,7 +44,7 @@ function renderPrint(text: string, blanks: DigitizedBlank[]): ReactNode[] {
 }
 
 function MarkChip({ mark, student }: { mark: Mark; student: string }) {
-  if (mark === "wrong" && unanswered(student)) return <Tag kind="wrong" icon="alert">{UNANSWERED}</Tag>;
+  if (mark === "blank" || (mark === "wrong" && unanswered(student))) return <Tag kind="pending" icon="alert">{UNANSWERED}</Tag>;
   const kind = mark === "correct" ? "correct" : mark === "wrong" ? "wrong" : mark === "partial" ? "partial" : "neutral";
   return <Tag kind={kind} icon={mark === "unmarked" ? "info" : undefined}>{MARK_LABEL[mark]}</Tag>;
 }
@@ -208,9 +208,9 @@ export default function Paper() {
               <span>正确答案</span>
             </div>
             {rows.map((b) => (
-              <div className={`ans__row${isWrongMark(b.mark) ? " ans__row--wrong" : ""}`} key={b.id}>
+              <div className={`ans__row${b.mark === "wrong" || b.mark === "partial" ? " ans__row--wrong" : isProblemMark(b.mark, b.student) ? " ans__row--blank" : ""}`} key={b.id}>
                 <span className="ans__num">{b.number}</span>
-                <span className={`ans__hand${isWrongMark(b.mark) ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : b.student}</span>
+                <span className={`ans__hand${b.mark === "wrong" || b.mark === "partial" ? " ans__hand--wrong" : ""}`}>{unanswered(b.student) ? "—" : b.student}</span>
                 <span>
                   <MarkChip mark={b.mark} student={b.student} />
                   {b.note && b.note !== UNANSWERED && <span className="t-cap" style={{ color: "var(--wrong)", display: "block" }}>{b.note}</span>}
@@ -228,12 +228,12 @@ export default function Paper() {
   const errorsTab = (
     <>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Tag kind="wrong" icon="alert">未作答 {errors.filter((e) => e.kind === "未作答").length}</Tag>
-        <Tag kind="partial" icon="xmark">答错 {errors.filter((e) => e.kind !== "未作答").length}</Tag>
+        <Tag kind="wrong" icon="xmark">答错 {errors.filter((e) => e.kind !== "未作答").length}</Tag>
+        <Tag kind="pending" icon="alert">未作答 {errors.filter((e) => e.kind === "未作答").length}</Tag>
         <Tag kind="correct">已订正 {stats.corrected}</Tag>
       </div>
       {errors.length === 0 ? (
-        <Empty icon="seal" title="这张试卷没有错题" text="真棒。" />
+        <Empty icon="seal" title="这张试卷没有错题，也没有空题" text="真棒。" />
       ) : (
         <>
           <Hint icon="list">按知识点分组，做完一题就勾掉。勾选会同步到文件夹和错题库。</Hint>
@@ -260,12 +260,13 @@ export default function Paper() {
             <h1 className="t-title3 ellipsis" style={{ fontWeight: 800 }}>{paper.name}</h1>
             <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <Tag kind="wrong">{stats.wrong} 错</Tag>
+              {stats.blank > 0 && <Tag kind="pending" icon="alert">{stats.blank} 空</Tag>}
               <Tag kind="correct">{stats.correct} 对</Tag>
               <Tag kind="neutral" icon="document">{sheets.length} 个卷面</Tag>
             </span>
           </div>
         </div>
-        <IconSegmented value={tab} onChange={setTab} options={[{ value: "paper", label: "试卷", icon: "document" }, { value: "answers", label: "作答", icon: "pencil" }, { value: "errors", label: `错题 ${stats.wrong}`, icon: "xcircle" }]} />
+        <IconSegmented value={tab} onChange={setTab} options={[{ value: "paper", label: "试卷", icon: "document" }, { value: "answers", label: "作答", icon: "pencil" }, { value: "errors", label: `错题 ${stats.problems}`, icon: "xcircle" }]} />
 
         {tab === "paper" && paperTab}
         {tab === "answers" && answersTab}
@@ -273,7 +274,7 @@ export default function Paper() {
 
         <div className="bottom-bar" style={{ marginTop: "auto" }}>
           <Button variant="outline" icon="export" onClick={() => setExporting(true)} style={{ flex: 1 }}>导出这张</Button>
-          <Button icon="pencil" onClick={() => setTab("errors")} style={{ flex: 1.3 }} disabled={stats.wrong === 0}>订正错题 · {stats.wrong - stats.corrected}</Button>
+          <Button icon="pencil" onClick={() => setTab("errors")} style={{ flex: 1.3 }} disabled={stats.problems === 0}>订正 · {stats.problems - stats.corrected}</Button>
         </div>
       </div>
 

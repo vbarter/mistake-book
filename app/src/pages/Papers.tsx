@@ -85,7 +85,7 @@ export default function Papers() {
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="clock" size={14} stroke={2} />{formatDate(f.updatedAt)}</span>
                   </span>
                 </div>
-                {st.unscanned > 0 && st.wrong === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.wrong} corrected={st.corrected} />}
+                {st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} corrected={st.corrected} />}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className="thumbs">
@@ -100,8 +100,9 @@ export default function Papers() {
                   {more > 0 && <span className="tag tag--neutral">+{more}</span>}
                   {kps.length === 0 && <span className="t-foot c-sec">{st.unscanned > 0 ? "扫一下，错题就自动归到知识点里" : "没有错题，真棒"}</span>}
                 </span>
-                {st.wrong > 0 && st.corrected > 0 && <Tag kind="correct">{st.corrected >= st.wrong ? "全部订正" : `已订正 ${st.corrected}`}</Tag>}
-                {st.unscanned > 0 && st.wrong === 0 && <Tag kind="accent">去扫描</Tag>}
+                {st.blank > 0 && <Tag kind="pending" icon="alert">空 {st.blank}</Tag>}
+                {st.problems > 0 && st.corrected > 0 && <Tag kind="correct">{st.corrected >= st.problems ? "全部订正" : `已订正 ${st.corrected}`}</Tag>}
+                {st.unscanned > 0 && st.problems === 0 && <Tag kind="accent">去扫描</Tag>}
               </div>
             </button>
           );

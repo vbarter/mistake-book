@@ -24,7 +24,15 @@ from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemp
 
 FONT = "STSong-Light"
 BLANK_RE = re.compile(r"\[\[([^\[\]]{1,24})\]\]")
-MARK_LABEL = {"correct": "正确", "wrong": "错误", "partial": "半对", "unmarked": "未批改"}
+MARK_LABEL = {"correct": "正确", "wrong": "错误", "partial": "半对", "blank": "未作答", "unmarked": "未批改"}
+PROBLEM_MARKS = ("wrong", "partial", "blank")
+
+
+def _kind(q: dict) -> str:
+    """答错 / 半对 / 未作答；旧数据里未作答存成 wrong + 空作答，一并识别。"""
+    if q.get("mark") == "blank" or not (q.get("studentAnswer") or "").strip():
+        return UNANSWERED
+    return "半对" if q.get("mark") == "partial" else "答错"
 UNANSWERED = "未作答"
 
 
@@ -139,8 +147,10 @@ def _answer_part(story: list, sheets: list[dict]) -> None:
                 mark = b.get("mark") or "unmarked"
                 student = b.get("student") or ""
                 unanswered = not student.strip()
+                if unanswered and mark == "wrong":
+                    mark = "blank"
                 st = S_CELL_WRONG if mark in ("wrong", "partial") else S_CELL_OK if mark == "correct" else S_CELL
-                verdict = UNANSWERED if unanswered and mark == "wrong" else MARK_LABEL.get(mark, mark)
+                verdict = MARK_LABEL.get(mark, mark)
                 note = b.get("note") or ""
                 if note and note != UNANSWERED:
                     verdict += f"（{note}）"
@@ -152,29 +162,40 @@ def _answer_part(story: list, sheets: list[dict]) -> None:
                 ])
                 if mark in ("wrong", "partial"):
                     styles.append(("BACKGROUND", (0, len(rows) - 1), (-1, len(rows) - 1), colors.HexColor("#fff4f4")))
+                elif mark == "blank":
+                    styles.append(("BACKGROUND", (0, len(rows) - 1), (-1, len(rows) - 1), colors.HexColor("#fff7ec")))
     tbl = Table(rows, colWidths=[16 * mm, 72 * mm, 30 * mm, 52 * mm], repeatRows=1)
     tbl.setStyle(TableStyle(styles))
     story.append(tbl)
 
 
 def _summary_part(story: list, sheets: list[dict], questions: list[dict]) -> None:
-    wrong = [q for q in questions if q.get("mark") in ("wrong", "partial")]
+    wrong = [q for q in questions if q.get("mark") in PROBLEM_MARKS]
     story.append(PageBreak())
-    story.append(Paragraph("错题汇总", S_TITLE))
+    story.append(Paragraph("错题与未作答汇总", S_TITLE))
     syllabus = next((s.get("syllabus") for s in sheets if s.get("syllabus")), "")
     exam = " · ".join(x for x in [next((s.get("region") for s in sheets if s.get("region")), ""), next((s.get("examGrade") for s in sheets if s.get("examGrade")), ""), next((s.get("examLevel") for s in sheets if s.get("examLevel")), "")] if x)
-    sub = f"共 {len(questions)} 题，错 {len(wrong)} 题"
+    n_blank = sum(1 for q in wrong if _kind(q) == UNANSWERED)
+    sub = f"共 {len(questions)} 题，答错 {len(wrong) - n_blank} 题，未作答 {n_blank} 题"
     if exam:
         sub += f" · {exam}"
     if syllabus:
         sub += f" · 按{syllabus}归类"
     story.append(Paragraph(_esc(sub), S_SUB))
     if not wrong:
-        story.append(Paragraph("本卷没有错题。", S_BODY))
+        story.append(Paragraph("本卷没有错题，也没有空题。", S_BODY))
         return
 
     def numbers(qs: list[dict]) -> str:
         return "、".join(str(q.get("number") or "") for q in qs)
+
+    by_kind: "OrderedDict[str, list[dict]]" = OrderedDict((k, []) for k in ("答错", "半对", UNANSWERED))
+    for q in wrong:
+        by_kind[_kind(q)].append(q)
+    story.append(Paragraph("按类型", S_H))
+    for k, qs in by_kind.items():
+        if qs:
+            story.append(Paragraph(f"{k}（{len(qs)} 题）：{numbers(qs)}", S_BODY))
 
     by_kp: "OrderedDict[str, list[dict]]" = OrderedDict()
     for q in wrong:

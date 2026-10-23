@@ -373,8 +373,8 @@ def test_claude_digitize_cleans_fields(monkeypatch):
     assert [b.id for b in passage.blanks] == ["36", "37", "38"] and passage.blanks[1].number == "37"
     item44 = sheets[0].blocks[3]
     assert item44.subject == "math" and item44.questionType == "fill" and item44.bbox == [0.0, 0.0, 1.0, 1.0] and item44.blanks[0].mark == "unmarked"
-    # 没写作答的空按错题处理
-    assert passage.blanks[2].id == "38" and passage.blanks[2].mark == "wrong" and passage.blanks[2].note == "未作答"
+    # 没写作答的空单独归为 blank（未作答），不算答错
+    assert passage.blanks[2].id == "38" and passage.blanks[2].mark == "blank" and passage.blanks[2].note == ""
     assert [q.number for q in qs] == ["36", "37", "38", "44", "52"]
     qs = [q for q in qs if q.number != "38"]
     assert qs[0].options == ["A. repairs", "B. awards"] and qs[0].questionType == "choice" and qs[0].mark == "correct"
@@ -395,7 +395,7 @@ def test_digitize_dedupes_label_block_and_notes():
     assert [b.type for b in sheets[0].blocks] == ["wordbank", "passage", "item"]  # 重复的篇号块被丢弃
     assert sheets[0].blocks[2].number == "3" and sheets[0].blocks[2].text == "[[3-1]] [[3-2]]"  # 题号尾点与正文重复题号被清掉
     qs = derive_questions(sheets)
-    assert qs[-1].number == "3" and qs[-1].teacherNote == "未作答" and qs[-1].mark == "wrong"
+    assert qs[-1].number == "3" and qs[-1].teacherNote == "" and qs[-1].mark == "blank"
 
 
 def test_claude_digitize_runs_one_call_per_page(monkeypatch):

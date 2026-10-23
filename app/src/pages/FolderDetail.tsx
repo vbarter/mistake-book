@@ -78,8 +78,9 @@ export default function FolderDetail() {
                 {st.scanned ? (
                   <>
                     <Tag kind="wrong">{st.wrong} 错</Tag>
+                    {st.blank > 0 && <Tag kind="pending" icon="alert">{st.blank} 空</Tag>}
                     <Tag kind="correct">{st.correct} 对</Tag>
-                    {st.wrong > 0 && st.corrected >= st.wrong && <Tag kind="correct" icon="checkcircle">全部订正</Tag>}
+                    {st.problems > 0 && st.corrected >= st.problems && <Tag kind="correct" icon="checkcircle">全部订正</Tag>}
                   </>
                 ) : (
                   <Tag kind="pending">待扫描</Tag>
@@ -101,11 +102,11 @@ export default function FolderDetail() {
   const errorsTab = (
     <>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Tag kind="wrong" icon="alert">未作答 {errors.filter((e) => e.kind === "未作答").length}</Tag>
-        <Tag kind="partial" icon="xmark">答错 {errors.filter((e) => e.kind === "答错").length}</Tag>
+        <Tag kind="wrong" icon="xmark">答错 {errors.filter((e) => e.kind !== "未作答").length}</Tag>
+        <Tag kind="pending" icon="alert">未作答 {errors.filter((e) => e.kind === "未作答").length}</Tag>
         <Tag kind="correct">已订正 {stats.corrected}</Tag>
       </div>
-      {errors.length === 0 && <Empty icon="seal" title={stats.unscanned > 0 ? "先扫描试卷" : "这个文件夹没有错题"} text={stats.unscanned > 0 ? "扫描后错题会自动出现在这里。" : "真棒。"} />}
+      {errors.length === 0 && <Empty icon="seal" title={stats.unscanned > 0 ? "先扫描试卷" : "这个文件夹没有错题，也没有空题"} text={stats.unscanned > 0 ? "扫描后错题会自动出现在这里。" : "真棒。"} />}
       {groups.map(([k, items]) => {
         const done = items.filter((i) => i.corrected).length;
         const pct = Math.round((done / items.length) * 100);
@@ -123,7 +124,7 @@ export default function FolderDetail() {
             <span className="progress"><span style={{ width: `${pct}%`, background: done === items.length ? "var(--mastered)" : "var(--brand)" }} /></span>
             <div className="nums">
               {items.map((i) => (
-                <button key={i.key} className={`num-chip${i.corrected ? " num-chip--done" : ""}`} onClick={() => toggle(i, !i.corrected)} aria-label={`第 ${i.q.number} 题，${i.corrected ? "已订正，点击撤销" : "点击标记已订正"}`}>
+                <button key={i.key} className={`num-chip${i.corrected ? " num-chip--done" : i.kind === "未作答" ? " num-chip--blank" : ""}`} onClick={() => toggle(i, !i.corrected)} aria-label={`第 ${i.q.number} 题（${i.kind}），${i.corrected ? "已订正，点击撤销" : "点击标记已订正"}`}>
                   {i.corrected && <Icon name="check" size={11} stroke={3.2} />}
                   {i.q.number}
                 </button>
@@ -163,11 +164,11 @@ export default function FolderDetail() {
           </div>
         </div>
         <div className="stats">
-          <Stat label="试卷" value={stats.papers} icon="document" />
           <Stat label="错题" value={stats.wrong} icon="xcircle" color="var(--wrong)" />
+          <Stat label="未作答" value={stats.blank} icon="alert" color="var(--accent-on)" />
           <Stat label="已订正" value={stats.corrected} icon="checkcircle" color="var(--mastered)" />
         </div>
-        <IconSegmented value={tab} onChange={setTab} options={[{ value: "papers", label: `试卷 ${stats.papers}`, icon: "document" }, { value: "errors", label: `错题汇总 ${stats.wrong}`, icon: "list" }]} />
+        <IconSegmented value={tab} onChange={setTab} options={[{ value: "papers", label: `试卷 ${stats.papers}`, icon: "document" }, { value: "errors", label: `错题汇总 ${stats.problems}`, icon: "list" }]} />
 
         {tab === "papers" ? papersTab : errorsTab}
 

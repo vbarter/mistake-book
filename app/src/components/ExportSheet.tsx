@@ -18,9 +18,14 @@ type Scope = "all" | "open";
 export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: { open: boolean; onClose: () => void; title: string; subtitle?: string; errors: ErrorItem[]; papers?: Paper[] }) {
   const [kind, setKind] = useState<"book" | "paper">("book");
   const [scope, setScope] = useState<Scope>("all");
+  const [withWrong, setWithWrong] = useState(true);
+  const [withBlank, setWithBlank] = useState(true);
   const [busy, setBusy] = useState(false);
-  const openErrors = errors.filter((e) => !e.corrected);
-  const chosen = scope === "all" ? errors : openErrors;
+  const wrongErrors = errors.filter((e) => e.kind !== "未作答");
+  const blankErrors = errors.filter((e) => e.kind === "未作答");
+  const typed = errors.filter((e) => (e.kind === "未作答" ? withBlank : withWrong));
+  const openErrors = typed.filter((e) => !e.corrected);
+  const chosen = scope === "all" ? typed : openErrors;
   const scanned = (papers ?? []).filter((p) => validDigitized(p.digitized));
   const bookPages = Math.max(1, Math.ceil(toBookItems(chosen).length / 3));
 
@@ -30,7 +35,8 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
       if (kind === "book") {
         const items = toBookItems(chosen);
         if (items.length === 0) return toast("这个范围里没有错题");
-        const blob = await apiBlob("/api/digitize/book", { method: "POST", body: { title: `${title} 错题本`, subtitle: [subtitle, `${chosen.length} 题`, scope === "open" ? "只含未订正" : ""].filter(Boolean).join(" · "), items }, timeoutMs: 90000 });
+        const typeLabel = withWrong && withBlank ? "错题 + 未作答" : withBlank ? "只含未作答" : "只含错题";
+        const blob = await apiBlob("/api/digitize/book", { method: "POST", body: { title: `${title} 错题本`, subtitle: [subtitle, `${chosen.length} 题`, typeLabel, scope === "open" ? "只含未订正" : ""].filter(Boolean).join(" · "), items }, timeoutMs: 90000 });
         await exportPdf(blob, `${title} 错题本.pdf`);
       } else {
         if (scanned.length === 0) return toast("还没有扫描过的试卷");
@@ -94,7 +100,15 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 2px" }}>
           <span className="t-foot" style={{ fontWeight: 700, color: "var(--secondary)", display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="list" size={14} stroke={2.2} />错题本里放哪些题</span>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className={`chip chip--select${scope === "all" ? " on" : ""}`} onClick={() => setScope("all")}>全部 {errors.length}</button>
+            <button className={`chip chip--select${withWrong ? " on" : ""}`} aria-pressed={withWrong} onClick={() => setWithWrong((v) => !(v && withBlank) ? true : !v)} style={{ gap: 6 }}>
+              <Icon name="xcircle" size={14} stroke={2.2} />错题 {wrongErrors.length}
+            </button>
+            <button className={`chip chip--select${withBlank ? " on" : ""}`} aria-pressed={withBlank} onClick={() => setWithBlank((v) => !(v && withWrong) ? true : !v)} style={{ gap: 6 }}>
+              <Icon name="alert" size={14} stroke={2.2} />未作答 {blankErrors.length}
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className={`chip chip--select${scope === "all" ? " on" : ""}`} onClick={() => setScope("all")}>全部 {typed.length}</button>
             <button className={`chip chip--select${scope === "open" ? " on" : ""}`} onClick={() => setScope("open")}>只要没订正的 {openErrors.length}</button>
           </div>
         </div>

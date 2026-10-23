@@ -82,7 +82,7 @@ export interface RecognizedItem {
   note: string;
 }
 
-export type Mark = "correct" | "wrong" | "partial" | "unmarked";
+export type Mark = "correct" | "wrong" | "partial" | "blank" | "unmarked"; // blank = 未作答，单独一类
 
 /** 卷面上的一个空：空号、学生手写、老师批改、正确答案 */
 export interface DigitizedBlank {

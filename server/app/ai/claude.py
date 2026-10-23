@@ -122,8 +122,8 @@ DIGITIZE_SYSTEM_PROMPT = (
     "- text：页眉页脚、订正提醒等其他文字。\n"
     "每个空（blank）：id 与占位一致；number 是所属题号；student 只写学生手写内容的逐字转写（涂改后以最终答案为准，看不清的字用「□」，没写就留空，不要写「无法辨认」之类的描述）；"
     "mark 按老师的批改符号判定：打勾「✓」「√」「☑」或写了对号 = correct；打叉「✗」「×」、斜杠「/」、划掉、圈出 = wrong；半勾、打分低于满分、部分扣分 = partial；完全没有批改符号 = unmarked。"
-    "没有写作答的空视为不会做：mark = wrong，note 写「未作答」。note 另外只记录老师的红笔批注或扣分，不写任何说明或推测；"
-    "answer 只写正确答案本身（mark 为 wrong、partial 或 unmarked 时都要给，correct 时留空；依据不在本页、无法确定时留空，不要写任何说明文字）；analysis 是判错时面向学生的简短解析（不超过 80 字，correct 时留空）。\n"
+    "没有写作答的空 mark = blank（未作答，单独一类，不是答错；student 留空，绝不要把正确答案填进 student）。note 只记录老师的红笔批注或扣分，不写任何说明或推测；"
+    "answer 只写正确答案本身（mark 为 wrong、partial、blank 或 unmarked 时都要给，correct 时留空；依据不在本页、无法确定时留空，不要写任何说明文字）；analysis 是判错时面向学生的简短解析（不超过 80 字，correct 时留空）。\n"
     "passage 与 item 块还要给出：subject（学科枚举）、questionType（choice/fill/solve）、知识点 knowledgePoints（所有题都给，1 到 3 项）、判错或未作答时一句「下次注意」tip、看不清的词 uncertainSpans，"
     "以及 bbox。知识点的要求：第一项必须是 syllabus 对应考纲 / 课标里的一级知识点名称，整张卷子用统一的规范名称，便于按知识点归类记忆；后面的项才是细分点。"
     "例如英语按考纲语法与题型：名词、代词、冠词、数词、介词、连词、形容词和副词、动词时态、被动语态、非谓语动词、情态动词、构词法、简单句句型、并列句、宾语从句、定语从句、状语从句、词汇辨析、完形填空、阅读理解、选词填空、句型转换、书面表达；"
@@ -137,7 +137,7 @@ _BLANK_PROPS = {
     "id": {"type": "string"},
     "number": {"type": "string"},
     "student": {"type": "string"},
-    "mark": {"type": "string", "enum": ["correct", "wrong", "partial", "unmarked"]},
+    "mark": {"type": "string", "enum": ["correct", "wrong", "partial", "blank", "unmarked"]},
     "note": {"type": "string"},
     "answer": {"type": "string"},
     "analysis": {"type": "string"},

@@ -10,7 +10,7 @@ import re
 from ..constants import QUESTION_TYPES, SUBJECTS
 from .base import BLOCK_TYPES, DigitizedBlank, DigitizedBlock, DigitizedPage, DigitizedQuestion
 
-MARKS = ("correct", "wrong", "partial", "unmarked")
+MARKS = ("correct", "wrong", "partial", "blank", "unmarked")  # blank = 未作答，单独一类，不算答错
 UNANSWERED = "未作答"
 BLANK_RE = re.compile(r"\[\[([^\[\]]{1,24})\]\]")
 
@@ -43,11 +43,10 @@ def clean_blank(raw: dict, fallback_number: str = "") -> DigitizedBlank | None:
     student = _str(raw.get("student"))
     mark = raw.get("mark") if raw.get("mark") in MARKS else "unmarked"
     note = _str(raw.get("note"))
-    # 没写作答的空视为不会做：按错题处理；老师已打勾的（例如阅读题整体给分）不改
-    if not student.strip() and mark in ("unmarked", "wrong"):
-        mark = "wrong"
-        if UNANSWERED not in note:
-            note = UNANSWERED if not note else f"{UNANSWERED}；{note}"
+    # 没写作答的空单独归为「未作答」（blank），不算答错；老师已打勾的（例如阅读题整体给分）不改
+    if not student.strip() and mark in ("unmarked", "wrong", "blank"):
+        mark = "blank"
+        note = "；".join(x for x in note.split("；") if x and x != UNANSWERED)
     return DigitizedBlank(
         id=bid,
         number=_str(raw.get("number")).strip() or fallback_number or bid.split("-")[0],
@@ -80,7 +79,7 @@ def clean_block(raw: dict) -> DigitizedBlock | None:
     for bid in BLANK_RE.findall(text):
         if bid not in seen:
             seen.add(bid)
-            blanks.append(DigitizedBlank(id=bid, number=number or bid.split("-")[0], mark="wrong", note=UNANSWERED))
+            blanks.append(DigitizedBlank(id=bid, number=number or bid.split("-")[0], mark="blank"))
     subject = raw.get("subject") if raw.get("subject") in SUBJECTS else "math"
     qtype = raw.get("questionType") if raw.get("questionType") in QUESTION_TYPES else ("choice" if raw.get("options") else "fill")
     block = DigitizedBlock(
@@ -164,10 +163,12 @@ def _aggregate_mark(blanks: list[DigitizedBlank]) -> str:
     marks = {b.mark for b in blanks}
     if not marks:
         return "unmarked"
-    if "partial" in marks or {"wrong", "correct"} <= marks:
+    if "partial" in marks or {"wrong", "correct"} <= marks or {"blank", "correct"} <= marks:
         return "partial"
     if "wrong" in marks:
         return "wrong"
+    if "blank" in marks:
+        return "blank"
     if "correct" in marks:
         return "correct"
     return "unmarked"
