@@ -1,8 +1,6 @@
 /** 开屏动效：three.js 画面 + 字幕 + 跳过 + 结尾 Logo。three.js 按需加载，不拖慢首屏。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export const SPLASH_SEEN_KEY = "zcb.splashSeen";
-
 export default function Splash({ onDone }: { onDone: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [caption, setCaption] = useState(-1);

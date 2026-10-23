@@ -5,7 +5,6 @@ import { startJobPoller } from "./lib/jobs";
 import { isTabRoot, setupBackButton, setupEdgeSwipeBack } from "./lib/native";
 import { BannerHost, Spinner } from "./components/ui";
 import { TabBar } from "./components/TabBar";
-import { SPLASH_SEEN_KEY } from "./components/Splash";
 
 const Splash = lazy(() => import("./components/Splash"));
 
@@ -23,22 +22,9 @@ import { Account, Privacy, Subjects } from "./pages/ProfilePages";
 function RequireAuth() {
   const { ready, token } = useAuth();
   const loc = useLocation();
-  // 开屏动效：每次冷启动播一次（WebView 重开时 sessionStorage 为空）；/splash 可随时重播
-  const [splash, setSplash] = useState(() => {
-    try {
-      return !sessionStorage.getItem(SPLASH_SEEN_KEY);
-    } catch {
-      return true;
-    }
-  });
-  const closeSplash = () => {
-    try {
-      sessionStorage.setItem(SPLASH_SEEN_KEY, "1");
-    } catch {
-      /* 无痕模式等：忽略 */
-    }
-    setSplash(false);
-  };
+  // 开屏动效：每次打开 App（冷启动 / 刷新页面）都播一次，右上角可跳过；/splash 可随时重播
+  const [splash, setSplash] = useState(true);
+  const closeSplash = () => setSplash(false);
 
   if (splash) return <Suspense fallback={null}><Splash onDone={closeSplash} /></Suspense>;
   if (!ready) return <Spinner />;
@@ -89,22 +75,9 @@ export default function App() {
     return () => stop?.();
   }, []);
 
-  // 开屏动效：每次冷启动播一次（WebView 重开时 sessionStorage 为空）；/splash 可随时重播
-  const [splash, setSplash] = useState(() => {
-    try {
-      return !sessionStorage.getItem(SPLASH_SEEN_KEY);
-    } catch {
-      return true;
-    }
-  });
-  const closeSplash = () => {
-    try {
-      sessionStorage.setItem(SPLASH_SEEN_KEY, "1");
-    } catch {
-      /* 无痕模式等：忽略 */
-    }
-    setSplash(false);
-  };
+  // 开屏动效：每次打开 App（冷启动 / 刷新页面）都播一次，右上角可跳过；/splash 可随时重播
+  const [splash, setSplash] = useState(true);
+  const closeSplash = () => setSplash(false);
 
   if (splash) return <Suspense fallback={null}><Splash onDone={closeSplash} /></Suspense>;
   if (!ready) return <Spinner />;
