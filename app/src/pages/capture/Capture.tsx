@@ -6,7 +6,7 @@ import { addPaper, deletePaper, getFolder, toPage, updatePaper, validDigitized }
 import { submitScan } from "../../lib/jobs";
 import { haptic, pickImage, pickImages } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
-import { MAX_PAGES, useCapture, type CapturePage } from "../../store/capture";
+import { useCapture, type CapturePage } from "../../store/capture";
 
 type Progress = { stage: string; pct: number; elapsed: number };
 type EntryState = { folderId?: string | null; paperId?: string | null; source?: "camera" | "photos" | "sample" } | null;
@@ -41,14 +41,8 @@ export default function Capture() {
 
   const addSources = async (sources: string[]) => {
     const current = useCapture.getState().pages;
-    const room = MAX_PAGES - current.length;
-    if (room <= 0) {
-      toast(`一张试卷最多 ${MAX_PAGES} 张照片`);
-      return;
-    }
     const added: CapturePage[] = [];
-    for (const src of sources.slice(0, room)) added.push(await toPage(src));
-    if (sources.length > room) toast(`只保留前 ${room} 张，一张试卷最多 ${MAX_PAGES} 张照片`);
+    for (const src of sources) added.push(await toPage(src));
     added.forEach(addPage);
     await persist([...current, ...added]);
     void haptic.light();
@@ -64,7 +58,7 @@ export default function Capture() {
         return true;
       }
       if (source === "photos") {
-        const list = await pickImages(MAX_PAGES);
+        const list = await pickImages(0); // 0 = 不限张数
         if (!list.length) return false;
         autoScanRef.current = true;
         await addSources(list);
@@ -191,21 +185,19 @@ export default function Capture() {
                   </button>
                 </div>
               ))}
-              {pages.length < MAX_PAGES && (
-                <button style={{ aspectRatio: "3 / 4", borderRadius: 10, border: "1.5px dashed var(--separator)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, color: "var(--brand)" }} onClick={() => pick("photos")} disabled={busy}>
-                  <Icon name="plus" size={24} stroke={2.2} />
-                  <span className="t-foot">加照片</span>
-                </button>
-              )}
+              <button style={{ aspectRatio: "3 / 4", borderRadius: 10, border: "1.5px dashed var(--separator)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, color: "var(--brand)" }} onClick={() => pick("photos")} disabled={busy}>
+                <Icon name="plus" size={24} stroke={2.2} />
+                <span className="t-foot">加照片</span>
+              </button>
             </div>
-            <span className="t-foot c-sec">已自动保存 · 一张试卷最多 {MAX_PAGES} 张照片 · 拍完所有页再扫描</span>
+            <span className="t-foot c-sec">已自动保存 · 拍完所有页再扫描</span>
           </div>
         )}
 
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", gap: 10 }}>
-            <Button variant="tinted" icon="camera" onClick={() => pick("camera")} disabled={busy || pages.length >= MAX_PAGES} style={{ flex: 1 }}>{pages.length ? "再拍一页" : "拍照"}</Button>
-            <Button variant="tinted" icon="photo" onClick={() => pick("photos")} disabled={busy || pages.length >= MAX_PAGES} style={{ flex: 1 }}>从相册选</Button>
+            <Button variant="tinted" icon="camera" onClick={() => pick("camera")} disabled={busy} style={{ flex: 1 }}>{pages.length ? "再拍一页" : "拍照"}</Button>
+            <Button variant="tinted" icon="photo" onClick={() => pick("photos")} disabled={busy} style={{ flex: 1 }}>从相册选</Button>
           </div>
           {digitized && pages.length > 0 && folderId && paperId ? (
             <Button icon="document" onClick={() => nav(`/papers/${folderId}/${paperId}`)} disabled={busy}>查看电子版 · {digitized.questions.length} 题</Button>

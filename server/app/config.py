@@ -25,7 +25,7 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(BASE_DIR / "uploads"))
-    MAX_CONTENT_LENGTH = 32 * 1024 * 1024
+    MAX_CONTENT_LENGTH = 150 * 1024 * 1024  # 一张试卷照片张数不限，按 100 个上传片段留余量；nginx 同步 150m
 
     # Capacitor 原生壳的来源是 capacitor://localhost（iOS）与 http://localhost（Android）
     CORS_ORIGINS = _env_list(
@@ -46,5 +46,5 @@ class Config:
     APPLE_BUNDLE_ID = os.getenv("APPLE_BUNDLE_ID", "com.zhicuoben.app")
 
     MAX_CROPS_PER_RECOGNIZE = 6
-    MAX_PAGES_PER_SCAN = 8  # 试卷夹最多 4 页，宽幅照片会被前端拆成左右两张上传
+    MAX_PAGES_PER_SCAN = 100  # 前端不限照片张数；宽幅照片会拆成左右两张上传，这里只防滥用
     DAILY_REVIEW_LIMIT = 20

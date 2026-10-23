@@ -51,7 +51,7 @@ export async function pickImage(source: "camera" | "photos"): Promise<string | n
   });
 }
 
-/** 从相册多选，返回 dataURL 列表（JPEG，最长边 1600）。网页端退化为多选文件。 */
+/** 从相册多选，返回 dataURL 列表（JPEG，最长边 1600）。limit 为 0 表示不限张数。网页端退化为多选文件。 */
 export async function pickImages(limit = 8): Promise<string[]> {
   if (isNative) {
     const { Camera } = await import("@capacitor/camera");
@@ -75,7 +75,8 @@ export async function pickImages(limit = 8): Promise<string[]> {
     input.accept = "image/*";
     input.multiple = true;
     input.onchange = async () => {
-      const files = Array.from(input.files ?? []).slice(0, limit);
+      const all = Array.from(input.files ?? []);
+      const files = limit > 0 ? all.slice(0, limit) : all;
       resolve(await Promise.all(files.map((f) => downscale(f, 1600))));
     };
     input.click();

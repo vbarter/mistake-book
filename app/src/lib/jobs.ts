@@ -59,7 +59,7 @@ export async function submitScan(folderId: string, paperId: string, pages: Captu
   for (let i = 0; i < pages.length; i++) uploads.push(...(await prepareUpload(pages[i].src, i)));
   onStage?.("正在上传试卷");
   const region = await getCity();
-  const job = await api<DigitizeJob>("/api/digitize", { method: "POST", body: { pages: uploads.map((p) => ({ image: p.image })), region }, timeoutMs: 120000 });
+  const job = await api<DigitizeJob>("/api/digitize", { method: "POST", body: { pages: uploads.map((p) => ({ image: p.image })), region }, timeoutMs: 600000 }); // 照片多时上传要久一点
   const parts = uploads.map(({ page, x0, w }) => ({ page, x0, w }));
   if (job.status === "done") {
     await finishJob(folderId, paperId, job, parts);

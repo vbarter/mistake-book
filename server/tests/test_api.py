@@ -289,7 +289,7 @@ def test_scan_pages_returns_items_with_bbox(client, auth):
     assert first["page"] == 0 and len(first["bbox"]) == 4 and first["reason"] and "stemImage" not in first
     assert body["items"][3]["page"] == 1
     assert client.post("/api/scan", json={"pages": []}, headers=auth).status_code == 400
-    assert client.post("/api/scan", json={"pages": [{"image": TINY_PNG}] * 9}, headers=auth).status_code == 400
+    assert client.post("/api/scan", json={"pages": [{"image": TINY_PNG}] * 101}, headers=auth).status_code == 400
 
 
 def test_claude_scan_cleans_bbox(monkeypatch):

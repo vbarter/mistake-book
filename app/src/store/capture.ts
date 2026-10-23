@@ -41,4 +41,5 @@ export const useCapture = create<CaptureState>((set) => ({
   reset: () => set({ folderId: null, paperId: null, paperName: "", pages: [], digitized: null }),
 }));
 
-export const MAX_PAGES = 4;
+/** 一张试卷的照片张数不设上限（服务端单次扫描上限见 MAX_PAGES_PER_SCAN） */
+export const MAX_PAGES = Infinity;
