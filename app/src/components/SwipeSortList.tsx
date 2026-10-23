@@ -1,6 +1,6 @@
 /** 可拖动排序 + 左滑删除的列表（手指 / 鼠标都行）。
  *
- * - 按住一项约 0.35 秒不动：它浮起来（有震动反馈），上下拖到想放的位置松手，回调 onReorder(新顺序的 key)
+ * - 传了 onReorder 时，按住一项约 0.35 秒不动：它浮起来（有震动反馈），上下拖到想放的位置松手，回调 onReorder(新顺序的 key)
  * - 向左滑一项：露出右侧的「删除」，点它回调 onDelete；滑回去或点别处收起
  * - 普通上下滑动交给原生滚动；滑动 / 拖动过程中的点击不会触发子元素的 onClick
  */
@@ -17,7 +17,7 @@ interface Props<T> {
   items: T[];
   keyOf: (item: T) => string;
   render: (item: T) => ReactNode;
-  onReorder: (keys: string[]) => void;
+  onReorder?: (keys: string[]) => void; // 不传就不支持按住拖动排序
   onDelete: (item: T) => void;
   gap?: number;
   deleteLabel?: string;
@@ -54,6 +54,7 @@ function haptic(): void {
 }
 
 export function SwipeSortList<T>({ items, keyOf, render, onReorder, onDelete, gap = 12, deleteLabel = "删除" }: Props<T>) {
+  const sortable = Boolean(onReorder);
   const [open, setOpen] = useState<string | null>(null); // 露出删除按钮的那一项
   const [dragKey, setDragKey] = useState<string | null>(null);
   const g = useRef<Gesture>({ kind: "idle" });
@@ -178,7 +179,7 @@ export function SwipeSortList<T>({ items, keyOf, render, onReorder, onDelete, ga
         }
       });
       setDragKey(null);
-      if (next.some((k, i) => k !== ks[i])) onReorder(next);
+      if (next.some((k, i) => k !== ks[i])) onReorder?.(next);
     }, 180);
   };
 
@@ -193,7 +194,7 @@ export function SwipeSortList<T>({ items, keyOf, render, onReorder, onDelete, ga
     // 这里先不抓 pointer capture：抓了之后 click 会落在外层容器上，卡片自己的 onClick 就收不到了；等真的变成滑动 / 拖动再抓
     const el = e.currentTarget;
     const timer = window.setTimeout(() => {
-      if (g.current.kind === "pending" && g.current.timer === timer) startDrag(g.current);
+      if (sortable && g.current.kind === "pending" && g.current.timer === timer) startDrag(g.current);
     }, LONG_PRESS_MS);
     g.current = { kind: "pending", key, x: e.clientX, y: e.clientY, timer, el, pointerId: e.pointerId };
   };

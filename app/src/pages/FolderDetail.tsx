@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { Subject } from "../api/types";
 import { ErrorCard } from "../components/ErrorCard";
 import { ExportSheet } from "../components/ExportSheet";
+import { SwipeSortList } from "../components/SwipeSortList";
 import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
@@ -72,11 +73,15 @@ export default function FolderDetail() {
   const papersTab = (
     <>
       {folder.papers.length === 0 && <Empty icon="document" title="还没有试卷" text="拍一张或从相册选，扫描后错题会自动汇总。" />}
-      {folder.papers.map((p) => {
+      <SwipeSortList
+        items={folder.papers}
+        keyOf={(p) => p.id}
+        onDelete={(p) => setDeletingPaper(p.id)}
+        gap={12}
+        render={(p) => {
         const st = paperStats(p);
         return (
-          <div key={p.id} className="card card--row">
-            <button style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textAlign: "left" }} onClick={() => (p.scanJob ? toast(`${scanStageText(p.scanJob)}，好了会自动更新`) : nav(`/papers/${folder.id}/${p.id}`))}>
+            <button className="card card--row" onClick={() => (p.scanJob ? toast(`${scanStageText(p.scanJob)}，好了会自动更新`) : nav(`/papers/${folder.id}/${p.id}`))}>
             <img className="thumb" src={p.pages[0]?.src} alt="" />
             <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
               <span className="t-headline ellipsis" style={{ display: "flex", alignItems: "center", gap: 6 }}>{paperSubject(p) && stats.subjects.length > 1 && <SubjectTile subject={paperSubject(p)} size="xs" />}{p.name}</span>
@@ -101,14 +106,11 @@ export default function FolderDetail() {
                 )}
               </span>
             </span>
-            {p.scanJob ? <Icon name="sparkles" size={20} style={{ color: "var(--brand)" }} /> : <Icon name="chevron-right" size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />}
+            {p.scanJob && <Icon name="sparkles" size={20} style={{ color: "var(--brand)" }} />}
             </button>
-            <button className="icon-btn" aria-label={`删除「${p.name}」`} style={{ color: "var(--tertiary)" }} onClick={() => setDeletingPaper(p.id)}>
-              <Icon name="trash" size={18} />
-            </button>
-          </div>
         );
-      })}
+        }}
+      />
       {folder.papers.length > 0 && <Hint>点一张试卷看电子版。新加的试卷扫完会自动并进「错题汇总」。</Hint>}
     </>
   );
