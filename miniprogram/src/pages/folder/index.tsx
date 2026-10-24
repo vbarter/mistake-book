@@ -180,7 +180,7 @@ export default function FolderPage() {
               <View className="kp-dot" style={{ background: c.bg, color: c.color }}>
                 {k.slice(0, 1)}
               </View>
-              <View className="flex1 col">
+              <View className="flex1 col minw0">
                 <Text className="t-headline">{k}</Text>
                 <Text className="t-cap c-sec">
                   {items.length} 题{blank > 0 ? `（未作答 ${blank}）` : ""}

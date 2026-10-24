@@ -1,6 +1,6 @@
 /** 通用小组件：学科方块、标签、公式文字、空状态、底部面板、分段切换 */
 import type { CSSProperties, ReactNode } from "react";
-import { Text, View } from "@tarojs/components";
+import { ScrollView, Text, View } from "@tarojs/components";
 import type { Mark, Subject } from "../lib/types";
 import { SUBJECT_LABEL } from "../lib/format";
 import { toSegments } from "../lib/math";
@@ -75,11 +75,14 @@ export function Hint({ children }: { children: ReactNode }) {
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: string; children: ReactNode }) {
   if (!open) return null;
   return (
+    // catchMove 挡住背后页面跟着滚；面板里的内容放进 ScrollView，内容多时自己滚（catchMove 会拦掉普通 View 的滚动）
     <View className="sheet" catchMove>
       <View className="sheet__mask" onClick={onClose} />
       <View className="sheet__panel">
         {title && <Text className="sheet__title">{title}</Text>}
-        {children}
+        <ScrollView scrollY className="sheet__body" enhanced showScrollbar={false}>
+          <View className="sheet__content">{children}</View>
+        </ScrollView>
       </View>
     </View>
   );

@@ -60,7 +60,8 @@ page {
 .c-ok { color: $ok; }
 .c-accent { color: $accent; }
 .center { text-align: center; }
-.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 小程序的 Text 是行内元素，要 block 才会出「…」 */
+.ellipsis { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .unrec { color: $unrec; font-weight: 700; }
 .hand { color: $ink; }
 .hand--wrong { color: $wrong; text-decoration: line-through; }
@@ -248,8 +249,13 @@ page {
   flex-direction: column;
   gap: 12px;
   max-height: 80vh;
-  overflow-y: auto;
+  box-sizing: border-box;
 }
+/* 面板内容区：超出时在 ScrollView 里滚动；标题固定在上面 */
+.sheet__title { flex-shrink: 0; }
+.sheet__body { flex: 1 1 auto; min-height: 0; max-height: calc(80vh - 90px); }
+.sheet__content { display: flex; flex-direction: column; gap: 12px; padding-bottom: 4px; }
+.sheet__content > view { flex-shrink: 0; }
 .sheet__title { font-size: 18px; font-weight: 800; }
 .pick { border: 2px solid transparent; }
 .pick--on { border-color: $brand; }

@@ -51,7 +51,7 @@ export default function Library() {
       <View className="card card--flush">
         <View className="row-center gap12 kp-head" style={{ background: c.bg }}>
           <SubjectTile subject={subj} size="sm" style={{ background: "#fff" }} />
-          <View className="flex1 col">
+          <View className="flex1 col minw0">
             <Text className="t-headline" style={{ color: c.color }}>
               {SUBJECT_LABEL[subj]}
             </Text>
@@ -70,7 +70,7 @@ export default function Library() {
                 <View className="kp-dot" style={{ background: c.bg, color: c.color }}>
                   {k.slice(0, 1)}
                 </View>
-                <View className="flex1 col">
+                <View className="flex1 col minw0">
                   <Text className="t-body">{k}</Text>
                   <Text className="t-cap c-sec">
                     来自 {new Set(list.map((i) => i.folderId)).size} 个文件夹{blank ? ` · 未作答 ${blank}` : ""}

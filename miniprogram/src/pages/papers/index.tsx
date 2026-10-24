@@ -93,7 +93,7 @@ export default function Papers() {
         const thumb = f.papers[0]?.pages[0]?.src;
         return (
           <View key={f.id} className="card card--row" hoverClass="card--pressed" onClick={() => Taro.navigateTo({ url: `/pages/folder/index?id=${f.id}` })} onLongPress={() => menu(f)}>
-            <View className="flex1 col gap12">
+            <View className="flex1 col gap12 minw0">
               <View className="row-center gap12">
                 <View className="thumb-wrap">
                   {thumb ? <Image className="thumb" src={thumb} mode="aspectFill" /> : <SubjectTile subject={st.subject} size="md" />}
@@ -141,7 +141,7 @@ export default function Papers() {
             return (
               <View key={f.id} className="list-row" onClick={() => { const s = pick!; setPick(null); void shoot(f.id, s); }}>
                 <SubjectTile subject={st.subject} size="sm" />
-                <View className="flex1 col">
+                <View className="flex1 col minw0">
                   <Text className="t-body">{f.name}</Text>
                   <Text className="t-cap c-sec">{f.papers.length} 张试卷</Text>
                 </View>
