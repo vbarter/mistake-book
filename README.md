@@ -243,3 +243,10 @@ export ANDROID_HOME=$HOME/Library/Android/sdk
 - `mirrors.init.gradle` 给所有子项目（含 node_modules 里的 capacitor-android）加阿里云镜像；本机走代理时用 `-D...proxy...` 把代理传给 Gradle，不走代理就去掉。
 - 发布签名：证书在 `~/.zhicuoben-keys/zhicuoben-release.jks`，密码写在 `app/android/keystore.properties`（不进 git，备份在 `~/.zhicuoben-keys/keystore.properties.backup`）。**证书丢了就无法给已安装的用户发更新，务必另存一份到安全的地方。**
 - 安卓上不显示 Apple 登录（插件不支持），用手机号登录；版本号在 `app/android/app/build.gradle` 的 versionCode / versionName。
+
+
+## 线上域名与 HTTPS
+
+- 正式入口：`https://book.openmindai.cn`（A 记录指向 43.129.175.172），nginx 站点见 `deploy/nginx-zhicuoben-book.conf`（服务器上是 `/etc/nginx/conf.d/zhicuoben-book.conf`），整站反向代理到 `127.0.0.1:5001`（gunicorn / Flask），HTTP 自动跳 HTTPS。
+- 证书：Let's Encrypt，certbot webroot 方式（`/var/www/certbot`）；`/etc/cron.d/certbot-book-openmindai` 每天 3 点尝试续期，续期后 `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` 自动 reload nginx。
+- App 生产环境 API：`app/.env.production` 的 `VITE_API_BASE=https://book.openmindai.cn`。旧入口 `http://43.129.175.172:8080/zhicuoben/` 仍保留，给已安装的旧版本用，等用户都更新后可以关掉。
