@@ -67,15 +67,15 @@ export default function Profile() {
 
   const doClear = async () => {
     const m = await Taro.showModal({
-      title: "清空本机数据？",
-      content: `会删掉这台手机上的 ${folders.length} 个文件夹、${stats.papers} 张试卷，以及它们的照片、电子版和错题，不能恢复。账号和学习设置不受影响。`,
+      title: "清空本应用数据？",
+      content: `会删掉错误本在这台手机上保存的 ${folders.length} 个文件夹、${stats.papers} 张试卷，以及它们的照片、电子版和错题，不能恢复。账号和学习设置不受影响。`,
       confirmText: "清空",
       confirmColor: "#d92d20",
     });
     if (!m.confirm) return;
     clearAllFolders();
     refresh();
-    toast("本机数据已清空", "success");
+    toast("已清空", "success");
   };
 
   const doLogout = async () => {
@@ -151,7 +151,8 @@ export default function Profile() {
           <Text className="c-sec">{loginLabel(user.loginMethod)}</Text>
         </View>
         <View className="list-row" onClick={doClear}>
-          <Text className="flex1 t-body c-wrong">清空本机数据</Text>
+          <Text className="flex1 t-body">清空本应用数据</Text>
+          <Text className="c-ter">›</Text>
         </View>
         <View className="list-row" onClick={doLogout}>
           <Text className="flex1 t-body c-wrong">退出登录</Text>

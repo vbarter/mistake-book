@@ -129,7 +129,7 @@ export function Privacy() {
     try {
       await clearAllFolders();
       setConfirm(false);
-      toast("本机数据已清空", "success");
+      toast("已清空", "success");
       nav("/papers", { replace: true });
     } catch (e) {
       toastError(e);
@@ -156,14 +156,14 @@ export function Privacy() {
         </div>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">你的权利</span>
-          <p className="t-sub c-sec">随时可以在下面清空这台设备上的全部试卷和错题。清空后不能恢复，账号和学习设置不受影响。</p>
+          <p className="t-sub c-sec">随时可以在下面清空知错本保存在这台设备上的全部试卷和错题。清空后不能恢复，账号和学习设置不受影响。</p>
         </div>
         <div className="group">
-          <Row icon="trash" iconColor="var(--wrong)" title="清空本机数据" danger chevron={false} value={counts ? `${counts.papers} 张试卷` : undefined} onClick={() => setConfirm(true)} />
+          <Row icon="trash" iconColor="var(--secondary)" title="清空本应用数据" value={counts ? `${counts.papers} 张试卷` : undefined} onClick={() => setConfirm(true)} />
         </div>
       </div>
-      <Sheet open={confirm} onClose={() => setConfirm(false)} title="清空本机数据？">
-        <p className="t-sub c-sec">会删掉这台设备上的 {counts?.folders ?? 0} 个文件夹、{counts?.papers ?? 0} 张试卷，以及它们的照片、电子版和错题，不能恢复。账号和学习设置不受影响。</p>
+      <Sheet open={confirm} onClose={() => setConfirm(false)} title="清空本应用数据？">
+        <p className="t-sub c-sec">会删掉知错本在这台设备上保存的 {counts?.folders ?? 0} 个文件夹、{counts?.papers ?? 0} 张试卷，以及它们的照片、电子版和错题，不能恢复。账号和学习设置不受影响。</p>
         <Button variant="danger" onClick={clearAll} disabled={busy}>{busy ? "正在清空…" : "清空"}</Button>
         <Button variant="plain" onClick={() => setConfirm(false)}>取消</Button>
       </Sheet>
