@@ -145,7 +145,7 @@ export default function Profile() {
 
       <View className="group">
         <View className="list-row">
-          <Text className="flex1 t-body">关于知错本</Text>
+          <Text className="flex1 t-body">关于错误本</Text>
           <Text className="c-sec">{VERSION}</Text>
         </View>
       </View>

@@ -1,6 +1,6 @@
 import { defineConfig } from "@tarojs/cli";
 
-/** 知错本小程序：设计稿按 375 宽写 px，Taro 换算成 rpx。 */
+/** 错误本（知错本的微信小程序版）：设计稿按 375 宽写 px，Taro 换算成 rpx。 */
 export default defineConfig<"webpack5">(() => ({
   projectName: "zhicuoben-miniprogram",
   date: "2026-10-24",

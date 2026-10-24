@@ -1,7 +1,7 @@
 {
   "miniprogramRoot": "dist/",
-  "projectname": "zhicuoben",
-  "description": "知错本：拍试卷，自动找出错题、按知识点归类",
+  "projectname": "cuowuben",
+  "description": "错误本：拍试卷，自动找出错题、按知识点归类",
   "appid": "wx6c5b932ae1de242f",
   "setting": {
     "urlCheck": false,

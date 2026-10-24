@@ -37,8 +37,8 @@ export default function Login() {
   return (
     <View className="page login">
       <View className="login__hero">
-        <Text className="login__logo">知</Text>
-        <Text className="t-title1 b">知错本</Text>
+        <Text className="login__logo">错</Text>
+        <Text className="t-title1 b">错误本</Text>
         <Text className="t-sub c-sec">拍下试卷，自动找出错题，按知识点归类</Text>
       </View>
 
