@@ -20,6 +20,9 @@ export const haptic = {
   },
 };
 
+/** 存进本机的试卷照片最长边：两页并排拍时切半后每页仍有 1200 多像素，插图也从这张图里裁 */
+export const PHOTO_MAX_SIDE = 2400;
+
 /** 拍照或从相册选图，返回 dataURL（JPEG）。网页端退化为文件选择。 */
 export async function pickImage(source: "camera" | "photos"): Promise<string | null> {
   if (isNative) {
@@ -30,7 +33,7 @@ export async function pickImage(source: "camera" | "photos"): Promise<string | n
         resultType: CameraResultType.DataUrl,
         source: source === "camera" ? CameraSource.Camera : CameraSource.Photos,
         correctOrientation: true,
-        width: 1600,
+        width: PHOTO_MAX_SIDE,
       });
       return photo.dataUrl ?? null;
     } catch (e) {
@@ -47,22 +50,22 @@ export async function pickImage(source: "camera" | "photos"): Promise<string | n
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return resolve(null);
-      downscale(file, 1600).then(resolve);
+      downscale(file, PHOTO_MAX_SIDE).then(resolve);
     };
     input.click();
   });
 }
 
-/** 从相册多选，返回 dataURL 列表（JPEG，最长边 1600）。limit 为 0 表示不限张数。网页端退化为多选文件。 */
+/** 从相册多选，返回 dataURL 列表（JPEG，最长边 PHOTO_MAX_SIDE）。limit 为 0 表示不限张数。网页端退化为多选文件。 */
 export async function pickImages(limit = 8): Promise<string[]> {
   if (isNative) {
     const { Camera } = await import("@capacitor/camera");
     try {
-      const result = await Camera.pickImages({ quality: 82, limit, correctOrientation: true, width: 1600 });
+      const result = await Camera.pickImages({ quality: 82, limit, correctOrientation: true, width: PHOTO_MAX_SIDE });
       const out: string[] = [];
       for (const p of result.photos) {
         if (!p.webPath) continue;
-        out.push(await downscale(p.webPath, 1600));
+        out.push(await downscale(p.webPath, PHOTO_MAX_SIDE));
       }
       return out;
     } catch (e) {
@@ -79,7 +82,7 @@ export async function pickImages(limit = 8): Promise<string[]> {
     input.onchange = async () => {
       const all = Array.from(input.files ?? []);
       const files = limit > 0 ? all.slice(0, limit) : all;
-      resolve(await Promise.all(files.map((f) => downscale(f, 1600))));
+      resolve(await Promise.all(files.map((f) => downscale(f, PHOTO_MAX_SIDE))));
     };
     input.click();
   });

@@ -3,6 +3,8 @@ import { Image, Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
 import { ErrorCard } from "../../components/ErrorCard";
 import { ExportSheet } from "../../components/ExportSheet";
+import { FigureImage } from "../../components/FigureImage";
+import { figureAt } from "../../lib/figures";
 import { Empty, ErrorFilterTags, Hint, MathText, Segmented, Tag, Verdict, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/ui";
 import { retake } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
@@ -135,8 +137,12 @@ export default function PaperPage() {
     }
   };
 
-  const printBlock = (block: DigitizedBlock, bi: number) => {
+  const printBlock = (block: DigitizedBlock, bi: number, si: number) => {
     switch (block.type) {
+      case "figure": {
+        const fig = figureAt(paper, si, bi);
+        return fig ? <FigureImage key={bi} fig={fig} /> : null;
+      }
       case "section":
         return (
           <View className="blk-section" key={bi}>
@@ -206,7 +212,7 @@ export default function PaperPage() {
               {sheet.score && <Text className="c-wrong b">{sheet.score}</Text>}
             </View>
           </View>
-          {sheet.blocks.map(printBlock)}
+          {sheet.blocks.map((b, bi) => printBlock(b, bi, si))}
           {sheet.note && <MathText className="t-cap c-sec" text={sheet.note} />}
         </View>
       ))}

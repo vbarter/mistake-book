@@ -3,6 +3,7 @@ import { useState } from "react";
 import { apiBlob } from "../api/client";
 import { toBookItems, type ErrorItem } from "../lib/errors";
 import { validDigitized, type Paper } from "../lib/folders";
+import { figureAt, figurePayload } from "../lib/figures";
 import { exportPdf, haptic } from "../lib/native";
 import { toast, toastError } from "../store/banner";
 import { Icon } from "./Icon";
@@ -31,14 +32,28 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
     setBusy(true);
     try {
       if (kind === "book") {
-        const items = toBookItems(chosen);
-        if (items.length === 0) return toast("这个范围里没有错题");
+        const books = toBookItems(chosen);
+        if (books.length === 0) return toast("这个范围里没有错题");
+        // 插图从原照片裁好一起发给服务器排版
+        const items = await Promise.all(books.map(async (b) => ({ ...b, figures: await Promise.all(b.figures.map(figurePayload)) })));
         const typeLabel = withWrong && withBlank ? "错题 + 未作答" : withBlank ? "只含未作答" : "只含错题";
         const blob = await apiBlob("/api/digitize/book", { method: "POST", body: { title: `${title} 错题本`, subtitle: [subtitle, `${chosen.length} 题`, typeLabel].filter(Boolean).join(" · "), items }, timeoutMs: 90000 });
         await exportPdf(blob, `${title} 错题本.pdf`);
       } else {
         if (scanned.length === 0) return toast("还没有扫描过的试卷");
-        const body = { title, papers: scanned.map((p) => { const d = validDigitized(p.digitized)!; return { title: `${title} · ${p.name}`, scannedAt: p.scannedAt ? formatDateTime(p.scannedAt) : "", pages: d.pages, questions: d.questions }; }) };
+        const papersBody = await Promise.all(
+          scanned.map(async (p) => {
+            const d = validDigitized(p.digitized)!;
+            const pages = await Promise.all(
+              d.pages.map(async (s, si) => ({
+                ...s,
+                blocks: await Promise.all(s.blocks.map(async (b, bi) => { const f = b.type === "figure" ? figureAt(p, si, bi) : null; return f ? { ...b, image: (await figurePayload(f)).image } : b; })),
+              })),
+            );
+            return { title: `${title} · ${p.name}`, scannedAt: p.scannedAt ? formatDateTime(p.scannedAt) : "", pages, questions: d.questions };
+          }),
+        );
+        const body = { title, papers: papersBody };
         const blob = await apiBlob("/api/digitize/pdf", { method: "POST", body, timeoutMs: 90000 });
         await exportPdf(blob, `${title} 电子试卷.pdf`);
       }

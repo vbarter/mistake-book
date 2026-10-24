@@ -57,7 +57,7 @@ class DigitizedBlank:
         return asdict(self)
 
 
-BLOCK_TYPES = ["section", "passage", "wordbank", "item", "text"]
+BLOCK_TYPES = ["section", "passage", "wordbank", "item", "text", "figure"]
 
 
 @dataclass
@@ -69,6 +69,8 @@ class DigitizedBlock:
     wordbank 词库/选项框：options
     item     小题：number、text（含占位空格）、hint（括号给词）、instruction（改写要求）、options（选择题选项）、blanks
     text     其他卷面文字（页眉页脚、订正提醒等）
+    figure   插图 / 统计图 / 几何图 / 实验装置图 / 表格：bbox（照片上的位置，客户端据此从原照片裁图）、title（图题）、
+             number（所属小题题号）、text（一句话说明图里有什么，图片显示不了时兜底）
     """
 
     type: str
@@ -137,6 +139,7 @@ class DigitizedPage:
     ocrText: str = ""  # OCR 模型逐行识别出的原文（印刷文字，公式为 LaTeX），同一张照片的几个 sheet 相同
     photoIssues: list[str] = field(default_factory=list)  # 照片问题：blurry 模糊 / cropped 不完整 / dark 太暗 / glare 反光 / tilted 歪斜 / covered 遮挡折痕
     photoNote: str = ""  # 哪里受影响，如「右下角反光，第 38–40 题看不清」
+    rotation: int = 0  # 照片内容相对正向逆时针转了几个 90°（0–3，来自 OCR 方向检测）；客户端裁插图后顺时针转回
     blocks: list[DigitizedBlock] = field(default_factory=list)
 
     def to_dict(self) -> dict:

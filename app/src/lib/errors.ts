@@ -2,6 +2,7 @@
 import type { DigitizedQuestion, Mark, Subject } from "../api/types";
 import { autoMark, effectiveMark, isBlank, isProblem, validDigitized, type Folder, type Paper } from "./folders";
 import { unwrapLines } from "./format";
+import { figuresOfQuestion, type FigureRef } from "./figures";
 
 export type ErrorKind = "未作答" | "答错" | "半对";
 
@@ -20,6 +21,7 @@ export interface ErrorItem {
   parts: ErrorPart[]; // 一题多问（如 18-1、18-2）时逐问的作答 / 判定 / 答案；只有一个空时为空数组
   stem: string; // 卡片上显示的题干：短文里的空只取当前空所在的那一句（q.stemText 仍是整篇，导出合并用）
   sectionLabel: string; // 所属大题，如「Ⅳ Complete the sentences…」
+  figures: FigureRef[]; // 这道题用到的插图（从原照片裁）
 }
 
 export const UNANSWERED = "未作答";
@@ -111,6 +113,7 @@ export function paperErrors(folder: Folder, paper: Paper): ErrorItem[] {
     parts: partsOf(paper, q),
     stem: focusSentence(unwrapLines(q.stemText)),
     sectionLabel: sectionOf(paper, q),
+    figures: figuresOfQuestion(paper, q),
   }));
 }
 
@@ -165,6 +168,7 @@ export interface BookItem {
   knowledge: string;
   source: string;
   answers: { number: string; student: string; answer: string; analysis: string; kind: ErrorKind; tip: string; sub: string }[];
+  figures: FigureRef[]; // 导出前换成 { title, text, image }
 }
 
 export function toBookItems(items: ErrorItem[]): BookItem[] {
@@ -185,12 +189,12 @@ export function toBookItems(items: ErrorItem[]): BookItem[] {
       }
       // 短文：把当前空的「____」也标上编号，整篇只放一次
       const stem = unwrapLines(q.stemText).replace(/(^|[^)])____/, `$1(${q.number})____`);
-      const item: BookItem = { number: q.number, stem, options: q.options, knowledge: it.knowledge, source, answers: [answer] };
+      const item: BookItem = { number: q.number, stem, options: q.options, knowledge: it.knowledge, source, answers: [answer], figures: it.figures };
       byBlock.set(key, item);
       out.push(item);
       continue;
     }
-    out.push({ number: q.number, stem: unwrapLines(q.stemText), options: q.options, knowledge: it.knowledge, source, answers: [answer] });
+    out.push({ number: q.number, stem: unwrapLines(q.stemText), options: q.options, knowledge: it.knowledge, source, answers: [answer], figures: it.figures });
   }
   return out;
 }

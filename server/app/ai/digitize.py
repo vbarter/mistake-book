@@ -132,12 +132,14 @@ def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | No
     number = _str(raw.get("number")).strip().rstrip(".．、 ")
     blanks: list[DigitizedBlank] = []
     seen: set[str] = set()
-    for b in raw.get("blanks") or []:
+    for b in ([] if btype == "figure" else raw.get("blanks") or []):
         blank = clean_blank(b, number)
         if blank and blank.id not in seen:
             seen.add(blank.id)
             blanks.append(blank)
     text = unwrap_lines(_str(raw.get("text")))
+    if btype == "figure":
+        text = re.sub(BLANK_RE.pattern, "", text)  # 插图里不该有作答空
     if number and btype == "item":
         text = re.sub(r"^\s*" + re.escape(number) + r"\s*[.．、]\s*", "", text, count=1)
     # 文本里引用了但 blanks 里没有的占位，补一个空记录，保证渲染时每个占位都有落点
@@ -170,6 +172,9 @@ def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | No
         uncertainSpans=_str_list(raw.get("uncertainSpans")),
     )
     if btype == "wordbank" and not block.options:
+        return None
+    # 插图要靠 bbox 从原照片裁出来：没给位置（默认整页）就没用
+    if btype == "figure" and (block.bbox == [0.0, 0.0, 1.0, 1.0] or (block.bbox[2] - block.bbox[0]) * (block.bbox[3] - block.bbox[1]) < 0.002):
         return None
     if btype in ("passage", "item", "text") and not block.text.strip() and not block.blanks:
         return None
@@ -204,7 +209,7 @@ def _merge_labels(blocks: list[DigitizedBlock]) -> list[DigitizedBlock]:
 
 def clean_sheet(raw: dict, page: int) -> DigitizedPage:
     subject = raw.get("subject") if raw.get("subject") in SUBJECTS else ""
-    blocks = _merge_labels([b for b in (clean_block(x, subject or "math") for x in (raw.get("blocks") or [])) if b])
+    blocks = merge_figures(_merge_labels([b for b in (clean_block(x, subject or "math") for x in (raw.get("blocks") or [])) if b]))
     if not subject:
         # 卷面没判出学科时按题块多数推断
         counts: dict[str, int] = {}
@@ -225,8 +230,66 @@ def clean_sheet(raw: dict, page: int) -> DigitizedPage:
         syllabus=_str(raw.get("syllabus")).strip(),
         photoIssues=[x for x in (raw.get("photoIssues") or []) if x in PHOTO_ISSUES][:4] if isinstance(raw.get("photoIssues"), list) else [],
         photoNote=_str(raw.get("photoNote")).strip()[:60],
+        rotation=_rotation(raw.get("rotation")),
         blocks=blocks,
     )
+
+
+def _rotation(v) -> int:
+    try:
+        return int(v or 0) % 4
+    except (TypeError, ValueError):
+        return 0
+
+
+def _iou(a: list[float], b: list[float]) -> float:
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+GENERIC_FIGURE_TITLES = {"", "插图", "图", "示意图"}
+
+
+def merge_figures(blocks: list[DigitizedBlock]) -> list[DigitizedBlock]:
+    """模型常把一幅图拆成几块（一排烧杯拆成四个、一张图切成左右两半）：同一道题、彼此挨着（并排或上下叠着、间距 < 8%）的相邻插图合成一幅，
+    位置取并集；图题有具体名字的（图1）留下来，「插图」这种泛称让位。"""
+    out: list[DigitizedBlock] = []
+    for b in blocks:
+        prev = out[-1] if out else None
+        if b.type == "figure" and prev is not None and prev.type == "figure" and prev.number == b.number:
+            same_title = prev.title == b.title or prev.title in GENERIC_FIGURE_TITLES or b.title in GENERIC_FIGURE_TITLES
+            dx = max(0.0, max(prev.bbox[0], b.bbox[0]) - min(prev.bbox[2], b.bbox[2]))
+            dy = max(0.0, max(prev.bbox[1], b.bbox[1]) - min(prev.bbox[3], b.bbox[3]))
+            # 并排的（上下有重叠）横向间距 < 8%、上下叠着的纵向间距 < 8%，或两个方向都很近
+            side_by_side = dy == 0.0 and dx < 0.08
+            stacked = dx == 0.0 and dy < 0.08
+            if same_title and (side_by_side or stacked or (dx < 0.04 and dy < 0.04)):
+                prev.bbox = [min(prev.bbox[0], b.bbox[0]), min(prev.bbox[1], b.bbox[1]), max(prev.bbox[2], b.bbox[2]), max(prev.bbox[3], b.bbox[3])]
+                if prev.title in GENERIC_FIGURE_TITLES:
+                    prev.title = b.title
+                if b.text and b.text not in prev.text:
+                    prev.text = f"{prev.text}；{b.text}" if prev.text else b.text
+                continue
+        out.append(b)
+    return out
+
+
+def snap_figures(sheets: list[DigitizedPage], regions: list[dict], direction: int = 0) -> None:
+    """模型给的插图位置往往不够准：和 OCR 版面分析检测到的插图 / 表格区域重叠明显的，换成 OCR 的精确位置；
+    同时记下照片方向，客户端裁图后转正。"""
+    boxes = [g["bbox"] for g in regions if isinstance(g, dict) and isinstance(g.get("bbox"), list) and len(g["bbox"]) == 4]
+    for sh in sheets:
+        sh.rotation = direction % 4
+        for b in sh.blocks:
+            if b.type != "figure" or not boxes:
+                continue
+            best = max(boxes, key=lambda r: _iou(b.bbox, r))
+            if _iou(b.bbox, best) >= 0.2:
+                b.bbox = [float(v) for v in best]
+        sh.blocks = merge_figures(sh.blocks)
 
 
 def clean_sheets(data: dict, page: int) -> list[DigitizedPage]:

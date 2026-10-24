@@ -20,7 +20,7 @@ from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
 from . import ocr
 from . import queue as page_queue
-from .digitize import _nearby_wordbank, _render_text, clean_sheets, derive_questions, drop_ghost_sheets, unreadable
+from .digitize import _nearby_wordbank, _render_text, clean_sheets, derive_questions, drop_ghost_sheets, snap_figures, unreadable
 
 log = logging.getLogger(__name__)
 
@@ -130,6 +130,12 @@ DIGITIZE_SYSTEM_PROMPT = (
     "- wordbank：选词填空的词库方框或一组共用选项，options 原样逐项（如「A. repairs」）。\n"
     "- item：一道小题。number 是题号原样，text 是题目原文（空格用 [[空号]] 占位；一题多空用 [[52-1]] [[52-2]]），hint 是句末括号里的给词（如「(bakery)」），instruction 是括号里的改写要求（如「改为一般疑问句」），选择题的选项放 options，blanks 逐空记录。\n"
     "- text：页眉页脚、订正提醒等其他文字。\n"
+    "- figure：插图、统计图、函数图像、几何图形、实验装置图、表格等光靠文字还原不了的内容，原卷有几幅就输出几个 figure 块，放在它在原卷出现的位置。"
+    "title 写图题（如「图1」「图2」；表格没有标题写「表格」，其他没有图题的写「插图」）；number 写这幅图所属小题的题号（如「5」；几道题共用或说不清时留空）；"
+    "text 用一两句话说清图里有什么、能读出的关键数据（如「硝酸钾、氯化钾溶解度曲线：t₁℃ 时氯化钾 34g」；表格逐行简述），供图片显示不了时参考；"
+    "bbox 紧紧包住整幅图（含图中标注和图题）。OCR 文字末尾列出了版面分析检测到的插图 / 表格区域时，bbox 直接照抄与这幅图对应的区域坐标。\n"
+    "图中的文字（坐标轴、刻度、图例、标注、表格里的内容、装置说明，以及 OCR 里以 [图中文字] 开头的行）只写进 figure 的 text，"
+    "绝不要写进题干 text、选项、passage 或 note；题干里保留「如图所示」「如下表」这样的原文即可。\n"
     "text 里不要保留照片或 OCR 文字里的排版换行：一句话被印成两行的要合成一行；只有原卷真正分段、分行（新段落、诗歌、逐行列表）才用换行。\n"
     "每个空（blank）：id 与占位一致；number 是所属题号；student 只写学生手写内容的逐字转写（涂改后以最终答案为准；解题过程按原来的步骤分行，每步一行；看不清的字用「□」，没写就留空，不要写「无法辨认」之类的描述）；"
     "mark 按老师的批改符号判定：打勾「✓」「√」「☑」或写了对号 = correct；打叉「✗」「×」、斜杠「/」、划掉、圈出 = wrong；半勾、打分低于满分、部分扣分 = partial；完全没有批改符号 = unmarked。"
@@ -445,9 +451,11 @@ class ClaudeProvider(AIProvider):
         def one(index: int, page: Crop) -> list[DigitizedPage]:
             # 第一步：OCR（paddle / baidu，见 ai/ocr.py）把文字逐行识别出来（几秒钟）；失败就退回让大模型直接看图
             ocr_text = ""
+            ocr_result = None
             if ocr.enabled():
                 try:
-                    ocr_text = ocr.ocr_image(page.data, page.media_type)
+                    ocr_result = ocr.ocr_page(page.data, page.media_type)
+                    ocr_text = ocr_result.text
                 except ocr.OCRError as e:
                     log.warning("ocr failed on page %s, fallback to image only: %s", index, e)
                 if on_page_progress:
@@ -459,7 +467,7 @@ class ClaudeProvider(AIProvider):
                 },
             ]
             if ocr_text:
-                content.append({"type": "text", "text": "OCR 模型逐行识别出的文字（已按分栏排序，栏间空行；公式为 LaTeX；印刷内容以此为准逐字照抄；以 [手写] 开头的行是 OCR 猜测的学生手写，可能有误，以照片为准）：\n<ocr>\n" + ocr_text[:20000] + "\n</ocr>"})
+                content.append({"type": "text", "text": "OCR 模型逐行识别出的文字（已按分栏排序，栏间空行；公式为 LaTeX；印刷内容以此为准逐字照抄；以 [手写] 开头的行是 OCR 猜测的学生手写，可能有误，以照片为准；以 [图中文字] 开头的行在插图或表格里，只能写进 figure 块）：\n<ocr>\n" + ocr_text[:20000] + "\n</ocr>"})
             content += [
                 {
                     "type": "text",
@@ -481,6 +489,8 @@ class ClaudeProvider(AIProvider):
                 log.warning("digitize page %s retry after: %s", index, e)
                 data = self._call(DIGITIZE_SYSTEM_PROMPT, content, DIGITIZE_SCHEMA, max_tokens=32000, on_text=on_text)
             sheets = clean_sheets(data, index)
+            if ocr_result is not None:
+                snap_figures(sheets, ocr_result.regions, ocr_result.direction)
             for sh in sheets:
                 sh.ocrText = ocr_text
             if on_page_done:

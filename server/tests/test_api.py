@@ -585,7 +585,7 @@ def test_ocr_text_is_fed_to_llm(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
     monkeypatch.setenv("OCR_BASE_URL", "https://ocr.example")
     monkeypatch.setenv("OCR_AUTH", "u:p")
-    monkeypatch.setattr(ocr, "ocr_image", lambda data, media_type="image/jpeg", **kw: "1. 方程 \\(x^{2}-5x+6=0\\) 的两个根为 ___。")
+    monkeypatch.setattr(ocr, "ocr_page", lambda data, media_type="image/jpeg", **kw: ocr.OcrPage(text="1. 方程 \\(x^{2}-5x+6=0\\) 的两个根为 ___。"))
     provider = ClaudeProvider(model="claude-sonnet-4-5")
     seen = {}
 
@@ -834,3 +834,55 @@ def test_wechat_login_same_openid_same_account(client):
     h = {"Authorization": f"Bearer {r1.get_json()['token']}"}
     r3 = client.put("/api/auth/me", json={"nickname": "小红"}, headers=h)
     assert r3.status_code == 200 and r3.get_json()["user"]["nickname"] == "小红"
+
+
+def test_baidu_figure_lines_tagged_and_regions_listed():
+    """百度版面分析里落在插图 / 表格里的行加 [图中文字]，末尾列出区域（0–1 坐标），方向取 img_direction"""
+    from app.ai import ocr
+
+    r = {
+        "img_direction": 2,
+        "results": [{"words": {"word": "5.根据图示回答问题"}}, {"words": {"word": "溶解度/g"}}, {"words": {"word": "(1)t1℃时溶解度为"}}],
+        "sections": [{"attribute": "section", "sec_idx": {"idx": [0, 1, 2], "row_idx": [0], "col_idx": [0]}}],
+        "layouts": [
+            {"layout": "text", "layout_idx": [0], "layout_location": [{"x": 0, "y": 0}, {"x": 100, "y": 10}]},
+            {"layout": "figure", "layout_idx": [1], "layout_location": [{"x": 100, "y": 200}, {"x": 600, "y": 200}, {"x": 600, "y": 700}, {"x": 100, "y": 700}]},
+        ],
+    }
+    page = ocr.baidu_page(r, (1000, 1000))
+    lines = page.text.splitlines()
+    assert lines[0] == "5.根据图示回答问题" and lines[1] == "[图中文字]溶解度/g" and lines[2] == "(1)t1℃时溶解度为"
+    assert page.regions == [{"kind": "figure", "bbox": [0.1, 0.2, 0.6, 0.7]}] and "插图1：[0.1, 0.2, 0.6, 0.7]" in page.text
+    assert page.direction == 2
+
+
+def test_figure_block_kept_and_snapped_to_ocr_region():
+    """模型给的 figure 块保留下来（不带空），位置贴到 OCR 检测的区域上，卷面记下方向；没位置的 figure 丢掉"""
+    from app.ai.digitize import clean_sheets, derive_questions, snap_figures
+
+    data = {"sheets": [{"label": "3/8", "blocks": [
+        {"type": "item", "number": "5", "text": "如图所示，t1℃时溶解度为 [[5]]", "blanks": [{"id": "5", "student": "34g", "mark": "correct"}]},
+        {"type": "figure", "title": "图1", "number": "5", "text": "溶解度曲线 [[9]]", "bbox": [0.12, 0.22, 0.58, 0.66], "blanks": [{"id": "9", "student": "x"}]},
+        {"type": "figure", "title": "图2", "text": "没位置"},
+    ]}]}
+    sheets = clean_sheets(data, 0)
+    figs = [b for b in sheets[0].blocks if b.type == "figure"]
+    assert len(figs) == 1 and figs[0].title == "图1" and figs[0].number == "5" and figs[0].blanks == [] and "[[" not in figs[0].text
+    snap_figures(sheets, [{"kind": "figure", "bbox": [0.1, 0.2, 0.6, 0.7]}, {"kind": "table", "bbox": [0.1, 0.8, 0.9, 0.95]}], direction=2)
+    assert figs[0].bbox == [0.1, 0.2, 0.6, 0.7] and sheets[0].rotation == 2
+    assert [q.number for q in derive_questions(sheets)] == ["5"]  # 插图不会变成题
+
+
+def test_split_figure_pieces_merged():
+    """同一题挨着的几块插图合成一幅（位置取并集、保留具体图题）；离得远的、不同题的不合并"""
+    from app.ai.digitize import clean_sheets
+
+    fig = lambda title, no, box: {"type": "figure", "title": title, "number": no, "text": title, "bbox": box}
+    data = {"sheets": [{"blocks": [
+        fig("插图", "4", [0.19, 0.79, 0.30, 0.84]), fig("插图", "4", [0.32, 0.79, 0.49, 0.85]), fig("插图", "4", [0.55, 0.80, 0.63, 0.86]),
+        fig("图2", "5", [0.30, 0.61, 0.58, 0.68]), fig("插图", "5", [0.18, 0.61, 0.43, 0.68]),
+        fig("图1", "2", [0.42, 0.60, 0.65, 0.68]), fig("图2", "2", [0.38, 0.38, 0.75, 0.47]),
+    ]}]}
+    figs = clean_sheets(data, 0)[0].blocks
+    assert [(f.number, f.title) for f in figs] == [("4", "插图"), ("5", "图2"), ("2", "图1"), ("2", "图2")]
+    assert figs[0].bbox == [0.19, 0.79, 0.63, 0.86] and figs[1].bbox == [0.18, 0.61, 0.58, 0.68]

@@ -190,7 +190,7 @@ export default function Capture() {
           <Empty
             icon="camera"
             title="把试卷平放，对准整页拍"
-            text="从相册一次选完整张试卷，选好后会自动开始扫描。"
+            text="一次拍一页、让试卷铺满画面，图表和小字才认得清。从相册选好后会自动开始扫描。"
             action={<Button size="xs" variant="plain" onClick={() => pick("sample")} disabled={busy}>没有试卷？用示例试卷试试</Button>}
           />
         )}

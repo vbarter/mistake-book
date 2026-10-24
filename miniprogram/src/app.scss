@@ -298,3 +298,10 @@ page {
 .ans__answer { flex: 1; min-width: 0; color: $ok; }
 
 .avatar { width: 60px; height: 60px; border-radius: 30px; background: $brand-tint; color: $brand; font-size: 24px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+/* 插图：从原照片裁出来 */
+.fig { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 4px 0; }
+.fig__img { width: 100%; max-width: 330px; border-radius: 8px; border: 1px solid $sep; background: #fff; }
+.fig__caption { font-size: 12px; color: $secondary; }
+.fig__placeholder { width: 100%; max-width: 330px; height: 120px; border-radius: 8px; background: $fill; }
+.fig__text { font-size: 13px; color: $secondary; background: $fill; border-radius: 8px; padding: 8px 10px; }

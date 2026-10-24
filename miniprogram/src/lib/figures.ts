@@ -1,0 +1,158 @@
+/** 插图（和 App 的 lib/figures.ts 同一套规则）：figure 块只有位置，图从本机原照片里裁出来；照片拍倒了裁完再转正。
+ *  小程序里用离屏 canvas 裁，裁好的图存成用户目录下的 jpg（按试卷 id 开头，删试卷时一起清掉）。 */
+import Taro from "@tarojs/taro";
+import type { DigitizedBlock, DigitizedQuestion } from "./types";
+import { validDigitized } from "./logic";
+import type { Paper } from "./store";
+
+export interface FigureRef {
+  key: string;
+  paperId: string;
+  src: string; // 原照片（本机路径）
+  bbox: number[];
+  rotation: number;
+  title: string;
+  text: string;
+}
+
+export const FIG_DIR = `${Taro.env.USER_DATA_PATH}/figs`;
+const baseNumber = (n: string) => (n || "").replace(/[（(].*$/, "").split("-")[0].trim();
+
+function refOf(paper: Paper, sheetIndex: number, blockIndex: number, block: DigitizedBlock): FigureRef | null {
+  const sheet = validDigitized(paper.digitized)?.pages[sheetIndex];
+  const photo = sheet ? paper.pages[sheet.page] : undefined;
+  if (!sheet || !photo?.src || block.type !== "figure" || block.bbox.length !== 4) return null;
+  return {
+    key: `${paper.id}:${photo.id}:${sheetIndex}:${blockIndex}:${block.bbox.map((v) => v.toFixed(3)).join(",")}`,
+    paperId: paper.id,
+    src: photo.src,
+    bbox: block.bbox,
+    rotation: sheet.rotation ?? 0,
+    title: block.title,
+    text: block.text,
+  };
+}
+
+export function figureAt(paper: Paper, sheetIndex: number, blockIndex: number): FigureRef | null {
+  const block = validDigitized(paper.digitized)?.pages[sheetIndex]?.blocks[blockIndex];
+  return block ? refOf(paper, sheetIndex, blockIndex, block) : null;
+}
+
+/** 一道题用到的插图：先找标了本题题号的图；没有标题号、题干又提到图表时，取紧挨着这道题（中间只隔说明文字）的图 */
+export function figuresOfQuestion(paper: Paper, q: DigitizedQuestion): FigureRef[] {
+  const sheet = validDigitized(paper.digitized)?.pages[q.sheet];
+  if (!sheet) return [];
+  const own = baseNumber(q.number);
+  const found = sheet.blocks
+    .map((b, i) => (b.type === "figure" && own && baseNumber(b.number) === own ? refOf(paper, q.sheet, i, b) : null))
+    .filter((f): f is FigureRef => Boolean(f));
+  if (found.length || !/图|表|如下/.test(q.stemText)) return found;
+  const near = (step: 1 | -1) => {
+    const out: FigureRef[] = [];
+    for (let i = q.blockIndex + step; i >= 0 && i < sheet.blocks.length; i += step) {
+      const b = sheet.blocks[i];
+      if (b.type === "figure") {
+        if (!b.number || baseNumber(b.number) === own) {
+          const r = refOf(paper, q.sheet, i, b);
+          if (r) out.push(r);
+        }
+        continue;
+      }
+      if (b.type !== "text") break;
+    }
+    return step === -1 ? out.reverse() : out;
+  };
+  const after = near(1);
+  return after.length ? after : near(-1);
+}
+
+function hash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+const cache = new Map<string, Promise<string>>();
+
+type Canvas2D = {
+  width: number;
+  height: number;
+  getContext: (t: "2d") => { fillStyle: string; fillRect: (...a: number[]) => void; translate: (x: number, y: number) => void; rotate: (r: number) => void; drawImage: (...a: unknown[]) => void };
+  createImage: () => { src: string; width: number; height: number; onload: () => void; onerror: (e: unknown) => void };
+  toDataURL: (type: string, q: number) => string;
+};
+
+/** 裁图并存成文件，返回本机路径；同一张图只裁一次 */
+export function cropFigure(f: FigureRef): Promise<string> {
+  const hit = cache.get(f.key);
+  if (hit) return hit;
+  const job = (async () => {
+    const fs = Taro.getFileSystemManager();
+    const path = `${FIG_DIR}/${f.paperId}_${hash(f.key)}.jpg`;
+    try {
+      fs.accessSync(path);
+      return path; // 以前裁过
+    } catch {
+      /* 没有，现在裁 */
+    }
+    const info = await Taro.getImageInfo({ src: f.src });
+    const W = info.width;
+    const H = info.height;
+    const pad = 0.015;
+    const x0 = Math.max(0, f.bbox[0] - pad) * W;
+    const y0 = Math.max(0, f.bbox[1] - pad) * H;
+    const sw = Math.max(1, Math.min(1, f.bbox[2] + pad) * W - x0);
+    const sh = Math.max(1, Math.min(1, f.bbox[3] + pad) * H - y0);
+    const scale = Math.min(1, 1400 / Math.max(sw, sh));
+    const w = Math.round(sw * scale);
+    const h = Math.round(sh * scale);
+    const turns = ((f.rotation % 4) + 4) % 4;
+    const canvas = Taro.createOffscreenCanvas({ type: "2d", width: turns % 2 ? h : w, height: turns % 2 ? w : h }) as unknown as Canvas2D;
+    const img = canvas.createImage();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = f.src;
+    });
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((turns * Math.PI) / 2);
+    ctx.drawImage(img, x0, y0, sw, sh, -w / 2, -h / 2, w, h);
+    const url = canvas.toDataURL("image/jpeg", 0.88);
+    const b64 = url.split(",")[1];
+    if (!b64) throw new Error("裁图失败");
+    try {
+      fs.accessSync(FIG_DIR);
+    } catch {
+      fs.mkdirSync(FIG_DIR, true);
+    }
+    fs.writeFileSync(path, b64, "base64");
+    return path;
+  })();
+  cache.set(f.key, job);
+  job.catch(() => cache.delete(f.key));
+  return job;
+}
+
+/** 导出 PDF 用：带上裁好的图（dataURL）；裁不出来就只给文字说明 */
+export async function figurePayload(f: FigureRef): Promise<{ title: string; text: string; image?: string }> {
+  try {
+    const path = await cropFigure(f);
+    const b64 = Taro.getFileSystemManager().readFileSync(path, "base64") as string;
+    return { title: f.title, text: f.text, image: `data:image/jpeg;base64,${b64}` };
+  } catch {
+    return { title: f.title, text: f.text };
+  }
+}
+
+/** 删试卷时把它的裁图一起删掉 */
+export function removeFigures(paperId: string) {
+  const fs = Taro.getFileSystemManager();
+  try {
+    for (const name of fs.readdirSync(FIG_DIR)) if (name.startsWith(`${paperId}_`)) fs.unlinkSync(`${FIG_DIR}/${name}`);
+  } catch {
+    /* 目录不存在 */
+  }
+}

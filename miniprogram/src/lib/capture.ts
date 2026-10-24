@@ -3,12 +3,13 @@ import Taro from "@tarojs/taro";
 import { errorText } from "./api";
 import { addPaper, getFolder, savePhoto, updatePaper, type FolderPage } from "./store";
 import { submitScan } from "./jobs";
+import { removeFigures } from "./figures";
 
 export type Source = "camera" | "album";
 
 async function choose(source: Source, count: number): Promise<string[]> {
   try {
-    const res = await Taro.chooseMedia({ count, mediaType: ["image"], sourceType: [source], sizeType: ["original", "compressed"], camera: "back" });
+    const res = await Taro.chooseMedia({ count, mediaType: ["image"], sourceType: [source], sizeType: ["original"], camera: "back" });
     return res.tempFiles.map((f) => f.tempFilePath);
   } catch (e) {
     const msg = String((e as { errMsg?: string }).errMsg || "");
@@ -71,6 +72,7 @@ export async function retake(folderId: string, paperId: string, source: Source):
         /* ignore */
       }
     });
+    removeFigures(paperId);
     updatePaper(folderId, paperId, { pages, digitized: undefined, scannedAt: undefined, gradedAt: undefined, scanError: undefined });
     await scan(folderId, paperId, pages);
   } finally {

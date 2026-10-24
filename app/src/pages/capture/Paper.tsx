@@ -4,6 +4,8 @@ import type { DigitizedBlank, DigitizedBlock, DigitizedPage, Mark } from "../../
 import { ErrorCard } from "../../components/ErrorCard";
 import { MathText, mathNodes } from "../../components/MathText";
 import { ExportSheet } from "../../components/ExportSheet";
+import { FigureImage } from "../../components/FigureImage";
+import { figureAt } from "../../lib/figures";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
@@ -129,8 +131,12 @@ export default function Paper() {
   };
 
   // ---------------------------------------------------------------- 试卷（打印版）
-  const renderPrintBlock = (block: DigitizedBlock, bi: number) => {
+  const renderPrintBlock = (block: DigitizedBlock, bi: number, si: number) => {
     switch (block.type) {
+      case "figure": {
+        const fig = figureAt(paper, si, bi);
+        return fig ? <FigureImage key={bi} fig={fig} /> : null;
+      }
       case "section":
         return (
           <div className="blk-section" key={bi}>
@@ -204,7 +210,7 @@ export default function Paper() {
               {sheet.score && <span className="paper__score">{sheet.score}</span>}
             </div>
           </div>
-          {sheet.blocks.map(renderPrintBlock)}
+          {sheet.blocks.map((b, bi) => renderPrintBlock(b, bi, si))}
           {sheet.note && <p className="paper__note">{sheet.note}</p>}
         </div>
       ))}

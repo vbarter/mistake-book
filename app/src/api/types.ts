@@ -96,7 +96,7 @@ export interface DigitizedBlank {
   aiGraded?: boolean; // 老师没批改，mark 是 AI 阅卷的结论
 }
 
-export type BlockType = "section" | "passage" | "wordbank" | "item" | "text";
+export type BlockType = "section" | "passage" | "wordbank" | "item" | "text" | "figure"; // figure：插图 / 表格，只有位置，图从原照片裁
 
 /** 电子版试卷里的一个版面块，按原卷阅读顺序排列 */
 export interface DigitizedBlock {
@@ -158,6 +158,7 @@ export interface DigitizedPage {
   syllabus: string; // 知识点归类依据的考纲 / 课标
   photoIssues?: PhotoIssue[]; // 照片问题（新扫描才有）
   photoNote?: string; // 哪里受影响
+  rotation?: number; // 照片内容逆时针转了几个 90°（OCR 判断），裁插图后转正
   blocks: DigitizedBlock[];
 }
 

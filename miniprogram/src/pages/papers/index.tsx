@@ -83,7 +83,7 @@ export default function Papers() {
         </View>
       </View>
 
-      {folders.length === 0 && <Empty title="还没有试卷" text="拍下整页试卷或从相册多选，会自动扫描成电子版，找出错题并按知识点归类。" />}
+      {folders.length === 0 && <Empty title="还没有试卷" text="拍下整页试卷或从相册多选，会自动扫描成电子版，找出错题并按知识点归类。一次拍一页、让试卷铺满画面，图表和小字才认得清。" />}
 
       {folders.map((f) => {
         const st = folderStats(f);

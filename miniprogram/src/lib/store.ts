@@ -6,6 +6,7 @@
 import Taro from "@tarojs/taro";
 import type { DigitizedResult, Subject } from "./types";
 import type { ScanJob } from "./jobs";
+import { removeFigures } from "./figures";
 
 export interface FolderPage {
   id: string;
@@ -143,6 +144,7 @@ function removePhotos(paper: Paper) {
     }
   }
   Taro.removeStorageSync(digKey(paper.id));
+  removeFigures(paper.id);
 }
 
 export function deleteFolder(id: string) {

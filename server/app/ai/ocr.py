@@ -13,6 +13,7 @@ OCR 失败时退回让大模型直接看图，不让任务失败。只用标准�
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 import os
@@ -21,6 +22,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
 
@@ -173,6 +175,29 @@ def _baidu_doc_analysis(data: bytes, timeout: float) -> dict:
     raise OCRError("百度 OCR 重试仍失败")
 
 
+FIGURE_TAG = "[图中文字]"
+FIGURE_LAYOUTS = {"figure": "插图", "table": "表格"}
+
+
+@dataclass
+class OcrPage:
+    """一张图片的 OCR 结果：逐行文字、方向（逆时针转了几个 90°）、插图 / 表格区域（相对整张图的 0–1 坐标）"""
+
+    text: str
+    direction: int = 0
+    regions: list = field(default_factory=list)  # [{"kind": "figure" | "table", "bbox": [x0, y0, x1, y1]}]
+
+
+def image_size(data: bytes) -> tuple[int, int] | None:
+    try:
+        from PIL import Image  # reportlab 依赖 Pillow，服务器上一定有
+
+        with Image.open(io.BytesIO(data)) as im:
+            return im.size
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _baidu_order(r: dict) -> list[list[int]]:
     """按分栏把 results 的下标分组：每个 section（按行、列排序）里的行按接口给出的顺序，不属于任何分栏的行放最后。"""
     results = r.get("results") or []
@@ -196,9 +221,55 @@ def _baidu_order(r: dict) -> list[list[int]]:
     return groups
 
 
+def _figure_lines(r: dict) -> dict[int, str]:
+    """版面分析里落在插图 / 表格里的行 → 该行的前缀"""
+    out: dict[int, str] = {}
+    for lay in r.get("layouts") or []:
+        if lay.get("layout") in FIGURE_LAYOUTS:
+            for i in lay.get("layout_idx") or []:
+                if isinstance(i, int):
+                    out[i] = FIGURE_TAG
+    return out
+
+
+def baidu_regions(r: dict, size: tuple[int, int] | None) -> list[dict]:
+    """插图 / 表格区域，坐标换成相对整张图的 0–1（百度给的是原图像素坐标，未按方向转正）"""
+    if not size:
+        return []
+    w, h = size
+    out = []
+    for lay in r.get("layouts") or []:
+        kind = lay.get("layout")
+        pts = lay.get("layout_location") or []
+        if kind not in FIGURE_LAYOUTS or len(pts) < 2:
+            continue
+        xs = [float(p.get("x", 0)) for p in pts]
+        ys = [float(p.get("y", 0)) for p in pts]
+        box = [max(0.0, min(xs) / w), max(0.0, min(ys) / h), min(1.0, max(xs) / w), min(1.0, max(ys) / h)]
+        # 太小的（印章、页码框之类）不算插图
+        if (box[2] - box[0]) * (box[3] - box[1]) < 0.004:
+            continue
+        out.append({"kind": kind, "bbox": [round(v, 4) for v in box]})
+    return out
+
+
+def baidu_page(r: dict, size: tuple[int, int] | None = None) -> OcrPage:
+    text = baidu_lines(r)
+    regions = baidu_regions(r, size)
+    if regions:
+        listing = "\n".join(f"- {FIGURE_LAYOUTS[g['kind']]}{i + 1}：{g['bbox']}" for i, g in enumerate(regions))
+        text += "\n\n【版面分析检测到的插图 / 表格区域，坐标为相对整张照片的 [x0, y0, x1, y1]】\n" + listing
+    try:
+        direction = int(r.get("img_direction") or 0) % 4
+    except (TypeError, ValueError):
+        direction = 0
+    return OcrPage(text=text, direction=direction, regions=regions)
+
+
 def baidu_lines(r: dict) -> str:
-    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀；没有 results 时退回 words_result。"""
+    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀，落在插图 / 表格里的行加 [图中文字] 前缀；没有 results 时退回 words_result。"""
     results = r.get("results") or []
+    in_figure = _figure_lines(r)
     chunks: list[str] = []
     for group in _baidu_order(r):
         lines: list[str] = []
@@ -207,7 +278,7 @@ def baidu_lines(r: dict) -> str:
             words = item.get("words") or {}
             word = str(words.get("word") or "").strip()
             if word:
-                lines.append((HANDWRITING_TAG if item.get("words_type") == "handwriting" else "") + word)
+                lines.append(in_figure.get(i, "") + (HANDWRITING_TAG if item.get("words_type") == "handwriting" else "") + word)
         if lines:
             chunks.append("\n".join(lines))
     if not chunks:
@@ -216,8 +287,8 @@ def baidu_lines(r: dict) -> str:
     return "\n\n".join(chunks)
 
 
-def _baidu_ocr(data: bytes, timeout: float) -> str:
-    return baidu_lines(_baidu_doc_analysis(data, timeout))
+def _baidu_ocr(data: bytes, timeout: float) -> OcrPage:
+    return baidu_page(_baidu_doc_analysis(data, timeout), image_size(data))
 
 
 # ---------- 对外 ----------
@@ -242,14 +313,22 @@ def health(max_age: float = 60.0) -> str:
 
 
 def ocr_image(data: bytes, media_type: str = "image/jpeg", prompt: str = "OCR:", timeout: float = 120.0) -> str:
-    """识别一张图片，返回逐行文字（公式为 LaTeX；百度方案下按分栏排序、手写行带 [手写] 前缀）。网络类错误重试一次。"""
+    """只要文字的调用方用：见 ocr_page"""
+    return ocr_page(data, media_type, prompt, timeout).text
+
+
+def ocr_page(data: bytes, media_type: str = "image/jpeg", prompt: str = "OCR:", timeout: float = 120.0) -> OcrPage:
+    """识别一张图片：逐行文字（公式为 LaTeX；百度方案下按分栏排序、手写行带 [手写] 前缀、图中的字带 [图中文字] 前缀，
+    末尾附插图 / 表格区域），以及方向和插图区域。网络类错误重试一次。"""
     name = provider()
     if not enabled():
         raise OCRError("OCR 未配置")
     last: Exception | None = None
     for attempt in range(2):
         try:
-            return _paddle_ocr(data, media_type, prompt, timeout) if name == "paddle" else _baidu_ocr(data, timeout)
+            if name == "paddle":
+                return OcrPage(text=_paddle_ocr(data, media_type, prompt, timeout))
+            return _baidu_ocr(data, timeout)
         except OCRError:
             raise
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError, KeyError, OSError) as e:

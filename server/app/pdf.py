@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import base64
 import html
 import io
 import re
@@ -20,7 +21,8 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .ai.digitize import auto_mark
 
@@ -53,6 +55,7 @@ S_BODY = ParagraphStyle("body", fontName=FONT, fontSize=10.5, leading=17)
 S_ITEM = ParagraphStyle("item", fontName=FONT, fontSize=10.5, leading=17, leftIndent=18, firstLineIndent=-18, spaceAfter=3)
 S_OPT = ParagraphStyle("opt", fontName=FONT, fontSize=10, leading=15, leftIndent=18)
 S_SMALL = ParagraphStyle("small", fontName=FONT, fontSize=8.5, leading=12, textColor=colors.grey, alignment=TA_CENTER)
+S_FIG = ParagraphStyle("fig", fontName=FONT, fontSize=9, leading=13, textColor=colors.HexColor("#555555"), spaceAfter=2)
 S_CELL = ParagraphStyle("cell", fontName=FONT, fontSize=9.5, leading=13)
 S_CELL_WRONG = ParagraphStyle("cellw", parent=S_CELL, textColor=colors.HexColor("#b42323"))
 S_CELL_OK = ParagraphStyle("cello", parent=S_CELL, textColor=colors.HexColor("#1e7a47"))
@@ -117,6 +120,31 @@ def _strip_paren(s: str) -> str:
     return re.sub(r"^[（(]|[）)]$", "", s or "").strip()
 
 
+def _figure_flow(fig: dict, max_w: float, max_h: float, keep: bool = True) -> list:
+    """插图：客户端从原照片裁好的图（image，dataURL）按比例缩进 max_w × max_h；没有图（旧版客户端）就印图题和文字说明。"""
+    caption = str(fig.get("title") or "").strip()
+    out: list = []
+    data = str(fig.get("image") or "")
+    if data.startswith("data:image") and "," in data:
+        try:
+            raw = base64.b64decode(data.split(",", 1)[1])
+            iw, ih = ImageReader(io.BytesIO(raw)).getSize()
+            scale = min(max_w / iw, max_h / ih)  # 按比例放进框里（裁出来的小图也放大到看得清）
+            img = Image(io.BytesIO(raw), width=iw * scale, height=ih * scale)
+            img.hAlign = "LEFT"
+            out.append(img)
+            if caption:
+                out.append(Paragraph(_esc(caption), S_FIG))
+            # 表格单元格里（错题本）不能用 KeepTogether：行内分页时会出错
+            return [Spacer(1, 3), KeepTogether(out) if keep else out[0], *([] if keep else out[1:]), Spacer(1, 4)]
+        except Exception:  # noqa: BLE001  图坏了就退回文字
+            out = []
+    desc = str(fig.get("text") or "").strip()
+    if caption or desc:
+        out.append(Paragraph(f"【{_esc(caption or '插图')}】" + (_esc(desc) if desc else ""), S_FIG))
+    return out
+
+
 def _paper_part(story: list, sheets: list[dict], title: str, scanned_at: str = "") -> None:
     for si, sheet in enumerate(sheets):
         if si > 0:
@@ -160,6 +188,8 @@ def _paper_part(story: list, sheets: list[dict], title: str, scanned_at: str = "
                 story.append(KeepTogether(flow))
             elif t == "text":
                 story.append(Paragraph(_esc(block.get("text") or ""), S_SMALL))
+            elif t == "figure":
+                story.extend(_figure_flow(block, 120 * mm, 90 * mm))
         if sheet.get("note"):
             story.append(Paragraph(_esc(sheet["note"]), S_INS))
 
@@ -327,6 +357,9 @@ def _book_rows(items: list[dict]):
         if opts:
             labeled = [o if re.match(r"^[A-H][.、．]", str(o)) else f"{chr(65 + i)}. {o}" for i, o in enumerate(opts)]
             left.append(Paragraph("　".join(_esc(str(o)) for o in labeled), S_BOOK_NOTE))
+        for fig in it.get("figures") or []:
+            if isinstance(fig, dict):
+                left.extend(_figure_flow(fig, 110 * mm, 60 * mm, keep=False))
         if it.get("source"):
             left.append(Paragraph(_esc(str(it["source"])), S_BOOK_META))
         left.append(Spacer(1, 18))  # 书写留白
