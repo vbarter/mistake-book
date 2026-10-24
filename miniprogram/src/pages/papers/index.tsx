@@ -115,11 +115,11 @@ export default function Papers() {
                   </Text>
                 ))}
                 {groups.length > 2 && <Tag>+{groups.length - 2}</Tag>}
-                {groups.length === 0 && <Text className="t-foot c-sec">{st.unscanned > 0 ? "扫一下，错题就自动归到知识点里" : "没有错题，真棒"}</Text>}
+                {groups.length === 0 && <Text className="t-foot c-sec">{st.unscanned > 0 ? `${st.unscanned} 张待扫描，扫完错题自动归到知识点` : "没有错题，真棒"}</Text>}
               </View>
             </View>
             <View className="row-center">
-              {scanning ? <Tag kind="info">{scanStageText(scanning.scanJob!)}</Tag> : st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} />}
+              {scanning ? <Tag kind="info">{scanStageText(scanning.scanJob!)}</Tag> : st.unscanned > 0 && st.problems === 0 ? <Tag kind="accent">去扫描</Tag> : <WrongRing wrong={st.problems} />}
             </View>
           </View>
         );

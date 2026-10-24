@@ -107,15 +107,14 @@ export default function Papers() {
                       <span key={k} className="tag" style={{ background: c.bg, color: c.color, height: 24 }}>{k} {items.length}</span>
                     ))}
                     {more > 0 && <span className="tag tag--neutral">+{more}</span>}
-                    {kps.length === 0 && <span className="t-foot c-sec">{st.unscanned > 0 ? "扫一下，错题就自动归到知识点里" : "没有错题，真棒"}</span>}
+                    {kps.length === 0 && <span className="t-foot c-sec">{st.unscanned > 0 ? `${st.unscanned} 张待扫描，扫完错题自动归到知识点` : "没有错题，真棒"}</span>}
                   </span>
-                  {st.unscanned > 0 && st.problems === 0 && <Tag kind="accent">去扫描</Tag>}
                 </div>
               </div>
               <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
                 {f.papers.some((p) => p.scanJob) ? (
                   <Tag kind="info" icon="sparkles">{scanStageText([...f.papers.filter((p) => p.scanJob)].sort((a, b) => a.scanJob!.progress - b.scanJob!.progress)[0].scanJob!)}</Tag>
-                ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="pending">{st.unscanned} 张待扫描</Tag> : <WrongRing wrong={st.problems} />}
+                ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="accent" icon="sparkles">去扫描</Tag> : <WrongRing wrong={st.problems} />}
               </span>
             </button>
           );

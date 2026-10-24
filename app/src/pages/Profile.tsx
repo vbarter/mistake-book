@@ -10,7 +10,7 @@ import { getCity } from "../lib/prefs";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
 
-const BUILD = "1.0 (27)";
+const BUILD = "1.0 (28)";
 
 /** 我的：账号、年级与城市（决定知识点按哪套考纲归类）、学科、本机数据与隐私、关于。 */
 export default function Profile() {
