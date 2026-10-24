@@ -11,7 +11,7 @@ import { listFolders, photosSizeMB } from "../../lib/store";
 import type { Subject } from "../../lib/types";
 
 const GRADES = Object.keys(GRADE_LABEL);
-const VERSION = "小程序 1.0.1";
+const VERSION = "小程序 1.0.2";
 
 const loginLabel = (m?: string) => (m === "wechat" ? "微信" : m === "apple" ? "Apple" : m === "phone" ? "手机号" : "游客");
 
