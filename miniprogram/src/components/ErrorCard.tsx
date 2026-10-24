@@ -2,6 +2,7 @@ import { Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import type { ErrorItem, ErrorPart } from "../lib/errors";
 import { QTYPE_LABEL } from "../lib/format";
+import { mathPlain } from "../lib/math";
 import { MathText, SubjectTile, Tag, Verdict, subjectColors } from "./ui";
 
 export const errorAnchor = (key: string) => `err-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -61,7 +62,7 @@ function PartRow({ p }: { p: ErrorPart }) {
 export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem; showSource?: boolean; showKnowledge?: boolean }) {
   const q = item.q;
   const c = subjectColors(q.subject);
-  const meta = [showSource ? `${item.folderName} · ${item.paperName}` : "", item.sectionLabel].filter(Boolean).join(" · ");
+  const meta = [showSource ? `${item.folderName} · ${item.paperName}` : "", mathPlain(item.sectionLabel)].filter(Boolean).join(" · ");
   return (
     <View className="card ecard" id={errorAnchor(item.key)}>
       <View className="ecard__head">

@@ -284,12 +284,17 @@ page {
 
 /* 作答对照 */
 .ans { gap: 0; padding: 10px 12px; }
-.ans__row { display: flex; align-items: center; gap: 6px; padding: 8px 0; border-top: 1px solid $sep; font-size: 14px; }
+.ans__item { border-top: 1px solid $sep; }
+.ans__row { display: flex; align-items: center; gap: 6px; padding: 8px 0; font-size: 14px; }
+.ans__row--head { border-top: 1px solid $sep; }
+.ans__sub { font-size: 11px; font-weight: 600; color: $secondary; }
+.ans__note { display: flex; align-items: flex-start; gap: 6px; padding: 0 4px 8px 52px; font-size: 13px; color: $wrong; line-height: 1.5; }
+.ans__note-label { flex-shrink: 0; font-size: 11px; font-weight: 700; color: $wrong; background: $wrong-bg; border-radius: 4px; padding: 0 4px; margin-top: 2px; }
 .ans__row--head { color: $secondary; font-size: 12px; font-weight: 600; }
 .ans__row--wrong { background: #fff7f7; }
-.ans__num { width: 40px; flex-shrink: 0; font-weight: 700; }
+.ans__num { width: 46px; flex-shrink: 0; font-weight: 700; }
 .ans__hand { flex: 1.2; min-width: 0; }
-.ans__mark { width: 64px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.ans__mark { width: 52px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
 .ans__answer { flex: 1; min-width: 0; color: $ok; }
 
 .avatar { width: 60px; height: 60px; border-radius: 30px; background: $brand-tint; color: $brand; font-size: 24px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }

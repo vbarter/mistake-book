@@ -133,11 +133,11 @@ export interface Seg {
   unrec?: boolean; // 看不清的字：红色「未识别」
 }
 
-/** 文本 → 片段：公式转成文字，□ 拆成「未识别」 */
+/** 文本 → 片段：公式转成文字，□ 拆成「未识别」（连着几个 □ 只显示一个） */
 export function toSegments(text: string): Seg[] {
   const plain = (text || "").replace(MATH_RE, (_, tex: string) => latexToText(tex));
   const out: Seg[] = [];
-  plain.split("□").forEach((part, i) => {
+  plain.split(/□+/).forEach((part, i) => {
     if (i > 0) out.push({ text: "未识别", unrec: true });
     if (part) out.push({ text: part });
   });

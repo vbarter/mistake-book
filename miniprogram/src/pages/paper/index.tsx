@@ -146,7 +146,7 @@ export default function PaperPage() {
                 {block.label && `${block.label}. `}
                 {mathPlain(block.title)}
               </Text>
-              {block.points && <Text className="t-cap c-sec">{stripParen(block.points)}</Text>}
+              {block.points && <Text className="t-cap c-sec">{mathPlain(stripParen(block.points))}</Text>}
             </View>
             {block.instruction && <MathText className="blk-section__instruction" text={block.instruction} />}
           </View>
@@ -199,7 +199,7 @@ export default function PaperPage() {
       {sheets.map((sheet, si) => (
         <View className="sheet-paper" key={si}>
           <View className="sheet-paper__head">
-            {sheet.title && <Text className="sheet-paper__title">{sheet.title}</Text>}
+            {sheet.title && <Text className="sheet-paper__title">{mathPlain(sheet.title)}</Text>}
             <View className="row-wrap t-cap c-sec">
               {sheet.label && <Text>{sheet.label}</Text>}
               {[sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).length > 0 && <Text>{[sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).join(" · ")}</Text>}
@@ -207,7 +207,7 @@ export default function PaperPage() {
             </View>
           </View>
           {sheet.blocks.map(printBlock)}
-          {sheet.note && <Text className="t-cap c-sec">{sheet.note}</Text>}
+          {sheet.note && <MathText className="t-cap c-sec" text={sheet.note} />}
         </View>
       ))}
     </>
@@ -235,15 +235,27 @@ export default function PaperPage() {
             </View>
             {rows.map((b) => {
               const wrong = b.mark === "wrong" || b.mark === "partial";
+              const sub = /-(\d+)$/.exec(b.id)?.[1];
+              const note = b.note && b.note !== "未作答" ? b.note : "";
               return (
-                <View className={`ans__row${wrong ? " ans__row--wrong" : ""}`} key={b.rowKey}>
-                  <Text className="ans__num">{b.number}</Text>
+                <View className={`ans__item${wrong ? " ans__row--wrong" : ""}`} key={b.rowKey}>
+                <View className="ans__row">
+                  <Text className="ans__num">
+                    {b.number || b.id.split("-")[0]}
+                    {sub ? <Text className="ans__sub">({sub})</Text> : null}
+                  </Text>
                   <View className="ans__hand">{b.student.trim() ? <MathText className={`hand${wrong ? " hand--wrong" : ""}`} text={b.student} /> : <Text>—</Text>}</View>
                   <View className="ans__mark">
                     <Verdict mark={b.mark} student={b.student} grading={grading} />
-                    {b.note && b.note !== "未作答" && <Text className="t-cap c-wrong">{b.note}</Text>}
                   </View>
                   <View className="ans__answer">{b.mark === "correct" ? null : <MathText text={b.answer} />}</View>
+                </View>
+                {note && (
+                  <View className="ans__note">
+                    <Text className="ans__note-label">批注</Text>
+                    <MathText text={note} />
+                  </View>
+                )}
                 </View>
               );
             })}
