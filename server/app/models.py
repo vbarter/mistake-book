@@ -22,6 +22,7 @@ class User(db.Model):
     id = db.Column(db.String(32), primary_key=True, default=_uuid)
     phone = db.Column(db.String(32), unique=True, nullable=True, index=True)
     apple_sub = db.Column(db.String(128), unique=True, nullable=True, index=True)
+    wx_openid = db.Column(db.String(64), unique=True, nullable=True, index=True)  # 微信小程序登录
     nickname = db.Column(db.String(32), default="小同学")
     grade = db.Column(db.String(4), default="5")
     subjects = db.Column(JSON, default=lambda: ["math", "chinese", "english", "science"])
@@ -37,7 +38,7 @@ class User(db.Model):
         return {
             "id": self.id,
             "phone": self.phone,
-            "loginMethod": "apple" if self.apple_sub else ("phone" if self.phone else "guest"),
+            "loginMethod": "apple" if self.apple_sub else ("wechat" if self.wx_openid else ("phone" if self.phone else "guest")),
             "nickname": self.nickname,
             "grade": self.grade,
             "subjects": self.subjects or [],

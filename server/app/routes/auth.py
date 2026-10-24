@@ -123,6 +123,48 @@ def login_with_apple():
     return _issue(user)
 
 
+def _wx_openid(code: str) -> str:
+    """小程序 wx.login 拿到的 code 换 openid（jscode2session）。WX_APPID / WX_SECRET 在 .env 里配置。"""
+    import os
+    import urllib.parse
+    import urllib.request
+
+    appid, secret = os.getenv("WX_APPID", "").strip(), os.getenv("WX_SECRET", "").strip()
+    if current_app.config.get("TESTING") and not appid:
+        return f"test-{code}"  # 测试：不连微信
+    if not (appid and secret):
+        abort(503, "微信登录还没配置（服务器缺少 WX_APPID / WX_SECRET）")
+    query = urllib.parse.urlencode({"appid": appid, "secret": secret, "js_code": code, "grant_type": "authorization_code"})
+    try:
+        with urllib.request.urlopen(f"https://api.weixin.qq.com/sns/jscode2session?{query}", timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:  # noqa: BLE001
+        log.warning("jscode2session failed: %s", e)
+        abort(502, "连接微信服务器失败，请稍后再试")
+    openid = data.get("openid")
+    if not openid:
+        log.warning("jscode2session error: %s", {k: v for k, v in data.items() if k != "session_key"})
+        abort(400, "微信登录失败：" + str(data.get("errmsg") or "code 无效"))
+    return str(openid)
+
+
+@bp.post("/auth/wechat")
+def login_with_wechat():
+    """微信小程序一键登录：同一个微信（openid）始终对应同一个账号。"""
+    data = request.get_json(silent=True) or {}
+    code = str(data.get("code", "")).strip()
+    if not code:
+        abort(400, "缺少 code")
+    openid = _wx_openid(code)
+    user = User.query.filter_by(wx_openid=openid).first()
+    if user is None:
+        user = User(wx_openid=openid)
+        _apply_profile(user, data.get("profile") or {})
+        db.session.add(user)
+        db.session.commit()
+    return _issue(user)
+
+
 @bp.post("/auth/guest")
 def login_as_guest():
     """先用后登：创建匿名本地账号，后续可绑定手机 / Apple。"""
@@ -188,7 +230,7 @@ def me():
     return jsonify({"user": current_user().to_dict()})
 
 
-@bp.patch("/auth/me")
+@bp.route("/auth/me", methods=["PATCH", "PUT"])  # 小程序 wx.request 不支持 PATCH，用 PUT
 @login_required
 def update_me():
     user = current_user()

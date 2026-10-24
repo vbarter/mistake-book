@@ -820,3 +820,17 @@ def test_grade_endpoint_regrades_stored_paper(client, auth, monkeypatch):
     marks = {b["id"]: (b["mark"], b["aiGraded"]) for b in body["pages"][0]["blocks"][0]["blanks"]}
     assert marks == {"36": ("wrong", True), "37": ("correct", True)} and body["graded"] == 2 and len(calls) == 2
     assert [q["index"] for q in body["questions"]] == [0, 1]
+
+
+def test_wechat_login_same_openid_same_account(client):
+    """小程序登录：同一个 code（测试环境下映射成同一个 openid）始终是同一个账号，登录方式为 wechat。"""
+    r1 = client.post("/api/auth/wechat", json={"code": "abc", "profile": {"nickname": "小明", "grade": "9"}})
+    r2 = client.post("/api/auth/wechat", json={"code": "abc"})
+    assert r1.status_code == 200 and r2.status_code == 200
+    u1, u2 = r1.get_json()["user"], r2.get_json()["user"]
+    assert u1["id"] == u2["id"] and u1["loginMethod"] == "wechat" and u1["grade"] == "9"
+    assert client.post("/api/auth/wechat", json={}).status_code == 400
+    # 小程序改资料用 PUT（wx.request 不支持 PATCH）
+    h = {"Authorization": f"Bearer {r1.get_json()['token']}"}
+    r3 = client.put("/api/auth/me", json={"nickname": "小红"}, headers=h)
+    assert r3.status_code == 200 and r3.get_json()["user"]["nickname"] == "小红"

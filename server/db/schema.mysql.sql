@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   id                VARCHAR(32)  NOT NULL COMMENT 'UUID hex',
   phone             VARCHAR(32)  NULL     COMMENT '手机号，验证码登录',
   apple_sub         VARCHAR(128) NULL     COMMENT 'Apple 登录的 sub',
+  wx_openid         VARCHAR(64)  NULL     COMMENT '微信小程序 openid',
   nickname          VARCHAR(32)  NOT NULL DEFAULT '小同学',
   grade             VARCHAR(4)   NOT NULL DEFAULT '5' COMMENT '年级 3-6',
   subjects          JSON         NULL     COMMENT '开启的学科数组，如 ["math","chinese"]',
@@ -21,7 +22,8 @@ CREATE TABLE IF NOT EXISTS users (
   created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uk_users_phone (phone),
-  UNIQUE KEY uk_users_apple_sub (apple_sub)
+  UNIQUE KEY uk_users_apple_sub (apple_sub),
+  UNIQUE KEY uk_users_wx_openid (wx_openid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户';
 
 -- 错题
@@ -119,3 +121,6 @@ CREATE TABLE IF NOT EXISTS digitize_jobs (
   INDEX idx_jobs_status (status),
   INDEX idx_jobs_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 已有库升级：微信小程序登录（用 root 执行）
+-- ALTER TABLE users ADD COLUMN wx_openid VARCHAR(64) NULL COMMENT '微信小程序 openid' AFTER apple_sub, ADD UNIQUE KEY uk_users_wx_openid (wx_openid);

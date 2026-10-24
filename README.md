@@ -250,3 +250,9 @@ export ANDROID_HOME=$HOME/Library/Android/sdk
 - 正式入口：`https://book.openmindai.cn`（A 记录指向 43.129.175.172），nginx 站点见 `deploy/nginx-zhicuoben-book.conf`（服务器上是 `/etc/nginx/conf.d/zhicuoben-book.conf`），整站反向代理到 `127.0.0.1:5001`（gunicorn / Flask），HTTP 自动跳 HTTPS。
 - 证书：Let's Encrypt，certbot webroot 方式（`/var/www/certbot`）；`/etc/cron.d/certbot-book-openmindai` 每天 3 点尝试续期，续期后 `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` 自动 reload nginx。
 - App 生产环境 API：`app/.env.production` 的 `VITE_API_BASE=https://book.openmindai.cn`。旧入口 `http://43.129.175.172:8080/zhicuoben/` 仍保留，给已安装的旧版本用，等用户都更新后可以关掉。
+
+## 微信小程序
+
+`miniprogram/` 是 Taro 4（React + TypeScript）写的微信小程序版，功能和 App 一致，共用同一个后端。
+开发、上线配置（request 合法域名、`WX_APPID` / `WX_SECRET`）见 [miniprogram/README.md](miniprogram/README.md)。
+后端为它新增了 `POST /api/auth/wechat`（`wx.login` 的 code 换账号，用户表新增 `wx_openid` 列），`/api/auth/me` 也接受 PUT。
