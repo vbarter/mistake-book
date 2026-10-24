@@ -149,6 +149,11 @@ export async function createFolder(name: string, subject?: Subject): Promise<Fol
   return saveFolder({ id: newId(), name: name.trim() || defaultFolderName(), subject, createdAt: now, updatedAt: now, papers: [] });
 }
 
+/** 清空本机全部文件夹、试卷照片和电子版（账号不受影响） */
+export async function clearAllFolders(): Promise<void> {
+  await tx("readwrite", (s) => s.clear());
+}
+
 export async function deleteFolder(id: string): Promise<void> {
   await tx("readwrite", (s) => s.delete(id));
 }

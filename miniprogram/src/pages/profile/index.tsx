@@ -7,7 +7,7 @@ import { currentUser, logout, refreshUser, updateProfile } from "../../lib/auth"
 import { allErrors } from "../../lib/errors";
 import { GRADE_LABEL, SUBJECTS, SUBJECT_LABEL } from "../../lib/format";
 import { toast, useDataVersion } from "../../lib/hooks";
-import { listFolders, photosSizeMB } from "../../lib/store";
+import { clearAllFolders, listFolders, photosSizeMB } from "../../lib/store";
 import type { Subject } from "../../lib/types";
 
 const GRADES = Object.keys(GRADE_LABEL);
@@ -63,6 +63,19 @@ export default function Profile() {
     if (v) Taro.setStorageSync("zcb.city", v);
     else Taro.removeStorageSync("zcb.city");
     setCity(v);
+  };
+
+  const doClear = async () => {
+    const m = await Taro.showModal({
+      title: "清空本机数据？",
+      content: `会删掉这台手机上的 ${folders.length} 个文件夹、${stats.papers} 张试卷，以及它们的照片、电子版和错题，不能恢复。账号和学习设置不受影响。`,
+      confirmText: "清空",
+      confirmColor: "#d92d20",
+    });
+    if (!m.confirm) return;
+    clearAllFolders();
+    refresh();
+    toast("本机数据已清空", "success");
   };
 
   const doLogout = async () => {
@@ -136,6 +149,9 @@ export default function Profile() {
         <View className="list-row">
           <Text className="flex1 t-body">登录方式</Text>
           <Text className="c-sec">{loginLabel(user.loginMethod)}</Text>
+        </View>
+        <View className="list-row" onClick={doClear}>
+          <Text className="flex1 t-body c-wrong">清空本机数据</Text>
         </View>
         <View className="list-row" onClick={doLogout}>
           <Text className="flex1 t-body c-wrong">退出登录</Text>

@@ -6,6 +6,7 @@ import { Button, InlineNav, Row, Sheet } from "../components/ui";
 import { SubjectTile } from "../components/v2";
 import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_GROUPS, SUBJECT_LABEL } from "../lib/format";
 import { getCity, setCity } from "../lib/prefs";
+import { clearAllFolders, listFolders } from "../lib/folders";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
 import { isNative, isAndroid } from "../lib/native";
@@ -113,17 +114,41 @@ export function Account() {
 
 /* ---------- 隐私与数据 ---------- */
 export function Privacy() {
+  const nav = useNavigate();
+  const [counts, setCounts] = useState<{ folders: number; papers: number } | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    listFolders()
+      .then((fs) => setCounts({ folders: fs.length, papers: fs.reduce((n, f) => n + f.papers.length, 0) }))
+      .catch(() => setCounts({ folders: 0, papers: 0 }));
+  }, []);
+
+  const clearAll = async () => {
+    setBusy(true);
+    try {
+      await clearAllFolders();
+      setConfirm(false);
+      toast("本机数据已清空", "success");
+      nav("/papers", { replace: true });
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="screen">
       <InlineNav title="隐私与数据" back />
       <div className="screen__content screen__content--modal" style={{ paddingTop: 8 }}>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">我们收集什么</span>
-          <p className="t-sub c-sec">只收集昵称、年级、学科设置、错题内容与复习记录。不收集姓名、学校、班级、位置。</p>
+          <p className="t-sub c-sec">账号只保存昵称、年级、学科设置和登录方式。试卷照片、电子版和错题只保存在这台设备上，不会上传备份。不收集姓名、学校、班级、位置。</p>
         </div>
         <div className="card" style={{ gap: 8 }}>
-          <span className="t-headline">AI 识别如何处理图片</span>
-          <p className="t-sub c-sec">只上传你框选的题目截图；自动分段会跳过卷头区域，并要求 AI 忽略姓名、学校等信息。</p>
+          <span className="t-headline">扫描时如何处理照片</span>
+          <p className="t-sub c-sec">扫描时把试卷照片发到我们的服务器识别和批改，并要求 AI 忽略姓名、学校、班级等信息。服务器不保存照片；识别结果保留一天，方便切走 App 后取回，之后自动删除。</p>
         </div>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">第三方 SDK</span>
@@ -131,9 +156,17 @@ export function Privacy() {
         </div>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">你的权利</span>
-          <p className="t-sub c-sec">可在「家长查看」中导出或永久删除全部数据。</p>
+          <p className="t-sub c-sec">随时可以在下面清空这台设备上的全部试卷和错题。清空后不能恢复，账号和学习设置不受影响。</p>
+        </div>
+        <div className="group">
+          <Row icon="trash" iconColor="var(--wrong)" title="清空本机数据" danger chevron={false} value={counts ? `${counts.papers} 张试卷` : undefined} onClick={() => setConfirm(true)} />
         </div>
       </div>
+      <Sheet open={confirm} onClose={() => setConfirm(false)} title="清空本机数据？">
+        <p className="t-sub c-sec">会删掉这台设备上的 {counts?.folders ?? 0} 个文件夹、{counts?.papers ?? 0} 张试卷，以及它们的照片、电子版和错题，不能恢复。账号和学习设置不受影响。</p>
+        <Button variant="danger" onClick={clearAll} disabled={busy}>{busy ? "正在清空…" : "清空"}</Button>
+        <Button variant="plain" onClick={() => setConfirm(false)}>取消</Button>
+      </Sheet>
     </div>
   );
 }

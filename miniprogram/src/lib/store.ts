@@ -147,6 +147,20 @@ function removePhotos(paper: Paper) {
   removeFigures(paper.id);
 }
 
+/** 清空本机全部文件夹、试卷照片、电子版和裁好的插图（账号和学习设置不受影响） */
+export function clearAllFolders() {
+  for (const id of readIndex()) deleteFolder(id);
+  writeIndex([]);
+  const fs = Taro.getFileSystemManager();
+  for (const dir of [PHOTO_DIR, `${Taro.env.USER_DATA_PATH}/figs`]) {
+    try {
+      for (const name of fs.readdirSync(dir)) fs.unlinkSync(`${dir}/${name}`);
+    } catch {
+      /* 目录不存在 */
+    }
+  }
+}
+
 export function deleteFolder(id: string) {
   const f = readFolder(id);
   f?.papers.forEach(removePhotos);
