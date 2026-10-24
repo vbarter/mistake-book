@@ -23,6 +23,8 @@ function setUser(u: User | null) {
   Taro.eventCenter.trigger("auth");
 }
 
+export const loginLabel = (m?: string) => (m === "wechat" ? "微信" : m === "apple" ? "Apple" : m === "phone" ? "手机号" : "游客");
+
 export function isLoggedIn(): boolean {
   return Boolean(loadToken());
 }

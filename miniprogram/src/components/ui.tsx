@@ -1,8 +1,8 @@
 /** 通用小组件：学科方块、标签、公式文字、空状态、底部面板、分段切换 */
 import type { CSSProperties, ReactNode } from "react";
+import { Icon, type IconName } from "./Icon";
 import { ScrollView, Text, View } from "@tarojs/components";
 import type { Mark, Subject } from "../lib/types";
-import { SUBJECT_LABEL } from "../lib/format";
 import { toSegments } from "../lib/math";
 
 export const SUBJECT_COLOR: Record<Subject, { color: string; bg: string }> = {
@@ -21,11 +21,31 @@ export const SUBJECT_COLOR: Record<Subject, { color: string; bg: string }> = {
 export const subjectColors = (s: Subject | null | undefined) => (s ? SUBJECT_COLOR[s] : { color: "#5b5b63", bg: "#f2f2f7" });
 
 /** 学科方块：色块 + 学科首字 */
+/** 学科图标（和 App 的 SubjectTile 一致） */
+const SUBJECT_ICON: Record<Subject, IconName> = { english: "bubble", math: "calculator", chinese: "brush", science: "flask", physics: "atom", chemistry: "tube", biology: "leaf", history: "scroll", geography: "map", politics: "scales" };
+const TILE_ICON_SIZE = { lg: 28, md: 26, sm: 20, xs: 13 } as const;
+
 export function SubjectTile({ subject, size = "md", style }: { subject: Subject | null | undefined; size?: "lg" | "md" | "sm" | "xs"; style?: CSSProperties }) {
   const c = subjectColors(subject);
   return (
-    <View className={`tile tile--${size}`} style={{ background: c.bg, color: c.color, ...style }}>
-      {subject ? SUBJECT_LABEL[subject].slice(0, 1) : "卷"}
+    <View className={`tile tile--${size}`} style={{ background: c.bg, ...style }}>
+      <Icon name={subject ? SUBJECT_ICON[subject] : "folder"} size={TILE_ICON_SIZE[size]} color={c.color} stroke={size === "xs" ? 2.4 : 2} />
+    </View>
+  );
+}
+
+/** 设置行（和 App 的 Row 一致）：彩色方块图标 + 标题 + 右侧值 + 箭头 */
+export function Row({ icon, iconBg, title, value, chevron = true, danger, onClick }: { icon: IconName; iconBg: string; title: string; value?: ReactNode; chevron?: boolean; danger?: boolean; onClick?: () => void }) {
+  return (
+    <View className="prow" hoverClass={onClick ? "prow--pressed" : "none"} onClick={onClick}>
+      <View className="prow__icon" style={{ background: iconBg }}>
+        <Icon name={icon} size={18} color="#ffffff" stroke={2} />
+      </View>
+      <Text className={`prow__title${danger ? " c-wrong" : ""}`}>{title}</Text>
+      <View className="prow__value">
+        {typeof value === "string" ? <Text>{value}</Text> : value}
+        {chevron && <Icon name="chevron-right" size={14} color="#8e8e93" stroke={2.4} />}
+      </View>
     </View>
   );
 }

@@ -321,3 +321,19 @@ page {
 .fig--right .fig__caption { color: $ok; }
 .fig--wrong .fig__img { border: 2px solid $wrong; }
 .fig--wrong .fig__caption { color: $wrong; }
+
+/* 设置行（对齐 App 的 .row）：彩色方块图标 + 标题 + 右侧值 + 箭头 */
+.prow { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 16px; border-top: 1px solid $sep; }
+.group .prow:first-child { border-top: 0; }
+.prow--pressed { background: $fill; }
+.prow__icon { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.prow__title { flex: 1; min-width: 0; font-size: 17px; font-weight: 500; }
+.prow__value { display: flex; align-items: center; gap: 6px; color: $secondary; font-size: 17px; flex-shrink: 0; }
+.group-title { font-size: 13px; font-weight: 600; color: $secondary; padding: 0 12px 6px; letter-spacing: 0.02em; }
+.group-note { font-size: 12px; color: $secondary; padding: 6px 12px 0; line-height: 1.5; }
+
+/* 我的：账号卡片 */
+.profile-card { padding: 16px; }
+.avatar-wrap { position: relative; flex-shrink: 0; }
+.avatar { background: #ffe3c2; color: #8a4b00; }
+.avatar__badge { position: absolute; right: -4px; bottom: -2px; font-size: 10px; font-weight: 800; color: #fff; background: $brand; border: 2px solid #fff; border-radius: 9px; padding: 1px 6px; line-height: 1.4; }

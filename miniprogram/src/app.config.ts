@@ -1,5 +1,5 @@
 export default defineAppConfig({
-  pages: ["pages/papers/index", "pages/library/index", "pages/profile/index", "pages/login/index", "pages/folder/index", "pages/paper/index"],
+  pages: ["pages/papers/index", "pages/library/index", "pages/profile/index", "pages/login/index", "pages/folder/index", "pages/paper/index", "pages/settings/index", "pages/privacy/index", "pages/account/index"],
   window: {
     backgroundTextStyle: "dark",
     navigationBarBackgroundColor: "#f2f2f7",
