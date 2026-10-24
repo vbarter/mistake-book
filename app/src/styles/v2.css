@@ -64,7 +64,8 @@
 .seg--icons .seg__item.on { color: var(--label); font-weight: 700; }
 
 /* 底栏按钮浮在 Tab 栏之上 */
-.bottom-bar--tab { bottom: calc(var(--tabbar-h) + var(--safe-bottom)); padding-bottom: 12px; }
+/* 底部操作栏贴在 Tab 栏上方；下面留出 Tab 栏的高度，滚到底时栏不会往上顶、盖住最后一张卡片 */
+.bottom-bar--tab { bottom: calc(var(--tabbar-h) + var(--safe-bottom)); padding-bottom: 12px; margin-bottom: calc(var(--tabbar-h) + var(--safe-bottom)); }
 
 /* 题号小圆牌（电子版空格里） */
 .blank__num { font-size: 10px; font-weight: 700; color: #fff; background: #8e8e93; border-radius: 7px; padding: 1px 5px; line-height: 12px; }
