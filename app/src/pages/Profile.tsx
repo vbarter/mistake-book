@@ -7,10 +7,10 @@ import { allErrors } from "../lib/errors";
 import { listFolders, type Folder } from "../lib/folders";
 import { GRADE_LABEL, SUBJECT_LABEL } from "../lib/format";
 import { getCity } from "../lib/prefs";
+import { WEB_VERSION, appVersion } from "../lib/version";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
 
-const BUILD = "1.0 (29)";
 
 /** 我的：账号、年级与城市（决定知识点按哪套考纲归类）、学科、本机数据与隐私、关于。 */
 export default function Profile() {
@@ -21,9 +21,11 @@ export default function Profile() {
   const [editName, setEditName] = useState(false);
   const [name, setName] = useState(user?.nickname ?? "");
 
+  const [version, setVersion] = useState(WEB_VERSION);
   useEffect(() => {
     listFolders().then(setFolders).catch(() => setFolders([]));
     getCity().then(setCityState);
+    appVersion().then(setVersion);
   }, []);
 
   const stats = useMemo(() => {
@@ -99,7 +101,7 @@ export default function Profile() {
         </div>
 
         <div className="group">
-          <Row icon="info" iconColor="var(--secondary)" title="关于知错本" value={BUILD} chevron={false} />
+          <Row icon="info" iconColor="var(--secondary)" title="关于知错本" value={version} chevron={false} />
         </div>
         <span className="t-cap c-sec" style={{ textAlign: "center" }}>{SUBJECT_LABEL.english}、{SUBJECT_LABEL.math}、{SUBJECT_LABEL.chinese}、{SUBJECT_LABEL.science} · 小学到高中</span>
       </div>
