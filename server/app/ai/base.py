@@ -70,7 +70,8 @@ class DigitizedBlock:
     item     小题：number、text（含占位空格）、hint（括号给词）、instruction（改写要求）、options（选择题选项）、blanks
     text     其他卷面文字（页眉页脚、订正提醒等）
     figure   插图 / 统计图 / 几何图 / 实验装置图 / 表格：bbox（照片上的位置，客户端据此从原照片裁图）、title（图题）、
-             number（所属小题题号）、text（一句话说明图里有什么，图片显示不了时兜底）
+             number（所属小题题号）、text（一句话说明图里有什么，图片显示不了时兜底）、
+             label（图片选项的字母 / 配对图上的标号，如 "A"；普通插图为空）
     """
 
     type: str

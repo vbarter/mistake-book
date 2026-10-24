@@ -156,7 +156,8 @@ def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | No
     block = DigitizedBlock(
         type=btype,
         text=text,
-        label=_str(raw.get("label")).strip(),
+        # 大题编号去掉尾部的点（「II.」→「II」），显示时统一加
+        label=_str(raw.get("label")).strip().rstrip(".．、 ") if btype == "section" else _str(raw.get("label")).strip(),
         title=_str(raw.get("title")).strip(),
         instruction=_str(raw.get("instruction")).strip(),
         points=_str(raw.get("points")).strip(),
@@ -174,7 +175,7 @@ def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | No
     if btype == "wordbank" and not block.options:
         return None
     # 插图要靠 bbox 从原照片裁出来：没给位置（默认整页）就没用
-    if btype == "figure" and (block.bbox == [0.0, 0.0, 1.0, 1.0] or (block.bbox[2] - block.bbox[0]) * (block.bbox[3] - block.bbox[1]) < 0.002):
+    if btype == "figure" and (block.bbox == [0.0, 0.0, 1.0, 1.0] or (block.bbox[2] - block.bbox[0]) * (block.bbox[3] - block.bbox[1]) < 0.0012):
         return None
     if btype in ("passage", "item", "text") and not block.text.strip() and not block.blanks:
         return None
@@ -259,7 +260,8 @@ def merge_figures(blocks: list[DigitizedBlock]) -> list[DigitizedBlock]:
     out: list[DigitizedBlock] = []
     for b in blocks:
         prev = out[-1] if out else None
-        if b.type == "figure" and prev is not None and prev.type == "figure" and prev.number == b.number:
+        # 带 label 的是选项图 / 配对图（A、B、C 各一张），不能合并
+        if b.type == "figure" and prev is not None and prev.type == "figure" and prev.number == b.number and not prev.label and not b.label:
             same_title = prev.title == b.title or prev.title in GENERIC_FIGURE_TITLES or b.title in GENERIC_FIGURE_TITLES
             dx = max(0.0, max(prev.bbox[0], b.bbox[0]) - min(prev.bbox[2], b.bbox[2]))
             dy = max(0.0, max(prev.bbox[1], b.bbox[1]) - min(prev.bbox[3], b.bbox[3]))
@@ -287,7 +289,8 @@ def snap_figures(sheets: list[DigitizedPage], regions: list[dict], direction: in
             if b.type != "figure" or not boxes:
                 continue
             best = max(boxes, key=lambda r: _iou(b.bbox, r))
-            if _iou(b.bbox, best) >= 0.2:
+            # 选项图很小，OCR 常把一排几张检测成一个区域：带 label 的要几乎重合才贴，免得几张都贴到同一个大框上
+            if _iou(b.bbox, best) >= (0.5 if b.label else 0.2):
                 b.bbox = [float(v) for v in best]
         sh.blocks = merge_figures(sh.blocks)
 

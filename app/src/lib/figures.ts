@@ -10,7 +10,15 @@ export interface FigureRef {
   bbox: number[];
   rotation: number;
   title: string;
+  label: string; // 图片选项的字母 / 配对图标号（"A"），普通插图为空
   text: string; // 文字说明（图裁不出来时显示）
+}
+
+/** 选择 / 配对题作答里的标号：只看很短的作答（如「B」「AC」「③」），免得把英文单词里的大写字母当成标号 */
+export function answerLabels(s: string): string[] {
+  const t = (s || "").replace(/[\s,，、;；.。()（）]/g, "").toUpperCase();
+  if (!t || t.length > 4) return [];
+  return t.match(/[A-H]|[①-⑩]/g) ?? [];
 }
 
 const baseNumber = (n: string) => (n || "").replace(/[（(].*$/, "").split("-")[0].trim();
@@ -22,7 +30,7 @@ function refOf(paper: Paper, sheetIndex: number, blockIndex: number, block: Digi
   const src = photo?.src;
   if (!sheet || !photo || !src || block.type !== "figure" || block.bbox.length !== 4) return null;
   // 照片 id 也进 key：重拍后同样位置的图不会用到旧照片的裁图
-  return { key: `${paper.id}:${photo.id}:${sheetIndex}:${blockIndex}:${block.bbox.map((v) => v.toFixed(3)).join(",")}`, src, bbox: block.bbox, rotation: sheet.rotation ?? 0, title: block.title, text: block.text };
+  return { key: `${paper.id}:${photo.id}:${sheetIndex}:${blockIndex}:${block.bbox.map((v) => v.toFixed(3)).join(",")}`, src, bbox: block.bbox, rotation: sheet.rotation ?? 0, title: block.title, label: (block.label || "").trim(), text: block.text };
 }
 
 /** 试卷页上某个 figure 块 */
@@ -38,13 +46,22 @@ export function figuresOfQuestion(paper: Paper, q: DigitizedQuestion): FigureRef
   const own = baseNumber(q.number);
   const byNumber = sheet.blocks.flatMap((b, i) => (b.type === "figure" && own && baseNumber(b.number) === own ? [refOf(paper, q.sheet, i, b)] : []));
   const found = byNumber.filter((f): f is FigureRef => Boolean(f));
-  if (found.length || !/图|表|如下/.test(q.stemText)) return found;
+  if (found.length) return found;
+  // 图文配对：共用的标号图（没写题号），取作答和答案里出现的标号
+  const marks = new Set([q.correctAnswer, q.studentAnswer].flatMap(answerLabels));
+  if (marks.size) {
+    const matched = sheet.blocks
+      .map((b, i) => (b.type === "figure" && !b.number && b.label && marks.has(b.label.trim().toUpperCase()) ? refOf(paper, q.sheet, i, b) : null))
+      .filter((f): f is FigureRef => Boolean(f));
+    if (matched.length) return matched;
+  }
+  if (!/图|表|如下/.test(q.stemText)) return [];
   const near = (step: 1 | -1) => {
     const out: FigureRef[] = [];
     for (let i = q.blockIndex + step; i >= 0 && i < sheet.blocks.length; i += step) {
       const b = sheet.blocks[i];
       if (b.type === "figure") {
-        if (!b.number || baseNumber(b.number) === own) {
+        if ((!b.number || baseNumber(b.number) === own) && !b.label) {
           const r = refOf(paper, q.sheet, i, b);
           if (r) out.push(r);
         }
@@ -96,10 +113,10 @@ export function cropFigure(f: FigureRef): Promise<string> {
 }
 
 /** 导出 PDF 用：带上裁好的图；裁不出来就只给文字说明 */
-export async function figurePayload(f: FigureRef): Promise<{ title: string; text: string; image?: string }> {
+export async function figurePayload(f: FigureRef): Promise<{ title: string; label: string; text: string; image?: string }> {
   try {
-    return { title: f.title, text: f.text, image: await cropFigure(f) };
+    return { title: f.title, label: f.label, text: f.text, image: await cropFigure(f) };
   } catch {
-    return { title: f.title, text: f.text };
+    return { title: f.title, label: f.label, text: f.text };
   }
 }

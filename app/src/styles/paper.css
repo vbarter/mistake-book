@@ -84,3 +84,13 @@
 .fig figcaption { font-size: 12px; color: var(--secondary); }
 .fig__placeholder { width: min(100%, 320px); height: 120px; border-radius: 8px; background: var(--fill-light); }
 .fig__text { font-size: 13px; color: var(--secondary); background: var(--fill-light); border-radius: 8px; padding: 8px 10px; }
+
+/* 图片选项 / 配对图：一行几张小图，下面标字母；正确答案绿框、选错的红框 */
+.fig-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; width: 100%; margin: 4px 0; }
+.fig--opt { margin: 0; align-items: center; }
+.fig--opt img { width: 100%; max-width: 160px; }
+.fig--opt figcaption { font-weight: 700; color: var(--label); font-size: 13px; }
+.fig--right img { border: 2px solid var(--mastered); }
+.fig--right figcaption { color: var(--mastered); }
+.fig--wrong img { border: 2px solid var(--wrong); }
+.fig--wrong figcaption { color: var(--wrong); }

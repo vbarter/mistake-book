@@ -886,3 +886,31 @@ def test_split_figure_pieces_merged():
     figs = clean_sheets(data, 0)[0].blocks
     assert [(f.number, f.title) for f in figs] == [("4", "插图"), ("5", "图2"), ("2", "图1"), ("2", "图2")]
     assert figs[0].bbox == [0.19, 0.79, 0.63, 0.86] and figs[1].bbox == [0.18, 0.61, 0.58, 0.68]
+
+
+def test_labeled_picture_options_not_merged_or_snapped_together():
+    """图片选项（A、B、C 各一张，带 label）不合并；OCR 把一排检测成一个大框时也不会都贴到那个框上"""
+    from app.ai.digitize import clean_sheets, snap_figures
+
+    opt = lambda lab, x: {"type": "figure", "number": "3", "label": lab, "title": "插图", "text": lab, "bbox": [x, 0.40, x + 0.10, 0.48]}
+    data = {"sheets": [{"blocks": [
+        {"type": "item", "number": "3", "text": "选出与图片相符的一项 [[3]]", "options": ["A. （图）游泳", "B. （图）跑步", "C. （图）读书"], "blanks": [{"id": "3", "student": "B", "mark": "wrong", "answer": "A"}]},
+        opt("A", 0.10), opt("B", 0.22), opt("C", 0.34),
+    ]}]}
+    sheets = clean_sheets(data, 0)
+    snap_figures(sheets, [{"kind": "figure", "bbox": [0.09, 0.39, 0.45, 0.49]}])
+    figs = [b for b in sheets[0].blocks if b.type == "figure"]
+    assert [f.label for f in figs] == ["A", "B", "C"]
+    assert figs[0].bbox == [0.10, 0.40, 0.20, 0.48]
+
+
+def test_pdf_renders_labeled_figure_row():
+    import base64, io
+    from PIL import Image as P
+    from app.pdf import build_book_pdf, build_papers_pdf
+
+    buf = io.BytesIO(); P.new("RGB", (120, 90), "white").save(buf, "JPEG"); url = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    figs = [{"type": "figure", "label": x, "title": "插图", "image": url, "bbox": [0, 0, 1, 1]} for x in "ABC"]
+    sheet = {"blocks": [{"type": "item", "number": "3", "text": "选图 [[3]]", "blanks": [{"id": "3", "student": "B", "mark": "wrong", "answer": "A"}]}, *figs]}
+    assert build_papers_pdf("t", [{"title": "t", "pages": [sheet], "questions": []}]).startswith(b"%PDF")
+    assert build_book_pdf("t", "", [{"number": "3", "stem": "选图", "knowledge": "k", "figures": figs, "answers": [{"number": "3", "student": "B", "answer": "A", "kind": "答错"}]}]).startswith(b"%PDF")

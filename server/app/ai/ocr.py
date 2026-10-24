@@ -247,7 +247,7 @@ def baidu_regions(r: dict, size: tuple[int, int] | None) -> list[dict]:
         ys = [float(p.get("y", 0)) for p in pts]
         box = [max(0.0, min(xs) / w), max(0.0, min(ys) / h), min(1.0, max(xs) / w), min(1.0, max(ys) / h)]
         # 太小的（印章、页码框之类）不算插图
-        if (box[2] - box[0]) * (box[3] - box[1]) < 0.004:
+        if (box[2] - box[0]) * (box[3] - box[1]) < 0.002:  # 图片选项可能很小，别滤掉
             continue
         out.append({"kind": kind, "bbox": [round(v, 4) for v in box]})
     return out

@@ -4,8 +4,8 @@ import type { DigitizedBlank, DigitizedBlock, DigitizedPage, Mark } from "../../
 import { ErrorCard } from "../../components/ErrorCard";
 import { MathText, mathNodes } from "../../components/MathText";
 import { ExportSheet } from "../../components/ExportSheet";
-import { FigureImage } from "../../components/FigureImage";
-import { figureAt } from "../../lib/figures";
+import { Figures } from "../../components/FigureImage";
+import { figureAt, type FigureRef } from "../../lib/figures";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
@@ -134,8 +134,15 @@ export default function Paper() {
   const renderPrintBlock = (block: DigitizedBlock, bi: number, si: number) => {
     switch (block.type) {
       case "figure": {
-        const fig = figureAt(paper, si, bi);
-        return fig ? <FigureImage key={bi} fig={fig} /> : null;
+        // 连着的几个 figure 一起排（选项图排成一行）：只在一串的第一个块上渲染
+        const prev = sheets[si].blocks[bi - 1];
+        if (prev?.type === "figure") return null;
+        const run: FigureRef[] = [];
+        for (let j = bi; j < sheets[si].blocks.length && sheets[si].blocks[j].type === "figure"; j++) {
+          const f = figureAt(paper, si, j);
+          if (f) run.push(f);
+        }
+        return run.length ? <Figures key={bi} figs={run} /> : null;
       }
       case "section":
         return (
@@ -143,7 +150,7 @@ export default function Paper() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="sec-bar" style={{ background: colors.color }} />
               <span className="blk-section__title" style={{ flex: 1 }}>
-                {block.label && `${block.label}. `}
+                {block.label && `${block.label.replace(/[.．、\s]+$/, "")}. `}
                 {block.title}
               </span>
               {block.points && <span className="t-cap c-sec">{stripParen(block.points)}</span>}

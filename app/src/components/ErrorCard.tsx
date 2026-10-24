@@ -1,7 +1,8 @@
 import type { Mark } from "../api/types";
 import type { ErrorItem, ErrorPart } from "../lib/errors";
 import { QTYPE_LABEL } from "../lib/format";
-import { FigureImage } from "./FigureImage";
+import { Figures } from "./FigureImage";
+import { answerLabels } from "../lib/figures";
 import { Icon } from "./Icon";
 import { MathText, hasUnrecognized } from "./MathText";
 import { SubjectChip } from "./ui";
@@ -91,7 +92,7 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
         </span>
       )}
       <p className="t-sub"><MathText text={item.stem} /></p>
-      {item.figures.map((f) => <FigureImage key={f.key} fig={f} />)}
+      {item.figures.length > 0 && <Figures figs={item.figures} right={answerLabels(q.correctAnswer)} chosen={answerLabels(q.studentAnswer)} />}
       {q.options.length > 0 && <p className="t-foot c-sec"><MathText text={q.options.join("　")} /></p>}
       {unclear && (
         <span className="t-cap" style={{ color: "var(--wrong)", display: "inline-flex", alignItems: "center", gap: 4 }}>

@@ -3,7 +3,8 @@ import Taro from "@tarojs/taro";
 import type { ErrorItem, ErrorPart } from "../lib/errors";
 import { QTYPE_LABEL } from "../lib/format";
 import { mathPlain } from "../lib/math";
-import { FigureImage } from "./FigureImage";
+import { Figures } from "./FigureImage";
+import { answerLabels } from "../lib/figures";
 import { MathText, SubjectTile, Tag, Verdict, subjectColors } from "./ui";
 
 export const errorAnchor = (key: string) => `err-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -84,9 +85,7 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
         </View>
       )}
       <MathText className="t-sub stem" text={item.stem} />
-      {item.figures.map((f) => (
-        <FigureImage key={f.key} fig={f} />
-      ))}
+      {item.figures.length > 0 && <Figures figs={item.figures} right={answerLabels(q.correctAnswer)} chosen={answerLabels(q.studentAnswer)} />}
       {q.options.length > 0 && <MathText className="t-foot c-sec" text={q.options.join("　")} />}
       {q.stemText.includes("□") && <Text className="t-cap c-wrong">题目里有内容没识别出来，建议把这一张重拍清楚</Text>}
       <View className="feedback">

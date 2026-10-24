@@ -145,6 +145,38 @@ def _figure_flow(fig: dict, max_w: float, max_h: float, keep: bool = True) -> li
     return out
 
 
+def _figure_row(figs: list[dict], total_w: float, max_h: float) -> list:
+    """选项图 / 配对图（A、B、C…）一行排几张，每张下面印标号；没有图片的退回文字说明。"""
+    per_row = min(4, max(1, len(figs)))
+    cell_w = total_w / per_row
+    cells = []
+    for f in figs:
+        label = str(f.get("label") or "").strip()
+        flow = _figure_flow({**f, "title": label or f.get("title") or ""}, cell_w - 8, max_h, keep=False)
+        cells.append([x for x in flow if not isinstance(x, Spacer)] or [Paragraph("", S_FIG)])
+    rows = [cells[i : i + per_row] for i in range(0, len(cells), per_row)]
+    rows[-1] += [[Paragraph("", S_FIG)]] * (per_row - len(rows[-1]))
+    tbl = Table(rows, colWidths=[cell_w] * per_row)
+    tbl.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 6)]))
+    return [Spacer(1, 3), tbl, Spacer(1, 4)]
+
+
+def _figures_flow(figs: list[dict], total_w: float, max_h: float, row_h: float, keep: bool = True) -> list:
+    """一串插图：普通插图一张一行，连着的带 label 的图（选项图 / 配对图）排成一行"""
+    out: list = []
+    run: list[dict] = []
+    for f in figs + [None]:
+        if f is not None and str(f.get("label") or "").strip():
+            run.append(f)
+            continue
+        if run:
+            out.extend(_figure_row(run, total_w, row_h))
+            run = []
+        if f is not None:
+            out.extend(_figure_flow(f, total_w, max_h, keep=keep))
+    return out
+
+
 def _paper_part(story: list, sheets: list[dict], title: str, scanned_at: str = "") -> None:
     for si, sheet in enumerate(sheets):
         if si > 0:
@@ -152,8 +184,15 @@ def _paper_part(story: list, sheets: list[dict], title: str, scanned_at: str = "
         story.append(Paragraph(_esc(sheet.get("title") or title or "电子版试卷"), S_TITLE))
         sub = " · ".join(x for x in [sheet.get("label") or "", f"得分 {sheet['score']}" if sheet.get("score") else "", f"扫描于 {scanned_at}" if scanned_at else ""] if x)
         story.append(Paragraph(_esc(sub) if sub else "&nbsp;", S_SUB))
-        for block in sheet.get("blocks") or []:
+        pending_figs: list[dict] = []
+        for block in (sheet.get("blocks") or []) + [{"type": "__end__"}]:
             t = block.get("type")
+            if t == "figure":
+                pending_figs.append(block)
+                continue
+            if pending_figs:
+                story.extend(_figures_flow(pending_figs, 120 * mm, 90 * mm, 40 * mm))
+                pending_figs = []
             blanks = block.get("blanks") or []
             if t == "section":
                 head = " ".join(x for x in [f"{block.get('label')}." if block.get("label") else "", block.get("title") or ""] if x)
@@ -188,8 +227,6 @@ def _paper_part(story: list, sheets: list[dict], title: str, scanned_at: str = "
                 story.append(KeepTogether(flow))
             elif t == "text":
                 story.append(Paragraph(_esc(block.get("text") or ""), S_SMALL))
-            elif t == "figure":
-                story.extend(_figure_flow(block, 120 * mm, 90 * mm))
         if sheet.get("note"):
             story.append(Paragraph(_esc(sheet["note"]), S_INS))
 
@@ -357,9 +394,9 @@ def _book_rows(items: list[dict]):
         if opts:
             labeled = [o if re.match(r"^[A-H][.、．]", str(o)) else f"{chr(65 + i)}. {o}" for i, o in enumerate(opts)]
             left.append(Paragraph("　".join(_esc(str(o)) for o in labeled), S_BOOK_NOTE))
-        for fig in it.get("figures") or []:
-            if isinstance(fig, dict):
-                left.extend(_figure_flow(fig, 110 * mm, 60 * mm, keep=False))
+        figs = [f for f in it.get("figures") or [] if isinstance(f, dict)]
+        if figs:
+            left.extend(_figures_flow(figs, 110 * mm, 60 * mm, 30 * mm, keep=False))
         if it.get("source"):
             left.append(Paragraph(_esc(str(it["source"])), S_BOOK_META))
         left.append(Spacer(1, 18))  # 书写留白

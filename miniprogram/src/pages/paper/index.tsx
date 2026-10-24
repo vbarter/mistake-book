@@ -3,8 +3,8 @@ import { Image, Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
 import { ErrorCard } from "../../components/ErrorCard";
 import { ExportSheet } from "../../components/ExportSheet";
-import { FigureImage } from "../../components/FigureImage";
-import { figureAt } from "../../lib/figures";
+import { Figures } from "../../components/FigureImage";
+import { figureAt, type FigureRef } from "../../lib/figures";
 import { Empty, ErrorFilterTags, Hint, MathText, Segmented, Tag, Verdict, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/ui";
 import { retake } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
@@ -140,8 +140,15 @@ export default function PaperPage() {
   const printBlock = (block: DigitizedBlock, bi: number, si: number) => {
     switch (block.type) {
       case "figure": {
-        const fig = figureAt(paper, si, bi);
-        return fig ? <FigureImage key={bi} fig={fig} /> : null;
+        // 连着的几个 figure 一起排（选项图排成一行）：只在一串的第一个块上渲染
+        const blocks = sheets[si].blocks;
+        if (blocks[bi - 1]?.type === "figure") return null;
+        const run: FigureRef[] = [];
+        for (let j = bi; j < blocks.length && blocks[j].type === "figure"; j++) {
+          const f = figureAt(paper, si, j);
+          if (f) run.push(f);
+        }
+        return run.length ? <Figures key={bi} figs={run} /> : null;
       }
       case "section":
         return (
@@ -149,7 +156,7 @@ export default function PaperPage() {
             <View className="row-center gap6">
               <View className="sec-bar" style={{ background: colors.color }} />
               <Text className="blk-section__title flex1">
-                {block.label && `${block.label}. `}
+                {block.label && `${block.label.replace(/[.．、\s]+$/, "")}. `}
                 {mathPlain(block.title)}
               </Text>
               {block.points && <Text className="t-cap c-sec">{mathPlain(stripParen(block.points))}</Text>}
