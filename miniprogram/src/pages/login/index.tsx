@@ -3,6 +3,7 @@ import { Input, Picker, Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { errorText } from "../../lib/api";
 import { login } from "../../lib/auth";
+import { startJobPoller } from "../../lib/jobs";
 import { GRADE_LABEL, SUBJECTS, SUBJECT_LABEL } from "../../lib/format";
 import type { Subject } from "../../lib/types";
 import { SubjectTile } from "../../components/ui";
@@ -24,6 +25,7 @@ export default function Login() {
     setBusy(true);
     try {
       await login({ grade, subjects, nickname: nickname.trim() || undefined });
+      startJobPoller();
       Taro.switchTab({ url: "/pages/papers/index" });
     } catch (e) {
       void Taro.showModal({ title: "登录失败", content: errorText(e), showCancel: false });

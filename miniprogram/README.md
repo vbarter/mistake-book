@@ -14,7 +14,7 @@ npm run typecheck
 ```
 
 用微信开发者工具「导入项目」，目录选 `miniprogram/`（`project.config.json` 已指向 `dist/`）。
-`project.config.json` 里 `appid` 现在是 `touristappid`（测试号），拿到正式 AppID 后替换。
+`project.config.json` 里已填正式 AppID `wx6c5b932ae1de242f`；AppSecret 只放在服务器 `.env`，不进仓库。
 开发时已关闭域名校验（`urlCheck: false`），手机预览前要先完成下面的后台配置。
 
 后端地址默认 `https://book.openmindai.cn`，本地调试可以：
@@ -27,7 +27,7 @@ TARO_APP_API_BASE=http://localhost:5001 npm run dev
 
 1. **开发管理 → 开发设置 → 服务器域名**
    - request 合法域名：`https://book.openmindai.cn`
-2. **AppID / AppSecret** 写进服务器 `.env`（不要提交到仓库），然后重启服务：
+2. **AppID / AppSecret** 写进服务器 `.env`（不要提交到仓库），然后重启服务（已配好）：
    ```
    WX_APPID=wx...
    WX_SECRET=...

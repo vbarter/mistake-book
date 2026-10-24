@@ -1,14 +1,11 @@
 import { PropsWithChildren } from "react";
-import Taro, { useDidHide, useDidShow, useLaunch } from "@tarojs/taro";
+import { useDidHide, useDidShow } from "@tarojs/taro";
 import { isLoggedIn } from "./lib/auth";
 import { startJobPoller, stopJobPoller } from "./lib/jobs";
 import "./app.scss";
 
-/** 小程序入口：没登录先去登录页；在前台时轮询服务器上的扫描任务 */
+/** 小程序入口：在前台时轮询服务器上的扫描任务；没登录时由各页面的 useDataVersion 送去登录页 */
 function App({ children }: PropsWithChildren) {
-  useLaunch(() => {
-    if (!isLoggedIn()) Taro.reLaunch({ url: "/pages/login/index" });
-  });
   useDidShow(() => {
     if (isLoggedIn()) startJobPoller();
   });
