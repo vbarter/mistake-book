@@ -5,11 +5,9 @@ import { startJobPoller } from "./lib/jobs";
 import { isTabRoot, setupBackButton, setupEdgeSwipeBack } from "./lib/native";
 import { BannerHost, Spinner } from "./components/ui";
 import { TabBar } from "./components/TabBar";
+import Startup from "./components/Startup";
 
 const Splash = lazy(() => import("./components/Splash"));
-
-/** 开屏动画开关：暂时关闭（改成 true 即恢复每次启动播放） */
-const SHOW_SPLASH = false;
 
 import Welcome from "./pages/Welcome";
 import Setup from "./pages/Setup";
@@ -58,9 +56,19 @@ export default function App() {
   const bootstrap = useAuth((s) => s.bootstrap);
   const ready = useAuth((s) => s.ready);
   const token = useAuth((s) => s.token);
+  const [startup, setStartup] = useState(true);
+  const [startupError, setStartupError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const closeStartup = useCallback(() => setStartup(false), []);
+  const retryStartup = useCallback(() => {
+    setStartupError(false);
+    setAttempt((value) => value + 1);
+  }, []);
   useEffect(() => {
-    void bootstrap();
-  }, [bootstrap]);
+    let active = true;
+    void bootstrap().catch(() => { if (active) setStartupError(true); });
+    return () => { active = false; };
+  }, [bootstrap, attempt]);
   // 登录后开始轮询服务器上的还原任务；回前台立刻问一次
   useEffect(() => {
     if (!token) return;
@@ -73,11 +81,7 @@ export default function App() {
     return () => stop?.();
   }, []);
 
-  // 开屏动效：SHOW_SPLASH 打开时每次打开 App 都播一次，右上角可跳过；/splash 可随时重播
-  const [splash, setSplash] = useState(SHOW_SPLASH);
-  const closeSplash = useCallback(() => setSplash(false), []);
-
-  if (splash) return <Suspense fallback={null}><Splash onDone={closeSplash} /></Suspense>;
+  if (startup) return <Startup ready={ready} error={startupError} onRetry={retryStartup} onDone={closeStartup} />;
   if (!ready) return <Spinner />;
 
   return (
