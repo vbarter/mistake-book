@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>知错本管理后台</title>
+<style>
+  :root { --brand: #2f6fed; --brand-pressed: #1f55c4; --label: #1c1c1e; --secondary: #5b5b63; --bg: #f2f2f7; --card: #fff; --fill: #f2f2f7; --wrong: #b42323; --line: #e5e5ea; }
+  @media (prefers-color-scheme: dark) { :root { --brand: #5b8ff5; --brand-pressed: #7aa5f7; --label: #f2f2f7; --secondary: #a1a1aa; --bg: #0b0b0d; --card: #1c1c1e; --fill: #2c2c2e; --wrong: #ff6b6b; --line: #2c2c2e; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--bg); color: var(--label); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  form { width: 100%; max-width: 360px; background: var(--card); border-radius: 20px; padding: 32px 24px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.06); }
+  .logo { width: 48px; height: 48px; border-radius: 14px; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px; }
+  h1 { margin: 6px 0 0; font-size: 22px; }
+  p { margin: 0 0 6px; color: var(--secondary); font-size: 14px; }
+  input { height: 48px; border-radius: 12px; border: 1.5px solid transparent; background: var(--fill); color: var(--label); padding: 0 14px; font-size: 16px; outline: none; }
+  input:focus { border-color: var(--brand); background: var(--card); }
+  button { height: 48px; border: 0; border-radius: 12px; background: var(--brand); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .err { color: var(--wrong); font-size: 14px; min-height: 20px; margin: 0; }
+</style>
+</head>
+<body>
+<form id="f">
+  <div class="logo">知</div>
+  <h1>知错本管理后台</h1>
+  <p>看看有多少人在用、用到什么程度。</p>
+  <input id="pw" type="password" autocomplete="current-password" placeholder="管理密码" autofocus required>
+  <p class="err" id="err" role="alert"></p>
+  <button id="btn" type="submit">登录</button>
+</form>
+<script>
+  const f = document.getElementById("f"), err = document.getElementById("err"), btn = document.getElementById("btn");
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    btn.disabled = true; err.textContent = "";
+    try {
+      const r = await fetch("/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: document.getElementById("pw").value }) });
+      if (r.ok) { location.href = "/admin"; return; }
+      const j = await r.json().catch(() => ({}));
+      err.textContent = j.message || "登录失败";
+    } catch { err.textContent = "网络出错了，请重试"; }
+    btn.disabled = false;
+  });
+</script>
+</body>
+</html>

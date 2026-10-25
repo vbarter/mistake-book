@@ -12,6 +12,7 @@ from ..ai import AIError, Crop, get_provider, provider_name
 from ..ai import queue as page_queue
 from ..ai.digitize import derive_questions, sheets_from_dicts
 from ..extensions import db
+from ..usage import track
 from ..models import DigitizeJob
 from ..auth_utils import current_user, login_required
 from ..constants import SUBJECTS
@@ -177,6 +178,7 @@ def _run_job_here(job_id: str, pages: list[Crop], subjects: list[str], grade: st
             j.done_pages = len(pages)
             j.status = "done"
             db.session.commit()
+            track(j.user_id, "scan_done", pages=len(pages), questions=len(out), wrong=sum(1 for q in out if q.get("mark") in ("wrong", "partial", "blank")))
             _started_pages.pop(job_id, None)
             _page_progress.pop(job_id, None)
             _touched_at.pop(job_id, None)
@@ -184,12 +186,14 @@ def _run_job_here(job_id: str, pages: list[Crop], subjects: list[str], grade: st
             j = db.session.get(DigitizeJob, job_id)
             j.status, j.error = "failed", str(e)
             db.session.commit()
+            track(j.user_id, "scan_fail", pages=len(pages))
         except Exception as e:  # noqa: BLE001
             log.exception("digitize job %s failed", job_id)
             db.session.rollback()
             j = db.session.get(DigitizeJob, job_id)
             j.status, j.error = "failed", f"AI 还原试卷出错了，请稍后重试（{type(e).__name__}）"
             db.session.commit()
+            track(j.user_id, "scan_fail", pages=len(pages))
             _started_pages.pop(job_id, None)
             _page_progress.pop(job_id, None)
             _touched_at.pop(job_id, None)
@@ -234,6 +238,7 @@ def digitize():
     db.session.add(job)
     db.session.commit()
     job_id = job.id
+    track(user, "scan", pages=len(pages))
 
     app = current_app._get_current_object()  # noqa: SLF001
     if current_app.config.get("DIGITIZE_SYNC") or current_app.config.get("TESTING"):
@@ -296,6 +301,7 @@ def digitize_pdf():
             abort(400, "缺少电子版内容")
         if not isinstance(paper.get("questions", []), list):
             abort(400, "题目列表格式不对")
+    track(current_user(), "pdf")
     try:
         pdf = build_papers_pdf(title, papers)
     except Exception as e:  # noqa: BLE001
@@ -314,6 +320,7 @@ def digitize_grade():
         abort(400, "缺少电子版内容")
     sheets = sheets_from_dicts(pages)
     provider = get_provider()
+    track(current_user(), "grade")
     graded = provider.grade_unmarked(sheets) if hasattr(provider, "grade_unmarked") else 0
     questions = []
     for i, q in enumerate(derive_questions(sheets)):
@@ -342,6 +349,7 @@ def digitize_book():
         abort(400, "一次最多导出 400 题")
     title = str(data.get("title") or "错题本")[:80]
     subtitle = str(data.get("subtitle") or "")[:120]
+    track(current_user(), "book", questions=len(items))
     try:
         pdf = build_book_pdf(title, subtitle, items)
     except Exception as e:  # noqa: BLE001

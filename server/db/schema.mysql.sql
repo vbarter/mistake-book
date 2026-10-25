@@ -21,7 +21,10 @@ CREATE TABLE IF NOT EXISTS users (
   reminder_hour     INT          NOT NULL DEFAULT 19,
   reminder_minute   INT          NOT NULL DEFAULT 30,
   created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_active_at    DATETIME     NULL     COMMENT '最近一次打开 / 使用（管理后台统计）',
+  last_platform     VARCHAR(12)  NULL     COMMENT '最近用的端：ios / android / wechat / web',
   PRIMARY KEY (id),
+  KEY ix_users_last_active_at (last_active_at),
   UNIQUE KEY uk_users_phone (phone),
   UNIQUE KEY uk_users_apple_sub (apple_sub),
   UNIQUE KEY uk_users_wx_openid (wx_openid)
@@ -123,7 +126,26 @@ CREATE TABLE IF NOT EXISTS digitize_jobs (
   INDEX idx_jobs_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 使用记录（管理后台统计用：打开、注册、登录、扫描、导出），不存试卷内容
+CREATE TABLE IF NOT EXISTS usage_events (
+  id         BIGINT      NOT NULL AUTO_INCREMENT,
+  user_id    VARCHAR(32) NOT NULL,
+  kind       VARCHAR(16) NOT NULL COMMENT 'open | signup | login | scan | scan_done | scan_fail | grade | pdf | book',
+  platform   VARCHAR(12) NULL     COMMENT 'ios | android | wechat | web',
+  method     VARCHAR(12) NULL     COMMENT '注册 / 登录方式',
+  pages      INT         NOT NULL DEFAULT 0,
+  questions  INT         NOT NULL DEFAULT 0,
+  wrong      INT         NOT NULL DEFAULT 0,
+  created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_usage_events_user_id (user_id),
+  KEY ix_usage_events_kind (kind),
+  KEY ix_usage_events_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='使用记录';
+
 -- 已有库升级：微信小程序登录（用 root 执行）
 -- ALTER TABLE users ADD COLUMN wx_openid VARCHAR(64) NULL COMMENT '微信小程序 openid' AFTER apple_sub, ADD UNIQUE KEY uk_users_wx_openid (wx_openid);
 -- 已有库升级：手机号注册的登录密码（用 root 执行）
 -- ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL COMMENT '登录密码哈希' AFTER phone;
+-- 已有库升级：管理后台的活跃统计（用 root 执行；usage_events 用上面的 CREATE TABLE）
+-- ALTER TABLE users ADD COLUMN last_active_at DATETIME NULL COMMENT '最近一次打开 / 使用' AFTER created_at, ADD COLUMN last_platform VARCHAR(12) NULL COMMENT '最近用的端' AFTER last_active_at, ADD KEY ix_users_last_active_at (last_active_at);

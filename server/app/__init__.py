@@ -36,6 +36,10 @@ def create_app(test_config: dict | None = None) -> Flask:
     for bp in (auth_bp, mistakes_bp, recognize_bp, review_bp, practice_bp):
         app.register_blueprint(bp, url_prefix="/api")
 
+    from .routes.admin import bp as admin_bp
+
+    app.register_blueprint(admin_bp)  # /admin 管理后台
+
     @app.get("/api/health")
     def health():
         from .ai import provider_name

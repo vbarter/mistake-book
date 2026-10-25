@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>知错本管理后台</title>
+<style>
+  :root {
+    --brand: #2f6fed; --brand-tint: #e6eefb; --brand-on-tint: #1f55c4;
+    --label: #1c1c1e; --secondary: #5b5b63; --tertiary: #8e8e93;
+    --bg: #f2f2f7; --card: #fff; --fill: #f2f2f7; --line: #ececf0;
+    --green: #1e7a47; --green-bg: #e3f5ea; --orange: #b35300; --orange-bg: #fff0e3; --red: #b42323; --red-bg: #fbe9e9; --purple: #5b37a8; --purple-bg: #efe8fb;
+    --c-ios: #1c1c1e; --c-android: #1e7a47; --c-wechat: #07a35a; --c-web: #8e8e93;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --brand: #5b8ff5; --brand-tint: #1a2740; --brand-on-tint: #9dbcf9;
+      --label: #f2f2f7; --secondary: #a1a1aa; --tertiary: #6e6e76;
+      --bg: #0b0b0d; --card: #1c1c1e; --fill: #2c2c2e; --line: #2c2c2e;
+      --green: #6fd39a; --green-bg: #123a24; --orange: #ffa95c; --orange-bg: #3a2410; --red: #ff8a8a; --red-bg: #3a1414; --purple: #b9a2f0; --purple-bg: #2a2140;
+      --c-ios: #e5e5ea; --c-android: #6fd39a; --c-wechat: #3fd884; --c-web: #8e8e93;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--label); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
+  .num { font-variant-numeric: tabular-nums; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; display: flex; flex-direction: column; gap: 16px; }
+
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .logo { width: 40px; height: 40px; border-radius: 12px; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 19px; flex-shrink: 0; }
+  .title { display: flex; flex-direction: column; min-width: 0; flex: 1 1 220px; }
+  .title h1 { margin: 0; font-size: 20px; line-height: 26px; }
+  .title span { color: var(--secondary); font-size: 12px; }
+  .tools { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .seg { display: inline-flex; background: var(--card); border-radius: 10px; padding: 3px; }
+  .seg button { border: 0; background: transparent; color: var(--secondary); padding: 6px 12px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+  .seg button.on { background: var(--brand); color: #fff; }
+  .btn { border: 0; background: var(--card); color: var(--label); padding: 8px 12px; border-radius: 10px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: var(--fill); }
+
+  .note { background: var(--brand-tint); color: var(--brand-on-tint); border-radius: 12px; padding: 10px 14px; font-size: 13px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .kpi { background: var(--card); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .kpi .label { color: var(--secondary); font-size: 13px; font-weight: 600; }
+  .kpi .value { font-size: 28px; line-height: 36px; font-weight: 800; letter-spacing: -0.01em; }
+  .kpi .sub { color: var(--tertiary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi .sub b { color: var(--green); font-weight: 700; }
+
+  .grid { display: grid; gap: 16px; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g2 { grid-template-columns: 2fr 1fr; }
+  .card { background: var(--card); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .card h2 { margin: 0; font-size: 15px; line-height: 22px; display: flex; align-items: center; gap: 8px; }
+  .card h2 small { margin-left: auto; color: var(--tertiary); font-weight: 500; font-size: 12px; }
+  .card .hint { color: var(--tertiary); font-size: 12px; margin: -6px 0 0; }
+
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tabs button { border: 0; background: var(--fill); color: var(--secondary); padding: 5px 10px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .tabs button.on { background: var(--brand-tint); color: var(--brand-on-tint); }
+  .chart { width: 100%; height: 220px; display: block; }
+  .chart text { fill: var(--tertiary); font-size: 11px; }
+  .chart .grid-line { stroke: var(--line); }
+  .chart .bar { fill: var(--brand); }
+  .chart .bar:hover { fill: var(--brand-on-tint); }
+  .tip { position: fixed; pointer-events: none; background: var(--label); color: var(--card); font-size: 12px; padding: 6px 8px; border-radius: 8px; white-space: nowrap; display: none; z-index: 10; }
+
+  .hbars { display: flex; flex-direction: column; gap: 10px; }
+  .hbar { display: grid; grid-template-columns: 92px 1fr 64px; align-items: center; gap: 10px; font-size: 13px; }
+  .hbar .name { color: var(--secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hbar .track { display: block; height: 10px; background: var(--fill); border-radius: 5px; overflow: hidden; }
+  .hbar .fill { display: block; height: 100%; border-radius: 5px; background: var(--brand); min-width: 2px; }
+  .hbar .v { text-align: right; font-weight: 700; }
+  .hbar .v small { color: var(--tertiary); font-weight: 500; margin-left: 2px; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--fill); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; }
+  .stat .value { font-size: 20px; font-weight: 800; line-height: 26px; }
+  .stat .label { color: var(--secondary); font-size: 12px; }
+
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 11px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .p-phone { background: var(--brand-tint); color: var(--brand-on-tint); }
+  .p-apple { background: var(--fill); color: var(--label); }
+  .p-wechat { background: var(--green-bg); color: var(--green); }
+  .p-guest { background: var(--orange-bg); color: var(--orange); }
+  .dot { width: 8px; height: 8px; border-radius: 4px; display: inline-block; }
+
+  .table-card { padding: 0; overflow: hidden; }
+  .table-head { display: flex; align-items: center; gap: 10px; padding: 16px 16px 8px; flex-wrap: wrap; }
+  .table-head h2 { margin: 0; font-size: 15px; }
+  .table-head input { margin-left: auto; height: 34px; border-radius: 10px; border: 1.5px solid transparent; background: var(--fill); color: var(--label); padding: 0 12px; font: inherit; outline: none; width: 220px; max-width: 100%; }
+  .table-head input:focus { border-color: var(--brand); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 860px; }
+  th, td { text-align: left; padding: 10px 16px; border-top: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--secondary); font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; border-top: 0; }
+  th.r, td.r { text-align: right; }
+  th .arrow { color: var(--brand); }
+  td .who { display: flex; flex-direction: column; }
+  td .who small { color: var(--tertiary); }
+  td.muted { color: var(--tertiary); }
+  .empty { color: var(--tertiary); text-align: center; padding: 24px 0; font-size: 13px; }
+  .more { display: block; width: 100%; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--brand); padding: 12px; font: inherit; font-weight: 600; cursor: pointer; }
+
+  .loading { color: var(--tertiary); text-align: center; padding: 80px 0; }
+
+  @media (max-width: 1000px) {
+    .kpis { grid-template-columns: repeat(3, 1fr); }
+    .g3 { grid-template-columns: 1fr 1fr; }
+    .g2 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .g3 { grid-template-columns: 1fr; }
+    .tools { margin-left: 0; width: 100%; flex-wrap: nowrap; }
+    .tools .seg { flex: 1; }
+    .seg button { flex: 1; padding: 6px 8px; }
+    .kpi .value { font-size: 24px; line-height: 30px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">知</div>
+    <div class="title"><h1>知错本管理后台</h1><span id="updated">加载中…</span></div>
+    <div class="tools">
+      <div class="seg" id="range" role="radiogroup" aria-label="统计范围">
+        <button data-days="7">7 天</button><button data-days="30" class="on">30 天</button><button data-days="90">90 天</button>
+      </div>
+      <button class="btn" id="refresh">刷新</button>
+      <button class="btn" id="logout">退出</button>
+    </div>
+  </header>
+  <div id="app"><div class="loading">正在统计…</div></div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString("zh-CN"));
+const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
+const METHOD = { phone: "手机号", apple: "Apple", wechat: "微信", guest: "游客" };
+const PLATFORM = { ios: "iPhone / iPad", android: "安卓", wechat: "微信小程序", web: "网页" };
+const PLATFORM_SHORT = { ios: "iOS", android: "安卓", wechat: "小程序", web: "网页" };
+const GRADE = (g) => (Number(g) <= 6 ? `${"一二三四五六"[g - 1]}年级` : Number(g) <= 9 ? `初${"一二三"[g - 7]}` : `高${"一二三"[g - 10]}`);
+
+let days = 30, data = null, series = "active", sortKey = "lastActiveAt", sortDir = -1, query = "", showAll = false;
+
+function ago(iso) {
+  if (!iso) return "—";
+  const t = new Date(iso), s = (Date.now() - t.getTime()) / 1000;
+  if (s < 60) return "刚刚";
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
+  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
+  if (s < 86400 * 30) return `${Math.floor(s / 86400)} 天前`;
+  return t.toLocaleDateString("zh-CN");
+}
+const dateStr = (iso) => (iso ? new Date(iso).toLocaleDateString("zh-CN", { year: "numeric", month: "numeric", day: "numeric" }) : "—");
+
+async function load() {
+  $("#updated").textContent = "加载中…";
+  const r = await fetch(`/admin/api/stats?days=${days}`, { cache: "no-store" });
+  if (r.status === 401) { location.href = "/admin/login"; return; }
+  if (!r.ok) { $("#app").innerHTML = `<div class="loading">统计失败（${r.status}），请刷新重试</div>`; return; }
+  data = await r.json();
+  render();
+}
+
+function kpi(label, value, sub) {
+  return `<div class="kpi"><span class="label">${label}</span><span class="value num">${value}</span><span class="sub">${sub}</span></div>`;
+}
+
+function hbars(rows, opts = {}) {
+  const max = Math.max(1, ...rows.map((r) => r.value));
+  const base = opts.base ?? null;
+  if (!rows.some((r) => r.value)) return `<div class="empty">还没有数据</div>`;
+  return `<div class="hbars">${rows.map((r) => `
+    <div class="hbar" title="${esc(r.label)}：${r.value}">
+      <span class="name">${opts.dot ? `<span class="dot" style="background:${r.color}"></span> ` : ""}${esc(r.label)}</span>
+      <span class="track"><span class="fill" style="width:${(100 * r.value) / max}%;${r.color ? `background:${r.color}` : ""}"></span></span>
+      <span class="v num">${fmt(r.value)}${base != null ? `<small>${pct(r.value, base)}%</small>` : ""}</span>
+    </div>`).join("")}</div>`;
+}
+
+function chart(points, key) {
+  const W = Math.max(300, $("#chart")?.clientWidth || 720), H = 220, L = 34, R = 8, T = 12, B = 26;
+  const vals = points.map((p) => p[key]);
+  const max = Math.max(4, ...vals);
+  const step = Math.pow(10, Math.floor(Math.log10(max)));
+  const top = Math.ceil(max / step) * step;
+  const n = points.length, bw = (W - L - R) / n;
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  let svg = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="每日趋势">`;
+  for (let i = 0; i <= 4; i++) {
+    const v = (top / 4) * i, yy = y(v);
+    svg += `<line class="grid-line" x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end">${Number.isInteger(v) ? v : v.toFixed(1)}</text>`;
+  }
+  const labelEvery = Math.ceil(n / 8);
+  points.forEach((p, i) => {
+    const v = p[key], x = L + i * bw, h = Math.max(v ? 2 : 0, H - B - y(v));
+    svg += `<rect class="bar" data-i="${i}" x="${x + bw * 0.18}" y="${H - B - h}" width="${bw * 0.64}" height="${h}" rx="${Math.min(3, bw * 0.2)}"/>`;
+    svg += `<rect data-i="${i}" x="${x}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent"/>`;
+    if (i % labelEvery === 0) {
+      const d = new Date(p.date);
+      svg += `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle">${d.getMonth() + 1}/${d.getDate()}</text>`;
+    }
+  });
+  return svg + `</svg>`;
+}
+
+const SERIES = { active: "活跃用户", newUsers: "新用户", scans: "扫描次数", pages: "扫描照片" };
+
+function render() {
+  const d = data, u = d.users, a = d.active, s = d.scans;
+  $("#updated").textContent = `更新于 ${new Date(d.generatedAt).toLocaleString("zh-CN", { hour12: false })}` + (d.trackingSince ? ` · 使用记录从 ${dateStr(d.trackingSince)} 开始` : "");
+
+  const sum = (k) => d.daily.reduce((n, p) => n + p[k], 0);
+  const platformRows = Object.entries(d.platforms).map(([k, v]) => ({ label: PLATFORM[k], value: v, color: `var(--c-${k})` }));
+  const activeTotal = d.funnel[0].value;
+  const methodRows = Object.entries(u.byMethod).map(([k, v]) => ({ label: METHOD[k], value: v }));
+  const gradeRows = d.grades.map((g) => ({ label: GRADE(g.grade), value: g.value }));
+  const ret = (r) => (r.rate == null ? `<span class="value">—</span><span class="label">还没有满一天的新用户</span>` : `<span class="value num">${r.rate}%</span><span class="label">${r.back} / ${r.cohort} 人回来</span>`);
+
+  $("#app").innerHTML = `
+  ${!d.trackingSince || new Date(d.trackingSince) > new Date(d.daily[0].date) ? `<div class="note">使用记录（活跃、扫描、导出）是从后台上线那天开始记的，之前的这几项没有数据；注册人数是完整的历史。</div>` : ""}
+
+  <section class="kpis">
+    ${kpi("注册用户", fmt(u.total), `今日 <b>+${u.new.today}</b> · 近 7 天 +${u.new.d7}`)}
+    ${kpi("今日活跃", fmt(a.today), `占注册 ${pct(a.today, u.total)}%`)}
+    ${kpi("近 7 天活跃", fmt(a.d7), `占注册 ${pct(a.d7, u.total)}%`)}
+    ${kpi("近 30 天活跃", fmt(a.d30), `占注册 ${pct(a.d30, u.total)}%`)}
+    ${kpi(`扫描次数`, fmt(s.total), `${s.users} 人扫过 · 近 ${d.days} 天`)}
+    ${kpi(`扫描照片`, fmt(s.pages), `平均每次 ${s.avgPages || 0} 张`)}
+  </section>
+
+  <section class="card">
+    <h2>每日趋势<small>近 ${d.days} 天合计 ${fmt(sum(series))}</small></h2>
+    <div class="tabs" id="series">${Object.entries(SERIES).map(([k, v]) => `<button data-k="${k}" class="${k === series ? "on" : ""}">${v}</button>`).join("")}</div>
+    <div id="chart">${chart(d.daily, series)}</div>
+  </section>
+
+  <section class="grid g3">
+    <div class="card">
+      <h2>用到什么程度<small>近 ${d.days} 天</small></h2>
+      <p class="hint">在这段时间里打开过的人，有多少走到了下一步</p>
+      ${hbars(d.funnel, { base: activeTotal })}
+    </div>
+    <div class="card">
+      <h2>每人扫了几次<small>活跃用户</small></h2>
+      ${hbars(d.depth.scans)}
+    </div>
+    <div class="card">
+      <h2>每人来了几天<small>活跃用户</small></h2>
+      ${hbars(d.depth.days)}
+    </div>
+  </section>
+
+  <section class="grid g3">
+    <div class="card">
+      <h2>扫描效果<small>近 ${d.days} 天</small></h2>
+      <div class="stats">
+        <div class="stat"><span class="value num">${s.successRate == null ? "—" : s.successRate + "%"}</span><span class="label">还原成功率</span></div>
+        <div class="stat"><span class="value num">${fmt(s.questions)}</span><span class="label">还原出的题</span></div>
+        <div class="stat"><span class="value num">${fmt(s.wrong)}</span><span class="label">其中错题 / 未作答</span></div>
+        <div class="stat"><span class="value num">${fmt(s.grades)}</span><span class="label">AI 补批改</span></div>
+        <div class="stat"><span class="value num">${fmt(s.pdfs)}</span><span class="label">导出电子试卷</span></div>
+        <div class="stat"><span class="value num">${fmt(s.books)}</span><span class="label">导出错题本</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>留存<small>近 ${d.days} 天注册的人</small></h2>
+      <div class="stats" style="grid-template-columns:1fr 1fr">
+        <div class="stat">${ret(d.retention.d1)}<span class="label">次日还来</span></div>
+        <div class="stat">${ret(d.retention.d7)}<span class="label">第 7 天还来</span></div>
+      </div>
+      <h2 style="margin-top:4px">各端活跃<small>近 ${d.days} 天</small></h2>
+      ${hbars(platformRows, { dot: true, base: activeTotal })}
+    </div>
+    <div class="card">
+      <h2>注册方式<small>全部用户</small></h2>
+      ${hbars(methodRows, { base: u.total })}
+      <h2 style="margin-top:4px">年级分布<small>全部用户</small></h2>
+      <div style="max-height:220px;overflow:auto">${hbars(gradeRows.filter((g) => g.value))}</div>
+    </div>
+  </section>
+
+  <section class="card table-card">
+    <div class="table-head">
+      <h2>用户</h2><span class="hint" style="margin:0">次数、天数按近 ${d.days} 天统计</span>
+      <input id="q" type="search" placeholder="搜昵称、手机号尾号" value="${esc(query)}">
+    </div>
+    <div class="scroll" id="table"></div>
+  </section>`;
+
+  $("#series").addEventListener("click", (e) => {
+    const k = e.target.dataset?.k; if (!k) return;
+    series = k; render();
+  });
+  $("#chart").innerHTML = chart(d.daily, series);
+  bindChart();
+  $("#q").addEventListener("input", (e) => { query = e.target.value.trim(); showAll = false; renderTable(); });
+  renderTable();
+}
+
+function bindChart() {
+  const tip = $("#tip"), svg = $("#chart svg");
+  svg.addEventListener("mousemove", (e) => {
+    const i = e.target.dataset?.i; if (i == null) { tip.style.display = "none"; return; }
+    const p = data.daily[i];
+    tip.innerHTML = `${new Date(p.date).toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "short" })}<br>${SERIES[series]}：<b>${fmt(p[series])}</b>`;
+    tip.style.display = "block";
+    tip.style.left = Math.min(e.clientX + 12, innerWidth - tip.offsetWidth - 8) + "px";
+    tip.style.top = e.clientY - 44 + "px";
+  });
+  svg.addEventListener("mouseleave", () => (tip.style.display = "none"));
+}
+
+const COLS = [
+  { k: "nickname", t: "用户" },
+  { k: "method", t: "注册方式" },
+  { k: "grade", t: "年级" },
+  { k: "platform", t: "最近用的端" },
+  { k: "createdAt", t: "注册时间" },
+  { k: "lastActiveAt", t: "最近活跃" },
+  { k: "activeDays", t: "活跃天数", r: true },
+  { k: "scans", t: "扫描次数", r: true },
+  { k: "pages", t: "照片", r: true },
+  { k: "exports", t: "导出", r: true },
+];
+
+function renderTable() {
+  let rows = data.userList.filter((u) => !query || (u.nickname || "").includes(query) || (u.phone || "").includes(query));
+  rows = rows.slice().sort((x, y) => {
+    const a = x[sortKey] ?? "", b = y[sortKey] ?? "";
+    return (a > b ? 1 : a < b ? -1 : 0) * sortDir;
+  });
+  const shown = showAll ? rows : rows.slice(0, 30);
+  $("#table").innerHTML = `
+    <table>
+      <thead><tr>${COLS.map((c) => `<th data-k="${c.k}" class="${c.r ? "r" : ""}">${c.t}${sortKey === c.k ? ` <span class="arrow">${sortDir > 0 ? "↑" : "↓"}</span>` : ""}</th>`).join("")}</tr></thead>
+      <tbody>${shown.map((u) => `
+        <tr>
+          <td><span class="who"><span>${esc(u.nickname)}</span><small class="num">${esc(u.phone || "")}</small></span></td>
+          <td><span class="pill p-${u.method}">${METHOD[u.method]}</span></td>
+          <td>${u.grade ? GRADE(u.grade) : "—"}</td>
+          <td class="${u.platform ? "" : "muted"}">${u.platform ? `<span class="dot" style="background:var(--c-${u.platform})"></span> ${PLATFORM_SHORT[u.platform]}` : "—"}</td>
+          <td class="num">${dateStr(u.createdAt)}</td>
+          <td class="${u.lastActiveAt ? "" : "muted"}" title="${esc(u.lastActiveAt || "")}">${ago(u.lastActiveAt)}</td>
+          <td class="r num">${u.activeDays || "—"}</td>
+          <td class="r num">${u.scans || "—"}</td>
+          <td class="r num">${u.pages || "—"}</td>
+          <td class="r num">${u.exports || "—"}</td>
+        </tr>`).join("")}</tbody>
+    </table>
+    ${shown.length ? "" : `<div class="empty">没有符合的用户</div>`}
+    ${rows.length > shown.length ? `<button class="more" id="more">显示全部 ${rows.length} 人</button>` : ""}`;
+  $("#table thead").addEventListener("click", (e) => {
+    const k = e.target.closest("th")?.dataset.k; if (!k) return;
+    if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; }
+    renderTable();
+  });
+  $("#more")?.addEventListener("click", () => { showAll = true; renderTable(); });
+}
+
+$("#range").addEventListener("click", (e) => {
+  const v = Number(e.target.dataset?.days); if (!v) return;
+  days = v;
+  document.querySelectorAll("#range button").forEach((b) => b.classList.toggle("on", Number(b.dataset.days) === v));
+  load();
+});
+$("#refresh").addEventListener("click", load);
+let resizeTimer;
+addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (data) { $("#chart").innerHTML = chart(data.daily, series); bindChart(); } }, 150); });
+$("#logout").addEventListener("click", async () => { await fetch("/admin/logout", { method: "POST" }); location.href = "/admin/login"; });
+load();
+</script>
+</body>
+</html>

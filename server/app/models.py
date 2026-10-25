@@ -32,6 +32,8 @@ class User(db.Model):
     reminder_hour = db.Column(db.Integer, default=19)
     reminder_minute = db.Column(db.Integer, default=30)
     created_at = db.Column(db.DateTime, default=datetime.now)
+    last_active_at = db.Column(db.DateTime, nullable=True, index=True)  # 最近一次打开 / 使用，管理后台看活跃度
+    last_platform = db.Column(db.String(12), nullable=True)  # ios | android | wechat | web
 
     mistakes = db.relationship("Mistake", backref="user", cascade="all, delete-orphan")
 
@@ -225,3 +227,18 @@ class DigitizeJob(db.Model):
             "createdAt": _iso(self.created_at),
             "updatedAt": _iso(self.updated_at),
         }
+
+
+class UsageEvent(db.Model):
+    """使用记录：打开、注册、登录、扫描、导出等，只给管理后台统计用，不存试卷内容。"""
+
+    __tablename__ = "usage_events"
+    id = db.Column(db.BigInteger().with_variant(db.Integer, "sqlite"), primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    kind = db.Column(db.String(16), index=True, nullable=False)  # open | signup | login | scan | scan_done | scan_fail | grade | pdf | book
+    platform = db.Column(db.String(12), nullable=True)
+    method = db.Column(db.String(12), nullable=True)  # 注册 / 登录方式：phone | password | apple | wechat | guest
+    pages = db.Column(db.Integer, default=0)  # 扫描的照片数
+    questions = db.Column(db.Integer, default=0)  # 还原出的题数
+    wrong = db.Column(db.Integer, default=0)  # 其中错题 / 未作答数
+    created_at = db.Column(db.DateTime, default=datetime.now, index=True)

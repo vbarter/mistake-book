@@ -17,6 +17,7 @@ from ..auth_utils import current_user, login_required
 from ..constants import GRADES, SUBJECTS
 from ..extensions import db
 from ..models import User
+from ..usage import track
 from .. import sms
 
 bp = Blueprint("auth", __name__)
@@ -58,7 +59,8 @@ def _verify_code(phone: str, code: str) -> None:
     _codes.pop(phone, None)
 
 
-def _issue(user: User):
+def _issue(user: User, kind: str = "login", method: str | None = None):
+    track(user, kind, method=method)
     token = create_access_token(identity=user.id)
     return jsonify({"token": token, "user": user.to_dict()})
 
@@ -119,7 +121,7 @@ def register_with_phone():
     _apply_profile(user, data.get("profile") or {})
     db.session.add(user)
     db.session.commit()
-    return _issue(user)
+    return _issue(user, "signup", "phone")
 
 
 PASSWORD_MIN, PASSWORD_MAX = 6, 32
@@ -156,7 +158,7 @@ def login_with_password():
         left = PW_MAX_FAILS - fails
         abort(400, "手机号或密码不对" + (f"，还可以试 {left} 次" if left > 0 else "，已锁定 15 分钟"))
     _pw_fails.pop(phone, None)
-    return _issue(user)
+    return _issue(user, "login", "password")
 
 
 @bp.post("/auth/password/reset")
@@ -174,7 +176,7 @@ def reset_password():
     user.password_hash = generate_password_hash(password)
     db.session.commit()
     _pw_fails.pop(phone, None)
-    return _issue(user)
+    return _issue(user, "login", "password")
 
 
 @bp.post("/auth/password")
@@ -204,7 +206,7 @@ def login_with_phone():
     if user is None:
         abort(404, "这个手机号还没注册，请先注册")
     _verify_code(phone, code)
-    return _issue(user)
+    return _issue(user, "login", "phone")
 
 
 APPLE_ISSUER = "https://appleid.apple.com"
@@ -260,12 +262,14 @@ def login_with_apple():
     if not sub:
         abort(400, "Apple 登录凭证无效")
     user = User.query.filter_by(apple_sub=sub).first()
+    kind = "login"
     if user is None:
         user = User(apple_sub=sub)
         _apply_profile(user, data.get("profile") or {})
         db.session.add(user)
         db.session.commit()
-    return _issue(user)
+        kind = "signup"
+    return _issue(user, kind, "apple")
 
 
 def _wx_openid(code: str) -> str:
@@ -302,12 +306,14 @@ def login_with_wechat():
         abort(400, "缺少 code")
     openid = _wx_openid(code)
     user = User.query.filter_by(wx_openid=openid).first()
+    kind = "login"
     if user is None:
         user = User(wx_openid=openid)
         _apply_profile(user, data.get("profile") or {})
         db.session.add(user)
         db.session.commit()
-    return _issue(user)
+        kind = "signup"
+    return _issue(user, kind, "wechat")
 
 
 @bp.post("/auth/guest")
@@ -318,7 +324,7 @@ def login_as_guest():
     _apply_profile(user, data.get("profile") or {})
     db.session.add(user)
     db.session.commit()
-    return _issue(user)
+    return _issue(user, "signup", "guest")
 
 
 @bp.post("/auth/bind")
@@ -372,6 +378,7 @@ def _apply_profile(user: User, data: dict) -> None:
 def me():
     """当前用户；同时给一个新 token（App 每次打开都调，常用就一直保持登录，直到主动退出）"""
     user = current_user()
+    track(user, "open")
     return jsonify({"user": user.to_dict(), "token": create_access_token(identity=user.id)})
 
 

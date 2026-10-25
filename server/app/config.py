@@ -45,6 +45,8 @@ class Config:
     # App Store 审核用的测试账号：固定手机号 + 固定验证码，不发短信、不回显（.env 里配置，不进仓库）
     REVIEW_PHONE = os.getenv("REVIEW_PHONE", "").strip()
     REVIEW_CODE = os.getenv("REVIEW_CODE", "").strip()
+    # 管理后台 /admin 的登录密码；不配置时后台不开放
+    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
 
     # Apple 登录：开发期不校验 identityToken 签名（APPLE_VERIFY=0）
     APPLE_VERIFY = os.getenv("APPLE_VERIFY", "0") == "1"
