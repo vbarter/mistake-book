@@ -38,7 +38,7 @@ class Config:
     ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "gpt-6.1-sol")
 
     # 短信：mock 模式下验证码固定为 123456，并在接口返回里回显
-    # 短信：off（默认，手机号验证码登录关闭，只有审核账号能用）| mock（本地开发，验证码固定 123456 并回显）；接入真实短信服务后再加
+    # 短信：off（默认，手机号验证码登录关闭，只有审核账号能用）| aliyun（阿里云短信认证，见 app/sms.py）| mock（本地开发，验证码固定 123456 并回显）
     SMS_PROVIDER = os.getenv("SMS_PROVIDER", "off")
     DEV_SMS_CODE = "123456"
     # App Store 审核用的测试账号：固定手机号 + 固定验证码，不发短信、不回显（.env 里配置，不进仓库）

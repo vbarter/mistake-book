@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { User } from "../api/types";
@@ -17,14 +17,24 @@ export default function Login() {
   const [sent, setSent] = useState(false);
   const [devCode, setDevCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [wait, setWait] = useState(0); // 重新获取验证码的倒计时（秒）
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = window.setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => window.clearTimeout(t);
+  }, [wait]);
 
-  const done = () => nav((loc.state as { from?: string } | null)?.from || "/today", { replace: true });
+  const state = (loc.state as { from?: string; profile?: { nickname?: string; grade?: string; subjects?: string[] } } | null) ?? {};
+  // 从「告诉我一点点」过来的新用户：注册时把年级、学科一起建进账号；已有账号登录时服务端会忽略
+  const profile = state.profile;
+  const done = () => nav(state.from || "/papers", { replace: true });
 
   const sendCode = async () => {
     setBusy(true);
     try {
       const res = await api<{ ok: boolean; devCode?: string }>("/api/auth/code", { method: "POST", auth: false, body: { phone } });
       setSent(true);
+      setWait(60);
       setDevCode(res.devCode ?? null);
       toast("验证码已发送");
     } catch (e) {
@@ -43,7 +53,7 @@ export default function Login() {
         toast("已绑定手机号", "success");
         nav(-1);
       } else {
-        const res = await api<{ token: string; user: User }>("/api/auth/login", { method: "POST", auth: false, body: { phone, code } });
+        const res = await api<{ token: string; user: User }>("/api/auth/login", { method: "POST", auth: false, body: { phone, code, profile } });
         await setSession(res.token, res.user);
         done();
       }
@@ -92,7 +102,7 @@ export default function Login() {
       await refreshUser();
       nav(-1);
     } else {
-      const res = await api<{ token: string; user: User }>("/api/auth/apple", { method: "POST", auth: false, body: { identityToken, profile: { nickname } } });
+      const res = await api<{ token: string; user: User }>("/api/auth/apple", { method: "POST", auth: false, body: { identityToken, profile: { ...profile, nickname: nickname || profile?.nickname } } });
       await setSession(res.token, res.user);
       done();
     }
@@ -100,9 +110,9 @@ export default function Login() {
 
   return (
     <div className="screen screen--card screen--narrow">
-      <InlineNav title={binding ? "绑定账号" : "登录"} back />
+      <InlineNav title={binding ? "绑定账号" : "登录 / 注册"} back />
       <div className="screen__content screen__content--modal" style={{ gap: 20, paddingTop: 12 }}>
-        <p className="t-sub c-sec">{binding ? "绑定后错题会备份到账号，换手机也不丢。" : "登录后可以同步错题、开启复习提醒。"}</p>
+        <p className="t-sub c-sec">{binding ? "绑定后换手机也能用同一个账号。" : isAndroid ? "用手机号登录，第一次登录会自动注册。" : "用 Apple 账号或手机号登录，第一次登录会自动注册。"}</p>
         {!isAndroid && (
           <>
             <Button variant="black" onClick={apple} disabled={busy}>
@@ -131,7 +141,12 @@ export default function Login() {
         {!sent ? (
           <Button onClick={sendCode} disabled={busy || phone.length !== 11}>获取验证码</Button>
         ) : (
-          <Button onClick={login} disabled={busy || code.length !== 6}>{binding ? "绑定" : "登录"}</Button>
+          <>
+            <Button onClick={login} disabled={busy || code.length !== 6}>{binding ? "绑定" : "登录"}</Button>
+            <Button variant="plain" onClick={sendCode} disabled={busy || wait > 0 || phone.length !== 11} style={{ height: 40 }}>
+              {wait > 0 ? `${wait} 秒后可重新获取` : "重新获取验证码"}
+            </Button>
+          </>
         )}
       </div>
     </div>

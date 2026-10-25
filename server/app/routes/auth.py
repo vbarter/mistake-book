@@ -16,6 +16,7 @@ from ..auth_utils import current_user, login_required
 from ..constants import GRADES, SUBJECTS
 from ..extensions import db
 from ..models import User
+from .. import sms
 
 bp = Blueprint("auth", __name__)
 log = logging.getLogger(__name__)
@@ -29,6 +30,31 @@ def _is_review(phone: str) -> bool:
     """App Store 审核账号：手机号和验证码都在 .env 里配好才生效"""
     cfg = current_app.config
     return bool(cfg.get("REVIEW_PHONE") and cfg.get("REVIEW_CODE") and phone == cfg["REVIEW_PHONE"])
+
+
+def _verify_code(phone: str, code: str) -> None:
+    """核验手机验证码：审核账号用固定码；阿里云模式交给阿里云核验；mock 模式比对内存里的固定码。不通过就 400。"""
+    if not code:
+        abort(400, "请输入验证码")
+    if _is_review(phone):
+        if code != current_app.config["REVIEW_CODE"]:
+            abort(400, "验证码不对或已过期")
+        return
+    provider = current_app.config["SMS_PROVIDER"]
+    if provider == "aliyun":
+        try:
+            ok = sms.check_code(phone, code)
+        except sms.SmsError as e:
+            abort(503, str(e))
+        if not ok:
+            abort(400, "验证码不对或已过期")
+        return
+    if provider != "mock":
+        abort(400, "验证码不对或已过期")
+    saved = _codes.get(phone)
+    if not saved or saved[0] != code or saved[1] < time.time():
+        abort(400, "验证码不对或已过期")
+    _codes.pop(phone, None)
 
 
 def _issue(user: User):
@@ -45,9 +71,16 @@ def send_code():
     if _is_review(phone):
         # 审核账号不发短信、不回显验证码：审核员按提交审核时填的验证码登录
         return jsonify({"ok": True, "expiresIn": 300})
-    if current_app.config["SMS_PROVIDER"] != "mock":
-        # 还没接真实短信服务：不能让固定验证码在线上生效（否则谁都能登别人的手机号账号）
-        abort(503, "手机号登录暂未开放，请使用 Apple 登录或游客模式")
+    provider = current_app.config["SMS_PROVIDER"]
+    if provider == "aliyun":
+        try:
+            sms.send_code(phone)
+        except sms.SmsError as e:
+            abort(503 if "暂时不可用" in str(e) or "没配置" in str(e) else 429, str(e))
+        return jsonify({"ok": True, "expiresIn": sms.VALID_SECONDS})
+    if provider != "mock":
+        # 没接真实短信服务：不能让固定验证码在线上生效（否则谁都能登别人的手机号账号）
+        abort(503, "手机号登录暂未开放，请使用 Apple 登录")
     code = current_app.config["DEV_SMS_CODE"]
     _codes[phone] = (code, time.time() + 300)
     payload = {"ok": True, "expiresIn": 300}
@@ -61,13 +94,7 @@ def login_with_phone():
     data = request.get_json(silent=True) or {}
     phone = str(data.get("phone", "")).strip()
     code = str(data.get("code", "")).strip()
-    saved = _codes.get(phone)
-    if _is_review(phone):
-        if code != current_app.config["REVIEW_CODE"]:
-            abort(400, "验证码不对或已过期")
-    elif not saved or saved[0] != code or saved[1] < time.time():
-        abort(400, "验证码不对或已过期")
-    _codes.pop(phone, None)
+    _verify_code(phone, code)
     user = User.query.filter_by(phone=phone).first()
     if user is None:
         user = User(phone=phone)
@@ -199,9 +226,7 @@ def bind_account():
     data = request.get_json(silent=True) or {}
     if data.get("phone"):
         phone, code = str(data["phone"]).strip(), str(data.get("code", "")).strip()
-        saved = _codes.get(phone)
-        if not saved or saved[0] != code or saved[1] < time.time():
-            abort(400, "验证码不对或已过期")
+        _verify_code(phone, code)
         if User.query.filter(User.phone == phone, User.id != user.id).first():
             abort(400, "该手机号已绑定其他账号")
         user.phone = phone

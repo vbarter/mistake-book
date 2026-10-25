@@ -938,3 +938,75 @@ def test_phone_login_off_blocks_fixed_code(app, client):
     assert client.post("/api/auth/login", json={"phone": "13912345678", "code": "123456"}).status_code == 400
     assert client.post("/api/auth/login", json={"phone": "13800138000", "code": "246810"}).status_code == 200
     app.config.update(SMS_PROVIDER="mock", REVIEW_PHONE="", REVIEW_CODE="")
+
+
+def test_aliyun_sms_login_flow(app, client, monkeypatch):
+    """阿里云短信认证模式：发码走 SendSmsVerifyCode，登录 / 绑定走 CheckSmsVerifyCode（只认 PASS）；频控等错误给中文提示；不回显验证码"""
+    from app import sms
+
+    for k, v in {"ALIYUN_ACCESS_KEY_ID": "id", "ALIYUN_ACCESS_KEY_SECRET": "secret", "ALIYUN_SMS_SIGN_NAME": "速通互联验证码", "ALIYUN_SMS_TEMPLATE_CODE": "100001"}.items():
+        monkeypatch.setenv(k, v)
+    app.config.update(SMS_PROVIDER="aliyun")
+    calls = []
+    state = {"send": {"Code": "OK", "Success": True}, "pass": {"13912345678": "246810", "13700000000": "135790"}}
+
+    def fake_call(action, params):
+        calls.append((action, params))
+        if action == "SendSmsVerifyCode":
+            return state["send"]
+        ok = state["pass"].get(params["PhoneNumber"]) == params["VerifyCode"]
+        return {"Code": "OK", "Model": {"VerifyResult": "PASS" if ok else "UNKNOWN"}}
+
+    monkeypatch.setattr(sms, "_call", fake_call)
+    r = client.post("/api/auth/code", json={"phone": "13912345678"})
+    assert r.status_code == 200 and "devCode" not in r.get_json()
+    action, params = calls[-1]
+    assert action == "SendSmsVerifyCode" and params["SignName"] == "速通互联验证码" and params["CodeLength"] == 6 and "##code##" in params["TemplateParam"]
+    assert client.post("/api/auth/login", json={"phone": "13912345678", "code": "000000"}).status_code == 400
+    ok = client.post("/api/auth/login", json={"phone": "13912345678", "code": "246810", "profile": {"nickname": "小明", "grade": "8"}})
+    assert ok.status_code == 200 and ok.get_json()["user"]["loginMethod"] == "phone" and ok.get_json()["user"]["grade"] == "8"
+    # 频控：阿里云返回 biz.FREQUENCY → 429 + 中文提示
+    state["send"] = {"Code": "biz.FREQUENCY", "Message": "check frequency failed"}
+    r = client.post("/api/auth/code", json={"phone": "13912345678"})
+    assert r.status_code == 429 and "1 分钟" in r.get_json()["message"]
+    # 游客绑定手机号也走阿里云核验
+    guest = client.post("/api/auth/guest", json={"profile": {}}).get_json()["token"]
+    h = {"Authorization": f"Bearer {guest}"}
+    assert client.post("/api/auth/bind", json={"phone": "13700000000", "code": "111111"}, headers=h).status_code == 400
+    b = client.post("/api/auth/bind", json={"phone": "13700000000", "code": "135790"}, headers=h)
+    assert b.status_code == 200 and b.get_json()["user"]["phone"] == "13700000000"
+    app.config.update(SMS_PROVIDER="mock")
+
+
+def test_aliyun_signature_format(monkeypatch):
+    """签名：参数按字典序、阿里云编码规则，结果是 base64 的 HMAC-SHA1；请求发到 dypnsapi"""
+    import io
+    from app import sms
+
+    monkeypatch.setenv("ALIYUN_ACCESS_KEY_ID", "testid")
+    monkeypatch.setenv("ALIYUN_ACCESS_KEY_SECRET", "testsecret")
+    seen = {}
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=10):
+        seen["url"] = req.full_url
+        seen["body"] = req.data.decode()
+        return Resp(b'{"Code":"OK"}')
+
+    monkeypatch.setattr(sms.urllib.request, "urlopen", fake_urlopen)
+    assert sms._call("CheckSmsVerifyCode", {"PhoneNumber": "13912345678", "VerifyCode": "1 2*~"}) == {"Code": "OK"}
+    import urllib.parse as up
+    form = dict(up.parse_qsl(seen["body"]))
+    assert seen["url"] == "https://dypnsapi.aliyuncs.com/" and form["Action"] == "CheckSmsVerifyCode" and form["Version"] == "2017-05-25"
+    # 用同样的参数重算一遍签名，应该一致
+    sig = form.pop("Signature")
+    canon = "&".join(f"{sms._quote(k)}={sms._quote(form[k])}" for k in sorted(form))
+    import base64, hashlib, hmac
+    expect = base64.b64encode(hmac.new(b"testsecret&", f"POST&%2F&{sms._quote(canon)}".encode(), hashlib.sha1).digest()).decode()
+    assert sig == expect and sms._quote("1 2*~") == "1%202%2A~"

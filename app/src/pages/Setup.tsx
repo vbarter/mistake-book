@@ -1,40 +1,21 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
-import type { Subject, User } from "../api/types";
+import type { Subject } from "../api/types";
 import { Button, InlineNav } from "../components/ui";
 import { GRADE_LABEL, SUBJECTS, SUBJECT_LABEL } from "../lib/format";
-import { useAuth } from "../store/auth";
-import { toastError } from "../store/banner";
 
 export default function Setup() {
   const nav = useNavigate();
-  const setSession = useAuth((s) => s.setSession);
   const [nickname, setNickname] = useState("");
   const [grade, setGrade] = useState("5");
   const [subjects, setSubjects] = useState<Subject[]>([...SUBJECTS]);
-  const [busy, setBusy] = useState(false);
 
   const toggle = (s: Subject) => {
     setSubjects((cur) => (cur.includes(s) ? (cur.length > 1 ? cur.filter((x) => x !== s) : cur) : [...cur, s]));
   };
 
-  const start = async () => {
-    setBusy(true);
-    try {
-      const res = await api<{ token: string; user: User }>("/api/auth/guest", {
-        method: "POST",
-        auth: false,
-        body: { profile: { nickname: nickname || "小同学", grade, subjects } },
-      });
-      await setSession(res.token, res.user);
-      nav("/papers", { replace: true });
-    } catch (e) {
-      toastError(e);
-    } finally {
-      setBusy(false);
-    }
-  };
+  // 资料带到登录页：用手机号（或 iPhone 上用 Apple）注册时一起建进账号
+  const next = () => nav("/login", { state: { profile: { nickname: nickname.trim() || "小同学", grade, subjects } } });
 
   return (
     <div className="screen screen--card screen--narrow">
@@ -67,9 +48,7 @@ export default function Setup() {
           <span className="t-foot c-sec">之后可以在「我的」里修改。</span>
         </div>
         <div style={{ marginTop: "auto" }}>
-          <Button onClick={start} disabled={busy}>
-            {busy ? "准备中…" : "开始录第一道题"}
-          </Button>
+          <Button onClick={next}>下一步：注册账号</Button>
         </div>
       </div>
     </div>
