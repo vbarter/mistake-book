@@ -25,6 +25,12 @@ _codes: dict[str, tuple[str, float]] = {}
 PHONE_RE = re.compile(r"^1\d{10}$")
 
 
+def _is_review(phone: str) -> bool:
+    """App Store 审核账号：手机号和验证码都在 .env 里配好才生效"""
+    cfg = current_app.config
+    return bool(cfg.get("REVIEW_PHONE") and cfg.get("REVIEW_CODE") and phone == cfg["REVIEW_PHONE"])
+
+
 def _issue(user: User):
     token = create_access_token(identity=user.id)
     return jsonify({"token": token, "user": user.to_dict()})
@@ -36,6 +42,9 @@ def send_code():
     phone = str(data.get("phone", "")).strip()
     if not PHONE_RE.match(phone):
         abort(400, "请输入 11 位手机号")
+    if _is_review(phone):
+        # 审核账号不发短信、不回显验证码：审核员按提交审核时填的验证码登录
+        return jsonify({"ok": True, "expiresIn": 300})
     code = current_app.config["DEV_SMS_CODE"]
     _codes[phone] = (code, time.time() + 300)
     payload = {"ok": True, "expiresIn": 300}
@@ -50,7 +59,10 @@ def login_with_phone():
     phone = str(data.get("phone", "")).strip()
     code = str(data.get("code", "")).strip()
     saved = _codes.get(phone)
-    if not saved or saved[0] != code or saved[1] < time.time():
+    if _is_review(phone):
+        if code != current_app.config["REVIEW_CODE"]:
+            abort(400, "验证码不对或已过期")
+    elif not saved or saved[0] != code or saved[1] < time.time():
         abort(400, "验证码不对或已过期")
     _codes.pop(phone, None)
     user = User.query.filter_by(phone=phone).first()

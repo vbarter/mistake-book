@@ -40,6 +40,9 @@ class Config:
     # 短信：mock 模式下验证码固定为 123456，并在接口返回里回显
     SMS_PROVIDER = os.getenv("SMS_PROVIDER", "mock")
     DEV_SMS_CODE = "123456"
+    # App Store 审核用的测试账号：固定手机号 + 固定验证码，不发短信、不回显（.env 里配置，不进仓库）
+    REVIEW_PHONE = os.getenv("REVIEW_PHONE", "").strip()
+    REVIEW_CODE = os.getenv("REVIEW_CODE", "").strip()
 
     # Apple 登录：开发期不校验 identityToken 签名（APPLE_VERIFY=0）
     APPLE_VERIFY = os.getenv("APPLE_VERIFY", "0") == "1"

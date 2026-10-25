@@ -914,3 +914,16 @@ def test_pdf_renders_labeled_figure_row():
     sheet = {"blocks": [{"type": "item", "number": "3", "text": "选图 [[3]]", "blanks": [{"id": "3", "student": "B", "mark": "wrong", "answer": "A"}]}, *figs]}
     assert build_papers_pdf("t", [{"title": "t", "pages": [sheet], "questions": []}]).startswith(b"%PDF")
     assert build_book_pdf("t", "", [{"number": "3", "stem": "选图", "knowledge": "k", "figures": figs, "answers": [{"number": "3", "student": "B", "answer": "A", "kind": "答错"}]}]).startswith(b"%PDF")
+
+
+def test_review_account_fixed_code(app, client):
+    """审核账号：固定验证码能登录、不回显验证码、不需要先发验证码；错的验证码登不上；其他手机号不受影响"""
+    app.config.update(REVIEW_PHONE="13800138000", REVIEW_CODE="246810")
+    r = client.post("/api/auth/code", json={"phone": "13800138000"})
+    assert r.status_code == 200 and "devCode" not in r.get_json()
+    assert client.post("/api/auth/login", json={"phone": "13800138000", "code": "123456"}).status_code == 400
+    ok = client.post("/api/auth/login", json={"phone": "13800138000", "code": "246810"})
+    assert ok.status_code == 200 and ok.get_json()["user"]["loginMethod"] == "phone"
+    again = client.post("/api/auth/login", json={"phone": "13800138000", "code": "246810"})  # 不用先发验证码也能再登
+    assert again.status_code == 200 and again.get_json()["user"]["id"] == ok.get_json()["user"]["id"]
+    app.config.update(REVIEW_PHONE="", REVIEW_CODE="")
