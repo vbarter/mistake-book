@@ -45,6 +45,9 @@ def send_code():
     if _is_review(phone):
         # 审核账号不发短信、不回显验证码：审核员按提交审核时填的验证码登录
         return jsonify({"ok": True, "expiresIn": 300})
+    if current_app.config["SMS_PROVIDER"] != "mock":
+        # 还没接真实短信服务：不能让固定验证码在线上生效（否则谁都能登别人的手机号账号）
+        abort(503, "手机号登录暂未开放，请使用 Apple 登录或游客模式")
     code = current_app.config["DEV_SMS_CODE"]
     _codes[phone] = (code, time.time() + 300)
     payload = {"ok": True, "expiresIn": 300}

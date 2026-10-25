@@ -927,3 +927,13 @@ def test_review_account_fixed_code(app, client):
     again = client.post("/api/auth/login", json={"phone": "13800138000", "code": "246810"})  # 不用先发验证码也能再登
     assert again.status_code == 200 and again.get_json()["user"]["id"] == ok.get_json()["user"]["id"]
     app.config.update(REVIEW_PHONE="", REVIEW_CODE="")
+
+
+def test_phone_login_off_blocks_fixed_code(app, client):
+    """短信关闭（线上）：普通手机号发不了验证码、123456 登不上，也不回显；审核账号照常能登"""
+    app.config.update(SMS_PROVIDER="off", REVIEW_PHONE="13800138000", REVIEW_CODE="246810")
+    r = client.post("/api/auth/code", json={"phone": "13912345678"})
+    assert r.status_code == 503 and "devCode" not in (r.get_json() or {})
+    assert client.post("/api/auth/login", json={"phone": "13912345678", "code": "123456"}).status_code == 400
+    assert client.post("/api/auth/login", json={"phone": "13800138000", "code": "246810"}).status_code == 200
+    app.config.update(SMS_PROVIDER="mock", REVIEW_PHONE="", REVIEW_CODE="")

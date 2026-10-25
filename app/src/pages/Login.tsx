@@ -124,7 +124,8 @@ export default function Login() {
           <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span className="t-headline">验证码</span>
             <input className="input" inputMode="numeric" autoComplete="one-time-code" placeholder="6 位验证码" value={code} maxLength={6} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
-            {devCode && <span className="t-foot c-sec">开发环境验证码：{devCode}</span>}
+            {/* 只在本地开发时显示，正式包里永远不出现 */}
+            {import.meta.env.DEV && devCode && <span className="t-foot c-sec">开发环境验证码：{devCode}</span>}
           </label>
         )}
         {!sent ? (
