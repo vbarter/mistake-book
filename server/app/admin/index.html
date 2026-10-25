@@ -108,6 +108,23 @@
 
   .loading { color: var(--tertiary); text-align: center; padding: 80px 0; }
 
+  /* 手机上用户列表改成一人一张卡片 */
+  .sort { display: none; height: 34px; border-radius: 10px; border: 0; background: var(--fill); color: var(--label); padding: 0 10px; font: inherit; }
+  .ulist { display: none; }
+  .ucard { padding: 14px 16px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+  .ucard__top { display: flex; align-items: flex-start; gap: 10px; }
+  .ucard__who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .ucard__name { font-size: 16px; font-weight: 700; }
+  .ucard__name small { color: var(--tertiary); font-weight: 500; font-size: 12px; margin-left: 6px; }
+  .ucard__who .id { min-width: 0; }
+  .ucard__who .id .num { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--secondary); font-size: 13px; }
+  .ucard__when { text-align: right; flex-shrink: 0; font-size: 13px; font-weight: 600; }
+  .ucard__when small { display: block; color: var(--tertiary); font-weight: 500; font-size: 11px; }
+  .ucard__meta { display: flex; gap: 6px 12px; flex-wrap: wrap; color: var(--secondary); font-size: 12px; }
+  .ucard__nums { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--fill); border-radius: 10px; padding: 8px 0; }
+  .ucard__nums span { display: flex; flex-direction: column; align-items: center; font-size: 16px; font-weight: 800; }
+  .ucard__nums small { color: var(--tertiary); font-size: 11px; font-weight: 500; }
+
   @media (max-width: 1000px) {
     .kpis { grid-template-columns: repeat(3, 1fr); }
     .g3 { grid-template-columns: 1fr 1fr; }
@@ -121,6 +138,21 @@
     .seg button { flex: 1; padding: 6px 8px; }
     .kpi .value { font-size: 24px; line-height: 30px; }
     .stats { grid-template-columns: repeat(2, 1fr); }
+    .wrap { padding: 12px 12px 40px; gap: 12px; }
+    .logo { width: 36px; height: 36px; font-size: 17px; border-radius: 10px; }
+    .title h1 { font-size: 18px; line-height: 24px; }
+    .kpis { gap: 10px; }
+    .kpi { padding: 12px 14px; }
+    .kpi .sub { white-space: normal; }
+    .card { padding: 14px; }
+    .hbar { grid-template-columns: 84px 1fr 60px; }
+    .table-head { padding: 14px 16px 10px; }
+    .table-head .hint { width: 100%; order: 3; }
+    .table-head input { flex: 1; width: auto; min-width: 0; margin-left: 0; order: 4; }
+    .title .since { display: none; }
+    .sort { display: block; order: 5; }
+    .scroll { display: none; }
+    .ulist { display: block; }
   }
 </style>
 </head>
@@ -219,7 +251,7 @@ const SERIES = { active: "活跃用户", newUsers: "新用户", scans: "扫描�
 
 function render() {
   const d = data, u = d.users, a = d.active, s = d.scans;
-  $("#updated").textContent = `更新于 ${new Date(d.generatedAt).toLocaleString("zh-CN", { hour12: false })}` + (d.trackingSince ? ` · 使用记录从 ${dateStr(d.trackingSince)} 开始` : "");
+  $("#updated").innerHTML = `更新于 ${new Date(d.generatedAt).toLocaleString("zh-CN", { hour12: false })}` + (d.trackingSince ? `<span class="since"> · 使用记录从 ${dateStr(d.trackingSince)} 开始</span>` : "");
 
   const sum = (k) => d.daily.reduce((n, p) => n + p[k], 0);
   const platformRows = Object.entries(d.platforms).map(([k, v]) => ({ label: PLATFORM[k], value: v, color: `var(--c-${k})` }));
@@ -294,9 +326,11 @@ function render() {
   <section class="card table-card">
     <div class="table-head">
       <h2>用户</h2><span class="hint" style="margin:0">一个手机号 / Apple 账号 / 微信算一个人；次数、天数按近 ${d.days} 天统计</span>
-      <input id="q" type="search" placeholder="搜姓名、手机号、Apple 邮箱" value="${esc(query)}">
+      <input id="q" type="search" placeholder="搜姓名、手机号、邮箱" value="${esc(query)}">
+      <select class="sort" id="sort" aria-label="排序">${COLS.filter((c) => c.sort !== false).map((c) => `<option value="${c.k}" ${c.k === sortKey ? "selected" : ""}>按${c.t}</option>`).join("")}</select>
     </div>
     <div class="scroll" id="table"></div>
+    <div class="ulist" id="ulist"></div>
   </section>`;
 
   $("#series").addEventListener("click", (e) => {
@@ -306,6 +340,7 @@ function render() {
   $("#chart").innerHTML = chart(d.daily, series);
   bindChart();
   $("#q").addEventListener("input", (e) => { query = e.target.value.trim(); showAll = false; renderTable(); });
+  $("#sort").addEventListener("change", (e) => { sortKey = e.target.value; sortDir = sortKey === "name" || sortKey === "grade" ? 1 : -1; renderTable(); });
   renderTable();
 }
 
@@ -324,7 +359,7 @@ function bindChart() {
 
 const COLS = [
   { k: "name", t: "用户" },
-  { k: "method", t: "账号" },
+  { k: "method", t: "账号", sort: false },
   { k: "grade", t: "年级" },
   { k: "platform", t: "最近用的端" },
   { k: "createdAt", t: "注册时间" },
@@ -362,8 +397,30 @@ function renderTable() {
     </table>
     ${shown.length ? "" : `<div class="empty">没有符合的用户</div>`}
     ${rows.length > shown.length ? `<button class="more" id="more">显示全部 ${rows.length} 人</button>` : ""}`;
+  $("#ulist").innerHTML = shown.map((u) => `
+    <div class="ucard">
+      <div class="ucard__top">
+        <div class="ucard__who">
+          <span class="ucard__name">${esc(u.name)}${u.name !== u.nickname ? `<small>称呼：${esc(u.nickname)}</small>` : ""}</span>
+          ${u.identities.map((i) => `<span class="id"><span class="pill p-${i.kind}">${METHOD[i.kind]}</span><span class="num">${esc(i.value)}</span></span>`).join("")}
+        </div>
+        <div class="ucard__when">${ago(u.lastActiveAt)}<small>最近活跃</small></div>
+      </div>
+      <div class="ucard__meta">
+        <span>${u.grade ? GRADE(u.grade) : "年级未填"}</span>
+        <span>${u.platform ? `<span class="dot" style="background:var(--c-${u.platform})"></span> ${PLATFORM_SHORT[u.platform]}` : "还没用过"}</span>
+        <span>${dateStr(u.createdAt)} 注册</span>
+      </div>
+      <div class="ucard__nums num">
+        <span>${u.activeDays || 0}<small>活跃天数</small></span>
+        <span>${u.scans || 0}<small>扫描</small></span>
+        <span>${u.pages || 0}<small>照片</small></span>
+        <span>${u.exports || 0}<small>导出</small></span>
+      </div>
+    </div>`).join("") + (shown.length ? "" : `<div class="empty">没有符合的用户</div>`) + (rows.length > shown.length ? `<button class="more" id="more2">显示全部 ${rows.length} 人</button>` : "");
+  $("#more2")?.addEventListener("click", () => { showAll = true; renderTable(); });
   $("#table thead").addEventListener("click", (e) => {
-    const k = e.target.closest("th")?.dataset.k; if (!k) return;
+    const k = e.target.closest("th")?.dataset.k; if (!k || COLS.find((c) => c.k === k).sort === false) return;
     if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; }
     renderTable();
   });
