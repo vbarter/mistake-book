@@ -10,6 +10,7 @@ USE zhicuoben;
 CREATE TABLE IF NOT EXISTS users (
   id                VARCHAR(32)  NOT NULL COMMENT 'UUID hex',
   phone             VARCHAR(32)  NULL     COMMENT '手机号，验证码登录',
+  password_hash     VARCHAR(255) NULL     COMMENT '登录密码哈希（手机号注册时设置）',
   apple_sub         VARCHAR(128) NULL     COMMENT 'Apple 登录的 sub',
   wx_openid         VARCHAR(64)  NULL     COMMENT '微信小程序 openid',
   nickname          VARCHAR(32)  NOT NULL DEFAULT '小同学',
@@ -124,3 +125,5 @@ CREATE TABLE IF NOT EXISTS digitize_jobs (
 
 -- 已有库升级：微信小程序登录（用 root 执行）
 -- ALTER TABLE users ADD COLUMN wx_openid VARCHAR(64) NULL COMMENT '微信小程序 openid' AFTER apple_sub, ADD UNIQUE KEY uk_users_wx_openid (wx_openid);
+-- 已有库升级：手机号注册的登录密码（用 root 执行）
+-- ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL COMMENT '登录密码哈希' AFTER phone;

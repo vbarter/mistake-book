@@ -28,8 +28,10 @@ export const useAuth = create<AuthState>((set, get) => ({
       return;
     }
     try {
-      const { user } = await api<{ user: User }>("/api/auth/me");
-      set({ ready: true, token, user });
+      const res = await api<{ user: User; token?: string }>("/api/auth/me");
+      const next = res.token || token;
+      if (res.token) await setToken(res.token);
+      set({ ready: true, token: next, user: res.user });
     } catch (e) {
       // 离线时保留 token，等待恢复网络；401 已在 handler 里登出
       set({ ready: true, token, user: get().user });

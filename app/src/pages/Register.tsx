@@ -1,34 +1,28 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import type { Subject, User } from "../api/types";
+import type { User } from "../api/types";
 import { Icon } from "../components/Icon";
 import { PhoneCode } from "../components/PhoneCode";
 import { Button, InlineNav } from "../components/ui";
 import { AppleAuthError, appleIdentity } from "../lib/appleAuth";
-import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_LABEL } from "../lib/format";
 import { isAndroid } from "../lib/native";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
 import "../styles/auth.css";
 
-/** 手机号注册：手机号 + 验证码，顺便填称呼、年级、学科（决定知识点按哪套考纲归类）。注册成功后用手机号登录。
- *  iPhone 上也可以直接用 Apple 注册。 */
+/** 注册：手机号 + 验证码（iPhone 上也可以用 Apple）。称呼、年级、学科之后在「我的」里设置；
+ *  登录密码可以在「账号与登录」里另设。 */
 export default function Register() {
   const nav = useNavigate();
   const loc = useLocation();
   const setSession = useAuth((s) => s.setSession);
   const [phone, setPhone] = useState(((loc.state as { phone?: string } | null)?.phone ?? "").slice(0, 11));
   const [code, setCode] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [grade, setGrade] = useState("5");
-  const [subjects, setSubjects] = useState<Subject[]>([...SUBJECTS]);
   const [agree, setAgree] = useState(false);
   const [registered, setRegistered] = useState(false); // 号码已注册：提示去登录
   const [busy, setBusy] = useState(false);
 
-  const profile = { nickname: nickname.trim() || "小同学", grade, subjects };
-  const toggle = (s: Subject) => setSubjects((cur) => (cur.includes(s) ? (cur.length > 1 ? cur.filter((x) => x !== s) : cur) : [...cur, s]));
   const goLogin = () => nav("/login", { replace: true, state: { phone } });
 
   const onCodeError = (status: number) => {
@@ -43,7 +37,7 @@ export default function Register() {
     if (!agree) return toast("请先阅读并同意用户协议和隐私政策");
     setBusy(true);
     try {
-      const res = await api<{ token: string; user: User }>("/api/auth/register", { method: "POST", auth: false, body: { phone, code, profile } });
+      const res = await api<{ token: string; user: User }>("/api/auth/register", { method: "POST", auth: false, body: { phone, code } });
       await setSession(res.token, res.user);
       toast("注册成功，下次用这个手机号登录", "success");
       nav("/papers", { replace: true });
@@ -61,7 +55,7 @@ export default function Register() {
     try {
       const id = await appleIdentity();
       if (!id) return;
-      const res = await api<{ token: string; user: User }>("/api/auth/apple", { method: "POST", auth: false, body: { identityToken: id.identityToken, profile: { ...profile, nickname: id.nickname || profile.nickname } } });
+      const res = await api<{ token: string; user: User }>("/api/auth/apple", { method: "POST", auth: false, body: { identityToken: id.identityToken, profile: id.nickname ? { nickname: id.nickname } : {} } });
       await setSession(res.token, res.user);
       nav("/papers", { replace: true });
     } catch (e) {
@@ -79,8 +73,8 @@ export default function Register() {
       <InlineNav title="" back />
       <div className="screen__content screen__content--modal auth" style={{ paddingTop: 0 }}>
         <div className="auth__head">
-          <h1 className="t-title1">手机号注册</h1>
-          <p className="t-sub c-sec">注册后，下次用手机号和验证码就能登录。</p>
+          <h1 className="t-title1">注册知错本</h1>
+          <p className="t-sub c-sec">{isAndroid ? "用手机号和验证码注册。" : "用手机号和验证码，或 Apple 账号注册。"}</p>
         </div>
 
         <section className="auth__section">
@@ -93,41 +87,6 @@ export default function Register() {
               <button type="button" onClick={goLogin}>去登录</button>
             </div>
           )}
-        </section>
-
-        <section className="auth__section">
-          <span className="auth__label">怎么称呼你</span>
-          <input className="input" placeholder="小同学" value={nickname} maxLength={16} onChange={(e) => setNickname(e.target.value)} />
-        </section>
-
-        <section className="auth__section">
-          <span className="auth__label">年级</span>
-          <div className="grade-groups">
-            {GRADE_GROUPS.map((g) => (
-              <div key={g.label} className="grade-groups__row">
-                <span className="grade-groups__label">{g.label}</span>
-                <div className="seg" role="radiogroup" aria-label={g.label}>
-                  {g.grades.map((k) => (
-                    <button key={k} type="button" role="radio" aria-checked={grade === k} className={`seg__item${grade === k ? " on" : ""}`} onClick={() => setGrade(k)}>
-                      {GRADE_LABEL[k].replace("年级", "")}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="auth__section">
-          <span className="auth__label">要整理的学科</span>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {SUBJECTS.map((s) => (
-              <button key={s} type="button" className={`chip chip--select${subjects.includes(s) ? " on" : ""}`} aria-pressed={subjects.includes(s)} onClick={() => toggle(s)}>
-                {SUBJECT_LABEL[s]}
-              </button>
-            ))}
-          </div>
-          <span className="auth__hint">年级和学科决定知识点怎么归类，之后可以在「我的」里修改。</span>
         </section>
 
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 14 }}>

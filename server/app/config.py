@@ -17,7 +17,8 @@ def _env_list(name: str, default: str) -> list[str]:
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me-please-use-32-bytes")
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", SECRET_KEY)
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=90)
+    # 登录状态一直保持到用户主动退出：token 一年有效，App 每次打开调 /auth/me 都换一个新的，常用就永不过期
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=365)
 
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'zhicuoben.db'}"

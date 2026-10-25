@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { toast, toastError } from "../store/banner";
 
-export type CodePurpose = "register" | "login" | "bind";
+export type CodePurpose = "register" | "login" | "bind" | "reset";
 
 /** 手机号 + 验证码：验证码输入框右边是「获取验证码」，发送后 60 秒倒计时。
  *  purpose 告诉服务端用途，注册时号码已注册、登录时号码没注册会直接提示，不白发短信。
  *  onError 把服务端的错误交给页面（比如「还没注册」时页面显示去注册的入口）。 */
-export function PhoneCode({ purpose, phone, setPhone, code, setCode, onError }: { purpose: CodePurpose; phone: string; setPhone: (v: string) => void; code: string; setCode: (v: string) => void; onError?: (status: number, message: string) => boolean }) {
+export function PhoneCode({ purpose, phone, setPhone, code, setCode, onError, fixedPhone }: { purpose: CodePurpose; phone: string; setPhone: (v: string) => void; code: string; setCode: (v: string) => void; onError?: (status: number, message: string) => boolean; fixedPhone?: boolean }) {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [wait, setWait] = useState(0);
@@ -37,12 +37,14 @@ export function PhoneCode({ purpose, phone, setPhone, code, setCode, onError }: 
 
   return (
     <div className="pc">
-      <label className="pc__field">
+      {!fixedPhone && <label className="pc__field">
         <span className="pc__prefix">+86</span>
         <input className="pc__input" inputMode="numeric" autoComplete="tel" placeholder="请输入手机号" value={phone} maxLength={11} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} aria-label="手机号" />
-      </label>
+      </label>}
       <div className="pc__row">
-        <input className="pc__input pc__field" inputMode="numeric" autoComplete="one-time-code" placeholder="6 位验证码" value={code} maxLength={6} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} aria-label="验证码" />
+        <label className="pc__field">
+          <input className="pc__input" inputMode="numeric" autoComplete="one-time-code" placeholder="6 位验证码" value={code} maxLength={6} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} aria-label="验证码" />
+        </label>
         <button type="button" className="pc__send" onClick={send} disabled={sending || wait > 0 || phone.length !== 11}>
           {sending ? "发送中…" : wait > 0 ? `${wait} 秒` : sent ? "重新获取" : "获取验证码"}
         </button>

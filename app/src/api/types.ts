@@ -7,7 +7,8 @@ export type Rating = "forgot" | "fuzzy" | "remembered";
 export interface User {
   id: string;
   phone: string | null;
-  loginMethod: "apple" | "phone" | "guest";
+  hasPassword?: boolean; // 手机号账号是否设置了登录密码
+  loginMethod: "apple" | "phone" | "guest" | "wechat";
   nickname: string;
   grade: string;
   subjects: Subject[];

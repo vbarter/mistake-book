@@ -1029,3 +1029,43 @@ def test_register_then_login_with_purpose_checks(client):
     login = client.post("/api/auth/login", json={"phone": phone, "code": code})
     assert login.status_code == 200 and login.get_json()["user"]["id"] == u["id"]
     assert client.post("/api/auth/register", json={"phone": phone, "code": code}).status_code == 409
+
+
+def test_password_register_login_reset_and_lockout(client):
+    """手机号 + 密码注册；密码登录（错 5 次锁定）；验证码重设密码后直接登录；/auth/me 会换新 token"""
+    phone = "13511112222"
+    code = lambda purpose: client.post("/api/auth/code", json={"phone": phone, "purpose": purpose}).get_json()["devCode"]
+    # 密码规则
+    r = client.post("/api/auth/register", json={"phone": phone, "code": code("register"), "password": "123456"})
+    assert r.status_code == 400 and "字母和数字" in r.get_json()["message"]
+    reg = client.post("/api/auth/register", json={"phone": phone, "code": code("register"), "password": "abc12345"})
+    assert reg.status_code == 200 and reg.get_json()["user"]["hasPassword"] is True
+    # 密码登录
+    ok = client.post("/api/auth/login/password", json={"phone": phone, "password": "abc12345"})
+    assert ok.status_code == 200 and ok.get_json()["user"]["id"] == reg.get_json()["user"]["id"]
+    assert client.post("/api/auth/login/password", json={"phone": "13599990000", "password": "abc12345"}).status_code == 404
+    for i in range(4):
+        r = client.post("/api/auth/login/password", json={"phone": phone, "password": "wrong999"})
+        assert r.status_code == 400 and f"还可以试 {4 - i} 次" in r.get_json()["message"]
+    assert "已锁定" in client.post("/api/auth/login/password", json={"phone": phone, "password": "wrong999"}).get_json()["message"]
+    assert client.post("/api/auth/login/password", json={"phone": phone, "password": "abc12345"}).status_code == 429  # 锁定中，对的密码也不行
+    # 忘记密码：验证码重设，锁定解除并直接登录
+    rs = client.post("/api/auth/password/reset", json={"phone": phone, "code": code("reset"), "password": "newpass88"})
+    assert rs.status_code == 200 and rs.get_json()["token"]
+    assert client.post("/api/auth/login/password", json={"phone": phone, "password": "newpass88"}).status_code == 200
+    # /auth/me 换新 token，新 token 能用
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {rs.get_json()['token']}"}).get_json()
+    assert me["token"] and client.get("/api/auth/me", headers={"Authorization": f"Bearer {me['token']}"}).status_code == 200
+
+
+def test_set_password_after_code_login(client):
+    """验证码注册的账号（没密码）：密码登录提示用验证码；登录后用验证码设置密码，之后能用密码登录"""
+    phone = "13522223333"
+    code = lambda purpose: client.post("/api/auth/code", json={"phone": phone, "purpose": purpose}).get_json()["devCode"]
+    tok = client.post("/api/auth/register", json={"phone": phone, "code": code("register")}).get_json()["token"]
+    r = client.post("/api/auth/login/password", json={"phone": phone, "password": "abc12345"})
+    assert r.status_code == 400 and "还没设置密码" in r.get_json()["message"]
+    h = {"Authorization": f"Bearer {tok}"}
+    s = client.post("/api/auth/password", json={"password": "abc12345", "code": code("reset")}, headers=h)
+    assert s.status_code == 200 and s.get_json()["user"]["hasPassword"] is True
+    assert client.post("/api/auth/login/password", json={"phone": phone, "password": "abc12345"}).status_code == 200

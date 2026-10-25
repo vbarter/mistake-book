@@ -11,6 +11,7 @@ const Splash = lazy(() => import("./components/Splash"));
 
 import Welcome from "./pages/Welcome";
 import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
 import Login from "./pages/Login";
 import Library from "./pages/Library";
 import Papers from "./pages/Papers";
@@ -94,6 +95,7 @@ export default function App() {
         <Route path="/welcome" element={token ? <Navigate to="/papers" replace /> : <Welcome />} />
         <Route path="/register" element={token ? <Navigate to="/papers" replace /> : <Register />} />
         <Route path="/setup" element={<Navigate to="/register" replace />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/login" element={<Login />} />
         <Route path="/splash" element={<SplashReplay />} />
 

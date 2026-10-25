@@ -8,6 +8,7 @@ import re
 import time
 
 import jwt
+from werkzeug.security import check_password_hash, generate_password_hash
 from flask import Blueprint, abort, current_app, jsonify, request
 from flask_jwt_extended import create_access_token
 from jwt import PyJWKClient
@@ -73,7 +74,7 @@ def send_code():
     exists = User.query.filter_by(phone=phone).first() is not None
     if purpose == "register" and exists:
         abort(409, "这个手机号已经注册过了，请直接登录")
-    if purpose == "login" and not exists:
+    if purpose in ("login", "reset") and not exists:
         abort(404, "这个手机号还没注册，请先注册")
     if purpose == "bind" and exists:
         abort(409, "这个手机号已绑定其他账号")
@@ -108,12 +109,89 @@ def register_with_phone():
         abort(400, "请输入 11 位手机号")
     if User.query.filter_by(phone=phone).first() is not None:
         abort(409, "这个手机号已经注册过了，请直接登录")
+    password = str(data.get("password", ""))
+    if "password" in data:
+        _check_password_rule(password)
     _verify_code(phone, code)
     user = User(phone=phone)
+    if password:
+        user.password_hash = generate_password_hash(password)
     _apply_profile(user, data.get("profile") or {})
     db.session.add(user)
     db.session.commit()
     return _issue(user)
+
+
+PASSWORD_MIN, PASSWORD_MAX = 6, 32
+_pw_fails: dict[str, tuple[int, float]] = {}  # 手机号 → (连续输错次数, 锁定到期时间)
+PW_MAX_FAILS, PW_LOCK_SECONDS = 5, 15 * 60
+
+
+def _check_password_rule(password: str) -> None:
+    if not (PASSWORD_MIN <= len(password) <= PASSWORD_MAX):
+        abort(400, f"密码要 {PASSWORD_MIN}–{PASSWORD_MAX} 位")
+    if not (re.search(r"[A-Za-z]", password) and re.search(r"\d", password)):
+        abort(400, "密码要同时包含字母和数字")
+
+
+@bp.post("/auth/login/password")
+def login_with_password():
+    """手机号 + 密码登录；同一号码连续输错 5 次锁 15 分钟（可以改用验证码登录）"""
+    data = request.get_json(silent=True) or {}
+    phone = str(data.get("phone", "")).strip()
+    password = str(data.get("password", ""))
+    if not PHONE_RE.match(phone):
+        abort(400, "请输入 11 位手机号")
+    fails, locked_until = _pw_fails.get(phone, (0, 0.0))
+    if locked_until > time.time():
+        abort(429, f"密码输错次数太多，请 {int((locked_until - time.time()) // 60) + 1} 分钟后再试，或用验证码登录")
+    user = User.query.filter_by(phone=phone).first()
+    if user is None:
+        abort(404, "这个手机号还没注册，请先注册")
+    if not user.password_hash:
+        abort(400, "这个账号还没设置密码，请用验证码登录")
+    if not check_password_hash(user.password_hash, password):
+        fails += 1
+        _pw_fails[phone] = (fails, time.time() + PW_LOCK_SECONDS if fails >= PW_MAX_FAILS else 0.0)
+        left = PW_MAX_FAILS - fails
+        abort(400, "手机号或密码不对" + (f"，还可以试 {left} 次" if left > 0 else "，已锁定 15 分钟"))
+    _pw_fails.pop(phone, None)
+    return _issue(user)
+
+
+@bp.post("/auth/password/reset")
+def reset_password():
+    """忘记密码：手机号 + 验证码 + 新密码，重设后直接登录"""
+    data = request.get_json(silent=True) or {}
+    phone = str(data.get("phone", "")).strip()
+    code = str(data.get("code", "")).strip()
+    password = str(data.get("password", ""))
+    user = User.query.filter_by(phone=phone).first()
+    if user is None:
+        abort(404, "这个手机号还没注册，请先注册")
+    _check_password_rule(password)
+    _verify_code(phone, code)
+    user.password_hash = generate_password_hash(password)
+    db.session.commit()
+    _pw_fails.pop(phone, None)
+    return _issue(user)
+
+
+@bp.post("/auth/password")
+@login_required
+def set_password():
+    """已登录用户设置 / 修改登录密码：用绑定手机号收到的验证码确认（Apple 账号没绑手机号时不能设）"""
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    if not user.phone:
+        abort(400, "请先绑定手机号再设置密码")
+    password = str(data.get("password", ""))
+    _check_password_rule(password)
+    _verify_code(user.phone, str(data.get("code", "")).strip())
+    user.password_hash = generate_password_hash(password)
+    db.session.commit()
+    _pw_fails.pop(user.phone, None)
+    return jsonify({"user": user.to_dict()})
 
 
 @bp.post("/auth/login")
@@ -292,7 +370,9 @@ def _apply_profile(user: User, data: dict) -> None:
 @bp.get("/auth/me")
 @login_required
 def me():
-    return jsonify({"user": current_user().to_dict()})
+    """当前用户；同时给一个新 token（App 每次打开都调，常用就一直保持登录，直到主动退出）"""
+    user = current_user()
+    return jsonify({"user": user.to_dict(), "token": create_access_token(identity=user.id)})
 
 
 @bp.route("/auth/me", methods=["PATCH", "PUT"])  # 小程序 wx.request 不支持 PATCH，用 PUT

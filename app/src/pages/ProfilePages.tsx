@@ -7,6 +7,11 @@ import { SubjectTile } from "../components/v2";
 import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_GROUPS, SUBJECT_LABEL } from "../lib/format";
 import { getCity, setCity } from "../lib/prefs";
 import { clearAllFolders, listFolders } from "../lib/folders";
+import { api } from "../api/client";
+import type { User } from "../api/types";
+import { PasswordInput, passwordProblem } from "../components/PasswordInput";
+import { PhoneCode } from "../components/PhoneCode";
+import "../styles/auth.css";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
 import { isNative, isAndroid } from "../lib/native";
@@ -82,13 +87,34 @@ export function Account() {
   const [confirm, setConfirm] = useState(false);
   const [server, setServer] = useState(getApiBase());
   const [serverSheet, setServerSheet] = useState(false);
+  const [pwSheet, setPwSheet] = useState(false);
+  const [pwCode, setPwCode] = useState("");
+  const [pw, setPw] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const pwProblem = pw ? passwordProblem(pw) : null;
+  const savePassword = async () => {
+    setPwBusy(true);
+    try {
+      await api<{ user: User }>("/api/auth/password", { method: "POST", body: { password: pw, code: pwCode } });
+      await useAuth.getState().refreshUser();
+      setPwSheet(false);
+      setPw("");
+      setPwCode("");
+      toast("登录密码已设置，下次可以用手机号 + 密码登录", "success");
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setPwBusy(false);
+    }
+  };
   return (
     <div className="screen">
       <InlineNav title="账号与登录" back />
       <div className="screen__content screen__content--modal" style={{ paddingTop: 8 }}>
         <div className="group">
-          <Row icon="person" iconColor="var(--label)" title="登录方式" chevron={false} value={user?.loginMethod === "apple" ? "Apple" : user?.loginMethod === "phone" ? `手机 ${user.phone?.slice(0, 3)}****${user.phone?.slice(-4)}` : "游客（仅本机）"} />
+          <Row icon="person" iconColor="var(--label)" title="登录方式" chevron={false} value={user?.loginMethod === "apple" ? "Apple" : user?.loginMethod === "wechat" ? "微信" : user?.loginMethod === "phone" ? `手机 ${user.phone?.slice(0, 3)}****${user.phone?.slice(-4)}` : "游客（仅本机）"} />
           {user?.loginMethod === "guest" && <Row icon="lock" iconColor="var(--brand)" title={isAndroid ? "绑定手机号" : "绑定手机号或 Apple"} sub="绑定后错题会备份到账号" onClick={() => nav("/login")} />}
+          {user?.phone && <Row icon="lock" iconColor="var(--brand)" title="登录密码" value={user.hasPassword ? "已设置，点击修改" : "未设置"} onClick={() => setPwSheet(true)} />}
         </div>
         {isNative && (
           <div className="group">
@@ -103,6 +129,13 @@ export function Account() {
       <Sheet open={confirm} onClose={() => setConfirm(false)} title="退出登录？">
         <Button variant="danger" onClick={async () => { await logout(); nav("/welcome", { replace: true }); }}>退出</Button>
         <Button variant="plain" onClick={() => setConfirm(false)}>取消</Button>
+      </Sheet>
+      <Sheet open={pwSheet} onClose={() => setPwSheet(false)} title={user?.hasPassword ? "修改登录密码" : "设置登录密码"}>
+        <p className="t-sub c-sec">验证码会发到 {user?.phone ? `${user.phone.slice(0, 3)}****${user.phone.slice(-4)}` : "绑定的手机号"}。设置后可以用手机号 + 密码登录。</p>
+        <PhoneCode purpose="reset" fixedPhone phone={user?.phone ?? ""} setPhone={() => {}} code={pwCode} setCode={setPwCode} />
+        <PasswordInput value={pw} onChange={setPw} placeholder="新密码，6 位以上含字母数字" autoComplete="new-password" />
+        {pwProblem && <span className="auth__hint" style={{ color: "var(--wrong)" }}>{pwProblem}</span>}
+        <Button onClick={savePassword} disabled={pwBusy || pwCode.length !== 6 || !pw || Boolean(pwProblem)}>{pwBusy ? "保存中…" : "保存"}</Button>
       </Sheet>
       <Sheet open={serverSheet} onClose={() => setServerSheet(false)} title="服务器地址">
         <input className="input" value={server} onChange={(e) => setServer(e.target.value)} placeholder="http://192.168.1.10:5001" />

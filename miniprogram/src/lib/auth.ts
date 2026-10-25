@@ -64,9 +64,10 @@ export async function login(profile: Profile): Promise<User> {
 
 export async function refreshUser(): Promise<User | null> {
   try {
-    const { user: u } = await api<{ user: User }>("/api/auth/me");
-    setUser(u);
-    return u;
+    const res = await api<{ user: User; token?: string }>("/api/auth/me");
+    if (res.token) setToken(res.token); // 服务端每次给新 token：常用就一直保持登录
+    setUser(res.user);
+    return res.user;
   } catch {
     return currentUser();
   }
