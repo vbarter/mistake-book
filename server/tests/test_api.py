@@ -934,6 +934,7 @@ def test_phone_login_off_blocks_fixed_code(app, client):
     app.config.update(SMS_PROVIDER="off", REVIEW_PHONE="13800138000", REVIEW_CODE="246810")
     r = client.post("/api/auth/code", json={"phone": "13912345678"})
     assert r.status_code == 503 and "devCode" not in (r.get_json() or {})
+    assert r.get_json()["message"].startswith("手机号登录暂未开放")  # JSON 错误，App 能显示原因
     assert client.post("/api/auth/login", json={"phone": "13912345678", "code": "123456"}).status_code == 400
     assert client.post("/api/auth/login", json={"phone": "13800138000", "code": "246810"}).status_code == 200
     app.config.update(SMS_PROVIDER="mock", REVIEW_PHONE="", REVIEW_CODE="")

@@ -52,6 +52,13 @@ def create_app(test_config: dict | None = None) -> Flask:
     def bad_request(e):
         return jsonify({"error": "bad_request", "message": getattr(e, "description", "请求有误")}), 400
 
+    # 其余 HTTP 错误（401 / 403 / 413 / 502 / 503 …）也返回 JSON，客户端才能显示具体原因，而不是「请求失败」
+    from werkzeug.exceptions import HTTPException
+
+    @app.errorhandler(HTTPException)
+    def http_error(e: HTTPException):
+        return jsonify({"error": (e.name or "error").lower().replace(" ", "_"), "message": e.description or "请求失败"}), e.code or 500
+
     # gunicorn 下把应用与各模块的日志接到 gunicorn 的 error log，后台任务里的异常才看得到
     import logging
 
