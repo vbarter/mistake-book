@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getApiBase, setApiBase } from "../api/client";
 import type { Subject } from "../api/types";
 import { Button, InlineNav, Row, Sheet } from "../components/ui";
-import { SubjectTile } from "../components/v2";
+import { SubjectTile, Tag } from "../components/v2";
 import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_GROUPS, SUBJECT_LABEL } from "../lib/format";
 import { getCity, setCity } from "../lib/prefs";
 import { clearAllFolders, listFolders } from "../lib/folders";
@@ -11,6 +11,8 @@ import { api } from "../api/client";
 import type { User } from "../api/types";
 import { PasswordInput, passwordProblem } from "../components/PasswordInput";
 import { PhoneCode } from "../components/PhoneCode";
+import { AppleLogo } from "../components/AppleLogo";
+import { Icon } from "../components/Icon";
 import "../styles/auth.css";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
@@ -81,6 +83,8 @@ export function Subjects() {
 }
 
 /* ---------- 账号与登录 ---------- */
+const maskPhone = (p: string, sep = "") => `${p.slice(0, 3)}${sep}****${sep}${p.slice(-4)}`;
+
 export function Account() {
   const nav = useNavigate();
   const { user, logout } = useAuth();
@@ -110,28 +114,70 @@ export function Account() {
   return (
     <div className="screen">
       <InlineNav title="账号与登录" back />
-      <div className="screen__content screen__content--modal" style={{ paddingTop: 8 }}>
-        <div className="group">
-          <Row icon="person" iconColor="var(--label)" title="登录方式" chevron={false} value={user?.loginMethod === "apple" ? "Apple" : user?.loginMethod === "wechat" ? "微信" : user?.loginMethod === "phone" ? `手机 ${user.phone?.slice(0, 3)}****${user.phone?.slice(-4)}` : "游客（仅本机）"} />
-          {user?.loginMethod === "guest" && <Row icon="lock" iconColor="var(--brand)" title={isAndroid ? "绑定手机号" : "绑定手机号或 Apple"} sub="绑定后错题会备份到账号" onClick={() => nav("/login")} />}
-          {user?.phone && <Row icon="lock" iconColor="var(--brand)" title="登录密码" value={user.hasPassword ? "已设置，点击修改" : "未设置"} onClick={() => setPwSheet(true)} />}
+      <div className="screen__content screen__content--modal acct">
+        <div className="card acct__hero">
+          <span className="acct__avatar" aria-hidden="true">{user?.nickname.slice(-1)}</span>
+          <span className="acct__id num">{user?.phone ? maskPhone(user.phone, " ") : user?.loginMethod === "apple" ? "Apple 账号" : "游客"}</span>
+          {user?.loginMethod === "guest"
+            ? <Tag kind="neutral" icon="info">仅保存在本机</Tag>
+            : <Tag kind="correct" icon="checkcircle">{user?.loginMethod === "apple" ? "已用 Apple 注册" : "已用手机号注册"}</Tag>}
         </div>
-        {isNative && (
+
+        <section className="acct__section">
+          <h2 className="acct__label">登录方式</h2>
           <div className="group">
-            <Row icon="info" iconColor="var(--secondary)" title="服务器地址" value={server.replace(/^https?:\/\//, "")} onClick={() => setServerSheet(true)} />
+            {user?.phone && (
+              <div className="row acct__row">
+                <span className="row__icon" style={{ background: "var(--brand)" }}><Icon name="bubble" size={18} stroke={2} /></span>
+                <span className="row__main"><span className="row__title">验证码登录</span><span className="row__sub">手机号收短信验证码</span></span>
+                <Tag kind="correct" icon="check">可用</Tag>
+              </div>
+            )}
+            {user?.phone && (
+              <button className="row acct__row" onClick={() => setPwSheet(true)}>
+                <span className="row__icon" style={{ background: "var(--accent-on)" }}><Icon name="lock" size={18} stroke={2} /></span>
+                <span className="row__main"><span className="row__title">密码登录</span><span className="row__sub">{user.hasPassword ? "手机号 + 密码" : "设置密码后可用"}</span></span>
+                {user.hasPassword ? <Tag kind="info" icon="pencil">修改</Tag> : <Tag kind="info" icon="plus">去设置</Tag>}
+              </button>
+            )}
+            {user?.loginMethod === "apple" && (
+              <div className="row acct__row">
+                <span className="row__icon" style={{ background: "var(--label)", color: "var(--card)" }}><AppleLogo size={18} /></span>
+                <span className="row__main"><span className="row__title">Apple 登录</span><span className="row__sub">用这台设备的 Apple 账号</span></span>
+                <Tag kind="correct" icon="check">可用</Tag>
+              </div>
+            )}
+            {user?.loginMethod === "guest" && (
+              <button className="row acct__row" onClick={() => nav("/login")}>
+                <span className="row__icon" style={{ background: "var(--brand)" }}><Icon name="lock" size={18} stroke={2} /></span>
+                <span className="row__main"><span className="row__title">{isAndroid ? "绑定手机号" : "绑定手机号或 Apple"}</span><span className="row__sub">绑定后换手机也能登录</span></span>
+                <Tag kind="info" icon="plus">去绑定</Tag>
+              </button>
+            )}
           </div>
+          <p className="acct__foot">登录后会一直保持，直到你在这里退出。</p>
+        </section>
+
+        {isNative && (
+          <section className="acct__section">
+            <h2 className="acct__label">开发</h2>
+            <div className="group">
+              <Row icon="info" iconColor="var(--secondary)" title="服务器地址" value={server.replace(/^https?:\/\//, "")} onClick={() => setServerSheet(true)} />
+            </div>
+          </section>
         )}
-        <div className="group">
-          <Row icon="xmark" iconColor="var(--wrong)" title="退出登录" danger chevron={false} onClick={() => setConfirm(true)} />
-        </div>
-        {user?.loginMethod === "guest" && <p className="t-foot c-sec">游客账号退出后本机数据无法再访问，建议先绑定。</p>}
+
+        <section className="acct__section acct__section--end">
+          <button className="acct__logout" onClick={() => setConfirm(true)}>退出登录</button>
+          <p className="acct__foot acct__foot--center">{user?.loginMethod === "guest" ? "游客账号退出后本机数据无法再访问，建议先绑定。" : "退出后本机的试卷照片不会删除。"}</p>
+        </section>
       </div>
       <Sheet open={confirm} onClose={() => setConfirm(false)} title="退出登录？">
         <Button variant="danger" onClick={async () => { await logout(); nav("/welcome", { replace: true }); }}>退出</Button>
         <Button variant="plain" onClick={() => setConfirm(false)}>取消</Button>
       </Sheet>
       <Sheet open={pwSheet} onClose={() => setPwSheet(false)} title={user?.hasPassword ? "修改登录密码" : "设置登录密码"}>
-        <p className="t-sub c-sec">验证码会发到 {user?.phone ? `${user.phone.slice(0, 3)}****${user.phone.slice(-4)}` : "绑定的手机号"}。设置后可以用手机号 + 密码登录。</p>
+        <p className="t-sub c-sec">验证码会发到 {user?.phone ? maskPhone(user.phone) : "绑定的手机号"}，设置后可以用密码登录。</p>
         <PhoneCode purpose="reset" fixedPhone phone={user?.phone ?? ""} setPhone={() => {}} code={pwCode} setCode={setPwCode} />
         <PasswordInput value={pw} onChange={setPw} placeholder="新密码，6 位以上含字母数字" autoComplete="new-password" />
         {pwProblem && <span className="auth__hint" style={{ color: "var(--wrong)" }}>{pwProblem}</span>}
