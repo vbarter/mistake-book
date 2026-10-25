@@ -24,7 +24,7 @@ def _recognize_and_save(client, auth, n=3):
 def test_health_and_auth(client):
     assert client.get("/api/health").get_json()["aiProvider"] == "mock"
     r = client.post("/api/auth/login", json={"phone": "13800000000", "code": "000000"})
-    assert r.status_code == 400
+    assert r.status_code == 404  # 没注册的号码不能登录
     r = client.post("/api/auth/guest", json={"profile": {"grade": "4"}})
     assert r.status_code == 200
     assert r.get_json()["user"]["loginMethod"] == "guest"
@@ -921,6 +921,7 @@ def test_review_account_fixed_code(app, client):
     app.config.update(REVIEW_PHONE="13800138000", REVIEW_CODE="246810")
     r = client.post("/api/auth/code", json={"phone": "13800138000"})
     assert r.status_code == 200 and "devCode" not in r.get_json()
+    assert client.post("/api/auth/register", json={"phone": "13800138000", "code": "246810"}).status_code == 200
     assert client.post("/api/auth/login", json={"phone": "13800138000", "code": "123456"}).status_code == 400
     ok = client.post("/api/auth/login", json={"phone": "13800138000", "code": "246810"})
     assert ok.status_code == 200 and ok.get_json()["user"]["loginMethod"] == "phone"
@@ -935,8 +936,9 @@ def test_phone_login_off_blocks_fixed_code(app, client):
     r = client.post("/api/auth/code", json={"phone": "13912345678"})
     assert r.status_code == 503 and "devCode" not in (r.get_json() or {})
     assert r.get_json()["message"].startswith("手机号登录暂未开放")  # JSON 错误，App 能显示原因
-    assert client.post("/api/auth/login", json={"phone": "13912345678", "code": "123456"}).status_code == 400
-    assert client.post("/api/auth/login", json={"phone": "13800138000", "code": "246810"}).status_code == 200
+    assert client.post("/api/auth/login", json={"phone": "13912345678", "code": "123456"}).status_code == 404
+    assert client.post("/api/auth/register", json={"phone": "13912345678", "code": "123456"}).status_code == 400  # 固定码在线上无效
+    assert client.post("/api/auth/register", json={"phone": "13800138000", "code": "246810"}).status_code == 200
     app.config.update(SMS_PROVIDER="mock", REVIEW_PHONE="", REVIEW_CODE="")
 
 
@@ -962,8 +964,8 @@ def test_aliyun_sms_login_flow(app, client, monkeypatch):
     assert r.status_code == 200 and "devCode" not in r.get_json()
     action, params = calls[-1]
     assert action == "SendSmsVerifyCode" and params["SignName"] == "速通互联验证码" and params["CodeLength"] == 6 and "##code##" in params["TemplateParam"]
-    assert client.post("/api/auth/login", json={"phone": "13912345678", "code": "000000"}).status_code == 400
-    ok = client.post("/api/auth/login", json={"phone": "13912345678", "code": "246810", "profile": {"nickname": "小明", "grade": "8"}})
+    assert client.post("/api/auth/register", json={"phone": "13912345678", "code": "000000"}).status_code == 400
+    ok = client.post("/api/auth/register", json={"phone": "13912345678", "code": "246810", "profile": {"nickname": "小明", "grade": "8"}})
     assert ok.status_code == 200 and ok.get_json()["user"]["loginMethod"] == "phone" and ok.get_json()["user"]["grade"] == "8"
     # 频控：阿里云返回 biz.FREQUENCY → 429 + 中文提示
     state["send"] = {"Code": "biz.FREQUENCY", "Message": "check frequency failed"}
@@ -1010,3 +1012,20 @@ def test_aliyun_signature_format(monkeypatch):
     import base64, hashlib, hmac
     expect = base64.b64encode(hmac.new(b"testsecret&", f"POST&%2F&{sms._quote(canon)}".encode(), hashlib.sha1).digest()).decode()
     assert sig == expect and sms._quote("1 2*~") == "1%202%2A~"
+
+
+def test_register_then_login_with_purpose_checks(client):
+    """注册 / 登录分开：注册前已注册的号码不发码、登录前没注册的号码不发码；注册带资料；之后能用手机号登录；重复注册提示去登录"""
+    phone = "13611112222"
+    r = client.post("/api/auth/code", json={"phone": phone, "purpose": "login"})
+    assert r.status_code == 404 and "还没注册" in r.get_json()["message"]
+    code = client.post("/api/auth/code", json={"phone": phone, "purpose": "register"}).get_json()["devCode"]
+    reg = client.post("/api/auth/register", json={"phone": phone, "code": code, "profile": {"nickname": "小红", "grade": "9", "subjects": ["math", "physics"]}})
+    u = reg.get_json()["user"]
+    assert reg.status_code == 200 and u["nickname"] == "小红" and u["grade"] == "9" and u["subjects"] == ["math", "physics"] and u["loginMethod"] == "phone"
+    r = client.post("/api/auth/code", json={"phone": phone, "purpose": "register"})
+    assert r.status_code == 409 and "已经注册" in r.get_json()["message"]
+    code = client.post("/api/auth/code", json={"phone": phone, "purpose": "login"}).get_json()["devCode"]
+    login = client.post("/api/auth/login", json={"phone": phone, "code": code})
+    assert login.status_code == 200 and login.get_json()["user"]["id"] == u["id"]
+    assert client.post("/api/auth/register", json={"phone": phone, "code": code}).status_code == 409

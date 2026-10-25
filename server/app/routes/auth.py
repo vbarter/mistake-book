@@ -68,6 +68,15 @@ def send_code():
     phone = str(data.get("phone", "")).strip()
     if not PHONE_RE.match(phone):
         abort(400, "请输入 11 位手机号")
+    # 发码前先看用途，避免白发短信：注册时号码已注册 / 登录时号码没注册，直接提示（老版本客户端不传 purpose，不检查）
+    purpose = str(data.get("purpose", "")).strip()
+    exists = User.query.filter_by(phone=phone).first() is not None
+    if purpose == "register" and exists:
+        abort(409, "这个手机号已经注册过了，请直接登录")
+    if purpose == "login" and not exists:
+        abort(404, "这个手机号还没注册，请先注册")
+    if purpose == "bind" and exists:
+        abort(409, "这个手机号已绑定其他账号")
     if _is_review(phone):
         # 审核账号不发短信、不回显验证码：审核员按提交审核时填的验证码登录
         return jsonify({"ok": True, "expiresIn": 300})
@@ -89,18 +98,34 @@ def send_code():
     return jsonify(payload)
 
 
-@bp.post("/auth/login")
-def login_with_phone():
+@bp.post("/auth/register")
+def register_with_phone():
+    """手机号注册：验证码通过后建账号（带上称呼、年级、学科）；号码已注册时提示去登录"""
     data = request.get_json(silent=True) or {}
     phone = str(data.get("phone", "")).strip()
     code = str(data.get("code", "")).strip()
+    if not PHONE_RE.match(phone):
+        abort(400, "请输入 11 位手机号")
+    if User.query.filter_by(phone=phone).first() is not None:
+        abort(409, "这个手机号已经注册过了，请直接登录")
     _verify_code(phone, code)
+    user = User(phone=phone)
+    _apply_profile(user, data.get("profile") or {})
+    db.session.add(user)
+    db.session.commit()
+    return _issue(user)
+
+
+@bp.post("/auth/login")
+def login_with_phone():
+    """手机号登录：只登录已注册的号码（注册走 /auth/register）"""
+    data = request.get_json(silent=True) or {}
+    phone = str(data.get("phone", "")).strip()
+    code = str(data.get("code", "")).strip()
     user = User.query.filter_by(phone=phone).first()
     if user is None:
-        user = User(phone=phone)
-        _apply_profile(user, data.get("profile") or {})
-        db.session.add(user)
-        db.session.commit()
+        abort(404, "这个手机号还没注册，请先注册")
+    _verify_code(phone, code)
     return _issue(user)
 
 

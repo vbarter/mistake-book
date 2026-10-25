@@ -10,7 +10,7 @@ import Startup from "./components/Startup";
 const Splash = lazy(() => import("./components/Splash"));
 
 import Welcome from "./pages/Welcome";
-import Setup from "./pages/Setup";
+import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Library from "./pages/Library";
 import Papers from "./pages/Papers";
@@ -92,7 +92,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to={token ? "/papers" : "/welcome"} replace />} />
         <Route path="/welcome" element={token ? <Navigate to="/papers" replace /> : <Welcome />} />
-        <Route path="/setup" element={<Setup />} />
+        <Route path="/register" element={token ? <Navigate to="/papers" replace /> : <Register />} />
+        <Route path="/setup" element={<Navigate to="/register" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/splash" element={<SplashReplay />} />
 

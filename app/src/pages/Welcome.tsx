@@ -14,9 +14,7 @@ export default function Welcome() {
     <div className="screen screen--card screen--narrow">
       <div className="screen__content screen__content--modal" style={{ paddingTop: "calc(var(--safe-top) + 48px)", paddingLeft: 24, paddingRight: 24, paddingBottom: "calc(var(--safe-bottom) + 24px)", gap: 28 }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, paddingTop: 16 }}>
-          <div style={{ width: 96, height: 96, borderRadius: 26, background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-            <Icon name="camera" size={52} />
-          </div>
+          <img src={`${import.meta.env.BASE_URL}app-icon.png`} alt="知错本" width={96} height={96} style={{ borderRadius: 22, boxShadow: "0 10px 28px rgba(47, 111, 237, 0.25)" }} />
           <h1 className="t-large">知错本</h1>
           <p className="t-body c-sec" style={{ textAlign: "center" }}>
             拍下试卷，错题自动整理，
@@ -38,8 +36,8 @@ export default function Welcome() {
           ))}
         </div>
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
-          <Button onClick={() => nav("/setup")}>开始使用</Button>
-          <Button variant="tinted" onClick={() => nav("/login")} style={{ height: 44 }}>
+          <Button onClick={() => nav("/register")}>手机号注册</Button>
+          <Button variant="tinted" onClick={() => nav("/login")}>
             已有账号，登录
           </Button>
           <p className="t-cap c-sec" style={{ textAlign: "center" }}>

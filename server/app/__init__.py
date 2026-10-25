@@ -45,8 +45,13 @@ def create_app(test_config: dict | None = None) -> Flask:
         return jsonify({"ok": True, "aiProvider": provider_name(), "ocr": ocr.health()})
 
     @app.errorhandler(404)
-    def not_found(_e):
-        return jsonify({"error": "not_found", "message": "资源不存在"}), 404
+    def not_found(e):
+        # abort(404, "具体原因") 时用具体原因（如「这个手机号还没注册」），否则是通用的「资源不存在」
+        from werkzeug.exceptions import NotFound
+
+        desc = getattr(e, "description", None)
+        message = desc if desc and desc != NotFound.description else "资源不存在"
+        return jsonify({"error": "not_found", "message": message}), 404
 
     @app.errorhandler(400)
     def bad_request(e):

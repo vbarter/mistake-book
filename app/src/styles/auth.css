@@ -1,0 +1,31 @@
+/* 注册 / 登录页 */
+.auth { gap: 22px !important; }
+.auth__head { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+.auth__section { display: flex; flex-direction: column; gap: 10px; }
+.auth__label { font-size: 15px; font-weight: 600; color: var(--label); }
+.auth__hint { font-size: 13px; color: var(--secondary); }
+.auth__switch { text-align: center; font-size: 15px; color: var(--secondary); }
+.auth__switch button { color: var(--brand); font-weight: 600; padding: 4px 2px; }
+.auth__notice { display: flex; align-items: center; gap: 10px; background: var(--brand-tint); color: var(--brand-on-tint); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+.auth__notice button { margin-left: auto; color: var(--brand); font-weight: 700; white-space: nowrap; }
+.auth__divider { display: flex; align-items: center; gap: 12px; color: var(--tertiary); font-size: 13px; }
+.auth__divider::before, .auth__divider::after { content: ""; flex: 1; height: 1px; background: var(--separator-light); }
+.agree { display: flex; align-items: flex-start; gap: 8px; text-align: left; font-size: 13px; line-height: 19px; color: var(--secondary); }
+.agree b { color: var(--label); font-weight: 600; }
+
+/* 手机号 + 验证码 */
+.pc { display: flex; flex-direction: column; gap: 10px; }
+.pc__field { display: flex; align-items: center; gap: 10px; min-height: 50px; border-radius: 12px; background: var(--fill-light); padding: 0 14px; border: 1.5px solid transparent; }
+.pc__field:focus-within { border-color: var(--brand); background: var(--card); }
+.pc__prefix { font-size: 17px; font-weight: 600; color: var(--label); padding-right: 10px; border-right: 1px solid var(--separator); }
+.pc__input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 17px; height: 48px; color: var(--label); letter-spacing: 0.02em; }
+.pc__row { display: flex; gap: 10px; }
+.pc__row .pc__field { flex: 1; }
+.pc__send { flex-shrink: 0; min-width: 112px; min-height: 50px; border-radius: 12px; background: var(--brand-tint); color: var(--brand-on-tint); font-size: 15px; font-weight: 600; padding: 0 14px; }
+.pc__send:disabled { opacity: 0.5; }
+
+/* 年级：小学 / 初中 / 高中三行 */
+.grade-groups { display: flex; flex-direction: column; gap: 8px; }
+.grade-groups__row { display: flex; align-items: center; gap: 10px; }
+.grade-groups__label { width: 32px; flex-shrink: 0; font-size: 12px; color: var(--secondary); }
+.grade-groups__row .seg { flex: 1; }

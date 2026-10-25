@@ -47,10 +47,10 @@ def client(app):
 
 @pytest.fixture()
 def auth(client):
-    """登录并返回带 Authorization 的 headers。"""
-    r = client.post("/api/auth/code", json={"phone": "13800000000"})
+    """手机号注册并返回带 Authorization 的 headers。"""
+    r = client.post("/api/auth/code", json={"phone": "13800000000", "purpose": "register"})
     code = r.get_json()["devCode"]
-    r = client.post("/api/auth/login", json={"phone": "13800000000", "code": code, "profile": {"nickname": "小雨", "grade": "5"}})
+    r = client.post("/api/auth/register", json={"phone": "13800000000", "code": code, "profile": {"nickname": "小雨", "grade": "5"}})
     token = r.get_json()["token"]
     return {"Authorization": f"Bearer {token}"}
 
