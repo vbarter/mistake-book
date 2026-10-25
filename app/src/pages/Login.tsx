@@ -78,7 +78,7 @@ export default function Login() {
       const id = await appleIdentity();
       if (!id) return;
       if (binding) {
-        await api("/api/auth/bind", { method: "POST", body: { identityToken: id.identityToken } });
+        await api("/api/auth/bind", { method: "POST", body: { identityToken: id.identityToken, profile: id.nickname ? { nickname: id.nickname } : {} } });
         await refreshUser();
         nav(-1);
       } else {

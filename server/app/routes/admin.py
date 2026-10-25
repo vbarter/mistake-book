@@ -2,7 +2,7 @@
 
 密码在服务器 .env 的 ADMIN_PASSWORD 里；没配置时整个后台不开放（404）。
 登录后发一个签名 cookie（7 天有效，只在 /admin 下发送）；同一 IP 连续输错 5 次锁 15 分钟。
-统计不含审核账号（REVIEW_PHONE）。
+只统计有账号的人（手机号 / Apple / 微信，一个账号一个人），游客只单独计数；不含审核账号（REVIEW_PHONE）。
 """
 from __future__ import annotations
 
@@ -110,8 +110,16 @@ def _method(u: User) -> str:
     return "apple" if u.apple_sub else "wechat" if u.wx_openid else "phone" if u.phone else "guest"
 
 
-def _mask(phone: str | None) -> str:
-    return f"{phone[:3]}****{phone[-4:]}" if phone and len(phone) >= 7 else ""
+def _identities(u: User) -> list[dict]:
+    """这个人是谁：手机号、Apple（有邮箱显示邮箱，否则 ID 尾号）、微信（openid 尾号）。一个账号可能绑了几种。"""
+    out = []
+    if u.phone:
+        out.append({"kind": "phone", "value": u.phone})
+    if u.apple_sub:
+        out.append({"kind": "apple", "value": u.apple_email or f"ID …{u.apple_sub[-6:]}"})
+    if u.wx_openid:
+        out.append({"kind": "wechat", "value": f"openid …{u.wx_openid[-6:]}"})
+    return out
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -134,7 +142,9 @@ def stats():
     start = datetime.combine(start_day, datetime.min.time())
 
     review_phone = current_app.config.get("REVIEW_PHONE") or ""
-    users = [u for u in User.query.all() if not (review_phone and u.phone == review_phone)]
+    everyone = [u for u in User.query.all() if not (review_phone and u.phone == review_phone)]
+    users = [u for u in everyone if _method(u) != "guest"]
+    guests = len(everyone) - len(users)
     user_ids = {u.id for u in users}
 
     # 窗口内的事件 + 每个用户历史上是否扫过、扫了几次（总量不大，直接取出来在内存里算）
@@ -242,8 +252,9 @@ def stats():
     user_rows = [
         {
             "id": u.id,
+            "name": u.apple_name or u.nickname,
             "nickname": u.nickname,
-            "phone": _mask(u.phone),
+            "identities": _identities(u),
             "method": _method(u),
             "grade": u.grade,
             "createdAt": _iso(u.created_at),
@@ -264,7 +275,8 @@ def stats():
             "trackingSince": _iso(first_event),
             "users": {
                 "total": len(users),
-                "byMethod": {m: by_method.get(m, 0) for m in ("phone", "apple", "wechat", "guest")},
+                "guests": guests,
+                "byMethod": {m: by_method.get(m, 0) for m in ("phone", "apple", "wechat")},
                 "new": {"today": new_since(1), "d7": new_since(7), "d30": new_since(30)},
             },
             "active": active,

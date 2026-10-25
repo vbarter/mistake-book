@@ -24,6 +24,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=True)  # 手机号注册时设置的登录密码（只存哈希）；Apple / 微信 / 验证码注册的为空
     apple_sub = db.Column(db.String(128), unique=True, nullable=True, index=True)
     wx_openid = db.Column(db.String(64), unique=True, nullable=True, index=True)  # 微信小程序登录
+    apple_name = db.Column(db.String(64), nullable=True)  # Apple 首次授权时给的姓名（之后 Apple 不再给），管理后台显示
+    apple_email = db.Column(db.String(128), nullable=True)  # Apple identityToken 里的邮箱（可能是隐藏邮箱），管理后台显示
     nickname = db.Column(db.String(32), default="小同学")
     grade = db.Column(db.String(4), default="5")
     subjects = db.Column(JSON, default=lambda: ["math", "chinese", "english", "science"])

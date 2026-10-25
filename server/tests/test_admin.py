@@ -59,7 +59,34 @@ def test_admin_stats_count_usage(app, client, auth):
     assert len(s["daily"]) == 7 and s["daily"][-1]["scans"] == 1
     assert s["funnel"][0]["value"] == 2 and s["funnel"][1]["value"] == 1
     phone_user = next(u for u in s["userList"] if u["method"] == "phone")
-    assert phone_user["phone"] == "138****0000" and phone_user["scans"] == 1 and phone_user["platform"] == "ios"
+    assert phone_user["identities"] == [{"kind": "phone", "value": "13800000000"}]
+    assert phone_user["name"] == "小雨" and phone_user["scans"] == 1 and phone_user["platform"] == "ios"
+
+
+def test_admin_lists_identified_users_only(app, client):
+    pw = _enable(app)
+    client.post("/api/auth/guest", json={})
+    client.post("/api/auth/wechat", json={"code": "w1"})
+    client.post("/admin/login", json={"password": pw})
+    s = client.get("/admin/api/stats").get_json()
+    assert s["users"]["total"] == 1 and s["users"]["guests"] == 1
+    assert [u["method"] for u in s["userList"]] == ["wechat"]
+    assert s["userList"][0]["identities"][0]["kind"] == "wechat"
+
+
+def test_apple_name_and_email_kept_for_admin(app, client):
+    import base64, json
+    def token(claims):
+        enc = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")
+        return f"{enc({'alg': 'none'})}.{enc(claims)}.sig"
+    t = token({"sub": "apple-123456789", "email": "kid@privaterelay.appleid.com"})
+    client.post("/api/auth/apple", json={"identityToken": t, "profile": {"nickname": "张小明"}})
+    client.post("/api/auth/apple", json={"identityToken": t, "profile": {}})  # 之后登录 Apple 不再给姓名
+    pw = _enable(app)
+    client.post("/admin/login", json={"password": pw})
+    u = client.get("/admin/api/stats").get_json()["userList"][0]
+    assert u["name"] == "张小明"
+    assert u["identities"] == [{"kind": "apple", "value": "kid@privaterelay.appleid.com"}]
 
 
 def test_admin_excludes_review_account(app, client):

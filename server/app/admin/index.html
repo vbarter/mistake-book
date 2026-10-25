@@ -101,6 +101,8 @@
   td .who { display: flex; flex-direction: column; }
   td .who small { color: var(--tertiary); }
   td.muted { color: var(--tertiary); }
+  .ids { display: flex; flex-direction: column; gap: 4px; }
+  .id { display: inline-flex; align-items: center; gap: 6px; }
   .empty { color: var(--tertiary); text-align: center; padding: 24px 0; font-size: 13px; }
   .more { display: block; width: 100%; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--brand); padding: 12px; font: inherit; font-weight: 600; cursor: pointer; }
 
@@ -230,7 +232,7 @@ function render() {
   ${!d.trackingSince || new Date(d.trackingSince) > new Date(d.daily[0].date) ? `<div class="note">使用记录（活跃、扫描、导出）是从后台上线那天开始记的，之前的这几项没有数据；注册人数是完整的历史。</div>` : ""}
 
   <section class="kpis">
-    ${kpi("注册用户", fmt(u.total), `今日 <b>+${u.new.today}</b> · 近 7 天 +${u.new.d7}`)}
+    ${kpi("注册用户", fmt(u.total), `今日 <b>+${u.new.today}</b> · 近 7 天 +${u.new.d7}${u.guests ? ` · 另有 ${u.guests} 个游客` : ""}`)}
     ${kpi("今日活跃", fmt(a.today), `占注册 ${pct(a.today, u.total)}%`)}
     ${kpi("近 7 天活跃", fmt(a.d7), `占注册 ${pct(a.d7, u.total)}%`)}
     ${kpi("近 30 天活跃", fmt(a.d30), `占注册 ${pct(a.d30, u.total)}%`)}
@@ -282,7 +284,7 @@ function render() {
       ${hbars(platformRows, { dot: true, base: activeTotal })}
     </div>
     <div class="card">
-      <h2>注册方式<small>全部用户</small></h2>
+      <h2>注册方式<small>全部注册用户</small></h2>
       ${hbars(methodRows, { base: u.total })}
       <h2 style="margin-top:4px">年级分布<small>全部用户</small></h2>
       <div style="max-height:220px;overflow:auto">${hbars(gradeRows.filter((g) => g.value))}</div>
@@ -291,8 +293,8 @@ function render() {
 
   <section class="card table-card">
     <div class="table-head">
-      <h2>用户</h2><span class="hint" style="margin:0">次数、天数按近 ${d.days} 天统计</span>
-      <input id="q" type="search" placeholder="搜昵称、手机号尾号" value="${esc(query)}">
+      <h2>用户</h2><span class="hint" style="margin:0">一个手机号 / Apple 账号 / 微信算一个人；次数、天数按近 ${d.days} 天统计</span>
+      <input id="q" type="search" placeholder="搜姓名、手机号、Apple 邮箱" value="${esc(query)}">
     </div>
     <div class="scroll" id="table"></div>
   </section>`;
@@ -321,8 +323,8 @@ function bindChart() {
 }
 
 const COLS = [
-  { k: "nickname", t: "用户" },
-  { k: "method", t: "注册方式" },
+  { k: "name", t: "用户" },
+  { k: "method", t: "账号" },
   { k: "grade", t: "年级" },
   { k: "platform", t: "最近用的端" },
   { k: "createdAt", t: "注册时间" },
@@ -334,7 +336,8 @@ const COLS = [
 ];
 
 function renderTable() {
-  let rows = data.userList.filter((u) => !query || (u.nickname || "").includes(query) || (u.phone || "").includes(query));
+  const q = query.toLowerCase();
+  let rows = data.userList.filter((u) => !q || [u.name, u.nickname, ...u.identities.map((i) => i.value)].some((v) => (v || "").toLowerCase().includes(q)));
   rows = rows.slice().sort((x, y) => {
     const a = x[sortKey] ?? "", b = y[sortKey] ?? "";
     return (a > b ? 1 : a < b ? -1 : 0) * sortDir;
@@ -345,8 +348,8 @@ function renderTable() {
       <thead><tr>${COLS.map((c) => `<th data-k="${c.k}" class="${c.r ? "r" : ""}">${c.t}${sortKey === c.k ? ` <span class="arrow">${sortDir > 0 ? "↑" : "↓"}</span>` : ""}</th>`).join("")}</tr></thead>
       <tbody>${shown.map((u) => `
         <tr>
-          <td><span class="who"><span>${esc(u.nickname)}</span><small class="num">${esc(u.phone || "")}</small></span></td>
-          <td><span class="pill p-${u.method}">${METHOD[u.method]}</span></td>
+          <td><span class="who"><span>${esc(u.name)}</span>${u.name !== u.nickname ? `<small>称呼：${esc(u.nickname)}</small>` : ""}</span></td>
+          <td><span class="ids">${u.identities.map((i) => `<span class="id"><span class="pill p-${i.kind}">${METHOD[i.kind]}</span><span class="num">${esc(i.value)}</span></span>`).join("")}</span></td>
           <td>${u.grade ? GRADE(u.grade) : "—"}</td>
           <td class="${u.platform ? "" : "muted"}">${u.platform ? `<span class="dot" style="background:var(--c-${u.platform})"></span> ${PLATFORM_SHORT[u.platform]}` : "—"}</td>
           <td class="num">${dateStr(u.createdAt)}</td>

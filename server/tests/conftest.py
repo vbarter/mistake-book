@@ -26,6 +26,7 @@ def app():
             "UPLOAD_DIR": tmp,
             "AI_PROVIDER": "mock",
             "SMS_PROVIDER": "mock",
+            "ADMIN_PASSWORD": "",  # 本机 .env 里可能配了后台密码，测试里默认关闭
         }
     )
     from app.extensions import db

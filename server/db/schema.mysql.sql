@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash     VARCHAR(255) NULL     COMMENT '登录密码哈希（手机号注册时设置）',
   apple_sub         VARCHAR(128) NULL     COMMENT 'Apple 登录的 sub',
   wx_openid         VARCHAR(64)  NULL     COMMENT '微信小程序 openid',
+  apple_name        VARCHAR(64)  NULL     COMMENT 'Apple 首次授权给的姓名',
+  apple_email       VARCHAR(128) NULL     COMMENT 'Apple identityToken 里的邮箱',
   nickname          VARCHAR(32)  NOT NULL DEFAULT '小同学',
   grade             VARCHAR(4)   NOT NULL DEFAULT '5' COMMENT '年级 3-6',
   subjects          JSON         NULL     COMMENT '开启的学科数组，如 ["math","chinese"]',
@@ -149,3 +151,5 @@ CREATE TABLE IF NOT EXISTS usage_events (
 -- ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL COMMENT '登录密码哈希' AFTER phone;
 -- 已有库升级：管理后台的活跃统计（用 root 执行；usage_events 用上面的 CREATE TABLE）
 -- ALTER TABLE users ADD COLUMN last_active_at DATETIME NULL COMMENT '最近一次打开 / 使用' AFTER created_at, ADD COLUMN last_platform VARCHAR(12) NULL COMMENT '最近用的端' AFTER last_active_at, ADD KEY ix_users_last_active_at (last_active_at);
+-- 已有库升级：管理后台按账号认人（用 root 执行）
+-- ALTER TABLE users ADD COLUMN apple_name VARCHAR(64) NULL COMMENT 'Apple 首次授权给的姓名' AFTER wx_openid, ADD COLUMN apple_email VARCHAR(128) NULL COMMENT 'Apple identityToken 里的邮箱' AFTER apple_name;

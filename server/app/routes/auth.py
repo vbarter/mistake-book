@@ -267,9 +267,20 @@ def login_with_apple():
         user = User(apple_sub=sub)
         _apply_profile(user, data.get("profile") or {})
         db.session.add(user)
-        db.session.commit()
         kind = "signup"
+    _remember_apple_identity(user, claims, data.get("profile") or {})
+    db.session.commit()
     return _issue(user, kind, "apple")
+
+
+def _remember_apple_identity(user: User, claims: dict, profile: dict) -> None:
+    """记下 Apple 给的姓名（只在首次授权时有）和邮箱，管理后台用来认人。"""
+    name = str(profile.get("nickname") or "").strip()[:64]
+    if name and not user.apple_name:
+        user.apple_name = name
+    email = str(claims.get("email") or "").strip()[:128]
+    if email:
+        user.apple_email = email
 
 
 def _wx_openid(code: str) -> str:
@@ -344,6 +355,7 @@ def bind_account():
         if User.query.filter(User.apple_sub == claims.get("sub"), User.id != user.id).first():
             abort(400, "该 Apple ID 已绑定其他账号")
         user.apple_sub = claims.get("sub")
+        _remember_apple_identity(user, claims, data.get("profile") or {})
     else:
         abort(400, "缺少绑定信息")
     db.session.commit()
