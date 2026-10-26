@@ -1069,3 +1069,48 @@ def test_set_password_after_code_login(client):
     s = client.post("/api/auth/password", json={"password": "abc12345", "code": code("reset")}, headers=h)
     assert s.status_code == 200 and s.get_json()["user"]["hasPassword"] is True
     assert client.post("/api/auth/login/password", json={"phone": phone, "password": "abc12345"}).status_code == 200
+
+
+def test_delete_account_removes_server_data(client, auth):
+    client.get("/api/auth/me", headers=auth)
+    client.post("/api/digitize", json={"pages": [{"image": TINY_PNG}]}, headers=auth)
+    r = client.delete("/api/auth/me", headers=auth)
+    assert r.status_code == 200
+    assert client.get("/api/auth/me", headers=auth).status_code == 401
+    # 同一个号码可以重新注册
+    code = client.post("/api/auth/code", json={"phone": "13800000000", "purpose": "register"}).get_json()["devCode"]
+    assert client.post("/api/auth/register", json={"phone": "13800000000", "code": code}).status_code == 200
+
+
+def test_listening_questions_are_left_out():
+    """听力没有录音：跨页的听力题不出题、答案清空；后面的笔试部分照常。"""
+    from app.ai.digitize import clean_sheets, clear_listening_answers, derive_questions, listening_blocks
+
+    p1 = clean_sheets({"sheets": [{"blocks": [
+        {"type": "section", "label": "Part 1", "title": "Listening(第一部分 听力)"},
+        {"type": "section", "label": "A", "title": "Listen and choose the right picture"},
+        {"type": "item", "number": "1", "text": "[[1]]", "blanks": [{"id": "1", "student": "", "answer": "B", "analysis": "猜的"}]},
+    ]}]}, 0)
+    p2 = clean_sheets({"sheets": [{"blocks": [
+        {"type": "item", "number": "2", "text": "2. The boy is ____ [[2]]", "blanks": [{"id": "2", "student": "happy", "mark": "unmarked", "answer": "sad"}]},
+        {"type": "section", "label": "Part 2", "title": "Vocabulary and Grammar"},
+        {"type": "item", "number": "3", "text": "3. He ____ a book. [[3]]", "options": ["A. read", "B. reads"], "blanks": [{"id": "3", "student": "", "answer": "B"}]},
+    ]}]}, 1)
+    sheets = p1 + p2
+    assert listening_blocks(sheets) == {(0, 2), (1, 0)}  # 听力从第 1 页跨到第 2 页
+    assert clear_listening_answers(sheets) == 2
+    assert sheets[0].blocks[2].blanks[0].answer == "" and sheets[1].blocks[0].blanks[0].answer == ""
+    assert [q.number for q in derive_questions(sheets)] == ["3"]
+    assert sheets[1].blocks[2].blanks[0].answer == "B"  # 笔试部分不受影响
+
+
+def test_chinese_listening_section_is_left_out():
+    from app.ai.digitize import clean_sheets, derive_questions
+
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "section", "label": "一", "title": "听力部分", "instruction": "听录音，选出你听到的单词"},
+        {"type": "item", "number": "1", "text": "[[1]]", "blanks": [{"id": "1", "student": ""}]},
+        {"type": "section", "label": "二", "title": "单项选择"},
+        {"type": "item", "number": "2", "text": "[[2]]", "blanks": [{"id": "2", "student": ""}]},
+    ]}]}, 0)
+    assert [q.number for q in derive_questions(sheets)] == ["2"]

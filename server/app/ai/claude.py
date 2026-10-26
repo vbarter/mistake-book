@@ -20,7 +20,7 @@ from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
 from . import ocr
 from . import queue as page_queue
-from .digitize import _nearby_wordbank, _render_text, clean_sheets, derive_questions, drop_ghost_sheets, snap_figures, unreadable
+from .digitize import _nearby_wordbank, _render_text, clear_listening_answers, clean_sheets, derive_questions, drop_ghost_sheets, listening_blocks, snap_figures, unreadable
 
 log = logging.getLogger(__name__)
 
@@ -515,6 +515,7 @@ class ClaudeProvider(AIProvider):
         futures = [page_queue.submit(lambda i=i, p=p: one(i, p), on_start=started) for i, p in enumerate(pages)]
         results = [f.result() for f in futures]
         sheets = drop_ghost_sheets([sheet for group in results for sheet in group])
+        clear_listening_answers(sheets)
         # 第二步：老师没批改、按答案也对不上的空，交给大模型统一阅卷（能看到全卷 OCR，词库在别页也能判）
         try:
             self.grade_unmarked(sheets)
@@ -539,17 +540,19 @@ class ClaudeProvider(AIProvider):
 
     @staticmethod
     def _ungraded(sheets: list[DigitizedPage]) -> int:
-        return sum(1 for s in sheets for blk in s.blocks if blk.type in ("item", "passage") for b in blk.blanks if b.mark == "unmarked" and b.student.strip() and not unreadable(b.student))
+        listening = listening_blocks(sheets)
+        return sum(1 for si, s in enumerate(sheets) for bi, blk in enumerate(s.blocks) if blk.type in ("item", "passage") and (si, bi) not in listening for b in blk.blanks if b.mark == "unmarked" and b.student.strip() and not unreadable(b.student))
 
     def _grade_round(self, sheets: list[DigitizedPage], batch: int) -> int:
         todo: list[tuple[str, DigitizedBlank, str]] = []
+        listening = listening_blocks(sheets)  # 听力没有录音，判不了，不送
         for si, sheet in enumerate(sheets):
             section = ""
             for bi, block in enumerate(sheet.blocks):
                 if block.type == "section":
                     section = " ".join(x for x in [block.label, block.title, block.instruction] if x)
                     continue
-                if block.type not in ("item", "passage"):
+                if block.type not in ("item", "passage") or (si, bi) in listening:
                     continue
                 options = block.options or (_nearby_wordbank(sheet.blocks, bi) if block.type == "passage" else [])
                 for b in block.blanks:

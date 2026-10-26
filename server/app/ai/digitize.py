@@ -453,10 +453,42 @@ def _nearby_wordbank(blocks: list[DigitizedBlock], i: int) -> list[str]:
     return []
 
 
-def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
-    questions: list[DigitizedQuestion] = []
+_LISTENING = re.compile(r"listen|听力|听到|听对话|听短文|听录音|听下面|听一段", re.I)
+
+
+def listening_blocks(sheets: list[DigitizedPage]) -> set[tuple[int, int]]:
+    """听力部分的题块（sheet 下标, 块下标）。卷子上只有题目没有录音，答案没法从卷面得出：
+    从标题含「Listen / 听力 / 听到…」的大题开始，跨页一直算到下一个不是听力的大题为止。"""
+    out: set[tuple[int, int]] = set()
+    listening = False
     for si, sheet in enumerate(sheets):
         for bi, block in enumerate(sheet.blocks):
+            if block.type == "section":
+                listening = bool(_LISTENING.search(" ".join(x for x in (block.label, block.title, block.instruction) if x)))
+            elif listening and block.type in ("item", "passage"):
+                out.add((si, bi))
+    return out
+
+
+def clear_listening_answers(sheets: list[DigitizedPage]) -> int:
+    """听力题的「正确答案」是大模型没听录音猜的，清掉，免得电子版上显示错的答案。返回清了几个空。"""
+    n = 0
+    for si, bi in listening_blocks(sheets):
+        for b in sheets[si].blocks[bi].blanks:
+            if b.answer or b.analysis:
+                b.answer, b.analysis = "", ""
+                n += 1
+    return n
+
+
+def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
+    """从卷面派生题目。听力题不出题：没有录音，判不了对错，也不算错题 / 未作答（卷面上照常保留）。"""
+    questions: list[DigitizedQuestion] = []
+    skip = listening_blocks(sheets)
+    for si, sheet in enumerate(sheets):
+        for bi, block in enumerate(sheet.blocks):
+            if (si, bi) in skip:
+                continue
             if block.type == "item":
                 blanks = block.blanks
                 stem = _render_text(block.text, blanks, None)

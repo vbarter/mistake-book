@@ -406,7 +406,12 @@ def update_me():
 @bp.delete("/auth/me")
 @login_required
 def delete_me():
+    """注销账号：账号和服务器上跟这个人有关的记录全部删掉（App Store 要求 App 内能注销）。本机的试卷照片在设备上，不受影响。"""
+    from ..models import DigitizeJob, PracticeSession, ReviewLog, UsageEvent
+
     user = current_user()
+    for model in (ReviewLog, PracticeSession, DigitizeJob, UsageEvent):
+        model.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     db.session.delete(user)
     db.session.commit()
     return jsonify({"ok": True})
