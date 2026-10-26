@@ -386,7 +386,7 @@ def test_claude_digitize_cleans_fields(monkeypatch):
     assert qs[0].options == ["A. repairs", "B. awards"] and qs[0].questionType == "choice" and qs[0].mark == "correct"
     assert qs[1].stemText == "Students win (36)____ and make ____." and qs[1].correctAnswer == "A"
     assert qs[2].stemText == "There are some nice ____ here. (bakery)"
-    assert qs[3].mark == "partial" and qs[3].studentAnswer == "Did；sets" and qs[3].correctAnswer == "set" and "改为一般疑问句" in qs[3].stemText
+    assert qs[3].mark == "partial" and qs[3].studentAnswer == "Did；sets" and qs[3].correctAnswer == "Did；set" and "改为一般疑问句" in qs[3].stemText
 
 
 def test_digitize_dedupes_label_block_and_notes():
@@ -1193,3 +1193,69 @@ def test_split_choice_word_not_in_options_is_resolved_by_model(monkeypatch):
     assert len(asked) == 1 and "【空】" in asked[0] and "B. spare" in asked[0]
     assert [q.number for q in qs] == ["66"] and qs[0].correctAnswer == "B" and qs[0].options[1] == "B. spare"
     assert sheets[1].blocks[0].blanks[0].answer == "B"
+
+
+def test_scratch_work_next_to_answer_is_not_marked_wrong():
+    """学生在答案旁写了草稿，识别时一起抄进来（多行）：按第一行 / 几部分合起来判，不判错。"""
+    from app.ai.digitize import auto_mark
+
+    assert auto_mark("unmarked", "-1\n(0,0)", "-1") == "correct"
+    assert auto_mark("unmarked", "$>$\n$y_1=c-1$\n$y_2=c-16$", "$>$") == "correct"
+    assert auto_mark("unmarked", "C\nS1/S2=AD/AB", "C", "choice") == "correct"
+    assert auto_mark("unmarked", "矩形 CDHG\n矩形 ABGH", "矩形 CDHG、矩形 ABGH") == "correct"
+    assert auto_mark("unmarked", "5\n(0,0)", "-1") == "wrong"  # 第一行就错了，照样判错
+
+
+def test_multi_blank_answers_keep_repeats():
+    """物理 3：三个空 B；A；B，合成一题时不能去重成 B；A。"""
+    from app.ai.digitize import clean_sheets, derive_questions
+
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "item", "number": "3", "text": "(1)[[3-1]] (2)[[3-2]] (3)[[3-3]]", "blanks": [
+            {"id": "3-1", "student": "", "answer": "B"}, {"id": "3-2", "student": "", "answer": "A"}, {"id": "3-3", "student": "", "answer": "B"}]},
+        {"type": "item", "number": "2", "text": "湖南省[[2-1]]部，湘江自[[2-2]]向[[2-3]]", "blanks": [
+            {"id": "2-1", "student": "南", "answer": "南"}, {"id": "2-2", "student": "北", "answer": "南"}, {"id": "2-3", "student": "北", "answer": "北"}]},
+    ]}]}, 0)
+    qs = derive_questions(sheets)
+    assert qs[0].correctAnswer == "B；A；B"
+    assert qs[1].correctAnswer == "南；南；北" and qs[1].studentAnswer == "南；北；北"
+
+
+def test_intro_of_big_question_is_not_a_question():
+    """物理 17：题干单独成了一个没有空的 item，下面才是 17(1)–(2)，题干不算一道题；没有小题的无空 item 照常保留。"""
+    from app.ai.digitize import clean_sheets, derive_questions
+
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "item", "number": "17", "text": "小华和小明利用小灯泡制作灯带……", "blanks": []},
+        {"type": "item", "number": "17(1)", "text": "电压表示数为[[17-1]]", "blanks": [{"id": "17-1", "student": "", "answer": "1.5V"}]},
+        {"type": "item", "number": "17(2)", "text": "补全电路[[17-2]]", "blanks": [{"id": "17-2", "student": "", "answer": "下端接B"}]},
+        {"type": "item", "number": "18", "text": "画出受力示意图", "blanks": []},
+    ]}]}, 0)
+    assert [q.number for q in derive_questions(sheets)] == ["17(1)", "17(2)", "18"]
+
+
+def test_word_bank_recognised_as_figure_becomes_word_bank():
+    """英语 40–43：词库方框被识别成表格 figure，短文又拆成两块；改成 wordbank 后两块短文的空都拿到选项。"""
+    from app.ai.digitize import clean_sheets, derive_questions
+
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "figure", "title": "表格", "text": "词库方框：A. placed；B. goal；C. method；D. detailed；E. exactly", "bbox": [0.1, 0.05, 0.9, 0.1]},
+        {"type": "passage", "text": "3. Memory Map Show students a [[40]] map. The [[41]] is to fill in.", "blanks": [
+            {"id": "40", "student": "", "answer": "D"}, {"id": "41", "student": "", "answer": "B"}]},
+        {"type": "passage", "text": "4. Matching Pairs Cards are [[42]] face down, or [[43]] the same card.", "blanks": [
+            {"id": "42", "student": "", "answer": "A"}, {"id": "43", "student": "", "answer": "E"}]},
+    ]}]}, 0)
+    assert sheets[0].blocks[0].type == "wordbank" and sheets[0].blocks[0].options[3] == "D. detailed"
+    qs = derive_questions(sheets)
+    assert [q.number for q in qs] == ["40", "41", "42", "43"]
+    assert all(q.options[:2] == ["A. placed", "B. goal"] and q.questionType == "choice" for q in qs)
+
+
+def test_real_figure_with_lettered_labels_stays_a_figure():
+    from app.ai.digitize import clean_sheets
+
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "figure", "title": "图6", "text": "左侧试管 A. 白磷 B. 水 C. 气球，右侧注射器", "bbox": [0.1, 0.2, 0.5, 0.4]},
+        {"type": "item", "number": "3", "text": "[[3]]", "blanks": [{"id": "3", "student": ""}]},
+    ]}]}, 0)
+    assert sheets[0].blocks[0].type == "figure"

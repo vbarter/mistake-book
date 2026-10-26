@@ -67,6 +67,16 @@ def auto_mark(mark: str, student: str, answer: str, question_type: str = "fill")
     ns = _norm_answer(s)
     if any(_norm_answer(x) == ns for x in alts):
         return "correct"
+    # 学生在答案旁边写了草稿 / 演算，识别时一起抄进来了（多行）：第一行是填在空上的答案，和正确答案一致就算对；
+    # 或者几行合起来正好是答案的几个部分（「矩形 CDHG」「矩形 ABGH」对「矩形 CDHG、矩形 ABGH」）
+    lines = [x for x in s.splitlines() if x.strip()]
+    if len(lines) > 1:
+        first = _norm_answer(lines[0])
+        if any(_norm_answer(x) == first for x in alts):
+            return "correct"
+        parts = {_norm_answer(x) for x in re.split(r"[、,，;；]|\s和\s", a) if x.strip()}
+        if len(parts) == len(lines) and {_norm_answer(x) for x in lines} == parts:
+            return "correct"
     # 算式、函数式这类答案写法很多（因式分解 / 展开、分数 / 小数），字面不同不代表错：留给 AI 阅卷判等价
     if question_type != "choice" and any(re.search(r"[=/\\]|[a-z]\d|\d[a-z]|√", _norm_answer(x)) for x in alts):
         return mark
@@ -208,9 +218,32 @@ def _merge_labels(blocks: list[DigitizedBlock]) -> list[DigitizedBlock]:
     return out
 
 
+_BANK_OPTION = re.compile(r"(?<![A-Za-z])([A-H])\s*[.．、)）]\s*([A-Za-z\u4e00-\u9fff][^；;。,，\n]*?)(?=\s*(?:[；;，,、]|\s+[A-H]\s*[.．、)）]|$))")
+_BANK_HINT = re.compile(r"词库|方框|选词|box|words|phrases", re.I)
+
+
+def _wordbank_from_figure(blocks: list[DigitizedBlock]) -> list[DigitizedBlock]:
+    """词库方框有时被识别成插图 / 表格（text 是「词库方框：A. placed；B. goal；…」），选项就挂不到短文上。
+    figure 的文字里有 3 个以上「字母. 词」、并且写明是词库或紧挨着带空的短文时，改成 wordbank。"""
+    for i, b in enumerate(blocks):
+        if b.type != "figure" or b.blanks:
+            continue
+        text = " ".join(x for x in (b.title, b.text) if x)
+        found = [(c, w.strip()) for c, w in _BANK_OPTION.findall(text)]
+        letters = [c for c, _ in found]
+        if len(found) < 3 or letters != [chr(ord("A") + k) for k in range(len(letters))]:
+            continue
+        near_passage = any(0 <= j < len(blocks) and blocks[j].type == "passage" and blocks[j].blanks for j in (i + 1, i + 2, i - 1))
+        if _BANK_HINT.search(text) or near_passage:
+            b.type = "wordbank"
+            b.options = [f"{c}. {w}" for c, w in found]
+            b.text = ""
+    return blocks
+
+
 def clean_sheet(raw: dict, page: int) -> DigitizedPage:
     subject = raw.get("subject") if raw.get("subject") in SUBJECTS else ""
-    blocks = merge_figures(_merge_labels([b for b in (clean_block(x, subject or "math") for x in (raw.get("blocks") or [])) if b]))
+    blocks = _wordbank_from_figure(merge_figures(_merge_labels([b for b in (clean_block(x, subject or "math") for x in (raw.get("blocks") or [])) if b])))
     if not subject:
         # 卷面没判出学科时按题块多数推断
         counts: dict[str, int] = {}
@@ -446,10 +479,16 @@ def _join(parts: list[str]) -> str:
 
 
 def _nearby_wordbank(blocks: list[DigitizedBlock], i: int) -> list[str]:
-    """passage 的词库框通常紧挨着短文（前或后），中间最多隔一个块。"""
+    """passage 的词库框通常紧挨着短文（前或后），中间最多隔一个块；
+    一篇短文被拆成几个 passage 块（「3. Memory Map」「4. Matching Pairs」）时，往前越过这几块找。"""
     for j in (i - 1, i + 1, i - 2, i + 2):
         if 0 <= j < len(blocks) and blocks[j].type == "wordbank":
             return list(blocks[j].options)
+    j = i - 1
+    while j >= 0 and blocks[j].type == "passage":
+        j -= 1
+    if j >= 0 and blocks[j].type == "wordbank":
+        return list(blocks[j].options)
     return []
 
 
@@ -593,8 +632,11 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
                 if block.instruction:
                     stem = f"{stem}（{block.instruction}）" if not block.instruction.startswith("（") else f"{stem}{block.instruction}"
                 if len(blanks) > 1:
-                    student = _join([f"{b.student}" for b in blanks])
-                    answer = _join([b.answer for b in blanks])
+                    # 学生作答和答案按空一一对应，相同的也要保留（「B；A；B」不能变成「B；A」）；批注、解析才去重
+                    student = "；".join(b.student for b in blanks) if any(b.student.strip() for b in blanks) else ""
+                    # 判对的空模型通常不给答案：用学生写的（它就是对的），整题答案才完整（「Did；set」而不是「；set」）
+                    per_blank = [b.answer or (b.student if b.mark == "correct" else "") for b in blanks]
+                    answer = "；".join(per_blank) if any(x.strip() for x in per_blank) else ""
                 else:
                     student = blanks[0].student if blanks else ""
                     answer = blanks[0].answer if blanks else ""
@@ -653,4 +695,7 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
                         )
                     )
     _with_parent_numbers(questions, sheets)
+    # 大题的引导语（如「17. 小华和小明……」，下面是 17(1)–(4)）被识别成没有空的 item：不是一道题，去掉
+    numbers = [q.number for q in questions]
+    questions = [q for q in questions if q.blankIds or not any(n.startswith(q.number + "(") for n in numbers if q.number)]
     return questions
