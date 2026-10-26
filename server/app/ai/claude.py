@@ -20,7 +20,7 @@ from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
 from . import ocr
 from . import queue as page_queue
-from .digitize import _nearby_wordbank, _render_text, clear_listening_answers, clean_sheets, derive_questions, drop_ghost_sheets, listening_blocks, snap_figures, unreadable
+from .digitize import _nearby_wordbank, _render_text, clear_listening_answers, clean_sheets, reconcile_split_choices, derive_questions, drop_ghost_sheets, listening_blocks, snap_figures, unreadable
 
 log = logging.getLogger(__name__)
 
@@ -516,6 +516,7 @@ class ClaudeProvider(AIProvider):
         results = [f.result() for f in futures]
         sheets = drop_ghost_sheets([sheet for group in results for sheet in group])
         clear_listening_answers(sheets)
+        reconcile_split_choices(sheets)
         # 第二步：老师没批改、按答案也对不上的空，交给大模型统一阅卷（能看到全卷 OCR，词库在别页也能判）
         try:
             self.grade_unmarked(sheets)

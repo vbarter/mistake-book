@@ -481,13 +481,96 @@ def clear_listening_answers(sheets: list[DigitizedPage]) -> int:
     return n
 
 
-def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
-    """从卷面派生题目。听力题不出题：没有录音，判不了对错，也不算错题 / 未作答（卷面上照常保留）。"""
-    questions: list[DigitizedQuestion] = []
-    skip = listening_blocks(sheets)
+_PLACEHOLDER_ONLY = re.compile(r"^[\s_＿.．、:：()（）0-9]*$")
+_LETTER = re.compile(r"^\s*([A-Ha-h])\s*[.．、)）]?\s*(.*)$", re.S)
+
+
+def _option_text(option: str) -> tuple[str, str]:
+    """「A. However」→（"A", "However"）。"""
+    m = _LETTER.match(option)
+    return (m.group(1).upper(), m.group(2).strip()) if m else ("", option.strip())
+
+
+def split_choice_links(sheets: list[DigitizedPage]) -> dict[tuple[int, int], tuple[int, int, str]]:
+    """跨页拆开的选择题：短文（带空）在一页、选项在后一页（完形填空常见）。
+    每张照片单独识别，于是短文页出「没有选项的空」，选项页出「只有选项、题干为空的选择题」，同一题号出两遍。
+    返回 {选项块位置: (短文所在 sheet, 块下标, 空 id)}：选项块并进短文的那个空，不再单独出题。"""
+    blanks: dict[str, tuple[int, int, str]] = {}  # 题号 → 最近一个没有选项的短文空
+    links: dict[tuple[int, int], tuple[int, int, str]] = {}
     for si, sheet in enumerate(sheets):
         for bi, block in enumerate(sheet.blocks):
-            if (si, bi) in skip:
+            if block.type == "passage" and not _nearby_wordbank(sheet.blocks, bi):
+                for b in block.blanks:
+                    blanks[(b.number or b.id).strip()] = (si, bi, b.id)
+            elif block.type == "item" and block.options and len(block.blanks) == 1:
+                num = (block.number or block.blanks[0].number or block.blanks[0].id).strip()
+                stem = BLANK_RE.sub("", block.text).replace(num, "")
+                hit = blanks.get(num)
+                if hit and hit[0] < si and _PLACEHOLDER_ONLY.match(stem):
+                    links[(si, bi)] = hit
+    return links
+
+
+def reconcile_split_choices(sheets: list[DigitizedPage]) -> int:
+    """跨页选择题两边答案对齐：短文那页看得到上下文，它给的词换成选项字母；
+    选项那页只看得到选项、答案是猜的，改成同一个字母。返回对上了几题。"""
+    n = 0
+    for (si, bi), (ps, pb, bid) in split_choice_links(sheets).items():
+        item = sheets[si].blocks[bi]
+        blank = next(b for b in sheets[ps].blocks[pb].blanks if b.id == bid)
+        word = _norm_answer(blank.answer)
+        letter = ""
+        for opt in item.options:
+            code, text = _option_text(opt)
+            if word and (word == _norm_answer(text) or word == code.lower()):
+                letter = code
+                break
+        if not letter:
+            continue  # 对不上就保持原样（选项页自己的答案）
+        blank.answer = letter
+        target = item.blanks[0]
+        target.answer, target.analysis = letter, blank.analysis or target.analysis
+        n += 1
+    return n
+
+
+_SUB_NUMBER = re.compile(r"^[(（][0-9一二三四五六七八九十]+[)）]|^[①②③④⑤⑥⑦⑧⑨⑩]")
+_PARENT = re.compile(r"^(\d+)\s*(?:[(（]|$)")
+
+
+def _with_parent_numbers(questions: list[DigitizedQuestion], sheets: list[DigitizedPage]) -> None:
+    """小题题号只写了「(3)」「(7)①」时补上所属大题号（「12(3)」）：大题号取最近的数字大题标题（如「12. 调控化学变化」），
+    或前面最近一个「11(2)」这样带大题号的题。全角括号统一成半角。"""
+    parent_at: dict[tuple[int, int], str] = {}
+    parent = ""
+    for si, sheet in enumerate(sheets):
+        for bi, block in enumerate(sheet.blocks):
+            if block.type == "section":
+                label = (block.label or "").strip().rstrip(".．、")
+                parent = label if label.isdigit() else ""
+            elif block.type in ("item", "passage"):
+                m = _PARENT.match((block.number or "").strip())
+                if m:
+                    parent = m.group(1)
+                parent_at[(si, bi)] = parent
+    for q in questions:
+        num = q.number.strip().replace("（", "(").replace("）", ")")
+        p = parent_at.get((q.sheet, q.blockIndex), "")
+        if p and _SUB_NUMBER.match(num):
+            num = p + num
+        q.number = num
+
+
+def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
+    """从卷面派生题目。听力题不出题：没有录音，判不了对错，也不算错题 / 未作答（卷面上照常保留）。
+    跨页拆开的选择题（短文一页、选项一页）合成一题；小题题号补上大题号。"""
+    questions: list[DigitizedQuestion] = []
+    skip = listening_blocks(sheets)
+    links = split_choice_links(sheets)
+    linked_options = {(ps, pb, bid): sheets[si].blocks[bi] for (si, bi), (ps, pb, bid) in links.items()}
+    for si, sheet in enumerate(sheets):
+        for bi, block in enumerate(sheet.blocks):
+            if (si, bi) in skip or (si, bi) in links:
                 continue
             if block.type == "item":
                 blanks = block.blanks
@@ -528,16 +611,21 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
             elif block.type == "passage":
                 options = _nearby_wordbank(sheet.blocks, bi)
                 for b in block.blanks:
+                    linked = linked_options.get((si, bi, b.id))
+                    opts = list(linked.options) if linked else options
+                    # 学生可能把选项圈在选项页上：短文空没写就用选项页的作答和批改
+                    other = linked.blanks[0] if linked else None
+                    use_other = other is not None and not b.student.strip() and other.student.strip()
                     questions.append(
                         DigitizedQuestion(
                             page=sheet.page,
                             number=b.number or b.id,
                             subject=block.subject,
-                            questionType="choice" if options else block.questionType,
+                            questionType="choice" if opts else block.questionType,
                             stemText=_render_text(block.text, block.blanks, b.id).strip(),
-                            options=options,
-                            studentAnswer=b.student,
-                            mark=b.mark,
+                            options=opts,
+                            studentAnswer=other.student if use_other else b.student,
+                            mark=other.mark if use_other else b.mark,
                             teacherNote=b.note,
                             bbox=list(block.bbox),
                             knowledgePoints=list(block.knowledgePoints),
@@ -548,7 +636,8 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
                             sheet=si,
                             blockIndex=bi,
                             blankIds=[b.id],
-                            aiGraded=b.aiGraded,
+                            aiGraded=other.aiGraded if use_other else b.aiGraded,
                         )
                     )
+    _with_parent_numbers(questions, sheets)
     return questions

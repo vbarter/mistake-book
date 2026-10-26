@@ -1114,3 +1114,57 @@ def test_chinese_listening_section_is_left_out():
         {"type": "item", "number": "2", "text": "[[2]]", "blanks": [{"id": "2", "student": ""}]},
     ]}]}, 0)
     assert [q.number for q in derive_questions(sheets)] == ["2"]
+
+
+def test_cloze_split_across_pages_becomes_one_question():
+    """短文在第 6 页、选项在第 7 页：合成一题，答案用短文页（看得到上下文）给的词对应的字母。"""
+    from app.ai.digitize import clean_sheets, derive_questions, reconcile_split_choices
+
+    p6 = clean_sheets({"sheets": [{"blocks": [
+        {"type": "section", "label": "B", "title": "Choose the best answer and complete the passage"},
+        {"type": "passage", "text": "Then I found an app. [[65]] I was busy. I have [[66]] time.", "blanks": [
+            {"id": "65", "number": "65", "student": "", "answer": "However", "analysis": "转折"},
+            {"id": "66", "number": "66", "student": "", "answer": "spare", "analysis": "空闲"},
+        ]},
+    ]}]}, 5)
+    p7 = clean_sheets({"sheets": [{"blocks": [
+        {"type": "item", "number": "65", "text": "[[65]]", "options": ["A. However", "B. At first", "C. In fact", "D. As a result"], "blanks": [{"id": "65", "student": "", "answer": "C"}]},
+        {"type": "item", "number": "66", "text": "66. ____ [[66]]", "options": ["A. busy", "B. spare", "C. happy", "D. rare"], "blanks": [{"id": "66", "student": "B", "mark": "correct", "answer": "D"}]},
+        {"type": "section", "label": "C", "title": "Fill in the blanks"},
+        {"type": "item", "number": "71", "text": "She is d[[71]] from others.", "blanks": [{"id": "71", "student": "", "answer": "different"}]},
+    ]}]}, 6)
+    sheets = p6 + p7
+    assert reconcile_split_choices(sheets) == 2
+    assert sheets[1].blocks[0].blanks[0].answer == "A" and sheets[1].blocks[1].blanks[0].answer == "B"  # 选项页的猜测被改掉
+    qs = derive_questions(sheets)
+    assert [q.number for q in qs] == ["65", "66", "71"]  # 不再重复
+    q65, q66 = qs[0], qs[1]
+    assert q65.options[0] == "A. However" and q65.correctAnswer == "A" and "app" in q65.stemText and q65.questionType == "choice"
+    assert q66.studentAnswer == "B" and q66.mark == "correct"  # 学生在选项页上作答，也算进来
+
+
+def test_options_only_item_without_matching_passage_is_kept():
+    from app.ai.digitize import clean_sheets, derive_questions
+
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "item", "number": "5", "text": "[[5]]", "options": ["A. x", "B. y"], "blanks": [{"id": "5", "student": "", "answer": "A"}]},
+    ]}]}, 0)
+    assert [q.number for q in derive_questions(sheets)] == ["5"]
+
+
+def test_sub_question_numbers_get_parent_number():
+    """化学卷：11 题 (1)(2)，12 题「调控化学变化」接着 (3)(4)，13 题 (7)①；小题号接着大题编，要补上大题号。"""
+    from app.ai.digitize import clean_sheets, derive_questions
+
+    sheets = clean_sheets({"sheets": [{"blocks": [
+        {"type": "section", "label": "六", "title": "化学变化"},
+        {"type": "item", "number": "11（1）", "text": "[[11-1]]", "blanks": [{"id": "11-1", "student": ""}]},
+        {"type": "item", "number": "11（2）", "text": "[[11-2]]", "blanks": [{"id": "11-2", "student": ""}]},
+        {"type": "section", "label": "12", "title": "调控化学变化"},
+        {"type": "item", "number": "(3)", "text": "[[3-1]]", "blanks": [{"id": "3-1", "student": ""}]},
+        {"type": "section", "label": "13.", "title": "应用化学变化"},
+        {"type": "item", "number": "(7)①", "text": "[[7-1]]", "blanks": [{"id": "7-1", "student": ""}]},
+        {"type": "section", "label": "七", "title": "下一大题"},
+        {"type": "item", "number": "(1)", "text": "[[1]]", "blanks": [{"id": "1", "student": ""}]},
+    ]}]}, 0)
+    assert [q.number for q in derive_questions(sheets)] == ["11(1)", "11(2)", "12(3)", "13(7)①", "(1)"]
