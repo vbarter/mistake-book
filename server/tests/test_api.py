@@ -1134,7 +1134,7 @@ def test_cloze_split_across_pages_becomes_one_question():
         {"type": "item", "number": "71", "text": "She is d[[71]] from others.", "blanks": [{"id": "71", "student": "", "answer": "different"}]},
     ]}]}, 6)
     sheets = p6 + p7
-    assert reconcile_split_choices(sheets) == 2
+    assert reconcile_split_choices(sheets) == []  # 两个词都在选项里，直接换成字母
     assert sheets[1].blocks[0].blanks[0].answer == "A" and sheets[1].blocks[1].blanks[0].answer == "B"  # 选项页的猜测被改掉
     qs = derive_questions(sheets)
     assert [q.number for q in qs] == ["65", "66", "71"]  # 不再重复
@@ -1168,3 +1168,28 @@ def test_sub_question_numbers_get_parent_number():
         {"type": "item", "number": "(1)", "text": "[[1]]", "blanks": [{"id": "1", "student": ""}]},
     ]}]}, 0)
     assert [q.number for q in derive_questions(sheets)] == ["11(1)", "11(2)", "12(3)", "13(7)①", "(1)"]
+
+
+def test_split_choice_word_not_in_options_is_resolved_by_model(monkeypatch):
+    """短文页给的词不在选项里（free ≠ spare）：再问一次大模型，带上短文和选项，拿字母。"""
+    from app.ai.base import Crop
+    from app.ai.claude import ClaudeProvider
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    asked = []
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        if "results" in schema["properties"] and "verdict" not in str(schema):
+            asked.append(content[0]["text"])
+            return {"results": [{"key": "c0", "answer": "B", "analysis": "spare time 空闲时间"}]}
+        if content[0]["source"]["data"] == "YQ==":  # 第一页：短文
+            return {"sheets": [{"blocks": [{"type": "passage", "text": "I have [[66]] time.", "blanks": [{"id": "66", "number": "66", "student": "", "answer": "free"}]}]}]}
+        return {"sheets": [{"blocks": [{"type": "item", "number": "66", "text": "[[66]]", "options": ["A. busy", "B. spare", "C. happy"], "blanks": [{"id": "66", "student": "", "answer": "C"}]}]}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    monkeypatch.setattr("app.ai.claude.ocr.enabled", lambda: False)
+    sheets, qs = provider.digitize_pages([Crop(data=b"a"), Crop(data=b"b")], subjects=["english"], grade="9")
+    assert len(asked) == 1 and "【空】" in asked[0] and "B. spare" in asked[0]
+    assert [q.number for q in qs] == ["66"] and qs[0].correctAnswer == "B" and qs[0].options[1] == "B. spare"
+    assert sheets[1].blocks[0].blanks[0].answer == "B"

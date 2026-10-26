@@ -20,7 +20,7 @@ from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
 from . import ocr
 from . import queue as page_queue
-from .digitize import _nearby_wordbank, _render_text, clear_listening_answers, clean_sheets, reconcile_split_choices, derive_questions, drop_ghost_sheets, listening_blocks, snap_figures, unreadable
+from .digitize import _nearby_wordbank, _render_text, clear_listening_answers, clean_sheets, option_letter, reconcile_split_choices, set_split_choice, derive_questions, drop_ghost_sheets, listening_blocks, snap_figures, unreadable
 
 log = logging.getLogger(__name__)
 
@@ -204,6 +204,29 @@ GRADE_SYSTEM_PROMPT = (
     "verdict 是你对学生作答的判定：correct（对）、wrong（错）、partial（部分对，只用于多空或解答题）；学生答案和正确答案数学上等价（因式分解式与展开式、分数与小数、化简前后、不同但正确的解法）一律算对；"
     "analysis 判错或部分对时写一句面向学生的解析（不超过 60 字），判对时留空；解答题改为 2 到 4 步标准解法，每步一行，最后一行用「错在：」指出学生哪一步出错。公式用 LaTeX 写在 $ 里（如 $\\frac{3}{4}$）。拿不准时也必须给出最可能的结论。"
 )
+
+SPLIT_CHOICE_SYSTEM_PROMPT = (
+    "你是认真负责的老师。下面每一题都是选择题：短文在试卷的一页，【空】标出这一题的位置；选项印在下一页。"
+    "请结合整篇短文的上下文，为每个空选出最恰当的选项。answer 只写选项字母（A/B/C/D…）；"
+    "analysis 用一句话（不超过 50 字）说明为什么选它。拿不准时也必须选一个最可能的。"
+)
+
+SPLIT_CHOICE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"key": {"type": "string"}, "answer": {"type": "string"}, "analysis": {"type": "string"}},
+                "required": ["key", "answer", "analysis"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["results"],
+    "additionalProperties": False,
+}
 
 GRADE_SCHEMA = {
     "type": "object",
@@ -516,13 +539,41 @@ class ClaudeProvider(AIProvider):
         results = [f.result() for f in futures]
         sheets = drop_ghost_sheets([sheet for group in results for sheet in group])
         clear_listening_answers(sheets)
-        reconcile_split_choices(sheets)
+        unresolved = reconcile_split_choices(sheets)
+        if unresolved:
+            try:
+                self._resolve_split_choices(unresolved)
+            except Exception as e:  # noqa: BLE001  失败就保留短文页给的词
+                log.warning("resolve split choices failed: %s", e)
         # 第二步：老师没批改、按答案也对不上的空，交给大模型统一阅卷（能看到全卷 OCR，词库在别页也能判）
         try:
             self.grade_unmarked(sheets)
         except Exception as e:  # noqa: BLE001  阅卷失败不影响还原结果
             log.warning("grade_unmarked failed: %s", e)
         return sheets, derive_questions(sheets)
+
+    def _resolve_split_choices(self, unresolved: list) -> int:
+        """跨页选择题（短文一页、选项一页）短文页给的词不在选项里时，把整篇短文和这个空的选项一起交给大模型选字母。"""
+        todo = []
+        for i, (item, blank, passage) in enumerate(unresolved):
+            text = _render_text(passage.text, passage.blanks, blank.id).replace("____", "【空】", 1)
+            todo.append((f"c{i}", item, blank, "\n".join([
+                f"题号：{blank.number or blank.id}（选择题，选项在下一页）",
+                f"短文（【空】是这一题）：{text[:3000]}",
+                f"选项：{'　'.join(item.options)}",
+            ])))
+        text = "\n\n".join(f"<blank key=\"{k}\">\n{ctx}\n</blank>" for k, _, _, ctx in todo)
+        data = self._call(SPLIT_CHOICE_SYSTEM_PROMPT, [{"type": "text", "text": text}], SPLIT_CHOICE_SCHEMA, max_tokens=4000)
+        by_key = {str(r.get("key")): r for r in data.get("results", []) if isinstance(r, dict)}
+        done = 0
+        for key, item, blank, _ in todo:
+            r = by_key.get(key) or {}
+            letter = option_letter(item.options, str(r.get("answer") or ""))
+            if letter:
+                set_split_choice(item, blank, letter, str(r.get("analysis") or "").strip()[:200])
+                done += 1
+        log.info("resolved %d/%d split choice(s)", done, len(todo))
+        return done
 
     def grade_unmarked(self, sheets: list[DigitizedPage], batch: int = 40, rounds: int = 2) -> int:
         """把仍是 unmarked（老师没批改、自动对答案也判不了）且学生写了作答的空交给大模型判对错；

@@ -511,27 +511,40 @@ def split_choice_links(sheets: list[DigitizedPage]) -> dict[tuple[int, int], tup
     return links
 
 
-def reconcile_split_choices(sheets: list[DigitizedPage]) -> int:
-    """跨页选择题两边答案对齐：短文那页看得到上下文，它给的词换成选项字母；
-    选项那页只看得到选项、答案是猜的，改成同一个字母。返回对上了几题。"""
-    n = 0
+def reconcile_split_choices(sheets: list[DigitizedPage]) -> list[tuple[DigitizedBlock, DigitizedBlank, DigitizedBlock]]:
+    """跨页选择题两边答案对齐：短文那页看得到上下文，它给的词如果正好是某个选项，就换成选项字母；
+    选项那页只看得到选项、答案是猜的，改成同一个字母。
+    返回对不上的（短文页给的词不在选项里）：[(选项块, 短文里的空, 短文块)]，交给大模型看着短文和选项重新选。"""
+    unresolved = []
     for (si, bi), (ps, pb, bid) in split_choice_links(sheets).items():
         item = sheets[si].blocks[bi]
-        blank = next(b for b in sheets[ps].blocks[pb].blanks if b.id == bid)
-        word = _norm_answer(blank.answer)
-        letter = ""
-        for opt in item.options:
-            code, text = _option_text(opt)
-            if word and (word == _norm_answer(text) or word == code.lower()):
-                letter = code
-                break
-        if not letter:
-            continue  # 对不上就保持原样（选项页自己的答案）
-        blank.answer = letter
-        target = item.blanks[0]
-        target.answer, target.analysis = letter, blank.analysis or target.analysis
-        n += 1
-    return n
+        passage = sheets[ps].blocks[pb]
+        blank = next(b for b in passage.blanks if b.id == bid)
+        letter = option_letter(item.options, blank.answer)
+        if letter:
+            set_split_choice(item, blank, letter, blank.analysis)
+        else:
+            unresolved.append((item, blank, passage))
+    return unresolved
+
+
+def option_letter(options: list[str], answer: str) -> str:
+    """答案（字母或选项内容）对应的选项字母；对不上返回空。"""
+    word = _norm_answer(answer or "")
+    for opt in options:
+        code, text = _option_text(opt)
+        if word and (word == _norm_answer(text) or word == code.lower()):
+            return code
+    return ""
+
+
+def set_split_choice(item: DigitizedBlock, blank: DigitizedBlank, letter: str, analysis: str) -> None:
+    """短文里的空和选项页的题统一成同一个字母答案。"""
+    blank.answer = letter
+    if analysis:
+        blank.analysis = analysis
+    target = item.blanks[0]
+    target.answer, target.analysis = letter, blank.analysis or target.analysis
 
 
 _SUB_NUMBER = re.compile(r"^[(（][0-9一二三四五六七八九十]+[)）]|^[①②③④⑤⑥⑦⑧⑨⑩]")
