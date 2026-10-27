@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
 import math
@@ -20,7 +21,10 @@ from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
 from . import ocr
 from . import queue as page_queue
-from .digitize import _nearby_wordbank, _render_text, clear_listening_answers, clean_sheets, option_letter, reconcile_split_choices, set_split_choice, derive_questions, drop_ghost_sheets, listening_blocks, snap_figures, unreadable
+from .digitize import (
+    BLANK_RE, _nearby_wordbank, _render_text, apply_context_answer, clear_listening_answers, clean_sheets, derive_questions, drop_ghost_sheets, join_page_breaks,
+    listening_blocks, merge_split_questions, needs_context, option_letter, parent_stems, reconcile_split_choices, set_split_choice, snap_figures, stem_lead, strip_page_chrome, unreadable,
+)
 
 log = logging.getLogger(__name__)
 
@@ -129,7 +133,7 @@ DIGITIZE_SYSTEM_PROMPT = (
     "- passage：短文、阅读材料、对话等整段文字。篇号（如「(A)」「(B)」）放 label，不要单独成块；原文逐字转写进 text；文中每个作答空格用 [[空号]] 占位（如 ...more fun than [[38]] classes），并在 blanks 里逐空记录。短文从第一个字开始完整转写，不要从中间开始，不要省略。短文下方供作答的横线行（如「40.____ 41.____」）不要写进 text，那里的手写字母记入对应空的 student；短文里的空一律记在该 passage 的 blanks 里，不要另拆成 item。\n"
     "- wordbank：选词填空的词库方框或一组共用选项，options 原样逐项（如「A. repairs」）。词库方框即使画成表格或带边框，也一定用 wordbank，不要用 figure。\n"
     "- item：一道小题。number 是题号原样，text 是题目原文（空格用 [[空号]] 占位；一题多空用 [[52-1]] [[52-2]]），hint 是句末括号里的给词（如「(bakery)」），instruction 是括号里的改写要求（如「改为一般疑问句」），选择题的选项放 options，blanks 逐空记录。\n"
-    "- text：页眉页脚、订正提醒等其他文字。\n"
+    "- text：订正提醒、材料出处等其他卷面文字。页眉页脚里的页码、试卷名，以及广告推广文字（家教平台、网站、二维码、「+V」之类的联系方式、整页的推广介绍）都不是卷面内容，不要输出成任何块（页码只写进 sheet 的 label）。\n"
     "- figure：插图、人物或场景插画、漫画 / 连环画、看图写话的图、统计图、函数图像、几何图形、实验装置图、表格等光靠文字还原不了的内容，原卷有几幅就输出几个 figure 块，放在它在原卷出现的位置。"
     "图片当选项的选择题（如「选出与图片相符的一项」下面 A、B、C 各是一张小图）：每个选项图各输出一个 figure，number 写本题题号，label 写选项字母（「A」）；这道 item 的 options 写成「A. （图）一个女孩在游泳」这样的字母加一句描述。"
     "图文配对题（图片上印着 A–F 等标号，下面的句子或短文选图作答）：每张标号图各输出一个 figure，label 写图上的标号（「A」「①」），number 留空（几道题共用），学生作答写选的标号。"
@@ -143,7 +147,7 @@ DIGITIZE_SYSTEM_PROMPT = (
     "每个空（blank）：id 与占位一致；number 是所属题号；student 只写学生手写内容的逐字转写（涂改后以最终答案为准；选择题、填空题只写填在答题处（横线、括号、答题框）里的最终答案，写在旁边或空白处的草稿、演算不要抄进来；解答题的解题过程按原来的步骤分行，每步一行；看不清的字用「□」，没写就留空，不要写「无法辨认」之类的描述）；"
     "mark 按老师的批改符号判定：打勾「✓」「√」「☑」或写了对号 = correct；打叉「✗」「×」、斜杠「/」、划掉、圈出 = wrong；半勾、打分低于满分、部分扣分 = partial；完全没有批改符号 = unmarked。"
     "没有写作答的空 mark = blank（未作答，单独一类，不是答错；student 留空，绝不要把正确答案填进 student）。note 只记录老师的红笔批注或扣分，不写任何说明或推测；"
-    "answer 只写正确答案本身（mark 为 wrong、partial、blank 或 unmarked 时都必须给出，correct 时留空；词库、原文在别的页上时，按上下文和常识给出最可能的答案，绝不留空，不要写任何说明文字）。老师没批改（unmarked）的空，由你当阅卷老师：给出 answer，并在 analysis 里写清对错依据（判对时 analysis 可留空）；analysis 是判错时面向学生的简短解析（不超过 80 字，correct 时留空）。解答题（questionType 为 solve）特殊处理：answer 只写最终结果；analysis 写 2 到 4 步标准解法，每步一行，判错时最后一行用「错在：」指出学生哪一步出错。学生作答和正确答案数学上等价（因式分解式与展开式、分数与小数、化简前后、换了一种正确解法）算对。\n"
+    "answer 只写正确答案本身（mark 为 wrong、partial、blank 或 unmarked 时都必须给出，correct 时留空；词库、原文、已知条件或选项在别的页上时，按上下文和常识给出最可能的答案，绝不留空，不要写任何说明文字，并在 analysis 开头写「缺前页内容：」或「缺后页内容：」）。老师没批改（unmarked）的空，由你当阅卷老师：给出 answer，并在 analysis 里写清对错依据（判对时 analysis 可留空）；analysis 是判错时面向学生的简短解析（不超过 80 字，correct 时留空）。解答题（questionType 为 solve）特殊处理：answer 只写最终结果；analysis 写 2 到 4 步标准解法，每步一行，判错时最后一行用「错在：」指出学生哪一步出错。学生作答和正确答案数学上等价（因式分解式与展开式、分数与小数、化简前后、换了一种正确解法）算对。\n"
     "passage 与 item 块还要给出：subject（学科枚举）、questionType（choice/fill/solve）、知识点 knowledgePoints（所有题都给，1 到 3 项）、判错或未作答时一句「下次注意」tip、看不清的词 uncertainSpans，"
     "以及 bbox。知识点的要求：第一项必须是 syllabus 对应考纲 / 课标里的一级知识点名称，整张卷子用统一的规范名称，便于按知识点归类记忆；后面的项才是细分点。"
     "例如英语按考纲语法与题型：名词、代词、冠词、数词、介词、连词、形容词和副词、动词时态、被动语态、非谓语动词、情态动词、构词法、简单句句型、并列句、宾语从句、定语从句、状语从句、词汇辨析、完形填空、阅读理解、选词填空、句型转换、书面表达；"
@@ -153,6 +157,7 @@ DIGITIZE_SYSTEM_PROMPT = (
     "生物：细胞、生物与环境、植物的生活、人体的结构与功能、动物、遗传与进化、健康生活；历史：中国古代史、中国近代史、中国现代史、世界史；地理：地球与地图、中国地理、世界地理、人文地理；道法：道德与心理、法律、国情与政治。"
     "同一道题的多个空共用块级知识点。"
     "bbox 是该块在整张照片上的位置 [x0, y0, x1, y1]（0 到 1 的比例），完整包住该块的文字与作答。其他类型的块 bbox 也要给，没有知识点等字段时给空值。\n"
+    "一道题被分页截断时：页底那一半照常输出（number 写题号）；页顶接着上一页的内容（没印题号的小题、选项、没说完的句子）照常输出，number 留空，绝不要编造「续题」「top」之类的题号。\n"
     "要求：不要遗漏任何题目和空格，答对的题也要转写；手写内容一定要按空号一一对应，不要合并；学生姓名、学校、班级一律忽略，不要写入任何字段。"
 )
 
@@ -212,6 +217,32 @@ SPLIT_CHOICE_SYSTEM_PROMPT = (
     "请结合整篇短文的上下文，为每个空选出最恰当的选项。answer 只写选项字母（A/B/C/D…）；"
     "analysis 用一句话（不超过 50 字）说明为什么选它。拿不准时也必须选一个最可能的。"
 )
+
+CONTEXT_SYSTEM_PROMPT = (
+    "你是认真负责的老师。试卷是一页一页拍照识别的，下面这些题在识别时只看到了一页：题目的已知条件、阅读材料、图或选项在相邻的页上，当时给出的答案可能是猜的。"
+    "现在附上相关几页的照片和 OCR 文字（照片按页码顺序），请找到每道题在卷面上的完整内容（包括前一页的题干、材料和后一页的选项、图），重新作答。"
+    "每个【空】都要作答：answer 只写正确答案本身——选择题只写选项字母（多选如「BD」），填空写词、短语或式子，解答题写最终结果，主观题写答题要点；"
+    "不要写说明，不要写「无法确定」「条件不足」：条件都在附上的页里，必须给出确定的答案。"
+    "analysis 写面向学生的简短解析（不超过 80 字；解答题写 2 到 4 步标准解法，每步一行），不要提到「本页」「前页」「下一页」。"
+    "公式用 LaTeX 写在 $ 里（如 $\\frac{3}{4}$）。"
+)
+
+CONTEXT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"key": {"type": "string"}, "answer": {"type": "string"}, "analysis": {"type": "string"}},
+                "required": ["key", "answer", "analysis"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["results"],
+    "additionalProperties": False,
+}
 
 SPLIT_CHOICE_SCHEMA = {
     "type": "object",
@@ -539,7 +570,9 @@ class ClaudeProvider(AIProvider):
 
         futures = [page_queue.submit(lambda i=i, p=p: one(i, p), on_start=started) for i, p in enumerate(pages)]
         results = [f.result() for f in futures]
-        sheets = drop_ghost_sheets([sheet for group in results for sheet in group])
+        sheets = drop_ghost_sheets(strip_page_chrome([sheet for group in results for sheet in group]))
+        # 一题被分页 / 插图拆开的合成一题；之后把只看到一页、答案是猜的题，带上前后页重新作答
+        touched = join_page_breaks(sheets) + merge_split_questions(sheets)
         clear_listening_answers(sheets)
         unresolved = reconcile_split_choices(sheets)
         if unresolved:
@@ -547,12 +580,76 @@ class ClaudeProvider(AIProvider):
                 self._resolve_split_choices(unresolved)
             except Exception as e:  # noqa: BLE001  失败就保留短文页给的词
                 log.warning("resolve split choices failed: %s", e)
+        try:
+            self._resolve_with_context(sheets, pages, needs_context(sheets, touched))
+        except Exception as e:  # noqa: BLE001  失败就保留逐页识别时的答案
+            log.warning("resolve with context failed: %s", e)
         # 第二步：老师没批改、按答案也对不上的空，交给大模型统一阅卷（能看到全卷 OCR，词库在别页也能判）
         try:
             self.grade_unmarked(sheets)
         except Exception as e:  # noqa: BLE001  阅卷失败不影响还原结果
             log.warning("grade_unmarked failed: %s", e)
         return sheets, derive_questions(sheets)
+
+    def _resolve_with_context(self, sheets: list[DigitizedPage], pages: list[Crop], positions: list[tuple[int, int]], batch: int = 10) -> int:
+        """逐页识别时缺了别页内容的题：带上这一页和前后页的照片、OCR，让大模型看着完整题目重新作答。按用到的页分组，几组并发。"""
+        if not positions:
+            return 0
+        parents = parent_stems(sheets)
+        by_pages: dict[tuple[int, ...], list[tuple[int, int]]] = {}
+        for si, bi in positions:
+            p = sheets[si].page
+            want = {p - 1, p, p + 1}
+            if (si, bi) in parents:
+                want.add(sheets[parents[(si, bi)][0]].page)
+            key = tuple(sorted(x for x in want if 0 <= x < len(pages)))[-3:]
+            by_pages.setdefault(key, []).append((si, bi))
+        ocr_of = {s.page: s.ocrText for s in sheets if s.ocrText}
+
+        def solve(page_ids: tuple[int, ...], chunk: list[tuple[int, int]]) -> int:
+            content: list[dict] = []
+            for k in page_ids:
+                content.append({"type": "text", "text": f"第 {k + 1} 张照片："})
+                content.append({"type": "image", "source": {"type": "base64", "media_type": pages[k].media_type, "data": base64.standard_b64encode(pages[k].data).decode("utf-8")}})
+            ocr_text = "\n\n".join(f"<page n=\"{k + 1}\">\n{ocr_of[k][:6000]}\n</page>" for k in page_ids if k in ocr_of)
+            todo: dict[str, tuple] = {}
+            parts = []
+            for n, (si, bi) in enumerate(chunk):
+                blk = sheets[si].blocks[bi]
+                keys = {b.id: f"q{n}b{m}" for m, b in enumerate(blk.blanks)}
+                text = BLANK_RE.sub(lambda mt: f"【{keys.get(mt.group(1), mt.group(1))}】", blk.text)
+                if (si, bi) in parents:
+                    text = stem_lead(sheets[parents[(si, bi)][0]].blocks[parents[(si, bi)][1]]) + "\n" + text
+                options = blk.options or (_nearby_wordbank(sheets[si].blocks, bi) if blk.type == "passage" else [])
+                missing = [k for bid, k in keys.items() if f"【{k}】" not in text]
+                parts.append("\n".join(x for x in [
+                    f"<question page=\"{sheets[si].page + 1}\" number=\"{blk.number}\" type=\"{blk.questionType}\">",
+                    text[:3000] + ("".join(f" 【{k}】" for k in missing) if missing else ""),
+                    f"选项 / 词库：{'　'.join(options)}" if options else "",
+                    "</question>",
+                ] if x))
+                for b in blk.blanks:
+                    todo[keys[b.id]] = (blk, b)
+            content.append({"type": "text", "text": ("OCR 文字：\n" + ocr_text + "\n\n" if ocr_text else "") + "要重新作答的题（【qXbY】是空的编号，results 的 key 用它）：\n\n" + "\n\n".join(parts)})
+            data = self._call(CONTEXT_SYSTEM_PROMPT, content, CONTEXT_SCHEMA, max_tokens=12000)
+            done = 0
+            for r in data.get("results", []):
+                hit = todo.get(str(r.get("key"))) if isinstance(r, dict) else None
+                if hit and str(r.get("answer") or "").strip():
+                    apply_context_answer(hit[0], hit[1], str(r.get("answer")), str(r.get("analysis") or ""))
+                    done += 1
+            return done
+
+        jobs = [(k, v[i : i + batch]) for k, v in by_pages.items() for i in range(0, len(v), batch)]
+        done = 0
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for f in [pool.submit(solve, k, c) for k, c in jobs]:
+                try:
+                    done += f.result()
+                except Exception as e:  # noqa: BLE001  某一组失败不影响其他组
+                    log.warning("context re-solve batch failed: %s", e)
+        log.info("re-solved %d blank(s) in %d question block(s) with neighbouring pages", done, len(positions))
+        return done
 
     def _resolve_split_choices(self, unresolved: list) -> int:
         """跨页选择题（短文一页、选项一页）短文页给的词不在选项里时，把整篇短文和这个空的选项一起交给大模型选字母。"""

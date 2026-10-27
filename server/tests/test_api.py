@@ -1259,3 +1259,119 @@ def test_real_figure_with_lettered_labels_stays_a_figure():
         {"type": "item", "number": "3", "text": "[[3]]", "blanks": [{"id": "3", "student": ""}]},
     ]}]}, 0)
     assert sheets[0].blocks[0].type == "figure"
+
+
+def _sheets(*pages):
+    from app.ai.digitize import clean_sheets
+
+    return [s for i, blocks in enumerate(pages) for s in clean_sheets({"sheets": [{"label": f"第{i + 1}页", "blocks": blocks}]}, i)]
+
+
+def _post(sheets):
+    from app.ai.digitize import derive_questions, join_page_breaks, merge_split_questions, strip_page_chrome
+
+    sheets = strip_page_chrome(sheets)
+    touched = join_page_breaks(sheets) + merge_split_questions(sheets)
+    return sheets, touched, derive_questions(sheets)
+
+
+AD = {"type": "text", "text": "上海最大家教平台--嘉惠家教 2万余上海老师任您选,+V: jiajiao6767)"}
+
+
+def test_page_numbers_and_ads_are_dropped():
+    """页码、页眉广告不是卷面内容；整页推广（学科网）整张去掉。"""
+    sheets, _, qs = _post(_sheets(
+        [AD, {"type": "item", "number": "1", "text": "1+1=[[1]]", "blanks": [{"id": "1", "answer": "2"}]}, {"type": "text", "text": "第1页共3页"}],
+        [{"type": "text", "text": "免费增值服务介绍 学科网"}, {"type": "figure", "text": "学科网卡通标志", "bbox": [0.1, 0.1, 0.5, 0.5]}],
+    ))
+    assert len(sheets) == 1 and [b.type for b in sheets[0].blocks] == ["item"] and [q.number for q in qs] == ["1"]
+
+
+def test_question_split_across_pages_is_merged():
+    """题干在页底（没有空），图和小题在下一页（模型编号「续题」）：合成一题，放在图那页，空重新编号。"""
+    sheets, touched, qs = _post(_sheets(
+        [{"type": "item", "number": "20", "text": "已知:如图,在四边形ABCD中,AB=AD=2."}, {"type": "text", "text": "第2页共3页"}],
+        [AD, {"type": "figure", "text": "四边形", "bbox": [0.1, 0.1, 0.5, 0.3]},
+         {"type": "item", "number": "", "text": "(1)求∠B. [[续题-1]]\n(2)求面积. [[续题-2]]", "blanks": [{"id": "续题-1", "answer": "无法确定"}, {"id": "续题-2"}]},
+         {"type": "item", "number": "21", "text": "求y. [[21]]", "blanks": [{"id": "21"}]}],
+    ))
+    assert [q.number for q in qs] == ["20", "21"]
+    assert qs[0].page == 1 and qs[0].blankIds == ["20-1", "20-2"] and qs[0].stemText.startswith("已知:如图") and "(2)求面积" in qs[0].stemText
+    assert sheets[0].blocks == [] and touched and touched[0].number == "20"
+
+
+def test_choice_options_on_next_page_are_attached():
+    """选择题的选项印在下一页开头（text 块、选项字母不带点也行）：并成一题的选项。"""
+    _, _, qs = _post(_sheets(
+        [{"type": "item", "number": "5", "questionType": "choice", "text": "反射角将([[5]])", "blanks": [{"id": "5", "answer": "逐渐增大"}]}],
+        [AD, {"type": "text", "text": "A逐渐减小\nB.逐渐增大,且总大于入射角\nC.逐渐增大,且总等于入射角\nD.逐渐减小"},
+         {"type": "item", "number": "6", "text": "x([[6]])", "options": ["A. 1", "B. 2"], "blanks": [{"id": "6"}]}],
+    ))
+    assert [q.number for q in qs] == ["5", "6"] and qs[0].options[0] == "A. 逐渐减小" and qs[0].options[3] == "D. 逐渐减小"
+
+
+def test_option_figures_on_next_page():
+    """图片选项（A、B、C 三张光路图）在下一页：补上选项，题挪到图那页。"""
+    _, _, qs = _post(_sheets(
+        [{"type": "item", "number": "6", "questionType": "choice", "text": "光路图是([[6]])", "blanks": [{"id": "6"}]}],
+        [{"type": "figure", "label": l, "text": f"光路{l}", "bbox": [0.1 * k, 0.1, 0.1 * k + 0.08, 0.2]} for k, l in enumerate("ABC", 1)],
+    ))
+    assert qs[0].page == 1 and qs[0].options == ["A. （图）光路A", "B. （图）光路B", "C. （图）光路C"]
+
+
+def test_sub_questions_get_parent_stem_and_no_empty_parent():
+    """题干一块、①②各成一题：小题前面补上题干；只有题干的那块不再单独成题。没有空的问答题补一个空。"""
+    _, touched, qs = _post(_sheets(
+        [{"type": "item", "number": "29", "text": "小明做光的折射实验,采集了如下数据。"}],
+        [{"type": "item", "number": "①", "text": "可以得出结论:[[①]]", "blanks": [{"id": "①"}]},
+         {"type": "item", "number": "30", "text": "想一想:他为什么要这样编排呢?"}],
+    ))
+    assert [q.number for q in qs] == ["29①", "30"]
+    assert qs[0].stemText.startswith("小明做光的折射实验") and qs[1].blankIds == ["30"] and any(b.number == "30" for b in touched)
+
+
+def test_sentence_cut_by_page_break_is_joined():
+    _, _, qs = _post(_sheets(
+        [{"type": "item", "number": "1", "text": "他在书里把谷物"}],
+        [AD, {"type": "text", "text": "类放在前面。想一想:为什么?"}, {"type": "item", "number": "2", "text": "x [[2]]", "blanks": [{"id": "2"}]}],
+    ))
+    assert qs[0].stemText.startswith("他在书里把谷物类放在前面。") and qs[0].blankIds == ["1"]
+
+
+def test_guessed_answers_are_resolved_with_neighbouring_pages(monkeypatch):
+    """只看到一页、答案是猜的（「本页未显示前页已知条件」）：带上前后页照片重新作答，答案和解析换掉。"""
+    from app.ai.base import Crop
+    from app.ai.claude import ClaudeProvider
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    asked = []
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        if "verdict" in str(schema):
+            return {"results": []}
+        if "results" in schema["properties"]:
+            asked.append(content)
+            return {"results": [{"key": "q0b0", "answer": "4", "analysis": "由已知条件求得"}]}
+        if content[0]["source"]["data"] == "YQ==":
+            return {"sheets": [{"blocks": [{"type": "passage", "text": "Tom has two pens."}]}]}
+        return {"sheets": [{"blocks": [{"type": "item", "number": "3", "text": "How many? [[3]]", "blanks": [{"id": "3", "answer": "3", "analysis": "原文不在本页，推定"}]}]}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    monkeypatch.setattr("app.ai.claude.ocr.enabled", lambda: False)
+    sheets, qs = provider.digitize_pages([Crop(data=b"a"), Crop(data=b"b")], subjects=["english"], grade="8")
+    images = [c for c in asked[0] if c["type"] == "image"]
+    assert len(asked) == 1 and len(images) == 2 and "【q0b0】" in asked[0][-1]["text"]
+    assert qs[0].correctAnswer == "4" and qs[0].analysis == "由已知条件求得"
+
+
+def test_stem_with_stray_blank_and_unnumbered_sub_question():
+    """页底题干末尾被多给了一个空，下一页小问 (1) 和 (2) 分成两块、(2) 没题号：合成一题，题干末尾那个空去掉。"""
+    _, _, qs = _post(_sheets(
+        [{"type": "item", "number": "20", "text": "已知:AB=AD=2.[[20]]", "blanks": [{"id": "20", "answer": "无法确定"}]}],
+        [{"type": "figure", "text": "四边形", "bbox": [0.1, 0.1, 0.5, 0.3]},
+         {"type": "item", "number": "20", "text": "(1)求∠B. [[20-1]]", "blanks": [{"id": "20-1"}]},
+         {"type": "item", "number": "", "text": "(2)求面积. [[2]]", "blanks": [{"id": "2"}]}],
+    ))
+    assert [(q.number, q.blankIds) for q in qs] == [("20", ["20-1", "20-2"])]
+    assert qs[0].stemText == "已知:AB=AD=2.\n(1)求∠B. ____\n(2)求面积. ____"

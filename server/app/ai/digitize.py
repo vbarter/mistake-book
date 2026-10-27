@@ -586,6 +586,433 @@ def set_split_choice(item: DigitizedBlock, blank: DigitizedBlank, letter: str, a
     target.answer, target.analysis = letter, blank.analysis or target.analysis
 
 
+# ---------------------------------------------------------------- page chrome & split questions
+
+_PAGE_NO = re.compile(r"^\s*(?:第\s*\d+\s*页\s*[/／,，、]?\s*(?:共\s*\d+\s*页)?|\d+\s*/\s*\d+|[-—]\s*\d+\s*[-—])\s*$")
+_AD = re.compile(r"家教|jiajiao|\+\s*V\s*[:：]|学科网|组卷网|zxxk|菁优网|21世纪教育|二一教育|免费增值服务|扫码关注|侵权必究", re.I)
+
+
+def strip_page_chrome(sheets: list[DigitizedPage]) -> list[DigitizedPage]:
+    """页码（「第2页共7页」）、页眉页脚的广告（「上海最大家教平台…+V」「学科网」）不是卷面内容：去掉这类 text 块；
+    整页都是广告的（「免费增值服务介绍」）整张去掉，但至少留一张。"""
+    out: list[DigitizedPage] = []
+    dropped = 0
+    for s in sheets:
+        keep = []
+        ad_page = False
+        for b in s.blocks:
+            text = " ".join(x for x in (b.title, b.text) if x).strip()
+            if b.type in ("text", "figure") and not b.blanks and _AD.search(text) and len(text) < 200:
+                ad_page = True
+                dropped += 1
+                continue
+            if b.type == "text" and not b.blanks and _PAGE_NO.match(text):
+                dropped += 1
+                continue
+            keep.append(b)
+        for attr in ("note", "title"):
+            if _AD.search(getattr(s, attr)):
+                setattr(s, attr, "")
+        if ad_page and not any(b.type in ("item", "passage", "section") for b in keep):
+            continue  # 广告页
+        s.blocks = keep
+        out.append(s)
+    if dropped:
+        log.info("dropped %d page header / footer / ad block(s)", dropped)
+    return out or sheets[:1]
+
+
+_TOP_NUMBER = re.compile(r"^(\d{1,3})(?:\s*[(（][^()（）]{1,4}[)）])*$")  # 「20」「25(3)」
+_SUB_ONLY = re.compile(r"^(?:[(（][0-9一二三四五六七八九十]{1,3}[)）]|[①-⑳]|(?:I{1,3}|IV|VI{0,3}|[ⅠⅡⅢⅣⅤⅥ])\b)")
+_STEM_NUMBER = re.compile(r"^\s*(\d{1,3})\s*[.．、]\s*(?=\S)")
+_OPTION_AT = re.compile(r"(?:^|(?<=\s))([A-H])(?:\s*[.．、:：]\s*|(?=[\u4e00-\u9fff$]))")  # 「A. xx」，也有印成「A逐渐减小」不带点的
+_SENTENCE_END = re.compile(r"[。！？!?.…」”）)：:；;]\s*$")
+
+
+def _number_kind(number: str) -> str:
+    """题号分三类：top（「20」「25(3)」）、sub（「(3)」「①」「II」）、loose（空、「续题」「water」「top-1」等模型编的号）。"""
+    n = number.strip().rstrip(".．、 ")
+    if _TOP_NUMBER.match(n):
+        return "top"
+    if _SUB_ONLY.match(n):
+        return "sub"
+    return "loose"
+
+
+def _base(number: str) -> str:
+    m = re.match(r"\d+", number.strip())
+    return m.group(0) if m else ""
+
+
+def _parse_options(text: str, start: str = "A") -> list[str]:
+    """「A. most popular B. more popular C. …」或逐行的「B.同步人脸识别…」→ 选项列表；
+    必须从 start 字母开头、字母连续，至少两项（接着前页选项的可以只有一项）。"""
+    t = (text or "").strip()
+    found = list(_OPTION_AT.finditer(t))
+    if not found or found[0].start() != 0 or found[0].group(1) != start:
+        return []
+    letters = [m.group(1) for m in found]
+    if letters != [chr(ord(start) + k) for k in range(len(letters))] or (len(letters) < 2 and start == "A"):
+        return []
+    out = []
+    for k, m in enumerate(found):
+        end = found[k + 1].start() if k + 1 < len(found) else len(t)
+        body = t[m.end():end].strip().rstrip("；;")
+        if not body:
+            return []
+        out.append(f"{m.group(1)}. {body}")
+    return out
+
+
+def _next_letter(options: list[str]) -> str:
+    letters = [_option_text(o)[0] for o in options]
+    return chr(ord(letters[-1]) + 1) if letters and letters[-1] else "A"
+
+
+def _needs_options(blk: DigitizedBlock) -> bool:
+    return blk.questionType == "choice" and len(blk.options) < 2
+
+
+def _glue(a: str, b: str) -> str:
+    if not a:
+        return b
+    if not b:
+        return a
+    return a + ("" if (_CJK.search(a[-1]) or _CJK.search(b[0])) else " ") + b
+
+
+def join_page_breaks(sheets: list[DigitizedPage]) -> list[DigitizedBlock]:
+    """一句话被分页截断：下一页顶端没有题号、接不上新题的 text / passage 块，接回上一页最后一道题或短文的末尾。
+    返回被接长的块。"""
+    touched: list[DigitizedBlock] = []
+    for si in range(1, len(sheets)):
+        blocks = sheets[si].blocks
+        if not blocks:
+            continue
+        first = blocks[0]
+        if first.type not in ("text", "passage") or first.blanks or first.label:
+            continue
+        text = first.text.strip()
+        if not text or _STEM_NUMBER.match(text) or _parse_options(text) or _OPTION_AT.match(text):
+            continue
+        prev = next((b for b in reversed(sheets[si - 1].blocks) if b.type != "figure"), None)
+        if prev is None or prev.type not in ("item", "passage") or not prev.text.strip():
+            continue
+        if _SENTENCE_END.search(BLANK_RE.sub("", prev.text)):
+            continue  # 上一页的话已经说完：这是新的内容
+        prev.text = _glue(prev.text.rstrip(), text)
+        blocks.pop(0)
+        touched.append(prev)
+    return touched
+
+
+def _split_groups(sheets: list[DigitizedPage]) -> tuple[list[list[tuple[int, int]]], dict[tuple[int, int], tuple[int, int]]]:
+    """找出被分页或插图拆开的题：返回 (要合成一块的若干组位置（第一个是题干）, {小题位置: 只有题干的大题位置})。
+
+    题干（有题号、没有空，或者是没有选项的选择题）后面、下一个题号之前出现的：
+    没题号 / 模型编的号（「续题」「water」「top-1」）的小题、同一个题号的小题、接着字母的选项文字，都是这一题的后半。
+    「(1)」「①」这种小题号仍各自成题，只记下它们的大题题干（派生题目时补在前面）。"""
+    skip = listening_blocks(sheets)
+    groups: list[list[tuple[int, int]]] = []
+    parents: dict[tuple[int, int], tuple[int, int]] = {}
+    head: tuple[int, int] | None = None
+    group: list[tuple[int, int]] = []
+    letter = "A"  # 题干是缺选项的选择题时，下一个选项应是哪个字母
+    got_options = False  # 这一组已经从后面补到了选项
+
+    def blk(pos):
+        return sheets[pos[0]].blocks[pos[1]]
+
+    def close():
+        nonlocal group
+        if len(group) > 1:
+            groups.append(group)
+        group = []
+
+    for si, sheet in enumerate(sheets):
+        first_question = True
+        for bi, b in enumerate(sheet.blocks):
+            pos = (si, bi)
+            if pos in skip:
+                close()
+                head = None
+                continue
+            if b.type == "section":
+                if b.label or b.title:  # 只有一句作答说明（「仔细阅读上述材料，解答下面的问题」）的不算新大题
+                    close()
+                    head = None
+                continue
+            if b.type in ("figure", "wordbank"):
+                continue
+            if b.type == "passage":
+                if b.blanks:
+                    close()
+                    head = None
+                continue
+            h = blk(head) if head else None
+            if b.type == "text":
+                m = _STEM_NUMBER.match(b.text)
+                if m and not b.blanks:  # 「22.如图为……」被识别成 text：当题干
+                    close()
+                    head, group = pos, [pos]
+                    letter, got_options = "A", False
+                    first_question = False
+                elif h is not None and _needs_options(blk(group[0])) and _parse_options(b.text, letter):
+                    group.append(pos)
+                    letter = _next_letter(_parse_options(b.text, letter))
+                    got_options = True
+                continue
+            # item
+            num = b.number.strip().rstrip(".．、 ")
+            kind = _number_kind(num)
+            stem_only = h is not None and not any(blk(p).blanks for p in group)
+            lacks_options = h is not None and _needs_options(blk(group[0])) and not got_options and not any(len(blk(p).options) >= 2 for p in group[1:])
+            head_num = (h.number if h.type == "item" else _STEM_NUMBER.match(h.text).group(1)) if h is not None else ""
+            if kind == "top":
+                # 同一个题号又出现一次：前一半只有题干 / 缺选项，或者是下一页开头接着写的（「(4)…」续在下一页还标着 26）
+                if h is not None and _base(num) == _base(head_num) and num.replace(" ", "") in (head_num.replace(" ", ""), _base(head_num)) and (stem_only or lacks_options or (first_question and head[0] < si)):
+                    group.append(pos)
+                else:
+                    close()
+                    head, group = pos, [pos]
+                    letter, got_options = (_next_letter(b.options) if b.options else "A"), False
+            elif kind == "sub":
+                if h is not None:
+                    parents[pos] = head
+            elif h is not None:
+                ids = [x.id for x in b.blanks]
+                same_number = head_num and any(i.startswith(head_num + "-") for i in ids)
+                new_page = first_question and head[0] < si
+                sub_text = bool(_SUB_NUMBER.match(BLANK_RE.sub("", b.text).strip()))  # 没题号、正文以「(2)」开头：前一题的小问
+                if stem_only or lacks_options or same_number or sub_text or "续" in num + "".join(ids) or new_page:
+                    group.append(pos)
+            first_question = False
+    close()
+    return groups, parents
+
+
+def _renumber_blanks(blk: DigitizedBlock) -> None:
+    """合并后的空统一编号：一个空用题号，多个空用「题号-1」「题号-2」…（占位一起改）。"""
+    if not blk.blanks:
+        return
+    ids = [b.id for b in blk.blanks]
+    new = [blk.number] if len(ids) == 1 else [f"{blk.number}-{k}" for k in range(1, len(ids) + 1)]
+    tmp = {old: f"\x00{k}\x00" for k, old in enumerate(ids)}
+    text = BLANK_RE.sub(lambda m: f"[[{tmp[m.group(1)]}]]" if m.group(1) in tmp else m.group(0), blk.text)
+    for k, (b, nid) in enumerate(zip(blk.blanks, new)):
+        text = text.replace(f"[[\x00{k}\x00]]", f"[[{nid}]]")
+        b.id, b.number = nid, blk.number
+    blk.text = text
+
+
+def _merge_group(sheets: list[DigitizedPage], group: list[tuple[int, int]]) -> tuple[tuple[int, int], DigitizedBlock]:
+    """把一组拆开的块合成一道 item，放在插图所在的那页（客户端在题目所在页找插图），没有插图就放在最后一页；返回 (位置, 块)。"""
+    blocks = [sheets[si].blocks[bi] for si, bi in group]
+    head = blocks[0]
+    number = head.number if head.type == "item" else _STEM_NUMBER.match(head.text).group(1)
+    if head.type == "text":
+        head.text = _STEM_NUMBER.sub("", head.text, count=1)
+    first, last = group[0], group[-1]
+    figure_sheets = [si for si in sorted({si for si, _ in group}) if any(
+        b.type == "figure" and (not b.number or _base(b.number) == _base(number)) and first <= (si, bi) <= last
+        for bi, b in enumerate(sheets[si].blocks))]
+    anchor_sheet = figure_sheets[0] if figure_sheets else last[0]
+    target = next(p for p in group if p[0] == anchor_sheet)
+    items = [b for b in blocks if b.type == "item"] or [head]
+    base_blk = next((b for b in items if b.knowledgePoints), items[0])
+
+    # 页底的题干（只有已知条件）末尾被多给了一个空，小问在后面：这个空不是作答处，去掉
+    if head.type == "item" and len(head.blanks) == 1 and any(b.blanks for b in blocks[1:]) and head.text.rstrip().endswith(f"[[{head.blanks[0].id}]]") and not head.blanks[0].student.strip():
+        head.text = head.text.rstrip()[: -len(f"[[{head.blanks[0].id}]]")].rstrip()
+        head.blanks = []
+    options = list(next((b.options for b in blocks if len(b.options) >= 2), head.options))
+    texts: list[str] = []
+    blanks: list[DigitizedBlank] = []
+    seen: dict[str, DigitizedBlank] = {}
+    for b in blocks:
+        extra = _parse_options(b.text, _next_letter(options)) if b.type == "text" and b is not head else []
+        if extra:
+            options += extra
+            continue
+        text = b.text
+        for x in b.blanks:
+            if x.id in seen:  # 两页都记了同一个空（短文页一个、选项页一个）：留一个，作答取有的那个
+                kept = seen[x.id]
+                if not kept.student.strip() and x.student.strip():
+                    kept.student, kept.mark, kept.note = x.student, x.mark, x.note
+                text = text.replace(f"[[{x.id}]]", "", 1)
+                continue
+            seen[x.id] = x
+            blanks.append(x)
+        if text.strip():
+            texts.append(text.strip())
+    # 图片当选项（选项是几张标了 A、B、C 的小图），选项还没有：用插图的描述补上
+    if head.questionType == "choice" and len(options) < 2:
+        figs = [b for si, s in enumerate(sheets) for bi, b in enumerate(s.blocks)
+                if b.type == "figure" and len(b.label.strip()) == 1 and b.label.strip() in "ABCDEFGH" and first <= (si, bi) <= last]
+        if len(figs) >= 2:
+            options = [f"{f.label.strip()}. （图）{f.text[:60]}" for f in figs]
+    merged = DigitizedBlock(
+        type="item",
+        text="\n".join(texts),
+        number=number,
+        hint=" ".join(dict.fromkeys(b.hint for b in blocks if b.hint)),
+        instruction=" ".join(dict.fromkeys(b.instruction for b in blocks if b.instruction)),
+        points=next((b.points for b in blocks if b.points), ""),
+        options=options,
+        blanks=blanks,
+        bbox=list(sheets[target[0]].blocks[target[1]].bbox),
+        subject=base_blk.subject,
+        questionType="choice" if len(options) >= 2 else (head.questionType if head.type == "item" else base_blk.questionType),
+        knowledgePoints=list(base_blk.knowledgePoints),
+        tip=next((b.tip for b in items if b.tip), ""),
+        uncertainSpans=[x for b in blocks for x in b.uncertainSpans],
+    )
+    if all(si == target[0] for si, _ in group):
+        bxs = [b.bbox for b in blocks]
+        merged.bbox = [min(x[0] for x in bxs), min(x[1] for x in bxs), max(x[2] for x in bxs), max(x[3] for x in bxs)]
+    _renumber_blanks(merged)
+    return target, merged
+
+
+def merge_split_questions(sheets: list[DigitizedPage]) -> list[DigitizedBlock]:
+    """一道题被分页或插图拆成几块（题干在页底、小题 / 选项 / 图在下一页；题干和小题中间隔着图）：合成一道题。
+    合完后仍然没有空、也没有小题的题（「想一想：他为什么要这样编排呢？」）补一个空，让大模型作答。
+    返回合并过 / 补过空的块（它们的答案要看着完整题目重做）。"""
+    groups, _ = _split_groups(sheets)
+    touched: list[DigitizedBlock] = []
+    remove: set[tuple[int, int]] = set()
+    put: dict[tuple[int, int], DigitizedBlock] = {}
+    for group in groups:
+        target, merged = _merge_group(sheets, group)
+        put[target] = merged
+        remove |= set(group) - {target}
+        touched.append(merged)
+    if groups:
+        for si, sheet in enumerate(sheets):
+            sheet.blocks = [put.get((si, bi), b) for bi, b in enumerate(sheet.blocks) if (si, bi) not in remove]
+        log.info("merged %d split question(s)", len(groups))
+    touched += options_from_figures(sheets)
+    _, parents = _split_groups(sheets)
+    parent_heads = set(parents.values())
+    skip = listening_blocks(sheets)
+    answered = {(x.number or x.id).strip() for s in sheets for b in s.blocks for x in b.blanks}  # 题号已经是别处的空（短文里的 [[83]]）
+    for si, sheet in enumerate(sheets):
+        for bi, b in enumerate(sheet.blocks):
+            if b.type != "item" or b.blanks or (si, bi) in parent_heads or (si, bi) in skip or _number_kind(b.number) == "loose" or b.number.strip() in answered:
+                continue
+            if not _has_sub_questions(sheets, si, bi):
+                b.blanks = [DigitizedBlank(id=b.number, number=b.number, mark="blank")]
+                b.text = f"{b.text.rstrip()} [[{b.number}]]"
+                touched.append(b)
+    return touched
+
+
+def options_from_figures(sheets: list[DigitizedPage]) -> list[DigitizedBlock]:
+    """选项是几张标了 A、B、C 的小图、而且印在下一页开头的选择题：用插图描述补上选项，并把题挪到插图那页（客户端按题目所在页找选项图）。"""
+    touched: list[DigitizedBlock] = []
+    for si in range(len(sheets) - 1):
+        blocks = sheets[si].blocks
+        if not blocks:
+            continue
+        item = blocks[-1]
+        if item.type != "item" or not _needs_options(item):
+            continue
+        nxt = sheets[si + 1].blocks
+        figs = []
+        for b in nxt:
+            if b.type == "figure" and len(b.label.strip()) == 1 and b.label.strip() == chr(ord("A") + len(figs)):
+                figs.append(b)
+            else:
+                break
+        if len(figs) < 2:
+            continue
+        item.options = [f"{f.label.strip()}. （图）{f.text[:60]}" for f in figs]
+        blocks.pop()
+        nxt.insert(0, item)
+        touched.append(item)
+    return touched
+
+
+def _has_sub_questions(sheets: list[DigitizedPage], si: int, bi: int) -> bool:
+    """题号为 N 的题后面（下一个大题号之前）有没有「N(1)」「(1)」这样的小题。"""
+    num = sheets[si].blocks[bi].number.strip()
+    after = [b for s in sheets[si:] for b in (s.blocks[bi + 1:] if s is sheets[si] else s.blocks)]
+    for b in after:
+        if b.type == "section" and (b.label or b.title):
+            return False
+        if b.type not in ("item", "passage"):
+            continue
+        n = b.number.strip()
+        if _number_kind(n) == "sub" or re.match(re.escape(num) + r"\s*[(（①-⑳]", n):
+            return True
+        if _number_kind(n) == "top":
+            return False
+    return False
+
+
+def parent_stems(sheets: list[DigitizedPage]) -> dict[tuple[int, int], tuple[int, int]]:
+    """「(1)」「①」这种小题各自成题时，它们所属大题那块的位置：{小题位置: 大题位置}。"""
+    return _split_groups(sheets)[1]
+
+
+def stem_lead(blk: DigitizedBlock) -> str:
+    """大题的引导部分（第一个小题或第一个空之前的那几行），补在单独成题的小题前面。"""
+    lines: list[str] = []
+    for line in _STEM_NUMBER.sub("", blk.text, count=1).split("\n"):
+        if _SUB_NUMBER.match(line.strip()) or BLANK_RE.search(line):
+            break
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+_GUESSED = re.compile(r"缺[前后上下]页|本页|前页|上一页|下一页|前一页|后页|原文不在|不在本页|无法确定|条件不足|需结合|推定|看不到")
+_LETTERS = re.compile(r"^[A-Ha-h](?:\s*[、,，;；]?\s*[A-Ha-h])*$")
+
+
+def needs_context(sheets: list[DigitizedPage], touched: list[DigitizedBlock]) -> list[tuple[int, int]]:
+    """要看着前后页重新作答的题块：合并过 / 补过空 / 接长过的；大题题干在别的页上的小题；
+    模型自己说缺了别页内容（「本页未显示前页已知条件」「原文不在本页，推定」）的；该有答案却没给的；
+    有选项但答案不是字母的选择题（先尝试按选项内容换成字母）。听力不做。"""
+    skip = listening_blocks(sheets)
+    parents = parent_stems(sheets)
+    ids = {id(b) for b in touched}
+    out: list[tuple[int, int]] = []
+    for si, sheet in enumerate(sheets):
+        for bi, blk in enumerate(sheet.blocks):
+            if blk.type not in ("item", "passage") or not blk.blanks or (si, bi) in skip:
+                continue
+            options = blk.options or (_nearby_wordbank(sheet.blocks, bi) if blk.type == "passage" else [])
+            if blk.type == "item" and len(blk.options) >= 2 and blk.questionType == "choice":
+                for b in blk.blanks:
+                    if b.answer and not _LETTERS.match(b.answer.strip()):
+                        b.answer = option_letter(blk.options, b.answer) or b.answer
+            bad = any(
+                _GUESSED.search(f"{b.answer} {b.analysis}")
+                or (not b.answer.strip() and b.mark != "correct")
+                or (blk.type == "item" and blk.questionType == "choice" and len(options) >= 2 and b.answer and not _LETTERS.match(b.answer.strip()))
+                for b in blk.blanks
+            )
+            cross = (si, bi) in parents and parents[(si, bi)][0] != si
+            if id(blk) in ids or bad or cross:
+                out.append((si, bi))
+    return out
+
+
+def apply_context_answer(blk: DigitizedBlock, blank: DigitizedBlank, answer: str, analysis: str) -> None:
+    """重新作答的结果写回：选择题换成字母；老师没批改、之前按旧答案自动判的空，按新答案重新判（判不了的留给 AI 阅卷）。"""
+    answer = answer.strip()
+    if blk.questionType == "choice" and blk.options and not _LETTERS.match(answer):
+        answer = option_letter(blk.options, answer) or answer
+    if not answer:
+        return
+    blank.answer = answer[:400]
+    blank.analysis = analysis.strip()[:400]
+    if blank.aiGraded or blank.mark == "unmarked":
+        blank.mark = auto_mark("unmarked", blank.student, blank.answer, blk.questionType) if blank.student.strip() else "blank"
+        blank.aiGraded = blank.mark not in ("unmarked", "blank")
+
+
 _SUB_NUMBER = re.compile(r"^[(（][0-9一二三四五六七八九十]+[)）]|^[①②③④⑤⑥⑦⑧⑨⑩]")
 _PARENT = re.compile(r"^(\d+)\s*(?:[(（]|$)")
 
@@ -619,6 +1046,7 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
     questions: list[DigitizedQuestion] = []
     skip = listening_blocks(sheets)
     links = split_choice_links(sheets)
+    parents = parent_stems(sheets)
     linked_options = {(ps, pb, bid): sheets[si].blocks[bi] for (si, bi), (ps, pb, bid) in links.items()}
     for si, sheet in enumerate(sheets):
         for bi, block in enumerate(sheet.blocks):
@@ -631,6 +1059,10 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
                     stem = f"{stem} {block.hint}"
                 if block.instruction:
                     stem = f"{stem}（{block.instruction}）" if not block.instruction.startswith("（") else f"{stem}{block.instruction}"
+                if (si, bi) in parents:  # 「(2)」这种小题单独成题：前面补上大题题干，题目才完整
+                    ps, pb = parents[(si, bi)]
+                    lead = stem_lead(sheets[ps].blocks[pb])
+                    stem = f"{lead}\n{stem}" if lead else stem
                 if len(blanks) > 1:
                     # 学生作答和答案按空一一对应，相同的也要保留（「B；A；B」不能变成「B；A」）；批注、解析才去重
                     student = "；".join(b.student for b in blanks) if any(b.student.strip() for b in blanks) else ""
@@ -697,5 +1129,8 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
     _with_parent_numbers(questions, sheets)
     # 大题的引导语（如「17. 小华和小明……」，下面是 17(1)–(4)）被识别成没有空的 item：不是一道题，去掉
     numbers = [q.number for q in questions]
-    questions = [q for q in questions if q.blankIds or not any(n.startswith(q.number + "(") for n in numbers if q.number)]
+    heads = set(parents.values())
+    # 没有空、题号又和别的题重复的（短文里的空 [[83]]，下面又单独印了一行「83. 问题…」）：同一题，去掉没有空的那个
+    answered = {q.number for q in questions if q.blankIds}
+    questions = [q for q in questions if q.blankIds or not ((q.sheet, q.blockIndex) in heads or q.number in answered or any(n.startswith(q.number + "(") for n in numbers if q.number))]
     return questions
