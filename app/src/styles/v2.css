@@ -126,6 +126,9 @@
 .steps > span { display: flex; gap: 6px; align-items: baseline; }
 .steps__no { flex-shrink: 0; width: 16px; height: 16px; border-radius: 8px; background: var(--fill); color: var(--secondary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .steps__err { color: var(--wrong); font-weight: 600; }
+.steps > .steps__sec { display: block; margin-top: 6px; }
+.steps > .steps__sec:first-child { margin-top: 0; }
+.steps__tag { font-weight: 700; color: var(--label); margin-right: 6px; }
 .part { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px dashed var(--separator); }
 .part:first-child { border-top: 0; padding-top: 0; }
 .part__head { display: flex; align-items: center; gap: 8px; }

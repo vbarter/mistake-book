@@ -1184,8 +1184,8 @@ def test_split_choice_word_not_in_options_is_resolved_by_model(monkeypatch):
             asked.append(content[0]["text"])
             return {"results": [{"key": "c0", "answer": "B", "analysis": "spare time 空闲时间"}]}
         if content[0]["source"]["data"] == "YQ==":  # 第一页：短文
-            return {"sheets": [{"blocks": [{"type": "passage", "text": "I have [[66]] time.", "blanks": [{"id": "66", "number": "66", "student": "", "answer": "free"}]}]}]}
-        return {"sheets": [{"blocks": [{"type": "item", "number": "66", "text": "[[66]]", "options": ["A. busy", "B. spare", "C. happy"], "blanks": [{"id": "66", "student": "", "answer": "C"}]}]}]}
+            return {"sheets": [{"subject": "english", "blocks": [{"type": "passage", "text": "I have [[66]] time.", "blanks": [{"id": "66", "number": "66", "student": "", "answer": "free"}]}]}]}
+        return {"sheets": [{"subject": "english", "blocks": [{"type": "item", "number": "66", "text": "[[66]]", "options": ["A. busy", "B. spare", "C. happy"], "blanks": [{"id": "66", "student": "", "answer": "C"}]}]}]}
 
     monkeypatch.setattr(provider, "_call", fake_call)
     monkeypatch.setattr("app.ai.claude.ocr.enabled", lambda: False)
@@ -1354,8 +1354,8 @@ def test_guessed_answers_are_resolved_with_neighbouring_pages(monkeypatch):
             asked.append(content)
             return {"results": [{"key": "q0b0", "answer": "4", "analysis": "由已知条件求得"}]}
         if content[0]["source"]["data"] == "YQ==":
-            return {"sheets": [{"blocks": [{"type": "passage", "text": "Tom has two pens."}]}]}
-        return {"sheets": [{"blocks": [{"type": "item", "number": "3", "text": "How many? [[3]]", "blanks": [{"id": "3", "answer": "3", "analysis": "原文不在本页，推定"}]}]}]}
+            return {"sheets": [{"subject": "english", "blocks": [{"type": "passage", "text": "Tom has two pens."}]}]}
+        return {"sheets": [{"subject": "english", "blocks": [{"type": "item", "number": "3", "text": "How many? [[3]]", "blanks": [{"id": "3", "answer": "3", "analysis": "原文不在本页，推定"}]}]}]}
 
     monkeypatch.setattr(provider, "_call", fake_call)
     monkeypatch.setattr("app.ai.claude.ocr.enabled", lambda: False)
@@ -1375,3 +1375,36 @@ def test_stem_with_stray_blank_and_unnumbered_sub_question():
     ))
     assert [(q.number, q.blankIds) for q in qs] == [("20", ["20-1", "20-2"])]
     assert qs[0].stemText == "已知:AB=AD=2.\n(1)求∠B. ____\n(2)求面积. ____"
+
+
+def test_math_mistakes_get_detailed_explanation(monkeypatch):
+    """数理化做错 / 没作答的题写详解：分【思路】【知识点】【解答】【技巧】【易错】段，学生答错时末行「错在：」；做对的题和英语不写。"""
+    from app.ai.base import Crop
+    from app.ai.claude import ClaudeProvider
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    asked = []
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        if "steps" in str(schema):
+            asked.append(content[-1]["text"])
+            return {"results": [{"key": "q0", "answer": "$2250$", "thinking": "先列利润函数，再看顶点是否在范围内。", "knowledge": ["二次函数顶点式", "利润 = 单件利润 × 销量"],
+                                 "steps": ["$y=(10+x)(200-10x)$", "∵ $a=-10<0$，∴ 开口向下", "答：最大利润 2250 元"], "technique": "", "pitfall": "忘了自变量范围", "wrongAt": "没有化成顶点式"}]}
+        if "results" in schema["properties"]:
+            return {"results": []}
+        return {"sheets": [{"subject": "math", "blocks": [
+            {"type": "item", "number": "1", "text": "求最大利润 [[1]]", "questionType": "solve", "blanks": [{"id": "1", "student": "2000", "mark": "wrong", "answer": "2250", "analysis": "配方得顶点"}]},
+            {"type": "item", "number": "2", "text": "求 $x$ [[2]]", "questionType": "fill", "blanks": [{"id": "2", "student": "3", "mark": "correct"}]},
+        ]}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    monkeypatch.setattr("app.ai.claude.ocr.enabled", lambda: False)
+    _, qs = provider.digitize_pages([Crop(data=b"a")], subjects=["math"], grade="9")
+    assert len(asked) == 1 and 'key="q0"' in asked[0] and "学生作答：2000" in asked[0] and "求 $x$" not in asked[0]
+    assert qs[0].correctAnswer == "2250"  # 只是写法不同，不改答案
+    assert qs[0].analysis.split("\n") == [
+        "【思路】先列利润函数，再看顶点是否在范围内。", "【知识点】二次函数顶点式；利润 = 单件利润 × 销量", "【解答】",
+        "$y=(10+x)(200-10x)$", "∵ $a=-10<0$，∴ 开口向下", "答：最大利润 2250 元", "【易错】忘了自变量范围", "错在：没有化成顶点式",
+    ]
+    assert qs[1].analysis == ""

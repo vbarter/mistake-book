@@ -39,18 +39,34 @@ function Answer({ text, wrong }: { text: string; wrong: boolean }) {
   return <MathText className={`ans-text${text.includes("\n") ? " ans-text--block" : ""}${wrong ? " ans-text--wrong" : ""}`} text={text} />;
 }
 
-/** 解析：多步解法每步一行，「错在：」那行标红 */
+/** 解析：多步解法每步一行，「错在：」那行标红；数理化详解按【思路】【知识点】【解答】【技巧】【易错】分段，【解答】下的步骤编号 */
 function Analysis({ text }: { text: string }) {
   if (!text) return null;
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const sectioned = lines.some((l) => /^【[^】]+】/.test(l));
+  let no = 0;
   return (
-    <div className="steps">
-      {lines.map((l, i) => (
-        <span key={i} className={l.startsWith("错在") ? "steps__err" : undefined}>
-          {lines.length > 1 && !l.startsWith("错在") && <span className="steps__no">{i + 1}</span>}
-          <MathText text={l} />
-        </span>
-      ))}
+    <div className={`steps${sectioned ? " steps--sec" : ""}`}>
+      {lines.map((l, i) => {
+        const sec = sectioned ? /^【([^】]+)】(.*)$/.exec(l) : null;
+        if (sec) {
+          no = 0;
+          return (
+            <span key={i} className="steps__sec">
+              <b className="steps__tag">{sec[1]}</b>
+              {sec[2].trim() && <MathText text={sec[2].trim()} />}
+            </span>
+          );
+        }
+        if (l.startsWith("错在")) return <span key={i} className="steps__err"><MathText text={l} /></span>;
+        no += 1;
+        return (
+          <span key={i}>
+            {(sectioned || lines.length > 1) && <span className="steps__no">{no}</span>}
+            <MathText text={l} />
+          </span>
+        );
+      })}
     </div>
   );
 }

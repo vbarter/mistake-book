@@ -475,7 +475,7 @@ def _join(parts: list[str]) -> str:
     for p in parts:
         if p and p not in seen:
             seen.append(p)
-    return "；".join(seen)
+    return ("\n" if any("\n" in p for p in seen) else "；").join(seen)
 
 
 def _nearby_wordbank(blocks: list[DigitizedBlock], i: int) -> list[str]:
@@ -1007,7 +1007,7 @@ def apply_context_answer(blk: DigitizedBlock, blank: DigitizedBlank, answer: str
     if not answer:
         return
     blank.answer = answer[:400]
-    blank.analysis = analysis.strip()[:400]
+    blank.analysis = analysis.strip()[:3000]
     if blank.aiGraded or blank.mark == "unmarked":
         blank.mark = auto_mark("unmarked", blank.student, blank.answer, blk.questionType) if blank.student.strip() else "blank"
         blank.aiGraded = blank.mark not in ("unmarked", "blank")
@@ -1134,3 +1134,68 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
     answered = {q.number for q in questions if q.blankIds}
     questions = [q for q in questions if q.blankIds or not ((q.sheet, q.blockIndex) in heads or q.number in answered or any(n.startswith(q.number + "(") for n in numbers if q.number))]
     return questions
+
+
+# ---------- 数理化详解 ----------
+
+EXPLAIN_SUBJECTS = {"math", "physics", "chemistry"}
+EXPLAIN_MARKS = {"wrong", "partial", "blank"}
+
+
+def explain_targets(sheets: list[DigitizedPage]) -> list[tuple[int, int, list[DigitizedBlank]]]:
+    """数学、物理、化学里做错、半对、没作答的空（按题块分组），给它们写详细讲解；听力和看不清的不写。"""
+    listening = listening_blocks(sheets)
+    out = []
+    for si, sheet in enumerate(sheets):
+        for bi, blk in enumerate(sheet.blocks):
+            if blk.type not in ("item", "passage") or (si, bi) in listening:
+                continue
+            if (blk.subject or sheet.subject) not in EXPLAIN_SUBJECTS:
+                continue
+            blanks = [b for b in blk.blanks if b.mark in EXPLAIN_MARKS and b.answer.strip()]
+            if blanks:
+                out.append((si, bi, blanks))
+    return out
+
+
+def _line(text) -> str:
+    return re.sub(r"\s*\n\s*", " ", str(text or "")).strip()
+
+
+def format_explanation(r: dict) -> str:
+    """详解写成分段文字：【思路】【知识点】【解答】（每步一行）【技巧】【易错】，学生答错时最后一行「错在：」。客户端按【】分段显示。"""
+    steps = [x for x in (_line(s) for s in r.get("steps") or []) if x]
+    if not steps:
+        return ""
+    knowledge = "；".join(x for x in (_line(k).rstrip("。；;，, ") for k in r.get("knowledge") or []) if x)
+    lines = []
+    if _line(r.get("thinking")):
+        lines.append("【思路】" + _line(r.get("thinking")))
+    if knowledge:
+        lines.append("【知识点】" + knowledge)
+    lines.append("【解答】")
+    lines += steps
+    if _line(r.get("technique")):
+        lines.append("【技巧】" + _line(r.get("technique")))
+    if _line(r.get("pitfall")):
+        lines.append("【易错】" + _line(r.get("pitfall")))
+    if _line(r.get("wrongAt")):
+        lines.append("错在：" + _line(r.get("wrongAt")))
+    return "\n".join(lines)
+
+
+def _same_answer(a: str, b: str) -> bool:
+    norm = lambda x: re.sub(r"[\s$，,。.；;]|\\[,;! ]", "", x).lower()  # noqa: E731
+    return norm(a) == norm(b)
+
+
+def apply_explanation(blk: DigitizedBlock, blank: DigitizedBlank, r: dict) -> bool:
+    """详解写回这个空；详解算出的答案和原答案不同就以详解为准（老师没批改的按新答案重新判）。"""
+    text = format_explanation(r)
+    if not text:
+        return False
+    answer = _line(r.get("answer"))
+    if answer and not _same_answer(answer, blank.answer):
+        apply_context_answer(blk, blank, answer, text)
+    blank.analysis = text[:3000]
+    return True

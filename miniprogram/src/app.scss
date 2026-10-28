@@ -268,6 +268,9 @@ page {
 .steps__line { display: flex; gap: 6px; }
 .steps__no { width: 18px; height: 18px; border-radius: 9px; background: $brand-tint; color: $brand; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
 .steps__err { color: $wrong; font-weight: 600; }
+.steps__sec { margin-top: 6px; }
+.steps__sec:first-child { margin-top: 0; }
+.steps__tag { font-weight: 700; color: $label; margin-right: 6px; }
 .part { display: flex; flex-direction: column; gap: 4px; padding-bottom: 6px; border-bottom: 1px dashed #d1d1d6; }
 .part__head { display: flex; align-items: center; justify-content: space-between; }
 

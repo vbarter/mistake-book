@@ -25,14 +25,31 @@ function Answer({ text, wrong }: { text: string; wrong: boolean }) {
 function Analysis({ text }: { text: string }) {
   if (!text) return null;
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  // 数理化详解按【思路】【知识点】【解答】【技巧】【易错】分段，【解答】下的步骤编号
+  const sectioned = lines.some((l) => /^【[^】]+】/.test(l));
+  let no = 0;
   return (
     <View className="steps">
-      {lines.map((l, i) => (
-        <View key={i} className={l.startsWith("错在") ? "steps__err" : "steps__line"}>
-          {lines.length > 1 && !l.startsWith("错在") && <Text className="steps__no">{i + 1}</Text>}
-          <MathText text={l} />
-        </View>
-      ))}
+      {lines.map((l, i) => {
+        const sec = sectioned ? /^【([^】]+)】(.*)$/.exec(l) : null;
+        if (sec) {
+          no = 0;
+          return (
+            <View key={i} className="steps__sec">
+              <Text className="steps__tag">{sec[1]}</Text>
+              {sec[2].trim() && <MathText text={sec[2].trim()} />}
+            </View>
+          );
+        }
+        if (l.startsWith("错在")) return <View key={i} className="steps__err"><MathText text={l} /></View>;
+        no += 1;
+        return (
+          <View key={i} className="steps__line">
+            {(sectioned || lines.length > 1) && <Text className="steps__no">{no}</Text>}
+            <MathText text={l} />
+          </View>
+        );
+      })}
     </View>
   );
 }

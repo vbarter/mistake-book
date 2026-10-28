@@ -22,7 +22,7 @@ from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, Digiti
 from . import ocr
 from . import queue as page_queue
 from .digitize import (
-    BLANK_RE, _nearby_wordbank, _render_text, apply_context_answer, clear_listening_answers, clean_sheets, derive_questions, drop_ghost_sheets, join_page_breaks,
+    BLANK_RE, _nearby_wordbank, _render_text, apply_context_answer, apply_explanation, explain_targets, clear_listening_answers, clean_sheets, derive_questions, drop_ghost_sheets, join_page_breaks,
     listening_blocks, merge_split_questions, needs_context, option_letter, parent_stems, reconcile_split_choices, set_split_choice, snap_figures, stem_lead, strip_page_chrome, unreadable,
 )
 
@@ -226,6 +226,49 @@ CONTEXT_SYSTEM_PROMPT = (
     "analysis 写面向学生的简短解析（不超过 80 字；解答题写 2 到 4 步标准解法，每步一行），不要提到「本页」「前页」「下一页」。"
     "公式用 LaTeX 写在 $ 里（如 $\\frac{3}{4}$）。"
 )
+
+EXPLAIN_SYSTEM_PROMPT = (
+    "你是经验丰富的初高中数学、物理、化学老师，给学生的错题本写详细讲解，要让学生看完就会做同类题。"
+    "下面是试卷上学生做错、没做完或没作答的题，附了所在页的照片和 OCR 文字（图形、表格、已知条件以照片为准）。每个【空】写一份讲解，按字段填：\n"
+    "- thinking 破题思路：1 到 2 句，先说这题考什么，再说从哪里下手（如「先按 总利润 = 单件利润 × 销量 列出函数，再看顶点是否在自变量取值范围内」）。\n"
+    "- knowledge 涉及知识点：2 到 4 项，写具体的公式、定理、性质、概念（如「二次函数顶点式 $y=a(x-h)^2+k$」「勾股定理」「欧姆定律 $I=\\frac{U}{R}$」），每项是一个短语或一个式子，末尾不加句号，不要只写章节名。\n"
+    "- steps 标准完整解答：按考试规范书写，一步一项，每步只做一件事（设未知数、列式、代入、化简、判断、结论）；"
+    "推理写成「∵ …，∴ …」，计算写出代入的数和中间结果，不要跳步，不要写「易得」「显然」；"
+    "选择题写出选它的依据，必要时逐项排除（「A 错：…」）；填空题写出得到答案的计算或推理；一题多问时只写这个空对应的那一问，用到前一问的结果直接引用；"
+    "最后一步写结论（「答：…」或「∴ 选 B」）。一般 3 到 8 步，每步不超过 60 字。\n"
+    "- technique 解题技巧：1 到 2 句，能迁移到同类题的方法、口诀或简便做法（如「两定点一动点在直线上求最短：作一个定点的对称点再连线」），没有就留空。\n"
+    "- pitfall 易错点：1 句，这类题最容易错在哪里（如「忘了先求自变量取值范围，直接取顶点」）。\n"
+    "- wrongAt：学生写了作答且答错或部分对时，1 句指出学生具体错在哪一步、为什么错；没作答或看不出时留空。\n"
+    "- answer：最终正确答案本身（选择题只写选项字母，不写说明）。附的参考答案是识别时给的，你认真算出来不同时以你算出的为准。\n"
+    "式子、方程、坐标、带上下标的量一律写成 LaTeX 并用 $ 包起来（如 $y=-10(x-5)^2+2250$、$A(-3,0)$），「∵」「∴」和中文写在 $ 外面。"
+    "同一题几个空的思路、知识点可以写得简短些。不要提到「照片」「OCR」「本页」。"
+)
+
+EXPLAIN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string"},
+                    "answer": {"type": "string"},
+                    "thinking": {"type": "string"},
+                    "knowledge": {"type": "array", "items": {"type": "string"}},
+                    "steps": {"type": "array", "items": {"type": "string"}},
+                    "technique": {"type": "string"},
+                    "pitfall": {"type": "string"},
+                    "wrongAt": {"type": "string"},
+                },
+                "required": ["key", "answer", "thinking", "knowledge", "steps", "technique", "pitfall", "wrongAt"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["results"],
+    "additionalProperties": False,
+}
 
 CONTEXT_SCHEMA = {
     "type": "object",
@@ -589,6 +632,11 @@ class ClaudeProvider(AIProvider):
             self.grade_unmarked(sheets)
         except Exception as e:  # noqa: BLE001  阅卷失败不影响还原结果
             log.warning("grade_unmarked failed: %s", e)
+        # 第三步：数理化做错 / 没作答的题写详解（思路、知识点、完整步骤、技巧、易错点），替换识别时的简短解析
+        try:
+            self.explain(sheets, pages)
+        except Exception as e:  # noqa: BLE001  失败就保留简短解析
+            log.warning("explain failed: %s", e)
         return sheets, derive_questions(sheets)
 
     def _resolve_with_context(self, sheets: list[DigitizedPage], pages: list[Crop], positions: list[tuple[int, int]], batch: int = 10) -> int:
@@ -649,6 +697,67 @@ class ClaudeProvider(AIProvider):
                 except Exception as e:  # noqa: BLE001  某一组失败不影响其他组
                     log.warning("context re-solve batch failed: %s", e)
         log.info("re-solved %d blank(s) in %d question block(s) with neighbouring pages", done, len(positions))
+        return done
+
+    def explain(self, sheets: list[DigitizedPage], pages: list[Crop], batch: int = 5) -> int:
+        """数学、物理、化学做错 / 没作答的空写详解：带上所在页（和大题题干所在页）的照片、OCR，几组并发。"""
+        targets = explain_targets(sheets)
+        if not targets:
+            return 0
+        parents = parent_stems(sheets)
+        by_pages: dict[tuple[int, ...], list[tuple[int, int, DigitizedBlank]]] = {}
+        for si, bi, blanks in targets:
+            want = {sheets[si].page}
+            if (si, bi) in parents:
+                want.add(sheets[parents[(si, bi)][0]].page)
+            key = tuple(sorted(x for x in want if 0 <= x < len(pages)))
+            by_pages.setdefault(key, []).extend((si, bi, b) for b in blanks)
+        ocr_of = {s.page: s.ocrText for s in sheets if s.ocrText}
+
+        def run(page_ids: tuple[int, ...], chunk: list[tuple[int, int, DigitizedBlank]]) -> int:
+            content: list[dict] = []
+            for k in page_ids:
+                content.append({"type": "text", "text": f"第 {k + 1} 张照片："})
+                content.append({"type": "image", "source": {"type": "base64", "media_type": pages[k].media_type, "data": base64.standard_b64encode(pages[k].data).decode("utf-8")}})
+            ocr_text = "\n\n".join(f"<page n=\"{k + 1}\">\n{ocr_of[k][:6000]}\n</page>" for k in page_ids if k in ocr_of)
+            todo: dict[str, tuple] = {}
+            parts = []
+            for n, (si, bi, b) in enumerate(chunk):
+                blk = sheets[si].blocks[bi]
+                key = f"q{n}"
+                stem = _render_text(blk.text, blk.blanks, b.id).replace("____", "【空】", 1)
+                if (si, bi) in parents:
+                    stem = stem_lead(sheets[parents[(si, bi)][0]].blocks[parents[(si, bi)][1]]) + "\n" + stem
+                options = blk.options or (_nearby_wordbank(sheets[si].blocks, bi) if blk.type == "passage" else [])
+                figures = [f.text for f in sheets[si].blocks if f.type == "figure" and f.text and (not f.number or f.number == blk.number)]
+                parts.append("\n".join(x for x in [
+                    f"<question key=\"{key}\" page=\"{sheets[si].page + 1}\" number=\"{b.number or blk.number}\" type=\"{blk.questionType}\">",
+                    stem[:3000],
+                    f"选项：{'　'.join(options)}" if options else "",
+                    f"图：{'；'.join(figures)[:800]}" if figures else "",
+                    f"学生作答：{b.student}" if b.student.strip() else "学生作答：（没作答）",
+                    f"参考答案：{b.answer}",
+                    "</question>",
+                ] if x))
+                todo[key] = (blk, b)
+            content.append({"type": "text", "text": ("OCR 文字：\n" + ocr_text + "\n\n" if ocr_text else "") + "要写讲解的题（【空】标出这一题要答的位置，results 的 key 用 question 的 key）：\n\n" + "\n\n".join(parts)})
+            data = self._call(EXPLAIN_SYSTEM_PROMPT, content, EXPLAIN_SCHEMA, max_tokens=16000)
+            done = 0
+            for r in data.get("results", []):
+                hit = todo.get(str(r.get("key"))) if isinstance(r, dict) else None
+                if hit and apply_explanation(hit[0], hit[1], r):
+                    done += 1
+            return done
+
+        jobs = [(k, v[i : i + batch]) for k, v in by_pages.items() for i in range(0, len(v), batch)]
+        done = 0
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for f in [pool.submit(run, k, c) for k, c in jobs]:
+                try:
+                    done += f.result()
+                except Exception as e:  # noqa: BLE001  某一组失败不影响其他组，保留简短解析
+                    log.warning("explain batch failed: %s", e)
+        log.info("explained %d/%d blank(s)", done, sum(len(v) for v in by_pages.values()))
         return done
 
     def _resolve_split_choices(self, unresolved: list) -> int:
