@@ -80,15 +80,20 @@ interface Props {
   label?: string;
 }
 
+/** 只有线条、没有封闭区域的图标：填充后会整个看不见，选中态改成加粗描边 */
+const LINE_ONLY = new Set<IconName>(["chart"]);
+
 export function Icon({ name, size = 22, stroke = 1.8, fill = false, className, style, label }: Props) {
+  const lineOnly = fill && LINE_ONLY.has(name);
+  const solid = fill && !lineOnly;
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill={fill ? "currentColor" : "none"}
-      stroke={fill ? "none" : "currentColor"}
-      strokeWidth={stroke}
+      fill={solid ? "currentColor" : "none"}
+      stroke={solid ? "none" : "currentColor"}
+      strokeWidth={lineOnly ? stroke + 0.8 : stroke}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
