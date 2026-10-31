@@ -5,7 +5,7 @@ import { ErrorCard, jumpToError } from "../../components/ErrorCard";
 import { ExportSheet } from "../../components/ExportSheet";
 import { Empty, ErrorFilterTags, Hint, Segmented, Sheet, SubjectTile, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/ui";
 import { captureInto, type Source } from "../../lib/capture";
-import { folderErrors, groupByKnowledge } from "../../lib/errors";
+import { folderErrors, groupByKnowledge, knowledgeKey } from "../../lib/errors";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../../lib/format";
 import { toast, useDataVersion } from "../../lib/hooks";
 import { gradeIfNeeded, scanStageText, tagIfNeeded } from "../../lib/jobs";
@@ -179,7 +179,7 @@ export default function FolderPage() {
         const papers = new Set(items.map((i) => i.paperId)).size;
         const c = subjectColors(items[0].subject);
         return (
-          <View key={k} className="card">
+          <View key={knowledgeKey(items[0])} className="card">
             <View className="row-center gap12">
               <View className="kp-dot" style={{ background: c.bg, color: c.color }}>
                 {k.slice(0, 1)}
@@ -205,7 +205,7 @@ export default function FolderPage() {
       })}
       {shown.length > 0 &&
         groups.map(([k, items]) => (
-          <View key={`list-${k}`} className="col gap10">
+          <View key={`list-${knowledgeKey(items[0])}`} className="col gap10">
             <Text className="t-headline section-title">
               {k} · {items.length} 题
             </Text>

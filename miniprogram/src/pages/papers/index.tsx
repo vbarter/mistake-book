@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Image, Input, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh } from "@tarojs/taro";
 import { captureInto, type Source } from "../../lib/capture";
-import { folderErrors, groupByKnowledge } from "../../lib/errors";
+import { folderErrors, groupByKnowledge, knowledgeKey } from "../../lib/errors";
 import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../../lib/format";
 import { useDataVersion, toast } from "../../lib/hooks";
 import { scanStageText, pollPendingJobs } from "../../lib/jobs";
@@ -110,7 +110,7 @@ export default function Papers() {
               </View>
               <View className="row-wrap">
                 {groups.slice(0, 2).map(([k, items]) => (
-                  <Text key={k} className="tag" style={{ background: c.bg, color: c.color }}>
+                  <Text key={knowledgeKey(items[0])} className="tag" style={{ background: c.bg, color: c.color }}>
                     {k} {items.length}
                   </Text>
                 ))}

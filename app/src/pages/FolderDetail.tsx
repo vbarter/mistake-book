@@ -8,7 +8,7 @@ import { SwipeSortList } from "../components/SwipeSortList";
 import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
 import { ErrorFilterTags, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
-import { folderErrors, groupByKnowledge, groupBySection, paperErrors } from "../lib/errors";
+import { folderErrors, groupByKnowledge, groupBySection, knowledgeKey, paperErrors } from "../lib/errors";
 import { deleteFolder, deletePaper, folderStats, getFolder, paperQuality, paperStats, paperSubject, reorderPapers, thumbOf, updateFolder, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
 import { gradeIfNeeded, needsScan, scanPending, scanStageText, tagIfNeeded, useJobs } from "../lib/jobs";
@@ -161,7 +161,7 @@ export default function FolderDetail() {
         const blank = items.filter((i) => i.kind === "未作答").length;
         const papers = new Set(items.map((i) => i.paperId)).size;
         return (
-          <div key={k} className="card" style={{ gap: 10, padding: "12px 14px" }}>
+          <div key={knowledgeKey(items[0])} className="card" style={{ gap: 10, padding: "12px 14px" }}>
             <div className="kp">
               <KnowledgeIcon name={k} subject={items[0].subject} />
               <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -186,7 +186,7 @@ export default function FolderDetail() {
             <span className="t-sub" style={{ fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="list" size={16} stroke={2.2} />逐题 · {shown.length}</span>
           </div>
           {groups.map(([k, items]) => (
-            <div key={k} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div key={knowledgeKey(items[0])} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <span className="t-headline" style={{ marginTop: 4 }}>{k} · {items.length} 题</span>
               {items.map((i) => (
                 <ErrorCard key={i.key} item={i} showSource={folder.papers.length > 1} />

@@ -7,7 +7,7 @@ import { Buddy } from "../components/Illustration";
 import { Button, Sheet } from "../components/ui";
 import { toast } from "../store/banner";
 import { SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
-import { folderErrors, groupByKnowledge } from "../lib/errors";
+import { folderErrors, groupByKnowledge, knowledgeKey } from "../lib/errors";
 import { deleteFolder, folderStats, listFolders, reorderFolders, thumbOf, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL, formatDate } from "../lib/format";
 import { scanStageText, useJobs } from "../lib/jobs";
@@ -73,7 +73,7 @@ export default function Papers() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
                     {kps.map(([k, items]) => (
-                      <span key={k} className="tag" style={{ background: c.bg, color: c.color, height: 24 }}>{k} {items.length}</span>
+                      <span key={knowledgeKey(items[0])} className="tag" style={{ background: c.bg, color: c.color, height: 24 }}>{k} {items.length}</span>
                     ))}
                     {more > 0 && <span className="tag tag--neutral">+{more}</span>}
                     {kps.length === 0 && <span className="t-foot c-sec">{st.unscanned > 0 ? `${st.unscanned} 张待扫描，扫完错题自动归到知识点` : "没有错题，真棒"}</span>}

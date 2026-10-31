@@ -1,6 +1,6 @@
 /** 错题榜：把一段时间里的错题排成几张榜单。易错指数 0–100，越高越该先复习，全部在本机算。 */
 import type { Subject } from "../api/types";
-import { paperIdsOf, timesWrong, type ErrorItem } from "./errors";
+import { knowledgeKey, paperIdsOf, timesWrong, type ErrorItem } from "./errors";
 
 export type Board = "question" | "knowledge" | "repeat" | "blank";
 
@@ -50,7 +50,7 @@ export const snippet = (t: string, n = 40) => {
 
 function byKnowledge(items: ErrorItem[]): Map<string, ErrorItem[]> {
   const m = new Map<string, ErrorItem[]>();
-  for (const e of items) m.set(e.knowledge, [...(m.get(e.knowledge) ?? []), e]);
+  for (const e of items) m.set(knowledgeKey(e), [...(m.get(knowledgeKey(e)) ?? []), e]);
   return m;
 }
 
@@ -66,7 +66,7 @@ function kpRow(k: string, list: ErrorItem[], maxCount: number, now: number, extr
   const tip = list.find((e) => e.q.tip)?.q.tip;
   return {
     key: k,
-    title: k,
+    title: list[0].knowledge,
     subject: list[0].subject,
     score,
     meta: [extra ?? `${list.length} 道题`, `来自 ${papers} 份试卷`],
@@ -86,7 +86,7 @@ export function rank(items: ErrorItem[], board: Board, now = Date.now()): RankRo
           key: e.key,
           title: snippet(e.stem),
           subject: e.subject,
-          score: questionScore(e, kps.get(e.knowledge)?.length ?? 1, maxKp, now),
+          score: questionScore(e, kps.get(knowledgeKey(e))?.length ?? 1, maxKp, now),
           meta: [e.knowledge, `${e.paperName} 第 ${e.q.number} 题`, ...(timesWrong(e) > 1 ? [`错过 ${timesWrong(e)} 次`] : [])],
           quote: e.q.tip ? `下次注意：${e.q.tip}` : answer,
           items: [e],
