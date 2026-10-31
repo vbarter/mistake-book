@@ -88,13 +88,15 @@ async function slot<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } finally {
     active -= 1;
-    waiting.shift()?.();
+    const next = waiting.shift();
+    if (next) next();
+    else if (active === 0) releaseFigureSources(); // 这一批裁完了：解码的原图不再留着
   }
 }
 
 /**
  * 解码好的原照片：同一张照片上的几张插图共用一次解码（以前每裁一张都重新读库、重新解码一张 2400px 原图，约 30MB）。
- * 只留最近用过的两张，用完立刻把 img.src 清空，解码出来的位图马上还给系统，不等垃圾回收。
+ * 只在一批裁图进行中留着（最多两张），这批裁完就把 img.src 清空，解码出来的位图马上还给系统，不等垃圾回收。
  */
 const SOURCE_MAX = 2;
 const sources = new Map<string, { img: Promise<HTMLImageElement>; users: number }>();
