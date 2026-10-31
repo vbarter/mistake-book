@@ -8,7 +8,7 @@ import { figureAt, type FigureRef } from "../../lib/figures";
 import { Empty, ErrorFilterTags, Hint, MathText, Segmented, Tag, Verdict, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/ui";
 import { retake } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
-import { formatDateTime, unwrapLines } from "../../lib/format";
+import { formatDateTime, stripLeadingNumber, unwrapLines } from "../../lib/format";
 import { useDataVersion } from "../../lib/hooks";
 import { gradeIfNeeded, isGrading, notDuplicate, printIfNeeded, scanStageText, tagIfNeeded } from "../../lib/jobs";
 import { autoMark, paperQuality, paperStats, validDigitized } from "../../lib/logic";
@@ -187,7 +187,7 @@ export default function PaperPage() {
             <Text className="blk-item__num">{block.number}.</Text>
             <View className="flex1 col gap4 minw0">
               <View>
-                <PrintText text={unwrapLines(block.text)} blanks={block.blanks} />
+                <PrintText text={stripLeadingNumber(unwrapLines(block.text), block.number)} blanks={block.blanks} />
                 {block.hint && <MathText className="c-sec" text={` ${block.hint}`} />}
                 {block.instruction && <Text className="c-sec">（{stripParen(block.instruction)}）</Text>}
               </View>

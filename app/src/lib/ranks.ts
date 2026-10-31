@@ -25,9 +25,27 @@ const DAY = 86400000;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const kindWeight = (e: ErrorItem) => (e.kind === "答错" ? 1 : e.kind === "未作答" ? 0.8 : 0.6);
 const recency = (e: ErrorItem, now: number) => Math.max(0, 1 - (now - new Date(e.scannedAt).getTime()) / (30 * DAY));
-const snippet = (t: string, n = 40) => {
+/** 题干摘要（列表里用 MathText 排公式）：按「看上去的字数」截，$...$ 公式整段保留或整段舍去，绝不从公式中间截断——
+ *  截在公式里会留下半截 LaTeX（「$\angle C=90^\ci…」），KaTeX 认不出，只能原样显示源码。 */
+export const snippet = (t: string, n = 40) => {
   const s = t.replace(/\[\[[^\]]*\]\]/g, "____").replace(/\s+/g, " ").trim();
-  return s.length > n ? `${s.slice(0, n - 1)}…` : s || "（无题干）";
+  if (!s) return "（无题干）";
+  let out = "";
+  let shown = 0;
+  for (const part of s.split(/(\$[^$]{1,600}\$)/)) {
+    if (!part) continue;
+    const isMath = part.length > 2 && part.startsWith("$") && part.endsWith("$");
+    // 公式按排出来大约几个字算：去掉命令名、花括号和上下标符号
+    const width = isMath ? Math.max(1, part.slice(1, -1).replace(/\\[a-zA-Z]+/g, "x").replace(/[{}^_\s]/g, "").length) : part.length;
+    if (shown + width <= n - 1) {
+      out += part;
+      shown += width;
+      continue;
+    }
+    if (!isMath) out += part.replace(/\$/g, "").slice(0, Math.max(0, n - 1 - shown));
+    return `${out.trimEnd()}…`;
+  }
+  return out;
 };
 
 function byKnowledge(items: ErrorItem[]): Map<string, ErrorItem[]> {

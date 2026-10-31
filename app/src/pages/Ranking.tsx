@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Subject } from "../api/types";
 import { Icon } from "../components/Icon";
+import { MathText } from "../components/MathText";
 import { Buddy } from "../components/Illustration";
 import { TrendBars } from "../components/Insights";
 import { CountUp } from "../components/Motion";
@@ -92,9 +93,9 @@ export default function Ranking() {
                   <button key={r.key} className="rank-card" style={{ ["--i" as string]: Math.min(i, 8) }} onClick={() => openDetail(i)}>
                     <span className={`rank-badge${i < 3 ? " rank-badge--top" : ""}`}>{i + 1}</span>
                     <span className="rank-card__body">
-                      <span className="rank-card__title">{subject === "all" && <SubjectTile subject={r.subject} size="xs" />}<span className="clamp2">{r.title}</span></span>
+                      <span className="rank-card__title">{subject === "all" && <SubjectTile subject={r.subject} size="xs" />}<MathText className="clamp2" text={r.title} style={{ whiteSpace: "normal" }} /></span>
                       <span className="rank-card__meta">{r.meta.map((m) => <span key={m} className="ellipsis">{m}</span>)}</span>
-                      <span className="rank-card__quote clamp2">{r.quote}</span>
+                      <MathText className="rank-card__quote clamp2" text={r.quote} style={{ whiteSpace: "normal" }} />
                     </span>
                     <span className="rank-index" aria-label={`易错指数 ${Math.round(r.score)}`}><span className="num">{Math.round(r.score)}</span><small>易错指数</small></span>
                   </button>
