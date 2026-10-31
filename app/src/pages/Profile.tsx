@@ -93,11 +93,12 @@ export default function Profile() {
         <div>
           <div className="group__header" style={{ padding: "0 12px 6px" }}><span>数据与隐私</span></div>
           <div className="group">
+            <Row icon="export" iconColor="var(--brand)" title="我的导出" value="最近 7 天" onClick={() => nav("/profile/exports")} />
             <Row icon="photo" iconColor="var(--accent-on)" title="本机试卷照片" value={`${stats.papers} 张 · ${stats.mb} MB`} chevron={false} />
             <Row icon="shield" iconColor="var(--mastered)" title="隐私与权限" onClick={() => nav("/profile/privacy")} />
             <Row icon="person" iconColor="var(--label)" title="账号与登录" value={user.loginMethod === "apple" ? "Apple" : user.loginMethod === "phone" ? "手机号" : "游客"} onClick={() => nav("/profile/account")} />
           </div>
-          <p className="t-cap c-sec" style={{ padding: "6px 12px 0" }}>试卷照片和电子版只保存在这台设备上，不上传。</p>
+          <p className="t-cap c-sec" style={{ padding: "6px 12px 0" }}>试卷照片和电子版只保存在这台设备上，不上传；导出的 PDF 在服务器上保留 7 天。</p>
         </div>
 
         <div className="group">

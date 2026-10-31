@@ -7,6 +7,7 @@ import { validDigitized, type Paper } from "../lib/folders";
 import { figureAt, figurePayload } from "../lib/figures";
 import { exportPdf, haptic } from "../lib/native";
 import { toast, toastError } from "../store/banner";
+import { useExports } from "../store/exports";
 import { Icon } from "./Icon";
 import { Button, Sheet } from "./ui";
 import { Tag } from "./v2";
@@ -22,6 +23,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
   const [withWrong, setWithWrong] = useState(true);
   const [withBlank, setWithBlank] = useState(true);
   const [busy, setBusy] = useState(false);
+  const submitExport = useExports((s) => s.submit);
   const wrongErrors = errors.filter((e) => e.kind !== "未作答");
   const blankErrors = errors.filter((e) => e.kind === "未作答");
   const typed = errors.filter((e) => (e.kind === "未作答" ? withBlank : withWrong));
@@ -30,36 +32,49 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
   const scanned = (papers ?? []).filter((p) => validDigitized(p.digitized));
   const bookPages = Math.max(1, Math.ceil(toBookItems(chosen).length / 3));
 
+  // 请求体：错题本 = 按知识点排好的题 + 裁好的插图；电子试卷 = 扫描结果原样 + 插图
+  const bookBody = async () => {
+    const books = toBookItems(chosen);
+    // 插图从原照片裁好一起发给服务器排版（同时最多解码两张原照片，见 figures.ts）
+    const items = await Promise.all(books.map(async (b) => ({ ...b, figures: await Promise.all(b.figures.map(figurePayload)) })));
+    const typeLabel = withWrong && withBlank ? "错题 + 未作答" : withBlank ? "只含未作答" : "只含错题";
+    return { title: `${title} 错题本`, subtitle: [subtitle, `${chosen.length} 题`, typeLabel].filter(Boolean).join(" · "), items };
+  };
+  const paperBody = async () => {
+    const papersBody = await Promise.all(
+      scanned.map(async (p) => {
+        const d = validDigitized(p.digitized)!;
+        const pages = await Promise.all(
+          d.pages.map(async (s, si) => ({
+            ...s,
+            blocks: await Promise.all(s.blocks.map(async (b, bi) => { const f = b.type === "figure" ? figureAt(p, si, bi) : null; return f ? { ...b, image: (await figurePayload(f)).image } : b; })),
+          })),
+        );
+        return { title: `${title} · ${p.name}`, scannedAt: p.scannedAt ? formatDateTime(p.scannedAt) : "", pages, questions: d.questions };
+      }),
+    );
+    return { title, papers: papersBody };
+  };
+
   const run = async () => {
+    if (kind === "book" && chosen.length === 0) return toast("这个范围里没有错题");
+    if (kind === "paper" && scanned.length === 0) return toast("还没有扫描过的试卷");
     setBusy(true);
     try {
-      if (kind === "book") {
-        const books = toBookItems(chosen);
-        if (books.length === 0) return toast("这个范围里没有错题");
-        // 插图从原照片裁好一起发给服务器排版
-        const items = await Promise.all(books.map(async (b) => ({ ...b, figures: await Promise.all(b.figures.map(figurePayload)) })));
-        const typeLabel = withWrong && withBlank ? "错题 + 未作答" : withBlank ? "只含未作答" : "只含错题";
-        const blob = await apiBlob("/api/digitize/book", { method: "POST", body: { title: `${title} 错题本`, subtitle: [subtitle, `${chosen.length} 题`, typeLabel].filter(Boolean).join(" · "), items }, timeoutMs: 90000 });
-        await exportPdf(blob, `${title} 错题本.pdf`);
-        await setLastExportAt();
-      } else {
-        if (scanned.length === 0) return toast("还没有扫描过的试卷");
-        const papersBody = await Promise.all(
-          scanned.map(async (p) => {
-            const d = validDigitized(p.digitized)!;
-            const pages = await Promise.all(
-              d.pages.map(async (s, si) => ({
-                ...s,
-                blocks: await Promise.all(s.blocks.map(async (b, bi) => { const f = b.type === "figure" ? figureAt(p, si, bi) : null; return f ? { ...b, image: (await figurePayload(f)).image } : b; })),
-              })),
-            );
-            return { title: `${title} · ${p.name}`, scannedAt: p.scannedAt ? formatDateTime(p.scannedAt) : "", pages, questions: d.questions };
-          }),
-        );
-        const body = { title, papers: papersBody };
-        const blob = await apiBlob("/api/digitize/pdf", { method: "POST", body, timeoutMs: 90000 });
-        await exportPdf(blob, `${title} 电子试卷.pdf`);
+      const body = kind === "book" ? await bookBody() : await paperBody();
+      // 交给服务器后台生成：面板马上关掉，好了弹提醒，「我的导出」里能再下载
+      const job = await submitExport({ kind, ...body });
+      if (job) {
+        if (kind === "book") await setLastExportAt();
+        void haptic.success();
+        if (job.status !== "done") toast("正在后台生成，好了会提醒你；也可以在「我的 › 我的导出」里查看");
+        onClose();
+        return;
       }
+      // 服务器还没升级（没有后台导出）：照旧当场生成
+      const blob = await apiBlob(kind === "book" ? "/api/digitize/book" : "/api/digitize/pdf", { method: "POST", body, timeoutMs: 180000 });
+      await exportPdf(blob, kind === "book" ? `${title} 错题本.pdf` : `${title} 电子试卷.pdf`);
+      if (kind === "book") await setLastExportAt();
       void haptic.success();
       onClose();
     } catch (e) {
@@ -126,7 +141,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
         </div>
       )}
 
-      <Button icon="printer" onClick={run} disabled={busy}>{busy ? "生成中…" : "生成 PDF"}</Button>
+      <Button icon="printer" onClick={run} disabled={busy}>{busy ? "正在提交…" : "生成 PDF"}</Button>
       <Button variant="plain" onClick={onClose} style={{ height: 44 }}>取消</Button>
     </Sheet>
   );

@@ -234,6 +234,37 @@ class DigitizeJob(db.Model):
         }
 
 
+class ExportJob(db.Model):
+    """导出任务（错题本 / 电子试卷 PDF）：提交后在服务器后台排版，App 关掉也照样生成；生成好的文件在「我的导出」里可以再下载，保留 7 天。"""
+
+    __tablename__ = "export_jobs"
+    id = db.Column(db.String(32), primary_key=True, default=_uuid)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    kind = db.Column(db.String(8), default="book")  # book | paper
+    title = db.Column(db.String(120), default="")
+    detail = db.Column(db.String(160), default="")  # 「141 题 · 错题 + 未作答」，列表里显示
+    status = db.Column(db.String(16), default="queued", index=True)  # queued | running | done | failed
+    error = db.Column(db.Text, default="")
+    pages = db.Column(db.Integer, default=0)
+    size = db.Column(db.Integer, default=0)  # 文件字节数
+    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "title": self.title,
+            "detail": self.detail or "",
+            "status": self.status,
+            "error": self.error or "",
+            "pages": self.pages or 0,
+            "size": self.size or 0,
+            "createdAt": _iso(self.created_at),
+            "updatedAt": _iso(self.updated_at),
+        }
+
+
 class UsageEvent(db.Model):
     """使用记录：打开、注册、登录、扫描、导出等，只给管理后台统计用，不存试卷内容。"""
 

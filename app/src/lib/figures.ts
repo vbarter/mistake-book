@@ -92,12 +92,13 @@ async function slot<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** 裁图：四周留 1.5% 边，最长边不超过 1400，转正后输出 JPEG dataURL */
-export function cropFigure(f: FigureRef): Promise<string> {
-  const hit = cache.get(f.key);
+/** 裁图：四周留 1.5% 边，最长边不超过 maxSide（屏幕上看 1400），转正后输出 JPEG dataURL */
+export function cropFigure(f: FigureRef, maxSide = 1400, quality = 0.88): Promise<string> {
+  const key = maxSide === 1400 ? f.key : `${f.key}@${maxSide}`;
+  const hit = cache.get(key);
   if (hit) {
-    cache.delete(f.key);
-    cache.set(f.key, hit);
+    cache.delete(key);
+    cache.set(key, hit);
     return hit;
   }
   const job = slot(async () => {
@@ -113,7 +114,7 @@ export function cropFigure(f: FigureRef): Promise<string> {
     const y1 = Math.min(1, f.bbox[3] + pad) * H;
     const sw = Math.max(1, x1 - x0);
     const sh = Math.max(1, y1 - y0);
-    const scale = Math.min(1, 1400 / Math.max(sw, sh));
+    const scale = Math.min(1, maxSide / Math.max(sw, sh));
     const w = Math.round(sw * scale);
     const h = Math.round(sh * scale);
     const turns = ((f.rotation % 4) + 4) % 4; // 内容逆时针转了几个 90°，这里顺时针转回去
@@ -126,20 +127,23 @@ export function cropFigure(f: FigureRef): Promise<string> {
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((turns * Math.PI) / 2);
     ctx.drawImage(img, x0, y0, sw, sh, -w / 2, -h / 2, w, h);
-    const out = canvas.toDataURL("image/jpeg", 0.88);
+    const out = canvas.toDataURL("image/jpeg", quality);
     releaseCanvas(canvas);
     return out;
   });
-  cache.set(f.key, job);
+  cache.set(key, job);
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
-  job.catch(() => cache.delete(f.key));
+  job.catch(() => cache.delete(key));
   return job;
 }
+
+/** PDF 里插图最多占半页宽（约 110mm），按打印 200dpi 算 900 像素就够了；用屏幕上的 1400 像素图，上百题的错题本请求体和 PDF 都会大好几倍 */
+const PDF_FIGURE_SIDE = 900;
 
 /** 导出 PDF 用：带上裁好的图；裁不出来就只给文字说明 */
 export async function figurePayload(f: FigureRef): Promise<{ title: string; label: string; text: string; image?: string }> {
   try {
-    return { title: f.title, label: f.label, text: f.text, image: await cropFigure(f) };
+    return { title: f.title, label: f.label, text: f.text, image: await cropFigure(f, PDF_FIGURE_SIDE, 0.8) };
   } catch {
     return { title: f.title, label: f.label, text: f.text };
   }

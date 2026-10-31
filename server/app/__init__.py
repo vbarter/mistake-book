@@ -32,8 +32,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     from .routes.recognize import bp as recognize_bp
     from .routes.review import bp as review_bp
     from .routes.practice import bp as practice_bp
+    from .routes.exports import bp as exports_bp
 
-    for bp in (auth_bp, mistakes_bp, recognize_bp, review_bp, practice_bp):
+    for bp in (auth_bp, mistakes_bp, recognize_bp, review_bp, practice_bp, exports_bp):
         app.register_blueprint(bp, url_prefix="/api")
 
     from .routes.admin import bp as admin_bp
