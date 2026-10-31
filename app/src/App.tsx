@@ -2,12 +2,14 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./store/auth";
 import { startJobPoller } from "./lib/jobs";
-import { isTabRoot, setupBackButton, setupEdgeSwipeBack } from "./lib/native";
+import { isTabRoot, needsPhotoConfirm, setupBackButton, setupEdgeSwipeBack } from "./lib/native";
 import { listenRestoredPhoto } from "./lib/cameraRestore";
 import { addPaper, getFolder, loadPages, toPage, updatePaper } from "./lib/folders";
 import { useCapture } from "./store/capture";
 import { toast, toastError } from "./store/banner";
 import { BannerHost, Spinner } from "./components/ui";
+import { PhotoConfirmHost } from "./components/PhotoConfirm";
+import { confirmPhoto } from "./store/photoConfirm";
 import { TabBar } from "./components/TabBar";
 import Startup from "./components/Startup";
 import { hasConsented, PrivacyConsent } from "./components/PrivacyConsent";
@@ -97,11 +99,19 @@ export default function App() {
     let active = true;
     void listenRestoredPhoto(async ({ dataUrl, target }) => {
       try {
+        const folder = target?.folderId ? await getFolder(target.folderId) : undefined;
+        const paper = target?.paperId ? folder?.papers.find((p) => p.id === target.paperId) : undefined;
+        // 找回的照片也先全屏确认：× 不要这张，回到录入页直接再起相机重拍
+        if (needsPhotoConfirm && !(await confirmPhoto(dataUrl))) {
+          const capture = useCapture.getState();
+          capture.reset();
+          capture.setReturnTo(folder ? `/papers/${folder.id}` : "/home");
+          nav("/capture", { state: { folderId: folder?.id ?? null, paperId: paper?.id ?? null, source: "camera" } });
+          return;
+        }
         const page = await toPage(dataUrl);
         let folderId: string | null = null;
         let paperId: string | null = null;
-        const folder = target?.folderId ? await getFolder(target.folderId) : undefined;
-        const paper = target?.paperId ? folder?.papers.find((p) => p.id === target.paperId) : undefined;
         if (folder && paper) {
           const pages = [...(await loadPages(paper)), page];
           await updatePaper(folder.id, paper.id, { pages, digitized: undefined, scannedAt: undefined, corrected: {} });
@@ -151,6 +161,7 @@ export default function App() {
       <ScrollToTop />
       <EdgeSwipeBack />
       <BannerHost />
+      <PhotoConfirmHost />
       <Routes>
         <Route path="/" element={<Navigate to={token ? "/home" : "/welcome"} replace />} />
         <Route path="/welcome" element={token ? <Navigate to="/home" replace /> : <Welcome />} />
