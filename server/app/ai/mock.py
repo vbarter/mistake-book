@@ -217,7 +217,7 @@ class MockProvider(AIProvider):
             blk = sheets[si].blocks[bi]
             subject = blk.subject or sheets[si].subject
             best, score = None, 0
-            for t in taxonomy.candidates(subject, grade):
+            for t in taxonomy.candidates(subject):
                 for kp in blk.knowledgePoints:
                     alias = taxonomy.resolve_alias(subject, kp)
                     if alias == t["id"]:

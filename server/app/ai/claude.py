@@ -393,9 +393,10 @@ def is_relay_base_url(url: str | None) -> bool:
 
 TAG_SYSTEM_PROMPT = (
     "你是中小学教研员，负责把学生的错题归到课程知识图谱里的知识点上。"
-    "你会先收到某学科、某学段的知识点清单（每行：id｜名称｜章节），再收到一张试卷上的若干道错题（题干、选项、学生作答、参考答案，以及识别时写的知识点说法）。"
+    "你会先收到某学科从小学到高中的全部知识点清单（每行：id｜名称｜章节，章节里带年级或册次），再收到一张试卷上的若干道错题（题干、选项、学生作答、参考答案，以及识别时写的知识点说法）。"
     "为每道题从清单里挑**一个**最贴切的知识点 id：按题目实际考查的内容判断，不要只看名字是否相同（不同教材版本说法不同，例如上海教材的「锐角三角比」就是清单里的「锐角三角函数」）；"
-    "一题考多个点时选学生答错最直接相关的那个；小学和初中六年级（五四制）的卷子可能对应清单里高一个年级的内容，不要因为年级不符而放弃。"
+    "一题考多个点时选学生答错最直接相关的那个；同名或相近的点在不同年级都有时，按题目难度和卷面年级选对应年级的那条。"
+    "卷面年级、学生年级只是参考，可能不准（家长账号扫孩子的卷子、复习往年内容、五四制六年级学的是七年级内容），和题目内容冲突时以题目为准。"
     "清单里 id 以 zcb_ 开头的是考纲大类（如「构词法」「疑问句」），清单里有更具体的点时优先选具体的点，只有大类能对上时选大类。"
     "清单里确实没有对应内容（超纲、别的学科、看不出考什么）时 topicId 给 null，不要硬凑。"
     "confidence：high 表示很确定，low 表示勉强对应或不确定。只输出 results，key 用题目的 key。"
@@ -423,9 +424,9 @@ TAG_SCHEMA = {
 }
 
 
-def candidate_text(subject: str, grade: str) -> str:
+def candidate_text(subject: str) -> str:
     """候选知识点清单：一行一个「id｜名称｜章节」。"""
-    rows = taxonomy.candidates(subject, grade)
+    rows = taxonomy.candidates(subject)
     return "\n".join(f"{t['id']}｜{t['name']}｜{taxonomy.chapter_title(t)}" for t in rows)
 
 
@@ -806,7 +807,7 @@ class ClaudeProvider(AIProvider):
         return done
 
     def tag_topics(self, sheets: list[DigitizedPage], grade: str, batch: int = 30) -> int:
-        """识别后的第四步：做错 / 半对 / 没作答的题块按学科分组，连同该学科学段的知识点清单交给大模型挑一个知识点 id（纯文本，不传照片）。
+        """识别后的第四步：做错 / 半对 / 没作答的题块按学科分组，连同该学科的全部知识点清单交给大模型挑一个知识点 id（纯文本，不传照片）。
         挑中的写进 block.topic；confidence 为 low 的也写，但记日志。返回标上的题块数。"""
         targets = tag_targets(sheets)
         if not targets:
@@ -818,10 +819,11 @@ class ClaudeProvider(AIProvider):
             by_subject.setdefault(blk.subject or sheets[si].subject, []).append((si, bi))
 
         def run(subject: str, chunk: list[tuple[int, int]]) -> int:
-            listing = candidate_text(subject, grade)
+            listing = candidate_text(subject)
             if not listing:
                 return 0
             todo: dict[str, object] = {}
+            exam_grades = "、".join(dict.fromkeys(sheets[si].examGrade for si, _ in chunk if sheets[si].examGrade))
             parts = []
             for n, (si, bi) in enumerate(chunk):
                 blk = sheets[si].blocks[bi]
@@ -842,7 +844,7 @@ class ClaudeProvider(AIProvider):
                 ] if x))
                 todo[key] = blk
             content = [
-                {"type": "text", "text": f"学科：{SUBJECT_LABELS.get(subject, subject)}；学生年级：{grade_label(grade)}。\n知识点清单（id｜名称｜章节）：\n{listing}"},
+                {"type": "text", "text": f"学科：{SUBJECT_LABELS.get(subject, subject)}；卷面年级：{exam_grades or '看不出'}；学生账号年级：{grade_label(grade)}。\n知识点清单（id｜名称｜章节）：\n{listing}"},
                 {"type": "text", "text": "要归类的错题（results 的 key 用 question 的 key）：\n\n" + "\n\n".join(parts)},
             ]
             data = self._call(TAG_SYSTEM_PROMPT, content, TAG_SCHEMA, max_tokens=4000)
@@ -858,6 +860,8 @@ class ClaudeProvider(AIProvider):
                         log.info("topic low confidence: %s -> %s (%s)", blk.number, tid, "、".join(blk.knowledgePoints))
                 elif tid:
                     log.info("topic id not in taxonomy: %s (%s)", tid, "、".join(blk.knowledgePoints))
+                else:
+                    log.info("topic none: %s (%s)", blk.number, "、".join(blk.knowledgePoints))
             return done
 
         jobs = [(subj, v[i : i + batch]) for subj, v in by_subject.items() for i in range(0, len(v), batch)]

@@ -1429,15 +1429,15 @@ def test_book_pdf_has_toc_with_page_numbers(monkeypatch):
 # ---------------------------------------------------------------- 知识图谱标注
 
 
-def test_taxonomy_candidates_by_stage():
-    """候选池按学段取：初中数学只有 7–9 年级的点，学生年级 ±1 排前面；高中按册；没有的学科为空。"""
+def test_taxonomy_candidates_whole_subject():
+    """候选池给整个学科，不按年级过滤：数学从一年级到高中都在，按年级排；没有的学科为空。"""
     from app import taxonomy
 
-    junior = taxonomy.candidates("math", "8")
-    assert junior and {t["grade"] for t in junior} == {7, 8, 9}
-    assert all(abs(t["grade"] - 8) <= 1 for t in junior[:50])
-    assert taxonomy.stage_of("6") == "primary" and taxonomy.stage_of("10") == "senior" and taxonomy.stage_of(None) == "junior"
-    assert taxonomy.candidates("chemistry", "9") == []
+    math = taxonomy.candidates("math")
+    assert {1, 7, 9, 10} <= {t["grade"] for t in math}
+    assert [t["grade"] for t in math] == sorted(t["grade"] for t in math)
+    assert all(t["subject"] == "math" for t in math)
+    assert taxonomy.candidates("chemistry") == []
     v = taxonomy.view("cnm_276")
     assert v and v["name"] == "锐角三角函数的定义" and v["chapter"] == "九下 第三十二章 锐角三角函数" and v["subject"] == "math"
     assert taxonomy.resolve_alias("math", "锐角三角比") == "cnm_276"
@@ -1446,7 +1446,7 @@ def test_taxonomy_candidates_by_stage():
 
 
 def test_tag_topics_sends_candidates_and_applies_valid_ids(monkeypatch):
-    """错题按学科合批交给大模型：提示词里有该学段的知识点清单；挑中的 id 写进题块和派生题，不在图谱里的 id 丢掉。"""
+    """错题按学科合批交给大模型：提示词里有该学科全部年级的知识点清单和卷面年级；挑中的 id 写进题块和派生题，不在图谱里的 id 丢掉。"""
     from app import taxonomy
     from app.ai.base import DigitizedBlank, DigitizedBlock, DigitizedPage
     from app.ai.claude import ClaudeProvider
@@ -1461,16 +1461,17 @@ def test_tag_topics_sends_candidates_and_applies_valid_ids(monkeypatch):
         return {"results": [{"key": "q0", "topicId": "cnm_221", "confidence": "high"}, {"key": "q1", "topicId": "nope_1", "confidence": "low"}]}
 
     monkeypatch.setattr(provider, "_call", fake_call)
-    sheets = [DigitizedPage(page=0, subject="math", blocks=[
+    sheets = [DigitizedPage(page=0, subject="math", examGrade="九年级", blocks=[
         DigitizedBlock(type="item", number="1", text="用配方法解方程 [[1]]", subject="math", questionType="solve", knowledgePoints=["数与代数 · 一元二次方程", "配方法"], blanks=[DigitizedBlank(id="1", number="1", student="x=1", mark="wrong", answer="x=1 或 x=3")]),
         DigitizedBlock(type="item", number="2", text="计算 [[2]]", subject="math", questionType="fill", knowledgePoints=["有理数"], blanks=[DigitizedBlank(id="2", number="2", student="", mark="blank", answer="3")]),
         DigitizedBlock(type="item", number="3", text="做对的题 [[3]]", subject="math", questionType="fill", blanks=[DigitizedBlank(id="3", number="3", student="5", mark="correct")]),
         DigitizedBlock(type="item", number="4", text="化学题 [[4]]", subject="chemistry", questionType="fill", blanks=[DigitizedBlank(id="4", number="4", student="", mark="wrong", answer="O2")]),
     ])]
-    assert provider.tag_topics(sheets, grade="9") == 1
+    assert provider.tag_topics(sheets, grade="5") == 1
     assert len(calls) == 1
     listing, questions = calls[0][0]["text"], calls[0][1]["text"]
-    assert "cnm_221｜配方法" in listing and "cnm_p001" not in listing and "cnm_h001" not in listing
+    assert "cnm_221｜配方法" in listing and "cnm_p001" in listing and "cnm_h001" in listing
+    assert "卷面年级：九年级" in listing
     assert 'key="q0"' in questions and 'key="q1"' in questions and "q2" not in questions and "化学题" not in questions
     assert sheets[0].blocks[0].topic == taxonomy.view("cnm_221") and sheets[0].blocks[1].topic is None
     qs = derive_questions(sheets)
@@ -1521,16 +1522,14 @@ def test_mistake_stores_topic_id(client, auth):
 
 
 def test_taxonomy_extra_topics_join_candidates():
-    """知错本自补的上海英语考纲大类（zcb_ 前缀）并进英语初中、高中候选池，不进小学；能被 view 和标注校验接受。"""
+    """知错本自补的上海英语考纲大类（zcb_ 前缀）并进英语候选池，不进别的学科；能被 view 和标注校验接受。"""
     from app import taxonomy
     from app.ai.base import DigitizedBlock
     from app.ai.digitize import apply_topic
 
-    junior = {t["id"] for t in taxonomy.candidates("english", "9")}
-    assert "zcb_e012" in junior and "cne_j243" in junior
-    assert "zcb_e012" in {t["id"] for t in taxonomy.candidates("english", "11")}
-    assert "zcb_e012" not in {t["id"] for t in taxonomy.candidates("english", "4")}
-    assert "zcb_e012" not in {t["id"] for t in taxonomy.candidates("math", "9")}
+    english = {t["id"] for t in taxonomy.candidates("english")}
+    assert "zcb_e012" in english and "cne_j243" in english
+    assert "zcb_e012" not in {t["id"] for t in taxonomy.candidates("math")}
     v = taxonomy.view("zcb_e012")
     assert v["chapter"] == "构词法" and v["subject"] == "english"
     blk = DigitizedBlock(type="item", subject="english")
