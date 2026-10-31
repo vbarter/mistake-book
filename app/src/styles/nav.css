@@ -6,12 +6,10 @@
 .tab__icon { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; }
 .tab.on .tab__icon { animation: tab-pop 0.45s var(--spring); }
 .tab--fab { position: relative; }
-.fab { position: absolute; left: 50%; top: -22px; width: 62px; height: 62px; margin-left: -31px; border-radius: 31px; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--brand-gradient); box-shadow: 0 8px 20px var(--brand-glow), 0 0 0 5px var(--bg), 0 0 0 7px var(--tie-trim); transition: transform 0.35s var(--spring); }
+.fab { position: absolute; left: 50%; top: -22px; width: 62px; height: 62px; margin-left: -31px; border-radius: 31px; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--brand); box-shadow: 0 4px 12px var(--brand-glow), 0 0 0 5px var(--bg); transition: transform 0.35s var(--spring); }
 .fab:active { transform: scale(0.9); }
 .fab svg { transition: transform 0.35s var(--spring); }
 .fab.open svg { transform: rotate(135deg); }
-.fab__ring { position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--tie-trim); animation: ring 2.4s ease-out infinite; pointer-events: none; }
-.fab.open .fab__ring { display: none; }
 
 .fab-scrim { position: fixed; inset: 0; z-index: 29; background: rgba(10, 16, 32, 0.28); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: fade-in 0.2s ease; }
 .fab-menu { position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 34px); z-index: 31; width: 0; height: 0; pointer-events: none; }

@@ -7,7 +7,7 @@ import { ExportSheet } from "../components/ExportSheet";
 import { SwipeSortList } from "../components/SwipeSortList";
 import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
-import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
+import { ErrorFilterTags, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
 import { folderErrors, groupByKnowledge, groupBySection, paperErrors } from "../lib/errors";
 import { deleteFolder, deletePaper, folderStats, getFolder, paperQuality, paperStats, paperSubject, reorderPapers, thumbOf, updateFolder, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
@@ -91,7 +91,7 @@ export default function FolderDetail() {
             <span className="t-headline">{pendingScan} 份试卷还没扫描</span>
             <span className="t-foot c-sec">照片都存在手机上，一起发给服务器识别</span>
           </span>
-          <Button size="sm" onClick={scanAll} disabled={Boolean(uploading)}>一键扫描</Button>
+          <Button size="sm" onClick={scanAll} disabled={Boolean(uploading)}>全部扫描</Button>
         </div>
       )}
       <SwipeSortList
@@ -138,7 +138,6 @@ export default function FolderDetail() {
         );
         }}
       />
-      {folder.papers.length > 0 && <Hint>目录按识别结果自动生成：卷头标题当试卷名，下面列出大题和错题数。点一张看电子版。</Hint>}
     </>
   );
 

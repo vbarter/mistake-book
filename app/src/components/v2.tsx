@@ -45,7 +45,7 @@ export function SubjectTile({ subject, size = "md", style }: { subject: Subject 
 
 /** 状态标签：颜色和图标一起变 */
 export function Tag({ kind, icon, children, style }: { kind: "wrong" | "correct" | "partial" | "pending" | "info" | "neutral" | "accent"; icon?: IconName; children: ReactNode; style?: CSSProperties }) {
-  const defaultIcon: Partial<Record<typeof kind, IconName>> = { wrong: "xmark", correct: "check", partial: "warning", pending: "viewfinder", accent: "sparkles" };
+  const defaultIcon: Partial<Record<typeof kind, IconName>> = { wrong: "xmark", correct: "check", partial: "warning", pending: "viewfinder" };
   const name = icon ?? defaultIcon[kind];
   return (
     <span className={`tag tag--${kind}`} style={style}>

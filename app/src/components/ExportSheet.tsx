@@ -89,7 +89,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
           <path d="M44 30h18M44 38h14" stroke="var(--separator)" strokeWidth="2" strokeLinecap="round" />
         </svg>
         <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-          <span className="t-headline" style={{ display: "flex", alignItems: "center", gap: 6 }}>错题本 <Tag kind="accent" icon="sparkles">推荐</Tag></span>
+          <span className="t-headline" style={{ display: "flex", alignItems: "center", gap: 6 }}>错题本 <Tag kind="accent">推荐</Tag></span>
           <span className="t-foot c-sec">自动生成目录，按知识点排好。左边空白重做，右边错题修正，对折就能自测。</span>
           <span className="t-cap c-sec">{chosen.length} 题 · 约 {bookPages} 页</span>
         </span>
@@ -126,7 +126,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
         </div>
       )}
 
-      <Button icon="sparkles" onClick={run} disabled={busy}>{busy ? "生成中…" : "生成 PDF"}</Button>
+      <Button icon="printer" onClick={run} disabled={busy}>{busy ? "生成中…" : "生成 PDF"}</Button>
       <Button variant="plain" onClick={onClose} style={{ height: 44 }}>取消</Button>
     </Sheet>
   );

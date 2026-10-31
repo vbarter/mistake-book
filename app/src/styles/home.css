@@ -1,20 +1,6 @@
-/* 首页与录入：问候卡、闭环四步、添加试卷面板、批量导入、文件夹自动目录、上传 HUD。 */
+/* 首页与录入：问候、添加试卷面板、批量导入、文件夹自动目录、上传 HUD。 */
 
-.hero { position: relative; overflow: hidden; display: flex; flex-direction: column; padding: 20px; border-radius: 24px; color: #fff; background: var(--brand-gradient); box-shadow: 0 12px 32px var(--brand-glow); }
-.hero::before { content: ""; position: absolute; width: 220px; height: 220px; right: -70px; top: -90px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); }
-.hero::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--tie); opacity: 0.9; }
-.hero > * { position: relative; }
-.hero__top { display: flex; align-items: center; gap: 8px; }
-
-/* 闭环四步：当前该做的一步高亮，带呼吸光圈和酒红小点 */
-.loop { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 12px 6px; border-radius: var(--radius-card); background: var(--card); }
-.loop__step { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 2px; border-radius: 14px; color: var(--secondary); }
-.loop__step:not(:last-child)::after { content: ""; position: absolute; top: 22px; right: -6px; width: 12px; height: 2px; border-radius: 1px; background: var(--separator); }
-.loop__icon { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; background: var(--fill-light); color: var(--secondary); }
-.loop__title { font-size: 13px; line-height: 17px; font-weight: 600; color: var(--label); }
-.loop__step.on .loop__icon { background: var(--brand-gradient); color: #fff; animation: pulse 2s ease-out infinite; }
-.loop__step.on .loop__title { color: var(--brand); }
-.loop__step.on::before { content: ""; position: absolute; top: 2px; left: calc(50% + 14px); z-index: 1; width: 8px; height: 8px; border-radius: 4px; background: var(--tie); box-shadow: 0 0 0 2px var(--card); }
+.greet { display: flex; flex-direction: column; gap: 4px; padding: 0 4px; }
 
 /* 薄弱知识点小条（首页摘要） */
 .chart { display: flex; flex-direction: column; gap: 12px; }
@@ -32,7 +18,7 @@
 /* 添加试卷面板 */
 .add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .add-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px; border-radius: 18px; background: var(--fill-light); text-align: left; }
-.add-tile__icon { width: 48px; height: 48px; margin-bottom: 4px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: var(--brand-gradient); color: #fff; }
+.add-tile__icon { width: 48px; height: 48px; margin-bottom: 4px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: var(--brand); color: #fff; }
 
 /* 文件夹自动目录 */
 .toc-num { min-width: 20px; font-size: 13px; font-weight: 700; color: var(--tertiary); font-variant-numeric: tabular-nums; }
@@ -50,4 +36,4 @@
 .thumb-add { width: 100%; aspect-ratio: 3 / 4; border-radius: 10px; border: 1.5px dashed color-mix(in srgb, var(--brand) 35%, transparent); background: var(--brand-tint); color: var(--brand); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; transition: transform 0.25s var(--spring); }
 .thumb-add:active { transform: scale(0.96); }
 .thumb-add:disabled { opacity: 0.5; }
-.thumb-add__icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--brand-gradient); color: #fff; box-shadow: 0 4px 10px color-mix(in srgb, var(--brand) 25%, transparent); }
+.thumb-add__icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--brand); color: #fff; box-shadow: 0 4px 10px color-mix(in srgb, var(--brand) 25%, transparent); }

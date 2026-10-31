@@ -59,7 +59,6 @@ export function TabBar() {
         {tabs.slice(0, 2).map(tab)}
         <span className="tab tab--fab">
           <button className={`fab${open ? " open" : ""}`} onClick={toggle} aria-label={open ? "收起" : "添加试卷"} aria-expanded={open}>
-            <span className="fab__ring" />
             <Icon name={open ? "plus" : "camera"} size={28} stroke={2.2} />
           </button>
         </span>

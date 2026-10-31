@@ -5,7 +5,7 @@ import { Button, Row, Sheet } from "../components/ui";
 import { SubjectTile } from "../components/v2";
 import { allErrors } from "../lib/errors";
 import { listFolders, photoBytes, type Folder } from "../lib/folders";
-import { GRADE_LABEL, SUBJECT_LABEL } from "../lib/format";
+import { GRADE_LABEL } from "../lib/format";
 import { getCity } from "../lib/prefs";
 import { WEB_VERSION, appVersion } from "../lib/version";
 import { useAuth } from "../store/auth";
@@ -69,16 +69,16 @@ export default function Profile() {
         </button>
 
         <div className="stats">
-          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--brand)" }}>{stats.papers}</span><span className="stat__label">张试卷</span></div>
+          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num">{stats.papers}</span><span className="stat__label">张试卷</span></div>
           <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--wrong)" }}>{stats.wrong}</span><span className="stat__label">道答错</span></div>
-          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--accent-on)" }}>{stats.blank}</span><span className="stat__label">道未作答</span></div>
+          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num">{stats.blank}</span><span className="stat__label">道未作答</span></div>
         </div>
 
         <div>
           <div className="group__header" style={{ padding: "0 12px 6px" }}><span>学习设置</span></div>
           <div className="group">
             <Row icon="graduation" iconColor="var(--brand)" title="年级与城市" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => nav("/profile/subjects")} />
-            <Row icon="letters" iconColor="var(--english)" title="学科" value={
+            <Row icon="books" iconColor="var(--brand)" title="学科" value={
               // 最多露 3 个学科图标，其余用「+N」收起，免得学科多时把一行挤满
               <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 {user.subjects.slice(0, 3).map((s) => <SubjectTile key={s} subject={s} size="xs" />)}
@@ -103,7 +103,6 @@ export default function Profile() {
         <div className="group">
           <Row icon="info" iconColor="var(--secondary)" title="关于知错本" value={version} chevron={false} />
         </div>
-        <span className="t-cap c-sec" style={{ textAlign: "center" }}>{SUBJECT_LABEL.english}、{SUBJECT_LABEL.math}、{SUBJECT_LABEL.chinese}、{SUBJECT_LABEL.science} · 小学到高中</span>
       </div>
 
       <Sheet open={editName} onClose={() => setEditName(false)} title="怎么称呼你">

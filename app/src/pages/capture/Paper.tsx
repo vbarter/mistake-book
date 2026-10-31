@@ -207,7 +207,7 @@ export default function Paper() {
 
   const paperTab = (
     <>
-      <Hint icon="printer">打印版只有原题，空格留白。手写和批改在「作答」里。</Hint>
+      <Hint icon="printer">这是打印版，空格留白。你的作答和老师批改在「作答」页。</Hint>
       {sheets.map((sheet, si) => (
         <div className="paper" key={si}>
           <div className="paper__head">

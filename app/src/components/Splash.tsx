@@ -91,7 +91,6 @@ export default function Splash({ onDone }: { onDone: () => void }) {
           </svg>
         </div>
         <span className="splash__name">知错本</span>
-        <span className="splash__slogan">拍一拍，错题不再错</span>
       </div>
     </div>
   );
