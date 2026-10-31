@@ -3,10 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { Button, InlineNav, Segmented, Sheet } from "../components/ui";
 import { SubjectTile } from "../components/v2";
-import { addPaper, folderStats, listFolders, thumbOf, type Folder } from "../lib/folders";
+import { addPaper, folderStats, listFolders, thumbOf, toPage, type Folder, type FullPage } from "../lib/folders";
 import { finishFlow } from "../lib/flow";
 import { submitScan } from "../lib/jobs";
-import { haptic } from "../lib/native";
+import { haptic, pickImage, pickImages } from "../lib/native";
 import { toast, toastError } from "../store/banner";
 import { useImport } from "../store/importer";
 
@@ -18,10 +18,11 @@ type Mode = "one" | "each";
  */
 export default function Import() {
   const nav = useNavigate();
-  const { sources, folderId, from, remove, setFolder, clear } = useImport();
+  const { sources, folderId, from, append, remove, setFolder, clear } = useImport();
   const [mode, setMode] = useState<Mode>("one");
   const [folders, setFolders] = useState<Folder[]>([]);
   const [picking, setPicking] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,6 +37,22 @@ export default function Import() {
     () => (mode === "one" || sources.length === 1 ? [{ name: `第 ${base + 1} 份`, pages: sources.map((_, i) => i) }] : sources.map((_, i) => ({ name: `第 ${base + i + 1} 份`, pages: [i] }))),
     [mode, sources, base],
   );
+
+  // 继续添加：拍一张或从相册再选几张，接在最后，目录预览跟着变
+  const addMore = async (source: "camera" | "photos") => {
+    setAdding(false);
+    try {
+      const list = source === "camera" ? [await pickImage("camera")].filter((x): x is string => Boolean(x)) : await pickImages(0);
+      if (!list.length) return;
+      if (list.length > 3) toast(`正在读取 ${list.length} 张照片…`);
+      const pages: FullPage[] = [];
+      for (const src of list) pages.push(await toPage(src));
+      append(pages);
+      void haptic.light();
+    } catch (e) {
+      toastError((e as Error).message === "permission_denied" ? new Error(source === "camera" ? "需要相机权限，可以在系统设置里打开" : "需要相册权限，可以在系统设置里打开") : e);
+    }
+  };
 
   const leave = () => {
     clear();
@@ -87,6 +104,10 @@ export default function Import() {
               )}
             </div>
           ))}
+          <button className="thumb-add" aria-label="继续添加照片" onClick={() => setAdding(true)} disabled={Boolean(progress)}>
+            <span className="thumb-add__icon"><Icon name="plus" size={20} stroke={2.6} /></span>
+            <span className="t-cap">添加</span>
+          </button>
         </div>
 
         {sources.length > 1 && (
@@ -136,6 +157,21 @@ export default function Import() {
               {folderId === f.id && <Icon name="check" size={18} stroke={2.6} style={{ color: "var(--brand)" }} />}
             </button>
           ))}
+        </div>
+      </Sheet>
+
+      <Sheet open={adding} onClose={() => setAdding(false)} title="继续添加">
+        <div className="add-grid">
+          <button className="add-tile" onClick={() => addMore("camera")}>
+            <span className="add-tile__icon"><Icon name="camera" size={28} stroke={2} /></span>
+            <span className="t-headline">拍照</span>
+            <span className="t-cap c-sec">拍一张，接在最后</span>
+          </button>
+          <button className="add-tile" onClick={() => addMore("photos")}>
+            <span className="add-tile__icon"><Icon name="photo" size={28} stroke={2} /></span>
+            <span className="t-headline">相册</span>
+            <span className="t-cap c-sec">可以一次选多张</span>
+          </button>
         </div>
       </Sheet>
 
