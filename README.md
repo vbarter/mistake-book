@@ -158,7 +158,11 @@ Apple 登录（已接入）：工程已升级到 Capacitor 7，使用 `@capacito
 cd app && npx cap open android
 ```
 
-Gradle 同步后直接运行。开发期 `capacitor.config.ts` 开启了明文 HTTP 以便连局域网后端，上线前应改为 HTTPS 并关闭 `cleartext`。
+Gradle 同步后直接运行。明文 HTTP 由 `android/app/src/{main,debug}/res/xml/network_security_config.xml` 控制：调试包允许连局域网 HTTP 后端，正式包只走 HTTPS（正式包里以前存下的 `http://` 服务器地址会被忽略）。`capacitor.config.ts` 的 `androidScheme` 必须保持 `http`，改了页面 origin 会变，已装用户本机的试卷全部读不到。
+
+安卓上的两处兜底：拍照时 App 被系统回收，重启后照片通过 `appRestoredResult` 送回，`lib/cameraRestore.ts` 把它放回原来的试卷并打开录入页；WebView 渲染进程被杀时 `MainActivity` 重建页面，而不是整个 App 退出。
+
+首次启动先弹《用户协议》《隐私政策》（`components/PrivacyConsent.tsx`），同意之前不联网。正文在 `lib/legal.tsx`，【运营者名称】【联系邮箱】上架前必须填好；改了正文要把 `CONSENT_VERSION` 改掉，老用户会重新确认。
 
 ## 三、云服务器部署（已部署）
 

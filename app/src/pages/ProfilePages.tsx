@@ -260,6 +260,10 @@ export function Privacy() {
           <p className="t-sub c-sec">随时可以在下面清空知错本保存在这台设备上的全部试卷和错题。清空后不能恢复，账号和学习设置不受影响。</p>
         </div>
         <div className="group">
+          <Row icon="info" iconColor="var(--secondary)" title="隐私政策" onClick={() => nav("/legal/privacy")} />
+          <Row icon="info" iconColor="var(--secondary)" title="用户协议" onClick={() => nav("/legal/terms")} />
+        </div>
+        <div className="group">
           <Row icon="trash" iconColor="var(--secondary)" title="清空本应用数据" value={counts ? `${counts.papers} 张试卷` : undefined} onClick={() => setConfirm(true)} />
         </div>
       </div>
