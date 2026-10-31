@@ -398,7 +398,8 @@ TAG_SYSTEM_PROMPT = (
     "一题考多个点时选学生答错最直接相关的那个；小学和初中六年级（五四制）的卷子可能对应清单里高一个年级的内容，不要因为年级不符而放弃。"
     "清单里 id 以 zcb_ 开头的是考纲大类（如「构词法」「疑问句」），清单里有更具体的点时优先选具体的点，只有大类能对上时选大类。"
     "清单里确实没有对应内容（超纲、别的学科、看不出考什么）时 topicId 给 null，不要硬凑。"
-    "confidence：high 表示很确定，low 表示勉强对应或不确定。只输出 results，key 用题目的 key。"
+    "confidence：high 表示很确定，low 表示勉强对应或不确定。只输出 results，每道题一项，key 原样照抄 question 标签里的 key（如 q0、q1），topicId 原样照抄清单里的 id（如 cnm_231）。"
+    "输出形如：{\"results\": [{\"key\": \"q0\", \"topicId\": \"cnm_231\", \"confidence\": \"high\"}, {\"key\": \"q1\", \"topicId\": null, \"confidence\": \"low\"}]}"
 )
 
 TAG_SCHEMA = {
@@ -846,18 +847,35 @@ class ClaudeProvider(AIProvider):
                 {"type": "text", "text": "要归类的错题（results 的 key 用 question 的 key）：\n\n" + "\n\n".join(parts)},
             ]
             data = self._call(TAG_SYSTEM_PROMPT, content, TAG_SCHEMA, max_tokens=4000)
-            done = 0
-            for r in data.get("results", []):
-                blk = todo.get(str(r.get("key"))) if isinstance(r, dict) else None
-                if blk is None:
+            # 中转模型不一定严格按 schema 来：results 可能被包了一层、key 写成题号、topicId 写成「cnm_231 配方法」
+            results = data.get("results") if isinstance(data, dict) else data
+            if isinstance(results, dict):
+                results = [{"key": k, **(v if isinstance(v, dict) else {"topicId": v})} for k, v in results.items()]
+            if not isinstance(results, list):
+                results = []
+            by_number = {blk.number: blk for blk in todo.values() if blk.number}
+            done, nulls, unmatched = 0, 0, 0
+            for r in results:
+                if not isinstance(r, dict):
                     continue
-                tid = r.get("topicId")
-                if apply_topic(blk, str(tid) if tid else None):
+                key = str(r.get("key") or "").strip()
+                blk = todo.get(key) or by_number.get(key)
+                if blk is None:
+                    unmatched += 1
+                    continue
+                tid = r.get("topicId") or r.get("topic_id") or r.get("id")
+                tid = re.split(r"[\s｜|]", str(tid).strip())[0] if tid else None
+                if apply_topic(blk, tid):
                     done += 1
                     if r.get("confidence") == "low":
                         log.info("topic low confidence: %s -> %s (%s)", blk.number, tid, "、".join(blk.knowledgePoints))
                 elif tid:
                     log.info("topic id not in taxonomy: %s (%s)", tid, "、".join(blk.knowledgePoints))
+                else:
+                    nulls += 1
+            if done == 0 and todo:
+                # 一道都没标上：把模型原文记下来，分得清是全给了 null、key 对不上还是结构不对
+                log.warning("tag topics: 0/%d tagged (null %d, unmatched key %d); raw: %.1500s", len(todo), nulls, unmatched, json.dumps(data, ensure_ascii=False))
             return done
 
         jobs = [(subj, v[i : i + batch]) for subj, v in by_subject.items() for i in range(0, len(v), batch)]

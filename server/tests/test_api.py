@@ -1535,3 +1535,26 @@ def test_taxonomy_extra_topics_join_candidates():
     assert v["chapter"] == "构词法" and v["subject"] == "english"
     blk = DigitizedBlock(type="item", subject="english")
     assert apply_topic(blk, "zcb_e012") and blk.topic["id"] == "zcb_e012"
+
+
+def test_tag_topics_tolerates_relay_output(monkeypatch, caplog):
+    """中转模型不按 schema：key 写成题号、topicId 带名称、results 是对象；一道没标上时把原文记进日志。"""
+    import logging
+    from app.ai.base import DigitizedBlank, DigitizedBlock, DigitizedPage
+    from app.ai.claude import ClaudeProvider
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    sheets = [DigitizedPage(page=0, subject="math", blocks=[
+        DigitizedBlock(type="item", number="例10", text="平移 [[1]]", subject="math", questionType="solve", knowledgePoints=["二次函数图象的平移"], blanks=[DigitizedBlank(id="1", number="例10", student="", mark="blank", answer="x")]),
+        DigitizedBlock(type="item", number="例11", text="最值 [[2]]", subject="math", questionType="solve", knowledgePoints=["二次函数的最值"], blanks=[DigitizedBlank(id="2", number="例11", student="", mark="blank", answer="x")]),
+    ])]
+    monkeypatch.setattr(provider, "_call", lambda *a, **k: {"results": {"例10": {"topicId": "cnm_231｜y=a(x-h)²+k 的图象与平移", "confidence": "high"}, "q1": "cnm_235 二次函数的最值"}})
+    assert provider.tag_topics(sheets, grade="9") == 2
+    assert sheets[0].blocks[0].topic["id"] == "cnm_231" and sheets[0].blocks[1].topic["id"] == "cnm_235"
+
+    sheets[0].blocks[0].topic = sheets[0].blocks[1].topic = None
+    monkeypatch.setattr(provider, "_call", lambda *a, **k: {"results": [{"key": "q0", "topicId": None, "confidence": "low"}, {"key": "zzz", "topicId": "cnm_231", "confidence": "high"}]})
+    with caplog.at_level(logging.WARNING, logger="app.ai.claude"):
+        assert provider.tag_topics(sheets, grade="9") == 0
+    assert any("0/2 tagged (null 1, unmatched key 1)" in r.message for r in caplog.records)
