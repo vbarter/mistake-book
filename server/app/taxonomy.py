@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).resolve().parent / "data"
 TAXONOMY_PATH = DATA_DIR / "taxonomy.json"
 ALIASES_PATH = DATA_DIR / "taxonomy_aliases.json"
+EXTRA_PATH = DATA_DIR / "taxonomy_extra.json"  # 知错本自己补的知识点（如上海英语考纲大类），id 用 zcb_ 前缀
 
 # 图谱覆盖的学科（知错本的 subject 枚举）；化学、生物、地理没有图谱，维持自由文本知识点
 _lock = threading.Lock()
@@ -50,6 +51,10 @@ def _load() -> dict:
             return _loaded
         raw = json.loads(TAXONOMY_PATH.read_text("utf-8"))
         topics = {t["id"]: t for t in raw.get("topics", [])}
+        if EXTRA_PATH.exists():
+            for t in json.loads(EXTRA_PATH.read_text("utf-8")).get("topics", []):
+                if t.get("id") and t.get("name") and t.get("subject") and t["id"] not in topics:
+                    topics[t["id"]] = {"semester": "", **t, "extra": True}
         prereqs: dict[str, list[str]] = {}
         for tid, pid in raw.get("prereqs", []):
             if tid in topics and pid in topics:
@@ -108,7 +113,7 @@ def view(topic_id: str) -> dict | None:
         t = data["topics"].get(targets[0]) if targets else None
     if t is None:
         return None
-    return {"id": t["id"], "name": t["name"], "subject": t["subject"], "domain": t["domain"], "grade": t["grade"], "chapter": chapter_title(t)}
+    return {"id": t["id"], "name": t["name"], "subject": t["subject"], "domain": t.get("domain", ""), "grade": t["grade"], "chapter": chapter_title(t)}
 
 
 def get(topic_id: str) -> dict | None:
@@ -122,7 +127,8 @@ def candidates(subject: str, grade: int | str | None) -> list[dict]:
         g = int(grade)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         g = {"primary": 5, "junior": 8, "senior": 10}[stage]
-    pool = [t for t in _load()["topics"].values() if t["subject"] == subject and stage_of(t["grade"]) == stage]
+    pool = [t for t in _load()["topics"].values() if t["subject"] == subject
+            and (stage in t["stages"] if t.get("extra") else stage_of(t["grade"]) == stage)]
     # 高中 grade 是册次，不按距离排
     if stage == "senior":
         return sorted(pool, key=lambda t: (t["grade"], t["id"]))

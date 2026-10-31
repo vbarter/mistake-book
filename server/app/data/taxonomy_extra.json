@@ -1,0 +1,30 @@
+{
+  "_note": "知错本自己维护的补充知识点，并进对应学科的候选池；id 用 zcb_ 前缀，和 cn-math-taxonomy 的 id 不冲突，数据归知错本所有。英语按上海中考英语考纲的语法类别和题型拆，图谱里的初中英语是按教材单元拆的，缺这些大类（评测见 reports/标注评测-嘉定英语二模.md）。chapter 就是类别本身，错题榜按它归并。stages 写这条点在哪些学段的候选池里出现。",
+  "topics": [
+    {"id": "zcb_e001", "name": "名词（单复数、所有格、可数与不可数）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "名词", "stages": ["junior", "senior"]},
+    {"id": "zcb_e002", "name": "代词（人称、物主、反身、不定代词）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "代词", "stages": ["junior", "senior"]},
+    {"id": "zcb_e003", "name": "冠词", "subject": "english", "domain": "语法", "grade": 9, "chapter": "冠词", "stages": ["junior", "senior"]},
+    {"id": "zcb_e004", "name": "数词（基数词、序数词）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "数词", "stages": ["junior", "senior"]},
+    {"id": "zcb_e005", "name": "介词与介词短语", "subject": "english", "domain": "语法", "grade": 9, "chapter": "介词", "stages": ["junior", "senior"]},
+    {"id": "zcb_e006", "name": "连词", "subject": "english", "domain": "语法", "grade": 9, "chapter": "连词", "stages": ["junior", "senior"]},
+    {"id": "zcb_e007", "name": "形容词和副词（原级、比较级、最高级）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "形容词和副词", "stages": ["junior", "senior"]},
+    {"id": "zcb_e008", "name": "动词时态", "subject": "english", "domain": "语法", "grade": 9, "chapter": "动词时态", "stages": ["junior", "senior"]},
+    {"id": "zcb_e009", "name": "被动语态", "subject": "english", "domain": "语法", "grade": 9, "chapter": "被动语态", "stages": ["junior", "senior"]},
+    {"id": "zcb_e010", "name": "非谓语动词（不定式、动名词、分词）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "非谓语动词", "stages": ["junior", "senior"]},
+    {"id": "zcb_e011", "name": "情态动词", "subject": "english", "domain": "语法", "grade": 9, "chapter": "情态动词", "stages": ["junior", "senior"]},
+    {"id": "zcb_e012", "name": "构词法（词性转换、前缀后缀、合成词）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "构词法", "stages": ["junior", "senior"]},
+    {"id": "zcb_e013", "name": "简单句句型（陈述、祈使、感叹、There be、形式主语 / 宾语）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "简单句句型", "stages": ["junior", "senior"]},
+    {"id": "zcb_e014", "name": "疑问句（一般、特殊、选择、反意疑问句）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "疑问句", "stages": ["junior", "senior"]},
+    {"id": "zcb_e015", "name": "并列句", "subject": "english", "domain": "语法", "grade": 9, "chapter": "并列句", "stages": ["junior", "senior"]},
+    {"id": "zcb_e016", "name": "宾语从句与间接引语", "subject": "english", "domain": "语法", "grade": 9, "chapter": "宾语从句", "stages": ["junior", "senior"]},
+    {"id": "zcb_e017", "name": "定语从句", "subject": "english", "domain": "语法", "grade": 9, "chapter": "定语从句", "stages": ["junior", "senior"]},
+    {"id": "zcb_e018", "name": "状语从句（时间、条件、原因、让步、目的、结果）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "状语从句", "stages": ["junior", "senior"]},
+    {"id": "zcb_e019", "name": "主谓一致", "subject": "english", "domain": "语法", "grade": 9, "chapter": "主谓一致", "stages": ["junior", "senior"]},
+    {"id": "zcb_e020", "name": "词汇辨析与同义句转换", "subject": "english", "domain": "词汇", "grade": 9, "chapter": "词汇辨析", "stages": ["junior", "senior"]},
+    {"id": "zcb_e021", "name": "完形填空", "subject": "english", "domain": "题型", "grade": 9, "chapter": "完形填空", "stages": ["junior", "senior"]},
+    {"id": "zcb_e022", "name": "阅读理解", "subject": "english", "domain": "题型", "grade": 9, "chapter": "阅读理解", "stages": ["junior", "senior"]},
+    {"id": "zcb_e023", "name": "选词填空", "subject": "english", "domain": "题型", "grade": 9, "chapter": "选词填空", "stages": ["junior", "senior"]},
+    {"id": "zcb_e024", "name": "句型转换与连词成句", "subject": "english", "domain": "题型", "grade": 9, "chapter": "句型转换", "stages": ["junior", "senior"]},
+    {"id": "zcb_e025", "name": "书面表达", "subject": "english", "domain": "题型", "grade": 9, "chapter": "书面表达", "stages": ["junior", "senior"]}
+  ]
+}

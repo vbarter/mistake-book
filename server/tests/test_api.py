@@ -1518,3 +1518,20 @@ def test_mistake_stores_topic_id(client, auth):
     assert created[1]["topic"] is None
     r = client.patch(f"/api/mistakes/{created[1]['id']}", json={"topicId": "cnm_276"}, headers=auth)
     assert r.status_code == 200 and r.get_json()["mistake"]["topic"]["id"] == "cnm_276"
+
+
+def test_taxonomy_extra_topics_join_candidates():
+    """知错本自补的上海英语考纲大类（zcb_ 前缀）并进英语初中、高中候选池，不进小学；能被 view 和标注校验接受。"""
+    from app import taxonomy
+    from app.ai.base import DigitizedBlock
+    from app.ai.digitize import apply_topic
+
+    junior = {t["id"] for t in taxonomy.candidates("english", "9")}
+    assert "zcb_e012" in junior and "cne_j243" in junior
+    assert "zcb_e012" in {t["id"] for t in taxonomy.candidates("english", "11")}
+    assert "zcb_e012" not in {t["id"] for t in taxonomy.candidates("english", "4")}
+    assert "zcb_e012" not in {t["id"] for t in taxonomy.candidates("math", "9")}
+    v = taxonomy.view("zcb_e012")
+    assert v["chapter"] == "构词法" and v["subject"] == "english"
+    blk = DigitizedBlock(type="item", subject="english")
+    assert apply_topic(blk, "zcb_e012") and blk.topic["id"] == "zcb_e012"
