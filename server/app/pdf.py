@@ -22,7 +22,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.lib.utils import ImageReader
-from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .ai.digitize import auto_mark
 
@@ -357,6 +357,11 @@ S_BOOK_STEM = ParagraphStyle("bookstem", fontName=FONT, fontSize=11, leading=19)
 S_BOOK_META = ParagraphStyle("bookmeta", fontName=FONT, fontSize=8.5, leading=11, textColor=colors.HexColor("#8e8e93"))
 S_BOOK_ANS = ParagraphStyle("bookans", fontName=FONT, fontSize=10.5, leading=15)
 S_BOOK_NOTE = ParagraphStyle("booknote", fontName=FONT, fontSize=9.5, leading=13.5, textColor=colors.HexColor("#555555"))
+S_TOC_H = ParagraphStyle("toch", fontName=FONT, fontSize=13, leading=18, spaceBefore=4, spaceAfter=6)
+S_TOC_HEAD = ParagraphStyle("tochead", fontName=FONT, fontSize=9.5, leading=13, textColor=colors.HexColor("#555555"))
+S_TOC_ROW = ParagraphStyle("tocrow", fontName=FONT, fontSize=10.5, leading=15)
+S_TOC_NUM = ParagraphStyle("tocnum", fontName=FONT, fontSize=10.5, leading=15, alignment=2)
+S_TOC_NOTE = ParagraphStyle("tocnote", fontName=FONT, fontSize=9, leading=13, textColor=colors.HexColor("#555555"))
 
 KIND_COLOR = {"未作答": "#b42323", "答错": "#b35300", "半对": "#b35300"}
 
@@ -366,7 +371,60 @@ def _blank_lines(text: str) -> str:
     return _esc(text).replace("____", "＿＿＿＿＿＿")
 
 
-def _book_rows(items: list[dict]):
+class _PageMark(Flowable):
+    """不占位置的记号：画到哪一页就把页码记进 sink，排目录用（放在表格单元格里也能记到）。"""
+
+    def __init__(self, key: str, sink: dict):
+        super().__init__()
+        self.key, self.sink = key, sink
+        self.width = self.height = 0
+
+    def wrap(self, *_args):
+        return 0, 0
+
+    def draw(self):
+        self.sink.setdefault(self.key, self.canv.getPageNumber())
+
+
+def _book_groups(items: list[dict]) -> list[tuple[str, list[dict]]]:
+    """按出现顺序把相邻的同一知识点归成一组（和正文分组一致）。"""
+    groups: list[tuple[str, list[dict]]] = []
+    for it in items:
+        kp = str(it.get("knowledge") or "（未标注知识点）")
+        if groups and groups[-1][0] == kp:
+            groups[-1][1].append(it)
+        else:
+            groups.append((kp, [it]))
+    return groups
+
+
+def _toc_part(story: list, groups: list[tuple[str, list[dict]]], pages: dict, width: float) -> None:
+    """目录：知识点 · 题数 · 题号 · 页码。页码在第二遍排版时填上。"""
+    story.append(Paragraph("目录", S_TOC_H))
+    rows = [[Paragraph("知识点", S_TOC_HEAD), Paragraph("题数", S_TOC_HEAD), Paragraph("题号", S_TOC_HEAD), Paragraph("页码", S_TOC_HEAD)]]
+    for gi, (kp, its) in enumerate(groups):
+        count = sum(max(1, len(it.get("answers") or [])) for it in its)
+        numbers = "、".join(str(it.get("number") or "") for it in its if it.get("number"))
+        page = pages.get(f"kp{gi}")
+        rows.append([
+            Paragraph(f"{gi + 1}. {_esc(kp)}", S_TOC_ROW),
+            Paragraph(str(count), S_TOC_NUM),
+            Paragraph(_esc(numbers), S_TOC_NOTE),
+            Paragraph(str(page) if page else "", S_TOC_NUM),
+        ])
+    tbl = Table(rows, colWidths=[width * 0.4, width * 0.08, width * 0.42, width * 0.1], repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.black),
+        ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#dddddd")),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(tbl)
+    story.append(PageBreak())
+
+
+def _book_rows(items: list[dict], marks: dict | None = None):
     rows = [[Paragraph("空白重做", S_BOOK_H), Paragraph("错题修正", S_BOOK_H)]]
     styles = [
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -379,11 +437,16 @@ def _book_rows(items: list[dict]):
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
     ]
     current_kp = None
+    kp_index = -1
     for it in items:
         kp = str(it.get("knowledge") or "（未标注知识点）")
         if kp != current_kp:
             current_kp = kp
-            rows.append([Paragraph(f"◆ {_esc(kp)}", S_BOOK_KP), Paragraph("", S_BOOK_KP)])
+            kp_index += 1
+            head = [Paragraph(f"◆ {_esc(kp)}", S_BOOK_KP)]
+            if marks is not None:
+                head.append(_PageMark(f"kp{kp_index}", marks))
+            rows.append([head, Paragraph("", S_BOOK_KP)])
             r = len(rows) - 1
             styles.append(("SPAN", (0, r), (1, r)))
             styles.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#f2f5fc")))
@@ -418,30 +481,56 @@ def _book_rows(items: list[dict]):
 
 
 def build_book_pdf(title: str, subtitle: str, items: list[dict]) -> bytes:
-    """横向 A4：每行一道错题，左栏只有原题（空格留白），右栏原答案 / 正确答案 / 解析；按知识点分组。"""
-    buf = io.BytesIO()
+    """横向 A4：先一页自动目录（知识点 · 题数 · 题号 · 页码），再每行一道错题，左栏只有原题（空格留白），右栏原答案 / 正确答案 / 解析；按知识点分组。
+
+    目录页码要排完才知道，所以排两遍：第一遍记下每个知识点落在第几页，第二遍填进目录。目录行数两遍一样，页码不会因此错位。
+    """
     page = landscape(A4)
-    doc = SimpleDocTemplate(buf, pagesize=page, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=14 * mm, bottomMargin=14 * mm, title=title)
-    story: list = [Paragraph(_esc(title), S_TITLE), Paragraph(_esc(subtitle) if subtitle else "空白重做 + 错题修正 · 对折或遮住右半页再做左边", S_SUB)]
-    rows, styles = _book_rows(items)
     width = page[0] - 28 * mm
-    # splitInRow：一道题（比如错了 20 个空的完形填空）比一页还高时，允许在行内断开续到下一页，否则 ReportLab 直接排版失败。
-    # 表头不用 repeatRows（行内断开时会在同一页多插一次表头），第二页起改在页边距里画栏目名。
-    tbl = Table(rows, colWidths=[width / 2, width / 2], splitByRow=1, splitInRow=1)
-    tbl.setStyle(TableStyle(styles))
-    story.append(tbl)
+    groups = _book_groups(items)
+    with_toc = len(groups) > 1
 
-    def later_header(canvas, _doc):
-        canvas.saveState()
-        canvas.setFont(FONT, 10)
-        canvas.setFillColor(colors.HexColor("#555555"))
-        y = page[1] - 10 * mm
-        canvas.drawString(14 * mm + 8, y, "空白重做")
-        canvas.drawString(14 * mm + width / 2 + 8, y, "错题修正")
-        canvas.setStrokeColor(colors.HexColor("#bbbbbb"))
-        canvas.setLineWidth(0.5)
-        canvas.line(14 * mm, y - 2.5 * mm, 14 * mm + width, y - 2.5 * mm)
-        canvas.restoreState()
+    def build(pages: dict, marks: dict) -> bytes:
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=page, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=14 * mm, bottomMargin=14 * mm, title=title)
+        story: list = [Paragraph(_esc(title), S_TITLE), Paragraph(_esc(subtitle) if subtitle else "空白重做 + 错题修正 · 对折或遮住右半页再做左边", S_SUB)]
+        if with_toc:
+            _toc_part(story, groups, pages, width)
+        rows, styles = _book_rows(items, marks)
+        # splitInRow：一道题（比如错了 20 个空的完形填空）比一页还高时，允许在行内断开续到下一页，否则 ReportLab 直接排版失败。
+        # 表头不用 repeatRows（行内断开时会在同一页多插一次表头），第二页起改在页边距里画栏目名。
+        tbl = Table(rows, colWidths=[width / 2, width / 2], splitByRow=1, splitInRow=1)
+        tbl.setStyle(TableStyle(styles))
+        story.append(tbl)
+        first_body = 2 if with_toc else 1
 
-    doc.build(story, onLaterPages=later_header)
-    return buf.getvalue()
+        def footer(canvas, _doc):
+            canvas.saveState()
+            canvas.setFont(FONT, 8.5)
+            canvas.setFillColor(colors.HexColor("#8e8e93"))
+            canvas.drawCentredString(page[0] / 2, 8 * mm, f"第 {canvas.getPageNumber()} 页")
+            canvas.restoreState()
+
+        def later_header(canvas, _doc):
+            footer(canvas, _doc)
+            if canvas.getPageNumber() <= first_body:
+                return
+            canvas.saveState()
+            canvas.setFont(FONT, 10)
+            canvas.setFillColor(colors.HexColor("#555555"))
+            y = page[1] - 10 * mm
+            canvas.drawString(14 * mm + 8, y, "空白重做")
+            canvas.drawString(14 * mm + width / 2 + 8, y, "错题修正")
+            canvas.setStrokeColor(colors.HexColor("#bbbbbb"))
+            canvas.setLineWidth(0.5)
+            canvas.line(14 * mm, y - 2.5 * mm, 14 * mm + width, y - 2.5 * mm)
+            canvas.restoreState()
+
+        doc.build(story, onFirstPage=footer, onLaterPages=later_header)
+        return buf.getvalue()
+
+    if not with_toc:
+        return build({}, {})
+    marks: dict = {}
+    build({}, marks)
+    return build(marks, {})

@@ -1408,3 +1408,19 @@ def test_math_mistakes_get_detailed_explanation(monkeypatch):
         "$y=(10+x)(200-10x)$", "∵ $a=-10<0$，∴ 开口向下", "答：最大利润 2250 元", "【易错】忘了自变量范围", "错在：没有化成顶点式",
     ]
     assert qs[1].analysis == ""
+
+
+def test_book_pdf_has_toc_with_page_numbers(monkeypatch):
+    """多个知识点时错题本先出一页目录，页码在第二遍排版时填上"""
+    import app.pdf as pdf
+
+    seen = []
+    orig = pdf._toc_part
+    monkeypatch.setattr(pdf, "_toc_part", lambda story, groups, pages, width: (seen.append(dict(pages)), orig(story, groups, pages, width)))
+    items = [
+        {"number": str(i + 1), "stem": "He ____ to school yesterday. " * 4, "knowledge": kp, "answers": [{"number": str(i + 1), "student": "go", "answer": "went", "analysis": "过去时" * 30, "kind": "答错"}]}
+        for i, kp in enumerate(["一般过去时"] * 8 + ["介词搭配"] * 8 + ["阅读理解"] * 2)
+    ]
+    assert pdf.build_book_pdf("t", "s", items).startswith(b"%PDF")
+    assert seen[0] == {} and set(seen[1]) == {"kp0", "kp1", "kp2"}
+    assert seen[1]["kp0"] == 2 and seen[1]["kp0"] <= seen[1]["kp1"] <= seen[1]["kp2"]

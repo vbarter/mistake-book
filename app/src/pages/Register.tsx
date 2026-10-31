@@ -41,7 +41,7 @@ export default function Register() {
       const res = await api<{ token: string; user: User }>("/api/auth/register", { method: "POST", auth: false, body: { phone, code } });
       await setSession(res.token, res.user);
       toast("注册成功，下次用这个手机号登录", "success");
-      nav("/papers", { replace: true });
+      nav("/home", { replace: true });
     } catch (e) {
       if ((e as { status?: number }).status === 409) setRegistered(true);
       else toastError(e);
@@ -58,7 +58,7 @@ export default function Register() {
       if (!id) return;
       const res = await api<{ token: string; user: User }>("/api/auth/apple", { method: "POST", auth: false, body: { identityToken: id.identityToken, profile: id.nickname ? { nickname: id.nickname } : {} } });
       await setSession(res.token, res.user);
-      nav("/papers", { replace: true });
+      nav("/home", { replace: true });
     } catch (e) {
       if (e instanceof AppleAuthError) toast(e.message, "error");
       else toastError(e);

@@ -1,28 +1,21 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Subject } from "../api/types";
+import { useAddPaper } from "../components/AddSheet";
 import { Icon } from "../components/Icon";
 import { SwipeSortList } from "../components/SwipeSortList";
 import { Button, Empty, LargeNav, Sheet } from "../components/ui";
 import { toast } from "../store/banner";
 import { SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
 import { folderErrors, groupByKnowledge } from "../lib/errors";
-import { createFolder, defaultFolderName, deleteFolder, folderStats, listFolders, reorderFolders, type Folder } from "../lib/folders";
-import { SUBJECTS, SUBJECT_LABEL, formatDate } from "../lib/format";
+import { deleteFolder, folderStats, listFolders, reorderFolders, type Folder } from "../lib/folders";
+import { SUBJECT_LABEL, formatDate } from "../lib/format";
 import { scanStageText, useJobs } from "../lib/jobs";
-import { useCapture } from "../store/capture";
 
-type Source = "camera" | "photos";
-
-/** 试卷 Tab：一次考试一个文件夹。点开看里面的试卷和错题汇总；底栏一步录新试卷（先选文件夹或新建）。 */
+/** 试卷 Tab：一次考试一个文件夹，自动建、自动命名。右上角 + 添加试卷（拍照 / 相册批量导入），不用先选文件夹。 */
 export default function Papers() {
   const nav = useNavigate();
-  const { reset, setReturnTo } = useCapture();
+  const add = useAddPaper();
   const [folders, setFolders] = useState<Folder[] | null>(null);
-  const [pick, setPick] = useState<Source | null>(null); // 选文件夹面板
-  const [creating, setCreating] = useState<{ source: Source | null } | null>(null);
-  const [name, setName] = useState("");
-  const [subject, setSubject] = useState<Subject | undefined>(undefined);
   const [deleting, setDeleting] = useState<Folder | null>(null); // 左滑后点了删除，等确认
 
   const jobsVersion = useJobs((s) => s.version);
@@ -30,40 +23,16 @@ export default function Papers() {
     listFolders().then(setFolders).catch(() => setFolders([]));
   }, [jobsVersion]);
 
-  const goCapture = (folderId: string | null, source: Source) => {
-    reset();
-    setReturnTo(folderId ? `/papers/${folderId}` : "/papers");
-    nav("/capture", { state: { folderId, source } });
-  };
-
-  const startCapture = (source: Source) => {
-    if (!folders || folders.length === 0) {
-      setName(defaultFolderName());
-      setSubject(undefined);
-      setCreating({ source });
-      return;
-    }
-    setPick(source);
-  };
-
-  const confirmCreate = async () => {
-    const f = await createFolder(name || defaultFolderName(), subject);
-    setCreating(null);
-    setPick(null);
-    if (creating?.source) goCapture(f.id, creating.source);
-    else nav(`/papers/${f.id}`);
-  };
-
   return (
     <div className="screen">
       <LargeNav title="我的试卷" actions={
-        <button aria-label="新建文件夹" className="tile tile--sm" style={{ background: "var(--brand-tint)", color: "var(--brand-on-tint)", border: 0, width: 44, height: 44, borderRadius: 22 }} onClick={() => { setName(""); setSubject(undefined); setCreating({ source: null }); }}>
+        <button aria-label="添加试卷" className="tile tile--sm" style={{ background: "var(--brand)", color: "#fff", border: 0, width: 44, height: 44, borderRadius: 22 }} onClick={add.open}>
           <Icon name="plus" size={22} stroke={2.4} />
         </button>
       } />
       <div className="screen__content" style={{ paddingBottom: 0, gap: 12 }}>
         {folders && folders.length === 0 && (
-          <Empty icon="folder" title="还没有试卷" text="拍下整页试卷或从相册多选，会自动扫描成电子版，找出错题并按知识点归类。" />
+          <Empty icon="folder" title="还没有试卷" text="拍下整页试卷或从相册多选，会自动扫描成电子版，找出错题并按知识点归类。" action={<Button size="sm" icon="plus" onClick={add.open}>添加试卷</Button>} />
         )}
 
         {folders && folders.length > 0 && (
@@ -122,27 +91,7 @@ export default function Papers() {
           />
         )}
 
-        <div className="bottom-bar bottom-bar--tab" style={{ marginTop: "auto" }}>
-          <Button icon="camera" onClick={() => startCapture("camera")} style={{ flex: 1.25 }}>拍试卷</Button>
-          <Button variant="tinted" icon="photo" onClick={() => startCapture("photos")} style={{ flex: 1 }}>相册</Button>
-        </div>
       </div>
-
-      <Sheet open={Boolean(pick)} onClose={() => setPick(null)} title="放进哪个文件夹？">
-        <div className="group">
-          {folders?.map((f) => {
-            const st = folderStats(f);
-            return (
-              <button key={f.id} className="row" style={{ minHeight: 56 }} onClick={() => { const s = pick!; setPick(null); goCapture(f.id, s); }}>
-                <SubjectTile subject={st.subject} size="sm" />
-                <span className="row__main"><span className="row__title">{f.name}</span><span className="row__sub">{f.papers.length} 张试卷</span></span>
-                <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-              </button>
-            );
-          })}
-        </div>
-        <Button variant="tinted" icon="plus" onClick={() => { setName(defaultFolderName()); setSubject(undefined); setCreating({ source: pick }); }}>新建文件夹</Button>
-      </Sheet>
 
       <Sheet open={Boolean(deleting)} onClose={() => setDeleting(null)} title={`删除「${deleting?.name ?? ""}」？`}>
         <span className="t-body c-sec">里面的 {deleting?.papers.length ?? 0} 张试卷和错题会一起删掉，删了就找不回来了。</span>
@@ -150,18 +99,7 @@ export default function Papers() {
         <Button variant="plain" onClick={() => setDeleting(null)}>取消</Button>
       </Sheet>
 
-      <Sheet open={Boolean(creating)} onClose={() => setCreating(null)} title="新建文件夹">
-        <input className="input" autoFocus value={name} maxLength={30} placeholder={defaultFolderName()} onChange={(e) => setName(e.target.value)} />
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {SUBJECTS.map((s) => (
-            <button key={s} className={`chip chip--select${subject === s ? " on" : ""}`} onClick={() => setSubject(subject === s ? undefined : s)} style={{ gap: 6 }}>
-              <SubjectTile subject={s} size="xs" />{SUBJECT_LABEL[s]}
-            </button>
-          ))}
-        </div>
-        <span className="t-foot c-sec">学科可以不选，扫描后会自动判断。</span>
-        <Button onClick={confirmCreate}>{creating?.source ? "建好并开始拍" : "建好"}</Button>
-      </Sheet>
+      {add.sheet}
     </div>
   );
 }

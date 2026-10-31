@@ -26,7 +26,7 @@ export default function ResetPassword() {
       const res = await api<{ token: string; user: User }>("/api/auth/password/reset", { method: "POST", auth: false, body: { phone, code, password } });
       await setSession(res.token, res.user);
       toast("密码已重设", "success");
-      nav("/papers", { replace: true });
+      nav("/home", { replace: true });
     } catch (e) {
       toastError(e);
     } finally {

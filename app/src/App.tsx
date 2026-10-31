@@ -13,6 +13,8 @@ import Welcome from "./pages/Welcome";
 import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
 import Login from "./pages/Login";
+import Home from "./pages/Home";
+import Import from "./pages/Import";
 import Library from "./pages/Library";
 import Papers from "./pages/Papers";
 import FolderDetail from "./pages/FolderDetail";
@@ -91,9 +93,9 @@ export default function App() {
       <EdgeSwipeBack />
       <BannerHost />
       <Routes>
-        <Route path="/" element={<Navigate to={token ? "/papers" : "/welcome"} replace />} />
-        <Route path="/welcome" element={token ? <Navigate to="/papers" replace /> : <Welcome />} />
-        <Route path="/register" element={token ? <Navigate to="/papers" replace /> : <Register />} />
+        <Route path="/" element={<Navigate to={token ? "/home" : "/welcome"} replace />} />
+        <Route path="/welcome" element={token ? <Navigate to="/home" replace /> : <Welcome />} />
+        <Route path="/register" element={token ? <Navigate to="/home" replace /> : <Register />} />
         <Route path="/setup" element={<Navigate to="/register" replace />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/login" element={<Login />} />
@@ -101,14 +103,16 @@ export default function App() {
 
         <Route element={<RequireAuth />}>
           <Route element={<TabLayout />}>
+            <Route path="/home" element={<Home />} />
             <Route path="/papers" element={<Papers />} />
             <Route path="/library" element={<Library />} />
             <Route path="/profile" element={<Profile />} />
           </Route>
-          <Route path="/today" element={<Navigate to="/papers" replace />} />
+          <Route path="/today" element={<Navigate to="/home" replace />} />
           <Route path="/papers/:folderId" element={<FolderDetail />} />
           <Route path="/papers/:folderId/:paperId" element={<Paper />} />
           <Route path="/capture" element={<Capture />} />
+          <Route path="/import" element={<Import />} />
           <Route path="/profile/subjects" element={<Subjects />} />
           <Route path="/profile/account" element={<Account />} />
           <Route path="/profile/privacy" element={<Privacy />} />

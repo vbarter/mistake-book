@@ -198,7 +198,7 @@ export async function setupBackButton(): Promise<() => void> {
   }
 }
 
-const TAB_ROOTS = new Set(["/papers", "/library", "/profile", "/welcome", "/", "/setup", "/login"]);
+const TAB_ROOTS = new Set(["/home", "/papers", "/library", "/profile", "/welcome", "/", "/setup", "/login"]);
 
 /**
  * 网页层的边缘右滑返回：从屏幕左边缘 28px 内按下、横向拖过 70px 且基本水平，松手就后退一页。

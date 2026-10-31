@@ -87,6 +87,26 @@ export function defaultPaperName(folder: Folder | null | undefined): string {
   return `第 ${(folder?.papers.length ?? 0) + 1} 张`;
 }
 
+const DEFAULT_FOLDER_RE = /^\d{1,2}月\d{1,2}日 试卷$/;
+const DEFAULT_PAPER_RE = /^第 \d+ (张|份)$/;
+
+/** 还是自动起的名字（没被用户改过），扫描后可以换成识别出的名字 */
+export const isDefaultFolderName = (name: string) => DEFAULT_FOLDER_RE.test(name);
+export const isDefaultPaperName = (name: string) => DEFAULT_PAPER_RE.test(name);
+
+/** 不用先选文件夹：今天建的、最近更新的那个文件夹；今天还没有就返回 null（加卷时自动新建） */
+export async function autoTargetFolder(): Promise<Folder | null> {
+  const today = new Date().toDateString();
+  const folders = await listFolders();
+  return [...folders].filter((f) => new Date(f.createdAt).toDateString() === today).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+}
+
+/** 识别完的卷头标题，作为试卷名；太长截断，没有就返回空 */
+export function recognizedTitle(d: DigitizedResult | null | undefined): string {
+  const t = (d?.pages.find((s) => s.title?.trim())?.title ?? "").replace(/\s+/g, " ").trim();
+  return t.length > 24 ? `${t.slice(0, 23)}…` : t;
+}
+
 /** 旧结构（一夹一卷）升级为文件夹里的一张试卷；旧电子版没有版面块的一律当未扫描 */
 function normalize(raw: Folder | LegacyFolder): { folder: Folder; migrated: boolean } {
   if (Array.isArray((raw as Folder).papers)) {

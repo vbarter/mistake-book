@@ -1,0 +1,67 @@
+/* 3.0 闭环：首页主入口、闭环四步、批量导入、分析图表、自动目录。沿用 iOS 分组列表与材质，主色只用在一个主动作上。 */
+
+/* 首页主入口 */
+.hero { border-radius: 24px; padding: 20px; display: flex; flex-direction: column; gap: 18px; color: #fff; background: linear-gradient(145deg, #3b7bff 0%, #2f6fed 45%, #5b4fe0 100%); box-shadow: 0 12px 32px rgba(47, 111, 237, 0.28); }
+.hero__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hero__btn { height: 56px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 17px; font-weight: 600; color: #fff; background: rgba(255, 255, 255, 0.18); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: transform 0.12s ease; }
+.hero__btn--solid { background: #fff; color: #2f6fed; }
+.hero__btn:active { transform: scale(0.97); }
+
+/* 闭环四步 */
+.loop { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; background: var(--card); border-radius: var(--radius-card); padding: 12px 6px; position: relative; }
+.loop__step { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 2px; border-radius: 14px; position: relative; color: var(--secondary); }
+.loop__step:not(:last-child)::after { content: ""; position: absolute; top: 22px; right: -6px; width: 12px; height: 2px; border-radius: 1px; background: var(--separator); }
+.loop__step:active { background: var(--fill-light); }
+.loop__icon { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; background: var(--fill-light); color: var(--secondary); }
+.loop__step.on .loop__icon { background: var(--brand); color: #fff; box-shadow: 0 4px 12px rgba(47, 111, 237, 0.32); }
+.loop__step.on { color: var(--label); }
+.loop__title { font-size: 13px; line-height: 17px; font-weight: 600; color: var(--label); }
+.loop__value { font-size: 11px; line-height: 14px; text-align: center; }
+
+/* 添加试卷面板 */
+.add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.add-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px; border-radius: 18px; background: var(--fill-light); text-align: left; transition: transform 0.12s ease; }
+.add-tile:active { transform: scale(0.97); }
+.add-tile__icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: var(--brand); color: #fff; margin-bottom: 4px; }
+
+/* 自动目录 */
+.toc-num { font-size: 13px; font-weight: 700; color: var(--tertiary); font-variant-numeric: tabular-nums; min-width: 20px; }
+.outline { flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; margin: 2px 0 0 32px; padding: 8px 10px; border-radius: 12px; background: var(--fill-light); }
+.outline__row { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 20px; color: var(--secondary); }
+.outline__wrong { font-weight: 700; color: var(--wrong); font-variant-numeric: tabular-nums; }
+.outline__ok { color: var(--mastered); display: inline-flex; }
+
+/* 上传中的 HUD */
+.hud { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.25); }
+.hud__card { width: 200px; padding: 24px 16px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; background: var(--bar); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2); }
+.spinner-ring { width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--brand-tint); border-top-color: var(--brand); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 分析图表 */
+.insight { background: linear-gradient(160deg, var(--brand-tint), var(--card) 70%); }
+.chart { display: flex; flex-direction: column; gap: 12px; }
+.chart__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.trend { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; height: 140px; }
+.trend__col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-width: 0; height: 100%; }
+.trend__val { font-size: 12px; font-weight: 700; height: 16px; color: var(--label); }
+.trend__area { flex: 1; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.trend__bar { width: 100%; max-width: 22px; border-radius: 4px 4px 0 0; background: var(--brand); opacity: 0.45; flex-shrink: 0; transition: height 0.3s ease; }
+.trend__col.on .trend__area { flex: 1; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.trend__bar { opacity: 1; }
+.trend__label { font-size: 10px; line-height: 14px; color: var(--secondary); white-space: nowrap; }
+.trend__col:not(.on) .trend__area { flex: 1; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.trend__bar { filter: saturate(0.6); }
+.kbars { display: flex; flex-direction: column; }
+.kbar { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 2px; text-align: left; border-top: 1px solid var(--separator-light); }
+.kbar:first-child { border-top: 0; }
+.kbar.on { background: var(--fill-light); border-radius: 10px; }
+.kbar__rank { width: 18px; text-align: center; font-size: 13px; font-weight: 700; color: var(--tertiary); }
+.kbar__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.kbar__name { font-size: 15px; line-height: 20px; font-weight: 500; }
+.kbar__track { height: 6px; border-radius: 3px; background: var(--fill-light); overflow: hidden; }
+.kbar__fill { display: block; height: 100%; border-radius: 3px; }
+.kbar__count { font-size: 17px; font-weight: 700; min-width: 24px; text-align: right; }
+.split { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.legend__item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.legend__dot { width: 8px; height: 8px; border-radius: 4px; }

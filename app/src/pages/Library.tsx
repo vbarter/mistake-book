@@ -4,15 +4,20 @@ import type { Subject } from "../api/types";
 import { ErrorCard } from "../components/ErrorCard";
 import { ExportSheet } from "../components/ExportSheet";
 import { Icon } from "../components/Icon";
-import { Empty, LargeNav } from "../components/ui";
-import { IconSegmented, KnowledgeIcon, SubjectTile, subjectColors } from "../components/v2";
+import { KnowledgeBars, SubjectSplit, TrendBars } from "../components/Insights";
+import { Empty, LargeNav, Segmented } from "../components/ui";
+import { IconSegmented, KnowledgeIcon, Stat, SubjectTile, subjectColors } from "../components/v2";
+import { RANGE_LABEL, analyze, inRange, type Range } from "../lib/insights";
 import { allErrors, groupByKnowledge, groupByMonth, groupBySubject, type ErrorItem } from "../lib/errors";
 import { listFolders, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL } from "../lib/format";
 
 type View = "subject" | "time";
 
-/** 错题库：所有文件夹的错题汇总。按学科：学科 → 知识点 → 题；按时间：月份 → 文件夹 → 题。右上角导出当前范围的错题本。 */
+/**
+ * 分析：上半是最近错题的特点（自动总结一句话、每周趋势、学科分布、薄弱知识点排行），右上角一键导出这段时间的错题本；
+ * 下半是全部错题，按学科（学科 → 知识点 → 题）或按时间（月份 → 文件夹 → 题）翻看。
+ */
 export default function Library() {
   const nav = useNavigate();
   const [folders, setFolders] = useState<Folder[] | null>(null);
@@ -21,6 +26,8 @@ export default function Library() {
   const [month, setMonth] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [range, setRange] = useState<Range>("30d");
+  const [pickedKp, setPickedKp] = useState<string | null>(null);
 
   const reload = useCallback(() => listFolders().then(setFolders).catch(() => setFolders([])), []);
   useEffect(() => {
@@ -32,8 +39,10 @@ export default function Library() {
   const byMonth = useMemo(() => groupByMonth(errors), [errors]);
   const activeSubject = subject ?? bySubject[0]?.[0] ?? null;
   const activeMonth = month ?? byMonth[0]?.[0] ?? null;
+  const ranged = useMemo(() => inRange(errors, range), [errors, range]);
+  const insight = useMemo(() => analyze(ranged), [ranged]);
+  const pickedList = insight.knowledge.find(([k]) => k === pickedKp)?.[1] ?? [];
   const scoped: ErrorItem[] = view === "subject" ? errors.filter((e) => e.subject === activeSubject) : (byMonth.find(([m]) => m === activeMonth)?.[1] ?? []);
-  const scopeLabel = view === "subject" ? (activeSubject ? SUBJECT_LABEL[activeSubject] : "全部") : (activeMonth ?? "全部");
   const syllabus = scoped.find((e) => e.q)?.q ? (folders ?? []).flatMap((f) => f.papers).find((p) => p.digitized?.pages.some((s) => s.syllabus))?.digitized?.pages.find((s) => s.syllabus)?.syllabus : "";
 
   /** 某个学科下的知识点：一张分组卡，卡头是学科，行是知识点，点开行展开逐题 */
@@ -77,8 +86,8 @@ export default function Library() {
 
   return (
     <div className="screen">
-      <LargeNav title="错题库" actions={
-        <button aria-label="导出当前范围的错题本" className="tile" style={{ background: "var(--brand-tint)", color: "var(--brand-on-tint)", border: 0, width: 44, height: 44, borderRadius: 22 }} onClick={() => setExporting(true)} disabled={scoped.length === 0}>
+      <LargeNav title="分析" actions={
+        <button aria-label="导出这段时间的错题本" className="tile" style={{ background: "var(--brand-tint)", color: "var(--brand-on-tint)", border: 0, width: 44, height: 44, borderRadius: 22 }} onClick={() => setExporting(true)} disabled={ranged.length === 0}>
           <Icon name="export" size={22} stroke={2.2} />
         </button>
       } />
@@ -87,6 +96,32 @@ export default function Library() {
 
         {errors.length > 0 && (
           <>
+            <Segmented value={range} onChange={(r) => { setRange(r); setPickedKp(null); }} options={(["7d", "30d", "all"] as Range[]).map((r) => ({ value: r, label: RANGE_LABEL[r] }))} />
+            <div className="card insight">
+              <span className="t-foot" style={{ fontWeight: 700, color: "var(--brand)", display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="sparkles" size={14} stroke={2.2} />自动总结 · {RANGE_LABEL[range]}</span>
+              <span className="t-body" style={{ fontWeight: 600 }}>{insight.summary}</span>
+            </div>
+            <div className="stats">
+              <Stat label="错题" value={insight.wrong} icon="xcircle" color="var(--wrong)" />
+              <Stat label="未作答" value={insight.blank} icon="alert" color="var(--accent-on)" />
+              <Stat label="知识点" value={insight.knowledge.length} icon="target" color="var(--brand)" />
+            </div>
+            <div className="card"><TrendBars items={errors} /></div>
+            {insight.total > 0 && (
+              <>
+                {insight.subjects.length > 1 && <div className="card"><SubjectSplit groups={insight.subjects} /></div>}
+                <div className="card">
+                  <KnowledgeBars groups={insight.knowledge} picked={pickedKp} onPick={(k) => setPickedKp(pickedKp === k ? null : k)} />
+                  {pickedList.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
+                      {pickedList.map((i) => <ErrorCard key={i.key} item={i} showSource />)}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            <span className="t-title3" style={{ marginTop: 12, padding: "0 4px" }}>全部错题</span>
             <IconSegmented value={view} onChange={setView} options={[{ value: "subject", label: "按学科", icon: "grid" }, { value: "time", label: "按时间", icon: "clock" }]} />
 
             {view === "subject" && (
@@ -144,7 +179,7 @@ export default function Library() {
           </>
         )}
       </div>
-      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={`错题库 · ${scopeLabel}`} subtitle={syllabus ? `按${syllabus}归类` : undefined} errors={scoped} />
+      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={`${RANGE_LABEL[range]}错题`} subtitle={syllabus ? `按${syllabus}归类` : undefined} errors={ranged} />
     </div>
   );
 }
