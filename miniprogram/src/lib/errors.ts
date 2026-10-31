@@ -2,7 +2,7 @@
 import type { DigitizedQuestion, Mark, Subject } from "./types";
 import { autoMark, effectiveMark, isBlank, isProblem, validDigitized } from "./logic";
 import type { Folder, Paper } from "./store";
-import { unwrapLines } from "./format";
+import { stripLeadingNumber, unwrapLines } from "./format";
 import { figuresOfQuestion, type FigureRef } from "./figures";
 import { countsInSummary, sameQuestion } from "./dedup";
 
@@ -54,14 +54,31 @@ function partsOf(paper: Paper, q: DigitizedQuestion): ErrorPart[] {
     });
 }
 
+/** 短文里各空的编号是模型自己编的（没印题号的古诗文默写，模型会把空记成「zw-1」「zw-2」…，题号就成了「zw」）：
+ *  题干里的「(zw)____」按出现顺序改成「(1)____」「(2)____」，题号换成当前空是第几个，
+ *  这样卡片不再显示「第 zw 题」，focusSentence 也能只取当前空那一句。真题号（带数字的）不动。 */
+const LOOSE_LABEL = /\(([^()\s\d]{1,8})\)____/;
+export function relabelLooseBlanks(q: DigitizedQuestion): DigitizedQuestion {
+  if (q.blankIds.length !== 1 || /\d/.test(q.number) || !LOOSE_LABEL.test(q.stemText)) return q;
+  let k = 0;
+  let focus = 0;
+  const stemText = q.stemText.replace(/(\([^()\s]{1,8}\))?____/g, (_m, label?: string) => {
+    k += 1;
+    if (label) return `(${k})____`;
+    if (!focus) focus = k;
+    return "____";
+  });
+  return focus ? { ...q, stemText, number: String(focus) } : q;
+}
+
 /** 短文（完形 / 选词填空）里的一个空：整篇短文只取包含当前空（裸「____」）的那一句，别的空仍带编号；不是短文或找不到就原样返回 */
 export function focusSentence(stem: string): string {
   if (!/\(\d+\)____/.test(stem)) return stem;
   const m = /(^|[^)])____/.exec(stem);
   if (!m) return stem;
   const at = m.index + m[1].length;
-  // 句号后面跟空格 / 引号 / 结尾才算句子结束；数字后的点（3.5）不算
-  const isEnd = (i: number) => /[.!?。！？]/.test(stem[i]) && !/\d/.test(stem[i - 1] ?? "") && (i + 1 >= stem.length || /[\s"”’)]/.test(stem[i + 1]));
+  // 中文句号、问号、叹号就是句子结束；英文句点后面跟空格 / 引号 / 结尾才算，数字后的点（3.5）不算
+  const isEnd = (i: number) => /[。！？]/.test(stem[i]) || (/[.!?]/.test(stem[i]) && !/\d/.test(stem[i - 1] ?? "") && (i + 1 >= stem.length || /[\s"”’)]/.test(stem[i + 1])));
   let start = 0;
   for (let i = at - 1; i >= 0; i--) {
     if (stem[i] === "\n" || isEnd(i)) {
@@ -114,24 +131,27 @@ function sectionOf(paper: Paper, q: DigitizedQuestion): string {
 export function paperErrors(folder: Folder, paper: Paper): ErrorItem[] {
   const d = validDigitized(paper.digitized);
   if (!d) return [];
-  return d.questions.filter(isProblem).map((q) => ({
-    key: `${paper.id}:${q.index}`,
-    folderId: folder.id,
-    folderName: folder.name,
-    paperId: paper.id,
-    paperName: paper.name,
-    scannedAt: paper.scannedAt ?? paper.updatedAt,
-    subject: q.subject,
-    knowledge: knowledgeOf(q),
-    subKnowledge: subKnowledgeOf(q),
-    topicId: q.topic?.id,
-    kind: kindOf(q),
-    q,
-    parts: partsOf(paper, q),
-    stem: focusSentence(unwrapLines(q.stemText)),
-    sectionLabel: sectionOf(paper, q),
-    figures: figuresOfQuestion(paper, q),
-  }));
+  return d.questions.filter(isProblem).map((raw) => {
+    const q = relabelLooseBlanks(raw);
+    return {
+      key: `${paper.id}:${q.index}`,
+      folderId: folder.id,
+      folderName: folder.name,
+      paperId: paper.id,
+      paperName: paper.name,
+      scannedAt: paper.scannedAt ?? paper.updatedAt,
+      subject: q.subject,
+      knowledge: knowledgeOf(q),
+      subKnowledge: subKnowledgeOf(q),
+      topicId: q.topic?.id,
+      kind: kindOf(q),
+      q,
+      parts: partsOf(paper, q),
+      stem: focusSentence(stripLeadingNumber(unwrapLines(q.stemText), q.number)),
+      sectionLabel: sectionOf(paper, q),
+      figures: figuresOfQuestion(paper, raw),
+    };
+  });
 }
 
 /** 文件夹里的错题：重复扫描的试卷不计，不同试卷里的同一道题合成一条 */
@@ -249,13 +269,13 @@ export function toBookItems(items: ErrorItem[]): BookItem[] {
         continue;
       }
       // 短文：把当前空的「____」也标上编号，整篇只放一次
-      const stem = unwrapLines(q.stemText).replace(/(^|[^)])____/, `$1(${q.number})____`);
+      const stem = stripLeadingNumber(unwrapLines(q.stemText), q.number).replace(/(^|[^)])____/, `$1(${q.number})____`);
       const item: BookItem = { number: q.number, stem, options: q.options, knowledge: it.knowledge, source, answers: [answer], figures: it.figures };
       byBlock.set(key, item);
       out.push(item);
       continue;
     }
-    out.push({ number: q.number, stem: unwrapLines(q.stemText), options: q.options, knowledge: it.knowledge, source, answers: [answer], figures: it.figures });
+    out.push({ number: q.number, stem: stripLeadingNumber(unwrapLines(q.stemText), q.number), options: q.options, knowledge: it.knowledge, source, answers: [answer], figures: it.figures });
   }
   return out;
 }

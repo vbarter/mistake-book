@@ -10,7 +10,7 @@ import { figureAt, releaseFigureSources, type FigureRef } from "../../lib/figure
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
-import { formatDateTime, unwrapLines } from "../../lib/format";
+import { formatDateTime, stripLeadingNumber, unwrapLines } from "../../lib/format";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperStats, thumbOf, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { gradeIfNeeded, isGrading, notDuplicate, printIfNeeded, scanStageText, tagIfNeeded, useJobs } from "../../lib/jobs";
@@ -187,7 +187,7 @@ export default function Paper() {
             <span className="blk-item__num">{block.number}.</span>
             <div className="blk-item__body">
               <p className="blk-text">
-                {renderPrint(unwrapLines(block.text), block.blanks)}
+                {renderPrint(stripLeadingNumber(unwrapLines(block.text), block.number), block.blanks)}
                 {block.hint && <span className="blk-hint"><MathText text={block.hint} /></span>}
                 {block.instruction && <span className="blk-instruction">（{stripParen(block.instruction)}）</span>}
               </p>

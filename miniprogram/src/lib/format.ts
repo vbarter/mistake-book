@@ -91,3 +91,14 @@ export function unwrapLines(text: string): string {
   }
   return out.join("\n").trim();
 }
+
+/** 题干开头重复的原卷题号去掉：「3. 如图」「3、如图」「3 如图」「(3)如图」→「如图」（老数据用；新扫描的服务端已处理）。
+ *  只认和本题题号相同的数字；只隔空格时要求后面紧跟汉字 / 公式 / 括号 / 大写开头的单词，「3个苹果」「3x+1」「3.5 米」这种不动。 */
+export function stripLeadingNumber(text: string, number: string | undefined): string {
+  const n = (number ?? "").trim().replace(/[.．、\s]+$/, "");
+  if (!n || !text) return text;
+  const num = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`^\\s*(?:[(（]${num}[)）]\\s*|${num}\\s*[.．、](?!\\d)\\s*|${num}\\s+(?=[\\u3400-\\u9fff$（(“"]|[A-Z][a-z]))`);
+  const out = text.replace(re, "");
+  return out.trim() ? out : text;
+}

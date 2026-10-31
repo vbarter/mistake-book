@@ -674,6 +674,20 @@ def test_unwrap_lines_joins_wrapped_sentences():
     assert blk.text == "half [[21]] hour at the sale."
 
 
+def test_strip_leading_number_from_item_text():
+    """题干开头重复的原卷题号去掉（「3 如图」只隔空格也算），「3个苹果」「3.5 米」这种正文不动。"""
+    from app.ai.digitize import clean_block, strip_leading_number
+
+    blk = clean_block({"type": "item", "number": "3", "text": "3 如图，在$\\mathrm{Rt}\\triangle ABC$中"}, "math")
+    assert blk.text == "如图，在$\\mathrm{Rt}\\triangle ABC$中"
+    assert strip_leading_number("5 如图，在$\\triangle ABC$中", "5") == "如图，在$\\triangle ABC$中"
+    assert strip_leading_number("49. After school", "49") == "After school"
+    assert strip_leading_number("(3)如图", "3") == "如图"
+    assert strip_leading_number("3个苹果", "3") == "3个苹果"
+    assert strip_leading_number("3.5 米长的绳子", "3") == "3.5 米长的绳子"
+    assert strip_leading_number("3 x+1=0", "3") == "3 x+1=0"
+
+
 def test_drop_ghost_sheets_from_photo_edge():
     """照片边缘的半截相邻页：没有页码的卷面里，和正常卷面空号重复的短文整段丢，重复的小题丢，其余真题保留。"""
     from app.ai.digitize import clean_sheets, derive_questions, drop_ghost_sheets

@@ -134,6 +134,15 @@ def unwrap_lines(text: str) -> str:
     return "\n".join(out).strip()
 
 
+def strip_leading_number(text: str, number: str) -> str:
+    """题干开头重复的原卷题号去掉：「3. 如图」「3、如图」「3 如图」「(3)如图」→「如图」。
+    只隔空格时要求后面紧跟汉字 / 公式 / 括号 / 大写开头的单词，「3个苹果」「3x+1」「3.5 米」不动。"""
+    num = re.escape(number)
+    pat = rf"^\s*(?:[(（]{num}[)）]\s*|{num}\s*[.．、](?!\d)\s*|{num}\s+(?=[\u3400-\u9fff$（(“\"]|[A-Z][a-z]))"
+    out = re.sub(pat, "", text, count=1)
+    return out if out.strip() else text
+
+
 def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | None:
     """中转模式下模型可能多给或少给字段：只保留已知字段并补默认值；空块丢弃。学科缺失时继承卷面学科。"""
     if not isinstance(raw, dict):
@@ -152,7 +161,7 @@ def clean_block(raw: dict, default_subject: str = "math") -> DigitizedBlock | No
     if btype == "figure":
         text = re.sub(BLANK_RE.pattern, "", text)  # 插图里不该有作答空
     if number and btype == "item":
-        text = re.sub(r"^\s*" + re.escape(number) + r"\s*[.．、]\s*", "", text, count=1)
+        text = strip_leading_number(text, number)
     # 文本里引用了但 blanks 里没有的占位，补一个空记录，保证渲染时每个占位都有落点
     for bid in BLANK_RE.findall(text):
         if bid not in seen:
