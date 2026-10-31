@@ -1,192 +1,138 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import type { Subject } from "../api/types";
 import { ErrorCard } from "../components/ErrorCard";
-import { ExportSheet } from "../components/ExportSheet";
-import { Icon } from "../components/Icon";
-import { KnowledgeBars, SubjectSplit, TrendBars } from "../components/Insights";
+import { Icon, type IconName } from "../components/Icon";
 import { Buddy } from "../components/Illustration";
+import { TrendBars } from "../components/Insights";
 import { CountUp } from "../components/Motion";
 import { Segmented } from "../components/ui";
-import { IconSegmented, KnowledgeIcon, Stat, SubjectTile, subjectColors } from "../components/v2";
-import { RANGE_LABEL, analyze, inRange, type Range } from "../lib/insights";
-import { allErrors, groupByKnowledge, groupByMonth, groupBySubject, type ErrorItem } from "../lib/errors";
+import { SubjectTile } from "../components/v2";
+import { allErrors } from "../lib/errors";
 import { listFolders, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL } from "../lib/format";
+import { RANGE_LABEL, analyze, inRange, type Range } from "../lib/insights";
+import { BOARDS, TYPE_LABEL, rank, type Board, type TypeFilter } from "../lib/ranks";
+import { useJobs } from "../lib/jobs";
 
-type View = "subject" | "time";
+const BOARD_ICON: Record<Board, IconName> = { question: "target", knowledge: "brain", repeat: "loop", blank: "alert" };
 
 /**
- * 分析：上半是最近错题的特点（自动总结一句话、每周趋势、学科分布、薄弱知识点排行），右上角一键导出这段时间的错题本；
- * 下半是全部错题，按学科（学科 → 知识点 → 题）或按时间（月份 → 文件夹 → 题）翻看。
+ * 分析 = 错题榜。版式参照生活类 App 的榜单页：顶部时间范围，四张榜单入口卡，学科页签，左边按题型筛，右边是带名次的榜单。
+ * 易错指数由错题数量、是否真错、跨几份试卷、离现在多近算出（lib/ranks.ts），扫描完自动更新。
  */
 export default function Library() {
-  const nav = useNavigate();
   const [folders, setFolders] = useState<Folder[] | null>(null);
-  const [view, setView] = useState<View>("subject");
-  const [subject, setSubject] = useState<Subject | null>(null);
-  const [month, setMonth] = useState<string | null>(null);
-  const [openKey, setOpenKey] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
   const [range, setRange] = useState<Range>("30d");
-  const [pickedKp, setPickedKp] = useState<string | null>(null);
+  const [board, setBoard] = useState<Board>("question");
+  const [subject, setSubject] = useState<Subject | "all">("all");
+  const [type, setType] = useState<TypeFilter>("all");
+  const [open, setOpen] = useState<string | null>(null);
+  const jobsVersion = useJobs((s) => s.version);
 
-  const reload = useCallback(() => listFolders().then(setFolders).catch(() => setFolders([])), []);
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    listFolders().then(setFolders).catch(() => setFolders([]));
+  }, [jobsVersion]);
 
   const errors = useMemo(() => (folders ? allErrors(folders) : []), [folders]);
-  const bySubject = useMemo(() => groupBySubject(errors), [errors]);
-  const byMonth = useMemo(() => groupByMonth(errors), [errors]);
-  const activeSubject = subject ?? bySubject[0]?.[0] ?? null;
-  const activeMonth = month ?? byMonth[0]?.[0] ?? null;
   const ranged = useMemo(() => inRange(errors, range), [errors, range]);
   const insight = useMemo(() => analyze(ranged), [ranged]);
-  const pickedList = insight.knowledge.find(([k]) => k === pickedKp)?.[1] ?? [];
-  const scoped: ErrorItem[] = view === "subject" ? errors.filter((e) => e.subject === activeSubject) : (byMonth.find(([m]) => m === activeMonth)?.[1] ?? []);
-  const syllabus = scoped.find((e) => e.q)?.q ? (folders ?? []).flatMap((f) => f.papers).find((p) => p.digitized?.pages.some((s) => s.syllabus))?.digitized?.pages.find((s) => s.syllabus)?.syllabus : "";
-
-  /** 某个学科下的知识点：一张分组卡，卡头是学科，行是知识点，点开行展开逐题 */
-  const kpGroup = (items: ErrorItem[], subj: Subject) => {
-    const groups = groupByKnowledge(items);
-    const c = subjectColors(subj);
-    return (
-      <div className="card" style={{ padding: 0, gap: 0, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: c.bg }}>
-          <SubjectTile subject={subj} size="sm" style={{ background: "var(--card)" }} />
-          <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-            <span className="t-headline" style={{ color: c.color }}>{SUBJECT_LABEL[subj]}</span>
-            <span className="t-cap" style={{ color: c.color, opacity: 0.8 }}>{items.length} 题 · {groups.length} 个知识点 · 错得多的在前</span>
-          </span>
-        </div>
-        {groups.map(([k, list], idx) => {
-          const open = openKey === `${subj}:${k}`;
-          const sources = new Set(list.map((i) => i.folderId)).size;
-          return (
-            <div key={k} style={{ borderTop: idx === 0 ? "none" : "1px solid var(--separator-light)" }}>
-              <button className="row" style={{ minHeight: 60, padding: "10px 14px", width: "100%", background: open ? "var(--fill-light)" : "transparent" }} onClick={() => setOpenKey(open ? null : `${subj}:${k}`)} aria-expanded={open}>
-                <KnowledgeIcon name={k} subject={subj} />
-                <span className="row__main" style={{ gap: 2 }}>
-                  <span className="row__title">{k}</span>
-                  <span className="row__sub">来自 {sources} 个文件夹{list.some((i) => i.kind === "未作答") ? ` · 未作答 ${list.filter((i) => i.kind === "未作答").length}` : ""}</span>
-                </span>
-                <span className="tag tag--wrong" style={{ fontWeight: 800 }}>{list.length}</span>
-                <Icon name={open ? "chevron-down" : "chevron-right"} size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-              </button>
-              {open && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "4px 10px 12px", background: "var(--fill-light)" }}>
-                  {list.map((i) => <ErrorCard key={i.key} item={i} showSource />)}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+  const subjects = insight.subjects.map(([s]) => s);
+  const scoped = useMemo(() => ranged.filter((e) => (subject === "all" || e.subject === subject) && (type === "all" || e.q.questionType === type)), [ranged, subject, type]);
+  const rows = useMemo(() => rank(scoped, board), [scoped, board]);
+  const boardInfo = BOARDS.find((b) => b.id === board)!;
+  const types = (["all", "choice", "fill", "solve"] as TypeFilter[]).filter((t) => t === "all" || ranged.some((e) => (subject === "all" || e.subject === subject) && e.q.questionType === t));
+  const listTitle = `${subject === "all" ? "" : SUBJECT_LABEL[subject]}${type === "all" ? "" : TYPE_LABEL[type]}${boardInfo.title}`;
+  const reset = () => setOpen(null);
 
   return (
-    <div className="screen">
-      <header className="topbar">
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Segmented value={range} onChange={(r) => { setRange(r); setPickedKp(null); }} options={(["7d", "30d", "all"] as Range[]).map((r) => ({ value: r, label: RANGE_LABEL[r] }))} />
+    <div className="screen rank-screen">
+      <header className="topbar topbar--center">
+        <div style={{ width: "min(280px, 100%)" }}>
+          <Segmented value={range} onChange={(r) => { setRange(r); reset(); }} options={(["7d", "30d", "all"] as Range[]).map((r) => ({ value: r, label: RANGE_LABEL[r] }))} />
         </div>
-        <button aria-label="导出这段时间的错题本" className="tile" style={{ background: "var(--brand-tint)", color: "var(--brand-on-tint)", border: 0, width: 36, height: 36, borderRadius: 18 }} onClick={() => setExporting(true)} disabled={ranged.length === 0}>
-          <Icon name="export" size={18} stroke={2.2} />
-        </button>
       </header>
-      <div className="screen__content" style={{ gap: 12 }}>
-        {folders && errors.length === 0 && <div className="empty rise"><Buddy scene="chart" size={150} /><span className="empty__title">还没有错题</span><span className="t-sub">扫描试卷后，这里会自动画出你最近错在哪。</span></div>}
+
+      <div className="screen__content" style={{ gap: 14 }}>
+        {folders && errors.length === 0 && <div className="empty rise"><Buddy scene="chart" size={150} /><span className="empty__title">还没有错题榜</span><span className="t-sub">扫描试卷后，这里会按易错程度排出你的错题榜。</span></div>}
 
         {errors.length > 0 && (
           <>
-            <div className="card insight rise" style={{ ["--i" as string]: 0, flexDirection: "row", alignItems: "center" }}>
-              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-              <span className="t-foot" style={{ fontWeight: 700, color: "var(--brand)", display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="sparkles" size={14} stroke={2.2} />自动总结 · {RANGE_LABEL[range]}</span>
-              <span className="t-body" style={{ fontWeight: 600 }}>{insight.summary}</span>
+            <section className="rank-hero rise" style={{ ["--i" as string]: 0 }}>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                <span className="rank-hero__title">错题榜</span>
+                <span className="t-foot rank-hero__sub">依据{RANGE_LABEL[range]} <CountUp value={insight.total} /> 道错题自动排出 · 每次扫描后更新</span>
+                <span className="t-sub rank-hero__summary">{insight.summary}</span>
               </div>
-              <Buddy scene="chart" size={96} style={{ flexShrink: 0, margin: "-8px -10px -12px 0" }} />
+              <Buddy scene="chart" size={100} style={{ flexShrink: 0, margin: "-10px -12px -14px 0" }} />
+            </section>
+
+            <div className="board-cards rise" style={{ ["--i" as string]: 1 }}>
+              {BOARDS.map((b) => (
+                <button key={b.id} className={`board-card board-card--${b.id}${board === b.id ? " on" : ""}`} onClick={() => { setBoard(b.id); reset(); }} aria-pressed={board === b.id}>
+                  <span className="board-card__title">{b.title}<Icon name="chevron-right" size={12} stroke={3} /></span>
+                  <span className="board-card__slogan">{b.slogan}</span>
+                  <span className="board-card__icon"><Icon name={BOARD_ICON[b.id]} size={26} stroke={2} /></span>
+                </button>
+              ))}
             </div>
-            <div className="stats rise" style={{ ["--i" as string]: 1 }}>
-              <Stat label="错题" value={<CountUp value={insight.wrong} />} icon="xcircle" color="var(--wrong)" />
-              <Stat label="未作答" value={<CountUp value={insight.blank} />} icon="alert" color="var(--accent-on)" />
-              <Stat label="知识点" value={<CountUp value={insight.knowledge.length} />} icon="target" color="var(--brand)" />
-            </div>
-            <div className="card rise" style={{ ["--i" as string]: 2 }}><TrendBars key={range} items={errors} /></div>
-            {insight.total > 0 && (
-              <>
-                {insight.subjects.length > 1 && <div className="card rise" style={{ ["--i" as string]: 3 }}><SubjectSplit key={range} groups={insight.subjects} /></div>}
-                <div className="card rise" style={{ ["--i" as string]: 4 }}>
-                  <KnowledgeBars key={range} groups={insight.knowledge} picked={pickedKp} onPick={(k) => setPickedKp(pickedKp === k ? null : k)} />
-                  {pickedList.length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
-                      {pickedList.map((i) => <ErrorCard key={i.key} item={i} showSource />)}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
 
-            <span className="t-title3" style={{ marginTop: 12, padding: "0 4px" }}>全部错题</span>
-            <IconSegmented value={view} onChange={setView} options={[{ value: "subject", label: "按学科", icon: "grid" }, { value: "time", label: "按时间", icon: "clock" }]} />
-
-            {view === "subject" && (
-              <>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "2px 0" }}>
-                  {bySubject.map(([s, list]) => {
-                    const c = subjectColors(s);
-                    const on = s === activeSubject;
-                    return (
-                      <button key={s} className="chip" style={{ height: 40, padding: "0 14px 0 8px", gap: 8, borderRadius: 20, flexShrink: 0, background: on ? c.color : "var(--card)", color: on ? "#fff" : "var(--label)", border: `1.5px solid ${on ? c.color : "var(--separator-light)"}` }} onClick={() => setSubject(s)} aria-pressed={on}>
-                        <SubjectTile subject={s} size="xs" style={on ? { background: "rgba(255,255,255,.22)", color: "#fff" } : undefined} />
-                        {SUBJECT_LABEL[s]}
-                        <span style={{ fontSize: 12, fontWeight: 700, opacity: on ? 0.9 : 0.6 }}>{list.length}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {activeSubject && kpGroup(scoped, activeSubject)}
-              </>
-            )}
-
-            {view === "time" && (
-              <>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-                  {byMonth.map(([m, list]) => (
-                    <button key={m} className={`chip chip--select${m === activeMonth ? " on" : ""}`} onClick={() => setMonth(m)} style={{ flexShrink: 0 }}>{m} · {list.length}</button>
+            <section className="rank-panel rise" style={{ ["--i" as string]: 2 }}>
+              <div className="subject-tabs" role="tablist">
+                {(["all", ...subjects] as (Subject | "all")[]).map((s) => (
+                  <button key={s} role="tab" aria-selected={subject === s} className={`subject-tab${subject === s ? " on" : ""}`} onClick={() => { setSubject(s); setType("all"); reset(); }}>
+                    {s === "all" ? "全部" : SUBJECT_LABEL[s]}
+                  </button>
+                ))}
+              </div>
+              <div className="rank-body">
+                <nav className="rank-side" aria-label="按题型">
+                  <span className="rank-side__head">题型</span>
+                  {types.map((t) => (
+                    <button key={t} className={`rank-side__item${type === t ? " on" : ""}`} onClick={() => { setType(t); reset(); }}>
+                      <Laurel />{t === "all" ? "全部" : TYPE_LABEL[t].slice(0, 2)}<Laurel flip />
+                    </button>
                   ))}
-                </div>
-                {Object.entries(scoped.reduce<Record<string, ErrorItem[]>>((acc, e) => { (acc[e.folderId] ??= []).push(e); return acc; }, {})).map(([fid, list]) => {
-                  const f = folders?.find((x) => x.id === fid);
-                  const open = openKey === `f:${fid}`;
-                  return (
-                    <div key={fid} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      <button className="card card--row" style={{ minHeight: 60, padding: "10px 14px" }} onClick={() => setOpenKey(open ? null : `f:${fid}`)} aria-expanded={open}>
-                        <SubjectTile subject={list[0].subject} size="sm" />
-                        <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                          <span className="t-headline ellipsis">{f?.name ?? list[0].folderName}</span>
-                          <span className="t-cap c-sec">{new Set(list.map((i) => i.paperId)).size} 张试卷 · {list.length} 道错题</span>
+                </nav>
+                <div className="rank-list">
+                  <div className="rank-list__head"><Laurel />{listTitle}<Laurel flip /></div>
+                  {rows.length === 0 && <div className="rank-empty"><Icon name="seal" size={28} /><span>这个榜上还没有题{board === "repeat" ? "，同一个知识点在两份以上试卷里都错才会上榜" : ""}</span></div>}
+                  {rows.slice(0, 20).map((r, i) => (
+                    <div key={r.key} className="rank-card" style={{ ["--i" as string]: Math.min(i, 8) }}>
+                      <button className="rank-card__main" onClick={() => setOpen(open === r.key ? null : r.key)} aria-expanded={open === r.key}>
+                        <span className={`rank-badge rank-badge--${i < 3 ? i + 1 : "n"}`}>{i + 1}</span>
+                        <span className="rank-card__body">
+                          <span className="rank-card__title">{subject === "all" && <SubjectTile subject={r.subject} size="xs" />}<span className="clamp2">{r.title}</span></span>
+                          <span className="rank-card__meta">{r.meta.map((m) => <span key={m} className="ellipsis">{m}</span>)}</span>
+                          <span className="rank-index">易错指数 {r.score.toFixed(1)}</span>
+                          <span className="rank-card__quote clamp2">“{r.quote}”</span>
                         </span>
-                        <span className="tag tag--wrong" style={{ fontWeight: 800 }}>{list.length}</span>
-                        <Icon name={open ? "chevron-down" : "chevron-right"} size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                       </button>
-                      {open && (
-                        <>
-                          <button className="t-foot" style={{ color: "var(--brand)", fontWeight: 600, textAlign: "left", padding: "0 4px" }} onClick={() => nav(`/papers/${fid}`)}>打开这个文件夹 ›</button>
-                          {list.map((i) => <ErrorCard key={i.key} item={i} showSource />)}
-                        </>
+                      {open === r.key && (
+                        <div className="rank-card__more">
+                          {r.items.slice(0, 5).map((e) => <ErrorCard key={e.key} item={e} showSource />)}
+                          {r.items.length > 5 && <span className="t-foot c-sec" style={{ textAlign: "center" }}>还有 {r.items.length - 5} 道，在文件夹的错题汇总里看</span>}
+                        </div>
                       )}
                     </div>
-                  );
-                })}
-              </>
-            )}
+                  ))}
+                </div>
+              </div>
+            </section>
 
+            <div className="card rise" style={{ ["--i" as string]: 3 }}><TrendBars key={range} items={errors} /></div>
           </>
         )}
       </div>
-      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={`${RANGE_LABEL[range]}错题`} subtitle={syllabus ? `按${syllabus}归类` : undefined} errors={ranged} />
     </div>
+  );
+}
+
+/** 榜单两边的小麦穗 */
+function Laurel({ flip }: { flip?: boolean }) {
+  return (
+    <svg className="laurel" width="12" height="18" viewBox="0 0 12 18" aria-hidden="true" style={flip ? { transform: "scaleX(-1)" } : undefined}>
+      <path d="M9 17C5 14 3.5 9 5 2" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+      <path d="M5.2 4.5C3 4 2 2.5 2 1c1.8.3 3 1.5 3.2 3.5zM4.6 8.5C2.4 8.3 1.2 7 1 5.3c1.9.2 3.2 1.3 3.6 3.2zM5.3 12.4C3.2 12.6 1.7 11.6 1.2 10c1.9-.1 3.4.8 4.1 2.4z" fill="currentColor" />
+    </svg>
   );
 }

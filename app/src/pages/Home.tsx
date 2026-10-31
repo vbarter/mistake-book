@@ -50,31 +50,26 @@ export default function Home() {
 
   // 闭环四步，高亮「下一步该做的」
   const next = papers.length === 0 ? 0 : scanning.length > 0 ? 1 : fresh.length > 0 ? 3 : 0;
-  const steps: { icon: IconName; title: string; value: string; go: () => void }[] = [
-    { icon: "camera", title: "收集", value: `${papers.length} 份`, go: add.open },
-    { icon: "sparkles", title: "识别归档", value: scanning.length ? `${scanning.length} 份进行中` : `${scanned} 份`, go: () => nav("/papers") },
-    { icon: "chart", title: "分析", value: `${recent.knowledge.length} 个知识点`, go: () => nav("/library") },
-    { icon: "printer", title: "导出", value: fresh.length ? `新增 ${fresh.length} 题` : "已是最新", go: () => setExporting(true) },
+  const steps: { icon: IconName; title: string; go: () => void }[] = [
+    { icon: "camera", title: "收集", go: add.open },
+    { icon: "sparkles", title: "识别归档", go: () => nav("/papers") },
+    { icon: "chart", title: "分析", go: () => nav("/library") },
+    { icon: "printer", title: "导出", go: () => setExporting(true) },
   ];
 
   return (
     <div className="screen">
       <header className="topbar">
         <span className="t-foot c-sec" style={{ fontWeight: 600 }}>{eyebrow}</span>
-        <button className="avatar" onClick={() => nav("/profile")} aria-label="我的">{nickname.slice(-1) || <Icon name="person" size={18} />}</button>
       </header>
       <div className="screen__content" style={{ gap: 16 }}>
         <section className="hero rise" style={{ ["--i" as string]: 0 }}>
           <div className="hero__top">
             <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
               <h2 className="t-title2">{hello}{nickname ? `，${nickname}` : ""}</h2>
-              <p className="t-sub" style={{ opacity: 0.88 }}>{papers.length ? "又考完一张？拍下来，错题我来整理。" : "拍下试卷，自动找出错题、归到知识点。"}</p>
+              <p className="t-sub" style={{ opacity: 0.88 }}>{papers.length ? "又考完一张？点下面的相机，错题我来整理。" : "点下面的相机拍下试卷，自动找出错题、归到知识点。"}</p>
             </div>
             <Buddy scene={scanning.length ? "scan" : "hero"} size={112} style={{ flexShrink: 0, margin: "-12px -8px -16px 0" }} />
-          </div>
-          <div className="hero__actions">
-            <button className="hero__btn hero__btn--solid" onClick={add.camera}><Icon name="camera" size={22} stroke={2.2} />拍照</button>
-            <button className="hero__btn" onClick={add.photos}><Icon name="photo" size={22} stroke={2.2} />相册批量导入</button>
           </div>
         </section>
 
@@ -83,7 +78,6 @@ export default function Home() {
             <button key={s.title} className={`loop__step${i === next ? " on" : ""}`} onClick={s.go}>
               <span className="loop__icon"><Icon name={s.icon} size={20} stroke={2.2} /></span>
               <span className="loop__title">{s.title}</span>
-              <span className="loop__value">{s.value}</span>
             </button>
           ))}
         </section>
