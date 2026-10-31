@@ -1,4 +1,4 @@
-/* 启动页：和首页问候卡同一套校服配色（藏青渐变 + 酒红加载条），深浅色模式一样，不随系统变。 */
+/* 启动页：校服配色（藏青底 + 酒红加载条），深浅色模式一样，不随系统变。 */
 .startup {
   position: fixed;
   inset: 0;
@@ -9,7 +9,7 @@
   overflow: hidden;
   min-height: 100%;
   padding: calc(32px + env(safe-area-inset-top, 0px)) 24px calc(28px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(165deg, #2a4a8a 0%, #1f3b73 45%, #142851 100%);
+  background: #1f3b73;
   color: #ffffff;
   opacity: 1;
   transition: opacity 280ms ease, transform 280ms ease;
@@ -19,27 +19,16 @@
   --ill-shadow: rgba(0, 0, 0, 0.28);
 }
 .startup--leaving { opacity: 0; transform: scale(1.04); pointer-events: none; }
-.startup__glow {
-  position: absolute;
-  top: 8%;
-  width: min(620px, 140vw);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 40%, transparent 68%);
-  pointer-events: none;
-}
 .startup::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: #a3303f; }
 .startup__brand { position: relative; margin-top: auto; text-align: center; animation: startup-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 .startup__brand h1 { margin: 0; font-size: 34px; font-weight: 800; letter-spacing: 6px; padding-left: 6px; }
-.startup__tagline { margin: 12px 0 0; font-size: 14px; letter-spacing: 2px; color: rgba(255, 255, 255, 0.72); }
 .startup__loading { position: relative; margin-top: auto; padding-top: 52px; text-align: center; min-height: 112px; }
 .startup__track { width: 132px; height: 4px; margin: 0 auto 18px; border-radius: 8px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
 .startup__track span { display: block; width: 45%; height: 100%; border-radius: inherit; background: #e8848f; animation: startup-loading 1.5s ease-in-out infinite; }
 .startup__track--ready span { width: 100%; animation: none; }
-.startup__loading p { margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.72); letter-spacing: 1px; }
+.startup__loading p { margin: 0; min-height: 16px; font-size: 12px; color: rgba(255, 255, 255, 0.72); letter-spacing: 1px; }
 .startup__loading button { margin-top: 16px; padding: 11px 24px; border: 0; border-radius: 12px; background: #ffffff; color: #1f3b73; font: inherit; font-weight: 600; cursor: pointer; }
 .startup__loading button:focus-visible { outline: 3px solid #e8848f; outline-offset: 3px; }
-.startup__footer { position: relative; margin-top: 36px; color: rgba(255, 255, 255, 0.6); font-size: 11px; letter-spacing: 2px; text-align: center; }
 @keyframes startup-loading { from { transform: translateX(-110%); } to { transform: translateX(330%); } }
 @keyframes startup-in { from { opacity: 0; transform: translateY(16px) scale(0.96); } }
 @media (prefers-reduced-motion: reduce) {
@@ -49,5 +38,4 @@
 @media (max-height: 500px) {
   .startup__brand svg { width: 110px; height: 110px; }
   .startup__loading { padding-top: 24px; min-height: 66px; }
-  .startup__footer { margin-top: 16px; }
-}
+  }

@@ -138,7 +138,7 @@ export default function Import() {
         </div>
 
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-          <Button icon="sparkles" onClick={start} disabled={Boolean(progress) || sources.length === 0}>开始识别{toc.length > 1 ? ` ${toc.length} 份` : ""}</Button>
+          <Button icon="viewfinder" onClick={start} disabled={Boolean(progress) || sources.length === 0}>开始识别{toc.length > 1 ? ` ${toc.length} 份` : ""}</Button>
           <span className="t-cap c-sec" style={{ textAlign: "center" }}>识别在服务器上进行，提交后可以离开</span>
         </div>
       </div>

@@ -86,7 +86,7 @@ export default function Capture() {
         await addSources([next]);
       }
       const n = useCapture.getState().pages.length;
-      if (n > 1) toast(`已拍 ${n} 张，都存在手机上了，拍完点「一键扫描」`, "success");
+      if (n > 1) toast(`已拍 ${n} 张，都存在手机上了，拍完点「扫描」`, "success");
       return true;
     } catch (e) {
       if ((e as Error).message === "permission_denied") setDenied(true);
@@ -230,7 +230,7 @@ export default function Capture() {
           <Empty
             icon="camera"
             title="把试卷平放，对准整页拍"
-            text="一次拍一页、让试卷铺满画面，图表和小字才认得清。可以连着拍好几页，都存在手机上，拍完再一键扫描。"
+            text="一次拍一页、让试卷铺满画面，图表和小字才认得清。可以连着拍好几页，都存在手机上，拍完再扫描。"
             action={<Button size="xs" variant="plain" onClick={() => pick("sample")} disabled={busy}>没有试卷？用示例试卷试试</Button>}
           />
         )}
@@ -259,7 +259,7 @@ export default function Capture() {
                 <span className="t-foot">加照片</span>
               </button>
             </div>
-            <span className="t-foot c-sec">每张都已存在手机上 · 拍完所有页再一键扫描</span>
+            <span className="t-foot c-sec">每张都已存在手机上 · 拍完所有页再扫描</span>
           </div>
         )}
 
@@ -278,8 +278,8 @@ export default function Capture() {
           {digitized && pages.length > 0 && folderId && paperId ? (
             <Button icon="document" onClick={() => nav(`/papers/${folderId}/${paperId}`)} disabled={busy}>查看电子版 · {digitized.questions.length} 题</Button>
           ) : (
-            <Button icon="sparkles" onClick={scan} disabled={pages.length === 0 || busy}>
-              {busy ? "处理中…" : pages.length > 1 ? (mode === "each" ? `一键扫描 ${pages.length} 份` : `一键扫描（${pages.length} 张照片）`) : "一键扫描"}
+            <Button icon="viewfinder" onClick={scan} disabled={pages.length === 0 || busy}>
+              {busy ? "处理中…" : pages.length > 1 ? (mode === "each" ? `扫描 ${pages.length} 份` : `扫描（${pages.length} 张照片）`) : "扫描"}
             </Button>
           )}
           {digitized && pages.length > 0 && (

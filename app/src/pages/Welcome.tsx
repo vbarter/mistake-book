@@ -4,9 +4,9 @@ import { Buddy } from "../components/Illustration";
 import { Button } from "../components/ui";
 
 const features: { icon: IconName; title: string; text: string }[] = [
-  { icon: "camera", title: "拍一拍就整理好", text: "拍照或相册批量导入，自动识别归档" },
-  { icon: "chart", title: "错题榜，一眼看到弱项", text: "最近最易错的题和知识点，按名次排好" },
-  { icon: "printer", title: "一键导出错题本", text: "带目录的 PDF，打印出来重做" },
+  { icon: "camera", title: "拍试卷", text: "拍照或从相册选，识别出每道题和对错" },
+  { icon: "chart", title: "看错题榜", text: "最近错得最多的题和知识点" },
+  { icon: "printer", title: "导出错题本", text: "PDF，打印出来重做" },
 ];
 
 export default function Welcome() {
@@ -17,16 +17,12 @@ export default function Welcome() {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, paddingTop: 16 }}>
           <Buddy scene="hero" size={148} />
           <h1 className="t-large">知错本</h1>
-          <p className="t-body c-sec" style={{ textAlign: "center" }}>
-            拍下试卷，错题自动整理，
-            <br />
-            每一次订正，都是进步。
-          </p>
+          <p className="t-body c-sec" style={{ textAlign: "center" }}>拍下试卷，自动挑出错题，按知识点整理。</p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {features.map((f) => (
             <div key={f.title} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-              <span style={{ width: 44, height: 44, borderRadius: 12, background: "var(--brand-gradient)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <span style={{ width: 44, height: 44, borderRadius: 12, background: "var(--brand-tint)", color: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <Icon name={f.icon} size={24} />
               </span>
               <div>

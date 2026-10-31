@@ -19,7 +19,7 @@
 }
 
 /* 实心主按钮用藏青渐变：深色模式下 --brand 变浅（给文字和链接用），按钮底色仍是藏青，白字才看得清 */
-.btn--primary { background: var(--brand-gradient); box-shadow: 0 6px 16px var(--brand-glow); }
+.btn--primary { background: var(--brand); }
 .btn--outline { background: var(--card); color: var(--brand); border: 1.5px solid var(--brand-tint); }
 
 /* 学科方块：圆角色块 + 一个大字符 */

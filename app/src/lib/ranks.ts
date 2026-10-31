@@ -4,11 +4,11 @@ import type { ErrorItem } from "./errors";
 
 export type Board = "question" | "knowledge" | "repeat" | "blank";
 
-export const BOARDS: { id: Board; title: string; slogan: string }[] = [
-  { id: "question", title: "易错题榜", slogan: "最该重做" },
-  { id: "knowledge", title: "知识点榜", slogan: "哪里最弱" },
-  { id: "repeat", title: "反复错榜", slogan: "一错再错" },
-  { id: "blank", title: "空白榜", slogan: "没有思路" },
+export const BOARDS: { id: Board; title: string; short: string; hint: string }[] = [
+  { id: "question", title: "易错题榜", short: "易错题", hint: "同一知识点错得越多、越近，排得越前" },
+  { id: "knowledge", title: "知识点榜", short: "知识点", hint: "错题最多的知识点" },
+  { id: "repeat", title: "反复错榜", short: "反复错", hint: "在两份以上试卷里都错过的知识点" },
+  { id: "blank", title: "空白榜", short: "空白", hint: "没有作答的题" },
 ];
 
 export interface RankRow {

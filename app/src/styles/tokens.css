@@ -6,7 +6,6 @@
   --brand-on-tint: #1f3b73;
   --brand-solid: #1f3b73; /* 白字压在上面的实心底色；深色模式下比 --brand 深 */
   --brand-glow: rgba(31, 59, 115, 0.32);
-  --brand-gradient: linear-gradient(150deg, #2a4a8a 0%, #1f3b73 50%, #152a55 100%);
   --tie: #a3303f;
   --tie-bg: #f8e6e8;
   --tie-trim: rgba(163, 48, 63, 0.55);
@@ -87,7 +86,6 @@
     --brand-on-tint: #b4c6f0;
     --brand-solid: #34569c;
     --brand-glow: rgba(0, 0, 0, 0.5);
-    --brand-gradient: linear-gradient(150deg, #22396b 0%, #18294f 55%, #101c38 100%);
     --tie: #e07a86;
     --tie-bg: #3a1a20;
     --tie-trim: rgba(224, 122, 134, 0.55);

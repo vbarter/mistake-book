@@ -10,7 +10,7 @@ import { useRankView } from "../store/rankView";
 
 /**
  * 错题详情：从错题榜点进来，整张榜的题按名次排成一行，左右滑一张一张看（scroll-snap，手感和系统相册一样）。
- * 每张顶部是名次、易错指数、所属知识点，下面是原题、作答、正确答案和解析。
+ * 每张顶部是名次、所属知识点和易错指数，下面是原题、作答、正确答案和解析。
  */
 export default function RankDetail() {
   const nav = useNavigate();
@@ -52,18 +52,17 @@ export default function RankDetail() {
 
   return (
     <div className="screen detail-screen">
-      <InlineNav title={title || "错题详情"} subtitle={slides.length ? `${current + 1} / ${slides.length}` : ""} back backLabel="错题榜" />
-      <div className="detail-progress" aria-hidden="true"><span style={{ width: `${slides.length ? ((current + 1) / slides.length) * 100 : 0}%` }} /></div>
+      <InlineNav title={title || "错题详情"} back backLabel="错题榜" />
       <div className="detail-track" ref={track} onScroll={onScroll}>
         {slides.map(({ en, item }, i) => (
           <section key={item.key} className="detail-slide" aria-roledescription="slide" aria-label={`第 ${i + 1} 道，共 ${slides.length} 道`}>
             <div className={`detail-head${i === current ? " on" : ""}`}>
-              <span className={`rank-badge rank-badge--${en.rank <= 3 ? en.rank : "n"}`}>{en.rank}</span>
+              <span className={`rank-badge${en.rank <= 3 ? " rank-badge--top" : ""}`}>{en.rank}</span>
               <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                 <span className="t-headline ellipsis">{en.group || item.knowledge}</span>
                 <span className="t-foot c-sec ellipsis">{item.folderName} · {item.paperName} · 第 {item.q.number} 题</span>
               </span>
-              <span className="rank-index">易错指数 {en.score.toFixed(1)}</span>
+              <span className="rank-index"><span className="num">{Math.round(en.score)}</span><small>易错指数</small></span>
             </div>
             <ErrorCard item={item} showSource={false} />
           </section>
@@ -72,9 +71,7 @@ export default function RankDetail() {
       {slides.length > 1 && (
         <div className="detail-nav">
           <button className="detail-nav__btn" onClick={() => go(current - 1)} disabled={current === 0} aria-label="上一道"><Icon name="chevron-left" size={22} stroke={2.4} /></button>
-          <span className="detail-dots" aria-hidden="true">
-            {slides.slice(0, 12).map((_, i) => <span key={i} className={i === Math.min(current, 11) ? "on" : ""} />)}
-          </span>
+          <span className="detail-count">{current + 1} / {slides.length}</span>
           <button className="detail-nav__btn" onClick={() => go(current + 1)} disabled={current === slides.length - 1} aria-label="下一道"><Icon name="chevron-right" size={22} stroke={2.4} /></button>
         </div>
       )}

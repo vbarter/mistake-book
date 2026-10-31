@@ -56,8 +56,8 @@ export function useAddPaper(folderId?: string) {
   const sheet = (
     <Sheet open={open} onClose={() => setOpen(false)} title="添加试卷">
       <div className="add-grid">
-        <AddTile icon="camera" title="拍照" sub="连着拍几页，拍完一键识别" onClick={camera} />
-        <AddTile icon="photo" title="相册导入" sub="一次选多张，自动排目录" onClick={photos} />
+        <AddTile icon="camera" title="拍照" sub="可以连着拍几页" onClick={camera} />
+        <AddTile icon="photo" title="相册导入" sub="一次选多张" onClick={photos} />
       </div>
       <button className="t-sub" style={{ color: "var(--brand)", minHeight: 40 }} onClick={sample}>没有试卷？用示例试卷试试</button>
     </Sheet>

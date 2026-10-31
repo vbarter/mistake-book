@@ -4,8 +4,8 @@ import { useAddPaper } from "../components/AddSheet";
 import { ExportSheet } from "../components/ExportSheet";
 import { Icon, type IconName } from "../components/Icon";
 import { KnowledgeBars } from "../components/Insights";
-import { Buddy } from "../components/Illustration";
 import { CountUp } from "../components/Motion";
+import { Buddy } from "../components/Illustration";
 import { Button } from "../components/ui";
 import { allErrors } from "../lib/errors";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
@@ -17,8 +17,8 @@ import { useAuth } from "../store/auth";
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
- * 首页：一条闭环 收集 → 识别归档 → 分析 → 导出，可以一直循环。
- * 一个主入口（添加试卷），一个收尾动作（一键导出新增错题），中间的识别、归类、命名、分析全部自动。
+ * 首页：问候、识别进度、近 30 天错题摘要、导出错题本。
+ * 添加试卷走底栏相机，识别、归类、命名、分析都自动完成。
  */
 export default function Home() {
   const nav = useNavigate();
@@ -47,43 +47,23 @@ export default function Home() {
   const h = now.getHours();
   const hello = h < 5 ? "夜深了" : h < 11 ? "早上好" : h < 13 ? "中午好" : h < 18 ? "下午好" : "晚上好";
 
-  // 闭环四步，高亮「下一步该做的」
-  const next = papers.length === 0 ? 0 : scanning.length > 0 ? 1 : fresh.length > 0 ? 3 : 0;
-  const steps: { icon: IconName; title: string; go: () => void }[] = [
-    { icon: "camera", title: "收集", go: add.open },
-    { icon: "sparkles", title: "识别归档", go: () => nav("/papers") },
-    { icon: "chart", title: "分析", go: () => nav("/rank") },
-    { icon: "printer", title: "导出", go: () => setExporting(true) },
-  ];
-
   return (
     <div className="screen">
       <header className="topbar">
         <span className="t-foot c-sec" style={{ fontWeight: 600 }}>{eyebrow}</span>
       </header>
       <div className="screen__content" style={{ gap: 16 }}>
-        <section className="hero rise" style={{ ["--i" as string]: 0 }}>
-          <div className="hero__top">
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-              <h2 className="t-title2">{hello}{nickname ? `，${nickname}` : ""}</h2>
-              <p className="t-sub" style={{ opacity: 0.88 }}>{papers.length ? "又考完一张？点下面的相机，错题我来整理。" : "点下面的相机拍下试卷，自动找出错题、归到知识点。"}</p>
-            </div>
-            <Buddy scene={scanning.length ? "scan" : "hero"} size={112} style={{ flexShrink: 0, margin: "-12px -8px -16px 0" }} />
+        <section className="greet rise" style={{ ["--i" as string]: 0 }}>
+          <div className="greet__text">
+            <h1 className="t-title1">{hello}{nickname ? `，${nickname}` : ""}</h1>
+            <p className="t-sub c-sec">{papers.length === 0 ? "点下面的相机，拍下第一张试卷。" : scanning.length ? "试卷正在识别，好了会自动归档。" : "拍下新试卷，错题会自动整理。"}</p>
           </div>
-        </section>
-
-        <section className="loop rise" style={{ ["--i" as string]: 1 }} aria-label="学习闭环">
-          {steps.map((s, i) => (
-            <button key={s.title} className={`loop__step${i === next ? " on" : ""}`} onClick={s.go}>
-              <span className="loop__icon"><Icon name={s.icon} size={20} stroke={2.2} /></span>
-              <span className="loop__title">{s.title}</span>
-            </button>
-          ))}
+          <Buddy scene={scanning.length ? "scan" : "hero"} size={112} style={{ flexShrink: 0, margin: "-8px -4px -12px 0" }} />
         </section>
 
         {(scanning.length > 0 || failed.length > 0) && (
           <div className="group rise" style={{ ["--i" as string]: 2 }}>
-            <div className="group__header"><span>正在识别</span><span>好了会自动归档</span></div>
+            <div className="group__header"><span>识别中</span><span>完成后自动归档</span></div>
             {scanning.map(({ f, p }) => (
               <button key={p.id} className="row" style={{ minHeight: 60 }} onClick={() => nav(`/papers/${f.id}`)}>
                 <img className="thumb thumb--sm" src={thumbOf(p.pages[0])} alt="" />
@@ -119,12 +99,12 @@ export default function Home() {
 
         {papers.length === 0 && folders && (
           <div className="group rise" style={{ ["--i" as string]: 2 }}>
-            <div className="group__header"><span>四步搞定，可以一直循环</span></div>
+            <div className="group__header"><span>怎么用</span></div>
             {[
-              ["camera", "收集", "拍照，或从相册一次选好整叠试卷"],
-              ["sparkles", "自动识别归档", "还原题目、批改、按知识点归类，自动命名"],
-              ["chart", "看分析", "最近错在哪、哪个知识点最该补"],
-              ["printer", "一键导出", "带目录的错题本 PDF，打印出来重做"],
+              ["camera", "拍试卷", "拍照，或从相册一次选多张"],
+              ["viewfinder", "自动识别", "还原题目和批改，按知识点归类"],
+              ["chart", "看错题榜", "最近错在哪、哪个知识点该补"],
+              ["printer", "导出错题本", "PDF，打印出来重做"],
             ].map(([icon, t, s]) => (
               <div key={t} className="row" style={{ minHeight: 56 }}>
                 <span className="row__icon" style={{ background: "var(--brand-tint)", color: "var(--brand)" }}><Icon name={icon as IconName} size={18} stroke={2.2} /></span>
@@ -135,9 +115,8 @@ export default function Home() {
         )}
 
         {errors.length > 0 && (
-          <div className="rise" style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 6, ["--i" as string]: 4 }}>
-            <Button icon="printer" onClick={() => setExporting(true)}>{fresh.length > 0 && lastExport ? `一键导出新增 ${fresh.length} 道错题` : `一键导出错题本 · ${errors.length} 题`}</Button>
-            <span className="t-cap c-sec" style={{ textAlign: "center" }}>按知识点排好、自动生成目录，打印后左边重做、右边对答案</span>
+          <div className="rise" style={{ marginTop: "auto", ["--i" as string]: 4 }}>
+            <Button icon="printer" onClick={() => setExporting(true)}>{fresh.length > 0 && lastExport ? `导出新增的 ${fresh.length} 道错题` : `导出错题本（${errors.length} 题）`}</Button>
           </div>
         )}
       </div>

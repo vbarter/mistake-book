@@ -83,7 +83,7 @@ export default function Papers() {
               <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
                 {f.papers.some((p) => p.scanJob) ? (
                   <Tag kind="info" icon="sparkles">{scanStageText([...f.papers.filter((p) => p.scanJob)].sort((a, b) => a.scanJob!.progress - b.scanJob!.progress)[0].scanJob!)}</Tag>
-                ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="accent" icon="sparkles">去扫描</Tag> : <WrongRing wrong={st.problems} />}
+                ) : st.unscanned > 0 && st.problems === 0 ? <Tag kind="accent" icon="viewfinder">去扫描</Tag> : <WrongRing wrong={st.problems} />}
               </span>
             </button>
           );
