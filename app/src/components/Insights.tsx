@@ -22,7 +22,7 @@ export function TrendBars({ items, weeks = 8 }: { items: ErrorItem[]; weeks?: nu
       </div>
       <div className="trend" role="img" aria-label={`最近 ${weeks} 周每周错题数：${data.map((d) => `${d.label} ${d.count} 题`).join("，")}`}>
         {data.map((d, i) => (
-          <button key={d.start} className={`trend__col${i === active ? " on" : ""}`} onClick={() => setActive(i)} aria-label={`${d.label} ${d.count} 题`}>
+          <button key={d.start} className={`trend__col${i === active ? " on" : ""}`} style={{ ["--d" as string]: i * 50 }} onClick={() => setActive(i)} aria-label={`${d.label} ${d.count} 题`}>
             <span className="trend__val num">{i === active ? d.count : ""}</span>
             <span className="trend__area"><span className="trend__bar" style={{ height: d.count ? `${Math.max(6, (d.count / max) * 100)}%` : 2 }} /></span>
             <span className="trend__label">{d.label}</span>

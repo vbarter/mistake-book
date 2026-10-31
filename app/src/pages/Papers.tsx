@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAddPaper } from "../components/AddSheet";
 import { Icon } from "../components/Icon";
 import { SwipeSortList } from "../components/SwipeSortList";
-import { Button, Empty, LargeNav, Sheet } from "../components/ui";
+import { Buddy } from "../components/Illustration";
+import { Button, Sheet } from "../components/ui";
 import { toast } from "../store/banner";
 import { SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
 import { folderErrors, groupByKnowledge } from "../lib/errors";
@@ -25,14 +26,13 @@ export default function Papers() {
 
   return (
     <div className="screen">
-      <LargeNav title="我的试卷" actions={
-        <button aria-label="添加试卷" className="tile tile--sm" style={{ background: "var(--brand)", color: "#fff", border: 0, width: 44, height: 44, borderRadius: 22 }} onClick={add.open}>
-          <Icon name="plus" size={22} stroke={2.4} />
-        </button>
-      } />
+      <header className="topbar">
+        <span className="t-foot c-sec" style={{ fontWeight: 600 }}>{folders ? `${folders.length} 个文件夹 · ${folders.reduce((n, f) => n + f.papers.length, 0)} 份试卷` : ""}</span>
+        <span className="t-cap c-sec">左滑删除 · 长按拖动排序</span>
+      </header>
       <div className="screen__content" style={{ paddingBottom: 0, gap: 12 }}>
         {folders && folders.length === 0 && (
-          <Empty icon="folder" title="还没有试卷" text="拍下整页试卷或从相册多选，会自动扫描成电子版，找出错题并按知识点归类。" action={<Button size="sm" icon="plus" onClick={add.open}>添加试卷</Button>} />
+          <div className="empty rise"><Buddy scene="empty" size={150} /><span className="empty__title">还没有试卷</span><span className="t-sub">点下面中间的相机，拍下整页试卷或从相册多选，错题会自动按知识点归类。</span><Button size="sm" icon="plus" onClick={add.open}>添加试卷</Button></div>
         )}
 
         {folders && folders.length > 0 && (
@@ -50,7 +50,7 @@ export default function Papers() {
           const more = Math.max(0, groupByKnowledge(folderErrors(f)).length - 2);
           const c = subjectColors(st.subject);
           return (
-            <button key={f.id} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12, textAlign: "left", width: "100%", padding: "14px 16px 14px 14px" }} onClick={() => nav(`/papers/${f.id}`)}>
+            <button key={f.id} className="card press" style={{ flexDirection: "row", alignItems: "center", gap: 12, textAlign: "left", width: "100%", padding: "14px 16px 14px 14px" }} onClick={() => nav(`/papers/${f.id}`)}>
               {/* 左：缩略图 + 标题 + 知识点；右：错题环 / 扫描状态，在整张卡片里上下居中 */}
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

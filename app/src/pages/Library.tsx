@@ -5,7 +5,9 @@ import { ErrorCard } from "../components/ErrorCard";
 import { ExportSheet } from "../components/ExportSheet";
 import { Icon } from "../components/Icon";
 import { KnowledgeBars, SubjectSplit, TrendBars } from "../components/Insights";
-import { Empty, LargeNav, Segmented } from "../components/ui";
+import { Buddy } from "../components/Illustration";
+import { CountUp } from "../components/Motion";
+import { Segmented } from "../components/ui";
 import { IconSegmented, KnowledgeIcon, Stat, SubjectTile, subjectColors } from "../components/v2";
 import { RANGE_LABEL, analyze, inRange, type Range } from "../lib/insights";
 import { allErrors, groupByKnowledge, groupByMonth, groupBySubject, type ErrorItem } from "../lib/errors";
@@ -86,32 +88,37 @@ export default function Library() {
 
   return (
     <div className="screen">
-      <LargeNav title="分析" actions={
-        <button aria-label="导出这段时间的错题本" className="tile" style={{ background: "var(--brand-tint)", color: "var(--brand-on-tint)", border: 0, width: 44, height: 44, borderRadius: 22 }} onClick={() => setExporting(true)} disabled={ranged.length === 0}>
-          <Icon name="export" size={22} stroke={2.2} />
+      <header className="topbar">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Segmented value={range} onChange={(r) => { setRange(r); setPickedKp(null); }} options={(["7d", "30d", "all"] as Range[]).map((r) => ({ value: r, label: RANGE_LABEL[r] }))} />
+        </div>
+        <button aria-label="导出这段时间的错题本" className="tile" style={{ background: "var(--brand-tint)", color: "var(--brand-on-tint)", border: 0, width: 36, height: 36, borderRadius: 18 }} onClick={() => setExporting(true)} disabled={ranged.length === 0}>
+          <Icon name="export" size={18} stroke={2.2} />
         </button>
-      } />
+      </header>
       <div className="screen__content" style={{ gap: 12 }}>
-        {folders && errors.length === 0 && <Empty icon="seal" title="还没有错题" text="扫描试卷后，判错的题会自动汇总到这里。" />}
+        {folders && errors.length === 0 && <div className="empty rise"><Buddy scene="chart" size={150} /><span className="empty__title">还没有错题</span><span className="t-sub">扫描试卷后，这里会自动画出你最近错在哪。</span></div>}
 
         {errors.length > 0 && (
           <>
-            <Segmented value={range} onChange={(r) => { setRange(r); setPickedKp(null); }} options={(["7d", "30d", "all"] as Range[]).map((r) => ({ value: r, label: RANGE_LABEL[r] }))} />
-            <div className="card insight">
+            <div className="card insight rise" style={{ ["--i" as string]: 0, flexDirection: "row", alignItems: "center" }}>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
               <span className="t-foot" style={{ fontWeight: 700, color: "var(--brand)", display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="sparkles" size={14} stroke={2.2} />自动总结 · {RANGE_LABEL[range]}</span>
               <span className="t-body" style={{ fontWeight: 600 }}>{insight.summary}</span>
+              </div>
+              <Buddy scene="chart" size={96} style={{ flexShrink: 0, margin: "-8px -10px -12px 0" }} />
             </div>
-            <div className="stats">
-              <Stat label="错题" value={insight.wrong} icon="xcircle" color="var(--wrong)" />
-              <Stat label="未作答" value={insight.blank} icon="alert" color="var(--accent-on)" />
-              <Stat label="知识点" value={insight.knowledge.length} icon="target" color="var(--brand)" />
+            <div className="stats rise" style={{ ["--i" as string]: 1 }}>
+              <Stat label="错题" value={<CountUp value={insight.wrong} />} icon="xcircle" color="var(--wrong)" />
+              <Stat label="未作答" value={<CountUp value={insight.blank} />} icon="alert" color="var(--accent-on)" />
+              <Stat label="知识点" value={<CountUp value={insight.knowledge.length} />} icon="target" color="var(--brand)" />
             </div>
-            <div className="card"><TrendBars items={errors} /></div>
+            <div className="card rise" style={{ ["--i" as string]: 2 }}><TrendBars key={range} items={errors} /></div>
             {insight.total > 0 && (
               <>
-                {insight.subjects.length > 1 && <div className="card"><SubjectSplit groups={insight.subjects} /></div>}
-                <div className="card">
-                  <KnowledgeBars groups={insight.knowledge} picked={pickedKp} onPick={(k) => setPickedKp(pickedKp === k ? null : k)} />
+                {insight.subjects.length > 1 && <div className="card rise" style={{ ["--i" as string]: 3 }}><SubjectSplit key={range} groups={insight.subjects} /></div>}
+                <div className="card rise" style={{ ["--i" as string]: 4 }}>
+                  <KnowledgeBars key={range} groups={insight.knowledge} picked={pickedKp} onPick={(k) => setPickedKp(pickedKp === k ? null : k)} />
                   {pickedList.length > 0 && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
                       {pickedList.map((i) => <ErrorCard key={i.key} item={i} showSource />)}

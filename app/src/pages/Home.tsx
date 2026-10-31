@@ -4,12 +4,15 @@ import { useAddPaper } from "../components/AddSheet";
 import { ExportSheet } from "../components/ExportSheet";
 import { Icon, type IconName } from "../components/Icon";
 import { KnowledgeBars } from "../components/Insights";
-import { Button, LargeNav } from "../components/ui";
+import { Buddy } from "../components/Illustration";
+import { CountUp } from "../components/Motion";
+import { Button } from "../components/ui";
 import { allErrors } from "../lib/errors";
 import { listFolders, type Folder } from "../lib/folders";
 import { analyze, inRange, since } from "../lib/insights";
 import { scanStageText, useJobs } from "../lib/jobs";
 import { getLastExportAt } from "../lib/prefs";
+import { useAuth } from "../store/auth";
 
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -24,6 +27,7 @@ export default function Home() {
   const [lastExport, setLastExport] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const jobsVersion = useJobs((s) => s.version);
+  const nickname = useAuth((s) => s.user?.nickname) ?? "";
 
   useEffect(() => {
     listFolders().then(setFolders).catch(() => setFolders([]));
@@ -41,6 +45,8 @@ export default function Home() {
 
   const now = new Date();
   const eyebrow = `${now.getMonth() + 1}月${now.getDate()}日 星期${WEEKDAY[now.getDay()]}`;
+  const h = now.getHours();
+  const hello = h < 5 ? "夜深了" : h < 11 ? "早上好" : h < 13 ? "中午好" : h < 18 ? "下午好" : "晚上好";
 
   // 闭环四步，高亮「下一步该做的」
   const next = papers.length === 0 ? 0 : scanning.length > 0 ? 1 : fresh.length > 0 ? 3 : 0;
@@ -53,12 +59,18 @@ export default function Home() {
 
   return (
     <div className="screen">
-      <LargeNav eyebrow={eyebrow} title="知错本" />
+      <header className="topbar">
+        <span className="t-foot c-sec" style={{ fontWeight: 600 }}>{eyebrow}</span>
+        <button className="avatar" onClick={() => nav("/profile")} aria-label="我的">{nickname.slice(-1) || <Icon name="person" size={18} />}</button>
+      </header>
       <div className="screen__content" style={{ gap: 16 }}>
-        <section className="hero">
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <h2 className="t-title2">{papers.length ? "又考完一张？" : "把错题变成提分的地方"}</h2>
-            <p className="t-sub" style={{ opacity: 0.85 }}>拍照或从相册一次选多张，自动还原题目、找出错题、归到知识点。</p>
+        <section className="hero rise" style={{ ["--i" as string]: 0 }}>
+          <div className="hero__top">
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+              <h2 className="t-title2">{hello}{nickname ? `，${nickname}` : ""}</h2>
+              <p className="t-sub" style={{ opacity: 0.88 }}>{papers.length ? "又考完一张？拍下来，错题我来整理。" : "拍下试卷，自动找出错题、归到知识点。"}</p>
+            </div>
+            <Buddy scene={scanning.length ? "scan" : "hero"} size={112} style={{ flexShrink: 0, margin: "-12px -8px -16px 0" }} />
           </div>
           <div className="hero__actions">
             <button className="hero__btn hero__btn--solid" onClick={add.camera}><Icon name="camera" size={22} stroke={2.2} />拍照</button>
@@ -66,7 +78,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="loop" aria-label="学习闭环">
+        <section className="loop rise" style={{ ["--i" as string]: 1 }} aria-label="学习闭环">
           {steps.map((s, i) => (
             <button key={s.title} className={`loop__step${i === next ? " on" : ""}`} onClick={s.go}>
               <span className="loop__icon"><Icon name={s.icon} size={20} stroke={2.2} /></span>
@@ -77,7 +89,7 @@ export default function Home() {
         </section>
 
         {(scanning.length > 0 || failed.length > 0) && (
-          <div className="group">
+          <div className="group rise" style={{ ["--i" as string]: 2 }}>
             <div className="group__header"><span>正在识别</span><span>好了会自动归档</span></div>
             {scanning.map(({ f, p }) => (
               <button key={p.id} className="row" style={{ minHeight: 60 }} onClick={() => nav(`/papers/${f.id}`)}>
@@ -100,10 +112,10 @@ export default function Home() {
         )}
 
         {recent.total > 0 && (
-          <section className="card" style={{ gap: 14 }}>
+          <section className="card rise" style={{ gap: 14, ["--i" as string]: 3 }}>
             <button style={{ display: "flex", alignItems: "center", gap: 8, textAlign: "left" }} onClick={() => nav("/library")}>
               <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                <span className="t-foot c-sec" style={{ fontWeight: 600 }}>近 30 天 · {recent.total} 道错题</span>
+                <span className="t-foot c-sec" style={{ fontWeight: 600 }}>近 30 天 · <CountUp value={recent.total} /> 道错题</span>
                 <span className="t-body" style={{ fontWeight: 600 }}>{recent.summary}</span>
               </span>
               <Icon name="chevron-right" size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
@@ -113,7 +125,7 @@ export default function Home() {
         )}
 
         {papers.length === 0 && folders && (
-          <div className="group">
+          <div className="group rise" style={{ ["--i" as string]: 2 }}>
             <div className="group__header"><span>四步搞定，可以一直循环</span></div>
             {[
               ["camera", "收集", "拍照，或从相册一次选好整叠试卷"],
@@ -130,7 +142,7 @@ export default function Home() {
         )}
 
         {errors.length > 0 && (
-          <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+          <div className="rise" style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 6, ["--i" as string]: 4 }}>
             <Button icon="printer" onClick={() => setExporting(true)}>{fresh.length > 0 && lastExport ? `一键导出新增 ${fresh.length} 道错题` : `一键导出错题本 · ${errors.length} 题`}</Button>
             <span className="t-cap c-sec" style={{ textAlign: "center" }}>按知识点排好、自动生成目录，打印后左边重做、右边对答案</span>
           </div>
