@@ -44,7 +44,7 @@ export default function Import() {
   const addMore = async (source: "camera" | "photos") => {
     setAdding(false);
     try {
-      const list = source === "camera" ? [await pickImage("camera")].filter((x): x is string => Boolean(x)) : await pickImages(0);
+      const list = source === "camera" ? [await pickImage("camera", { folderId, paperId: null })].filter((x): x is string => Boolean(x)) : await pickImages(0);
       if (!list.length) return;
       if (list.length > 3) toast(`正在读取 ${list.length} 张照片…`);
       const pages: FullPage[] = [];

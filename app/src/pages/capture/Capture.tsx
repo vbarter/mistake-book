@@ -77,13 +77,15 @@ export default function Capture() {
         await addSources(list);
         return true;
       }
-      const src = await pickImage("camera");
+      // 拍照期间 App 被系统回收时，重启后按这个把照片放回同一张试卷（见 lib/cameraRestore）
+      const cameraTarget = () => ({ folderId: useCapture.getState().folderId ?? targetFolder, paperId: useCapture.getState().paperId });
+      const src = await pickImage("camera", cameraTarget());
       if (!src) return false;
       await addSources([src]);
       // 连拍：接着起相机，直到在相机里点取消。稍等一下让上一个相机界面收起来，iOS 上连着弹太快会弹不出来
       for (;;) {
         await new Promise((r) => setTimeout(r, 400));
-        const next = await pickImage("camera");
+        const next = await pickImage("camera", cameraTarget());
         if (!next) break;
         await addSources([next]);
       }

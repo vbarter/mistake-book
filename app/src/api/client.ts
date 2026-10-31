@@ -26,6 +26,8 @@ export async function loadSession() {
   const [t, b] = await Promise.all([Preferences.get({ key: TOKEN_KEY }), Preferences.get({ key: BASE_KEY })]);
   token = t.value;
   apiBase = b.value;
+  // 正式包只允许 HTTPS：以前存下的 http 地址（旧版的公网 IP 入口）作废，回到默认的线上地址
+  if (import.meta.env.PROD && apiBase?.startsWith("http://")) apiBase = null;
   return token;
 }
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 正式包：只走 HTTPS（线上 API 是 https://book.openmindai.cn）。应用商店的安全检测会查明文传输。
+     localhost 留着：页面本身由 Capacitor 在 http://localhost 本地提供，不走网络。
+     调试包见 src/debug/res/xml/network_security_config.xml，允许连局域网 HTTP 后端。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

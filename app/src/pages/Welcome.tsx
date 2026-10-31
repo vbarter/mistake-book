@@ -38,7 +38,8 @@ export default function Welcome() {
             已有账号，登录
           </Button>
           <p className="t-cap c-sec" style={{ textAlign: "center" }}>
-            继续即表示同意 <a href="#terms">用户协议</a> 与 <a href="#privacy">隐私政策</a>
+            查看 <a href="/legal/terms" onClick={(e) => { e.preventDefault(); nav("/legal/terms"); }}>用户协议</a> 与{" "}
+            <a href="/legal/privacy" onClick={(e) => { e.preventDefault(); nav("/legal/privacy"); }}>隐私政策</a>
           </p>
         </div>
       </div>

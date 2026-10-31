@@ -11,7 +11,7 @@
 .auth__divider { display: flex; align-items: center; gap: 12px; color: var(--tertiary); font-size: 13px; }
 .auth__divider::before, .auth__divider::after { content: ""; flex: 1; height: 1px; background: var(--separator-light); }
 .agree { display: flex; align-items: flex-start; gap: 8px; text-align: left; font-size: 13px; line-height: 19px; color: var(--secondary); }
-.agree b { color: var(--label); font-weight: 600; }
+.agree b { color: var(--brand); font-weight: 600; }
 
 /* 手机号 + 验证码 */
 .pc { display: flex; flex-direction: column; gap: 10px; }

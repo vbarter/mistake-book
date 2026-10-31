@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
+import { forgetCameraTarget, rememberCameraTarget } from "./cameraRestore";
 
 export const isNative = Capacitor.isNativePlatform();
 /** 安卓原生：没有 Apple 登录，相机 / 相册走安卓权限 */
@@ -23,10 +24,14 @@ export const haptic = {
 /** 存进本机的试卷照片最长边：两页并排拍时切半后每页仍有 1200 多像素，插图也从这张图里裁 */
 export const PHOTO_MAX_SIDE = 2400;
 
-/** 拍照或从相册选图，返回 dataURL（JPEG）。网页端退化为文件选择。 */
-export async function pickImage(source: "camera" | "photos"): Promise<string | null> {
+/**
+ * 拍照或从相册选图，返回 dataURL（JPEG）。网页端退化为文件选择。
+ * target：这张照片要放进哪张试卷。安卓上拍照期间 App 被系统杀掉时，重启后靠它把照片放回去（见 cameraRestore）。
+ */
+export async function pickImage(source: "camera" | "photos", target?: { folderId: string | null; paperId: string | null }): Promise<string | null> {
   if (isNative) {
     const { Camera, CameraResultType, CameraSource } = await import("@capacitor/camera");
+    if (source === "camera") await rememberCameraTarget(target?.folderId ?? null, target?.paperId ?? null);
     try {
       const photo = await Camera.getPhoto({
         quality: 82,
@@ -40,6 +45,8 @@ export async function pickImage(source: "camera" | "photos"): Promise<string | n
       const msg = String((e as Error).message || "");
       if (/cancel/i.test(msg)) return null;
       throw new Error(msg.includes("denied") || msg.includes("permission") ? "permission_denied" : msg);
+    } finally {
+      if (source === "camera") await forgetCameraTarget();
     }
   }
   return new Promise((resolve) => {

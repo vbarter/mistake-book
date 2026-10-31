@@ -93,7 +93,11 @@ export default function Register() {
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
           <button type="button" className="agree" onClick={() => setAgree((v) => !v)} aria-pressed={agree}>
             <Icon name={agree ? "checkcircle" : "target"} size={20} stroke={agree ? 2.2 : 1.6} style={{ color: agree ? "var(--brand)" : "var(--tertiary)", flexShrink: 0 }} />
-            <span>我已阅读并同意<b>《用户协议》</b>和<b>《隐私政策》</b>，试卷照片和错题只保存在这台设备上。</span>
+            <span>
+              我已阅读并同意
+              <b role="link" tabIndex={0} onClick={(e) => { e.stopPropagation(); nav("/legal/terms"); }}>《用户协议》</b>和
+              <b role="link" tabIndex={0} onClick={(e) => { e.stopPropagation(); nav("/legal/privacy"); }}>《隐私政策》</b>，试卷照片和错题只保存在这台设备上。
+            </span>
           </button>
           <Button onClick={submit} disabled={busy || !ready}>{busy ? "注册中…" : "注册"}</Button>
           {!isAndroid && (
