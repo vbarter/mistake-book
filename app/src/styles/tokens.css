@@ -1,9 +1,15 @@
-/* 设计令牌：对应 PRD 画板 03 设计系统 */
+/* 设计令牌。3.0 主题：上海初中校服（藏青西装 + 白衬衫 + 酒红领带）。藏青是主色，酒红只做点缀；错题红、学科色另有含义，不跟主题走。 */
 :root {
-  --brand: #2f6fed;
-  --brand-pressed: #1f55c4;
-  --brand-tint: #e6eefb;
-  --brand-on-tint: #1f55c4;
+  --brand: #1f3b73;
+  --brand-pressed: #162c58;
+  --brand-tint: #e6ebf5;
+  --brand-on-tint: #1f3b73;
+  --brand-solid: #1f3b73; /* 白字压在上面的实心底色；深色模式下比 --brand 深 */
+  --brand-glow: rgba(31, 59, 115, 0.32);
+  --brand-gradient: linear-gradient(150deg, #2a4a8a 0%, #1f3b73 50%, #152a55 100%);
+  --tie: #a3303f;
+  --tie-bg: #f8e6e8;
+  --tie-trim: rgba(163, 48, 63, 0.55);
 
   --label: #1c1c1e;
   --secondary: #5b5b63;
@@ -13,7 +19,7 @@
   --fill: #e5e5ea;
   --fill-light: #f2f2f7;
 
-  --bg: #f2f2f7;
+  --bg: #f3f4f8;
   --card: #ffffff;
   --bar: rgba(249, 249, 249, 0.94);
 
@@ -56,15 +62,44 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --tabbar-h: 49px;
 
+  /* 插画「试卷小人」 */
+  --ill-paper: #ffffff;
+  --ill-paper2: #dbe2f0;
+  --ill-line: #1f3b73;
+  --ill-ink: #1f2a44;
+  --ill-cheek: #ffb4a8;
+  --ill-tie: #a3303f;
+  --ill-star: #e0b252;
+  --ill-ok: #1e9e5a;
+  --ill-ok-bg: #dcf5e7;
+  --ill-shadow: rgba(31, 42, 68, 0.12);
+
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Noto Sans CJK SC", Roboto, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --brand: #5b8dff;
-    --brand-pressed: #7aa2ff;
-    --brand-tint: #1a2740;
-    --brand-on-tint: #9dbaff;
+    --brand: #8fa9e6;
+    --brand-pressed: #a9bdee;
+    --brand-tint: #1a2440;
+    --brand-on-tint: #b4c6f0;
+    --brand-solid: #34569c;
+    --brand-glow: rgba(0, 0, 0, 0.5);
+    --brand-gradient: linear-gradient(150deg, #22396b 0%, #18294f 55%, #101c38 100%);
+    --tie: #e07a86;
+    --tie-bg: #3a1a20;
+    --tie-trim: rgba(224, 122, 134, 0.55);
+
+    --ill-paper: #f4f6ff;
+    --ill-paper2: #33456e;
+    --ill-line: #b4c6f0;
+    --ill-cheek: #ff9d90;
+    --ill-tie: #e07a86;
+    --ill-ok: #6fd39a;
+    --ill-ok-bg: #123a24;
+    --ill-shadow: rgba(0, 0, 0, 0.45);
 
     --label: #f2f2f7;
     --secondary: #a1a1aa;

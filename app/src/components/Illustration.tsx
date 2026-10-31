@@ -38,19 +38,19 @@ export function Buddy({ scene = "hero", size = 140, style }: { scene?: Scene; si
         <path d="M40 88q-10 4-12 14" stroke="var(--ill-line)" strokeWidth="5" strokeLinecap="round" />
         {scene === "hero" && (
           <g className="buddy__pencil">
-            <rect x="120" y="52" width="9" height="34" rx="3" fill="var(--ill-accent)" transform="rotate(28 124 69)" />
+            <rect x="120" y="52" width="9" height="34" rx="3" fill="var(--ill-tie)" transform="rotate(28 124 69)" />
             <path d="M115 85l5 8 3-9z" fill="var(--ill-ink)" opacity=".7" />
           </g>
         )}
         {scene === "chart" && (
           <g className="buddy__chart">
             <rect x="118" y="44" width="34" height="30" rx="6" fill="var(--ill-paper)" stroke="var(--ill-line)" strokeWidth="2" />
-            <rect className="buddy__barA" x="124" y="58" width="5" height="10" rx="1.5" fill="var(--ill-brand)" />
-            <rect className="buddy__barB" x="132" y="52" width="5" height="16" rx="1.5" fill="var(--ill-brand)" />
-            <rect className="buddy__barC" x="140" y="62" width="5" height="6" rx="1.5" fill="var(--ill-accent)" />
+            <rect className="buddy__barA" x="124" y="58" width="5" height="10" rx="1.5" fill="var(--brand)" />
+            <rect className="buddy__barB" x="132" y="52" width="5" height="16" rx="1.5" fill="var(--brand)" />
+            <rect className="buddy__barC" x="140" y="62" width="5" height="6" rx="1.5" fill="var(--ill-tie)" />
           </g>
         )}
-        {scene === "scan" && <rect className="buddy__scan" x="36" y="30" width="80" height="4" rx="2" fill="var(--ill-brand)" />}
+        {scene === "scan" && <rect className="buddy__scan" x="36" y="30" width="80" height="4" rx="2" fill="var(--brand)" />}
       </g>
       {/* 飘着的小东西 */}
       {scene !== "scan" && (
@@ -60,7 +60,7 @@ export function Buddy({ scene = "hero", size = 140, style }: { scene?: Scene; si
             <path d="M21 40l4 4 7-8" stroke="var(--ill-ok)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
           </g>
           <path className="buddy__spark buddy__spark--a" d="M136 20l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z" fill="var(--ill-star)" />
-          <path className="buddy__spark buddy__spark--b" d="M22 112l1.8 4.2 4.2 1.8-4.2 1.8-1.8 4.2-1.8-4.2-4.2-1.8 4.2-1.8z" fill="var(--ill-brand)" />
+          <path className="buddy__spark buddy__spark--b" d="M22 112l1.8 4.2 4.2 1.8-4.2 1.8-1.8 4.2-1.8-4.2-4.2-1.8 4.2-1.8z" fill="var(--brand)" />
         </>
       )}
     </svg>

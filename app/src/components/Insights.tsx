@@ -1,9 +1,6 @@
 import { useState } from "react";
-import type { Subject } from "../api/types";
 import type { ErrorItem } from "../lib/errors";
-import { SUBJECT_LABEL } from "../lib/format";
 import { weeklyTrend } from "../lib/insights";
-import { Icon } from "./Icon";
 import { subjectColors } from "./v2";
 
 /** 每周错题数柱状图（单一系列，标题即图例）。点一根柱子显示那周的数字。 */
@@ -33,8 +30,8 @@ export function TrendBars({ items, weeks = 8 }: { items: ErrorItem[]; weeks?: nu
   );
 }
 
-/** 薄弱知识点排行：横向条，长度 = 题数；点一行展开那个知识点的题 */
-export function KnowledgeBars({ groups, limit = 6, onPick, picked }: { groups: [string, ErrorItem[]][]; limit?: number; onPick?: (k: string) => void; picked?: string | null }) {
+/** 薄弱知识点排行（首页摘要）：横向条，长度 = 题数，颜色 = 学科 */
+export function KnowledgeBars({ groups, limit = 6 }: { groups: [string, ErrorItem[]][]; limit?: number }) {
   const shown = groups.slice(0, limit);
   const max = Math.max(1, ...shown.map(([, l]) => l.length));
   return (
@@ -44,40 +41,15 @@ export function KnowledgeBars({ groups, limit = 6, onPick, picked }: { groups: [
         <span className="t-foot c-sec">{groups.length} 个知识点{groups.length > limit ? ` · 显示前 ${limit}` : ""}</span>
       </div>
       <div className="kbars">
-        {shown.map(([k, list], i) => {
-          const c = subjectColors(list[0].subject);
-          return (
-            <button key={k} className={`kbar${picked === k ? " on" : ""}`} onClick={() => onPick?.(k)} aria-expanded={picked === k}>
-              <span className="kbar__rank num">{i + 1}</span>
-              <span className="kbar__main">
-                <span className="kbar__name ellipsis">{k}</span>
-                <span className="kbar__track"><span className="kbar__fill" style={{ width: `${(list.length / max) * 100}%`, background: c.color }} /></span>
-              </span>
-              <span className="kbar__count num">{list.length}</span>
-              {onPick && <Icon name={picked === k ? "chevron-down" : "chevron-right"} size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/** 学科占比：一条分段条 + 图例（文字带数字，颜色只做辅助） */
-export function SubjectSplit({ groups }: { groups: [Subject, ErrorItem[]][] }) {
-  const total = groups.reduce((n, [, l]) => n + l.length, 0) || 1;
-  return (
-    <div className="chart">
-      <div className="chart__head"><span className="t-headline">学科分布</span></div>
-      <div className="split" role="img" aria-label={groups.map(([s, l]) => `${SUBJECT_LABEL[s]} ${l.length} 题`).join("，")}>
-        {groups.map(([s, l]) => <span key={s} style={{ flex: l.length, background: subjectColors(s).color }} />)}
-      </div>
-      <div className="legend">
-        {groups.map(([s, l]) => (
-          <span key={s} className="legend__item">
-            <span className="legend__dot" style={{ background: subjectColors(s).color }} />
-            {SUBJECT_LABEL[s]} <span className="num c-sec">{l.length} · {Math.round((l.length / total) * 100)}%</span>
-          </span>
+        {shown.map(([k, list], i) => (
+          <div key={k} className="kbar">
+            <span className="kbar__rank num">{i + 1}</span>
+            <span className="kbar__main">
+              <span className="kbar__name ellipsis">{k}</span>
+              <span className="kbar__track"><span className="kbar__fill" style={{ width: `${(list.length / max) * 100}%`, background: subjectColors(list[0].subject).color, ["--i" as string]: i }} /></span>
+            </span>
+            <span className="kbar__count num">{list.length}</span>
+          </div>
         ))}
       </div>
     </div>

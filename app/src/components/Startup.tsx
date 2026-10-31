@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "../styles/startup.css";
+import { Buddy } from "./Illustration";
 
 interface StartupProps {
   ready: boolean;
@@ -8,7 +9,7 @@ interface StartupProps {
   onDone: () => void;
 }
 
-/** 启动页只在初始化成功后退出，动效不代表虚构的加载百分比。 */
+/** 启动页：校服藏青底 + 试卷小人。只在初始化成功后退出，动效不代表虚构的加载百分比。 */
 export default function Startup({ ready, error, onRetry, onDone }: StartupProps) {
   const [held, setHeld] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -30,14 +31,7 @@ export default function Startup({ ready, error, onRetry, onDone }: StartupProps)
     <main className={`startup${leaving ? " startup--leaving" : ""}`} aria-label="知错本启动页" aria-busy={!ready && !error}>
       <div className="startup__glow" aria-hidden="true" />
       <div className="startup__brand">
-        <div className="startup__mark" aria-hidden="true">
-          <svg viewBox="0 0 96 96" width="96" height="96" fill="none">
-            <rect x="22" y="16" width="52" height="65" rx="11" fill="white" />
-            <path d="M34 33h28M34 44h19" stroke="#B5CEFF" strokeWidth="5" strokeLinecap="round" />
-            <path d="m36 61 9 9 18-21" stroke="#2F6FED" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M29 18v61" stroke="#E5EEFF" strokeWidth="2" />
-          </svg>
-        </div>
+        <Buddy scene="hero" size={168} style={{ display: "block", margin: "0 auto 8px" }} />
         <h1>知错本</h1>
         <p className="startup__tagline">每一次订正，都是进步</p>
       </div>

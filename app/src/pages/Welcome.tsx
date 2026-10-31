@@ -1,11 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { Icon, type IconName } from "../components/Icon";
+import { Buddy } from "../components/Illustration";
 import { Button } from "../components/ui";
 
 const features: { icon: IconName; title: string; text: string }[] = [
-  { icon: "sparkles", title: "拍一拍就整理好", text: "自动框出错题、识别题目、归到知识点" },
-  { icon: "clock", title: "该复习时提醒你", text: "按遗忘曲线安排，每天几分钟" },
-  { icon: "pencil", title: "练一题，会一类", text: "同类变式题，连续答对就算掌握" },
+  { icon: "camera", title: "拍一拍就整理好", text: "拍照或相册批量导入，自动识别归档" },
+  { icon: "chart", title: "错题榜，一眼看到弱项", text: "最近最易错的题和知识点，按名次排好" },
+  { icon: "printer", title: "一键导出错题本", text: "带目录的 PDF，打印出来重做" },
 ];
 
 export default function Welcome() {
@@ -14,18 +15,18 @@ export default function Welcome() {
     <div className="screen screen--card screen--narrow">
       <div className="screen__content screen__content--modal" style={{ paddingTop: "calc(var(--safe-top) + 48px)", paddingLeft: 24, paddingRight: 24, paddingBottom: "calc(var(--safe-bottom) + 24px)", gap: 28 }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, paddingTop: 16 }}>
-          <img src={`${import.meta.env.BASE_URL}app-icon.png`} alt="知错本" width={96} height={96} style={{ borderRadius: 22, boxShadow: "0 10px 28px rgba(47, 111, 237, 0.25)" }} />
+          <Buddy scene="hero" size={148} />
           <h1 className="t-large">知错本</h1>
           <p className="t-body c-sec" style={{ textAlign: "center" }}>
             拍下试卷，错题自动整理，
             <br />
-            到时间提醒你复习。
+            每一次订正，都是进步。
           </p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {features.map((f) => (
             <div key={f.title} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-              <span style={{ width: 44, height: 44, borderRadius: 12, background: "var(--brand-tint)", color: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <span style={{ width: 44, height: 44, borderRadius: 12, background: "var(--brand-gradient)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <Icon name={f.icon} size={24} />
               </span>
               <div>

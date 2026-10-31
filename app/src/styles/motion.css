@@ -1,0 +1,45 @@
+/* 动效：卡片依次浮现、按压回弹、图表生长、插画漂浮。系统「减弱动态效果」时 base.css 统一关掉。 */
+
+.rise { animation: rise-in 0.5s var(--spring) both; animation-delay: calc(var(--i, 0) * 60ms); }
+.press, .card--row, .loop__step, .add-tile, .rank-card, .rank-side__item { transition: transform 0.25s var(--spring); }
+.press:active, .card--row:active, .loop__step:active, .add-tile:active { transform: scale(0.96); }
+.rank-card:active { transform: scale(0.97); }
+.rank-side__item:active { transform: scale(0.94); }
+.btn:active { transform: scale(0.95); transition-timing-function: var(--spring); }
+
+/* 进度条流光 */
+.progress > span { position: relative; overflow: hidden; }
+.progress > span::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent); animation: shimmer 1.4s linear infinite; }
+
+/* 插画「试卷小人」 */
+.buddy__body { animation: buddy-float 3.2s ease-in-out infinite; transform-origin: 80px 140px; }
+.buddy__shadow { animation: buddy-shadow 3.2s ease-in-out infinite; transform-origin: 80px 148px; }
+.buddy__eyes { animation: buddy-blink 4.5s infinite; transform-origin: 76px 86px; }
+.buddy__float--a { animation: buddy-bob 2.6s ease-in-out infinite; }
+.buddy__spark { animation: buddy-twinkle 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.buddy__spark--b { animation-delay: 0.9s; }
+.buddy__pencil { animation: buddy-write 1.2s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 0; }
+.buddy__wave { animation: buddy-wave 1.4s ease-in-out infinite; transform-origin: 112px 78px; }
+.buddy__scan { animation: buddy-scan 1.6s ease-in-out infinite alternate; }
+.buddy__barA, .buddy__barB, .buddy__barC { transform-box: fill-box; transform-origin: bottom; animation: buddy-bar 2.4s ease-in-out infinite; }
+.buddy__barB { animation-delay: 0.3s; }
+.buddy__barC { animation-delay: 0.6s; }
+
+@keyframes rise-in { from { opacity: 0; transform: translateY(14px) scale(0.98); } }
+@keyframes grow-x { from { transform: scaleX(0); } }
+@keyframes grow-y { from { transform: scaleY(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--brand-glow); } 70% { box-shadow: 0 0 0 12px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@keyframes ring { from { transform: scale(0.9); opacity: 1; } to { transform: scale(1.35); opacity: 0; } }
+@keyframes tab-pop { 40% { transform: scale(1.22) translateY(-2px); } }
+@keyframes badge-shine { 0%, 80%, 100% { filter: brightness(1); } 88% { filter: brightness(1.35); } }
+@keyframes buddy-float { 50% { transform: translateY(-6px) rotate(-1.5deg); } }
+@keyframes buddy-shadow { 50% { transform: scaleX(0.85); opacity: 0.7; } }
+@keyframes buddy-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@keyframes buddy-bob { 50% { transform: translateY(-5px); } }
+@keyframes buddy-twinkle { 50% { transform: scale(0.5) rotate(45deg); opacity: 0.5; } }
+@keyframes buddy-write { 50% { transform: rotate(-8deg) translateY(2px); } }
+@keyframes buddy-wave { 50% { transform: rotate(-18deg); } }
+@keyframes buddy-scan { from { transform: translateY(0); } to { transform: translateY(86px); } }
+@keyframes buddy-bar { 50% { transform: scaleY(0.55); } }

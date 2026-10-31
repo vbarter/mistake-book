@@ -1,13 +1,12 @@
 /* 2.0 视觉：更圆、更软、有图标。学科方块、状态标签、进度环、浮起的主按钮。 */
 :root {
-  --bg: #f4f5fa;
   --radius-card: 20px;
   --radius-btn: 18px;
   --accent: #ff8a3d;
   --accent-bg: #fff0e3;
   --accent-on: #b35300;
-  --avatar-bg: #ffe3c2;
-  --avatar-fg: #8a4b00;
+  --avatar-bg: var(--tie-bg);
+  --avatar-fg: var(--tie);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "SF Pro Text", "PingFang SC", "Helvetica Neue", "Noto Sans CJK SC", Roboto, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
@@ -16,14 +15,12 @@
     --accent: #ff9f5a;
     --accent-bg: #3a2614;
     --accent-on: #ffb27a;
-    --avatar-bg: #3a2a16;
-    --avatar-fg: #ffd59e;
   }
 }
 
-.btn--primary { box-shadow: 0 6px 16px rgba(47, 111, 237, 0.28); }
-.btn--outline { background: var(--card); color: var(--brand); border: 1.5px solid #d6e2fb; }
-@media (prefers-color-scheme: dark) { .btn--outline { border-color: #2b3a5c; } }
+/* 实心主按钮用藏青渐变：深色模式下 --brand 变浅（给文字和链接用），按钮底色仍是藏青，白字才看得清 */
+.btn--primary { background: var(--brand-gradient); box-shadow: 0 6px 16px var(--brand-glow); }
+.btn--outline { background: var(--card); color: var(--brand); border: 1.5px solid var(--brand-tint); }
 
 /* 学科方块：圆角色块 + 一个大字符 */
 .tile { border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: -0.02em; flex-shrink: 0; }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { autoTargetFolder } from "../lib/folders";
 import { pickImages } from "../lib/native";
 import { toastError } from "../store/banner";
@@ -14,6 +14,7 @@ import { Sheet } from "./ui";
  */
 export function useAddPaper(folderId?: string) {
   const nav = useNavigate();
+  const { pathname } = useLocation();
   const { reset, setReturnTo } = useCapture();
   const setImport = useImport((s) => s.set);
   const [open, setOpen] = useState(false);
@@ -24,7 +25,7 @@ export function useAddPaper(folderId?: string) {
     setOpen(false);
     const f = await target();
     reset();
-    setReturnTo(f ? `/papers/${f}` : "/home");
+    setReturnTo(pathname);
     nav("/capture", { state: { folderId: f, source: "camera" } });
   };
 
@@ -33,7 +34,7 @@ export function useAddPaper(folderId?: string) {
     try {
       const list = await pickImages(0);
       if (!list.length) return;
-      setImport(list, await target());
+      setImport(list, await target(), pathname);
       nav("/import");
     } catch (e) {
       toastError((e as Error).message === "permission_denied" ? new Error("需要相册权限，可以在系统设置里打开") : e);
@@ -44,7 +45,7 @@ export function useAddPaper(folderId?: string) {
     setOpen(false);
     const f = await target();
     reset();
-    setReturnTo(f ? `/papers/${f}` : "/home");
+    setReturnTo(pathname);
     nav("/capture", { state: { folderId: f, source: "sample" } });
   };
 

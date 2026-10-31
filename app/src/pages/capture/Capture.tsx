@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { addPaper, deletePaper, getFolder, toPage, updatePaper, validDigitized } from "../../lib/folders";
+import { finishFlow } from "../../lib/flow";
 import { submitScan } from "../../lib/jobs";
 import { haptic, pickImage, pickImages } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
@@ -83,7 +84,7 @@ export default function Capture() {
   };
 
   const leave = () => {
-    nav(returnTo, { replace: true });
+    finishFlow(nav, returnTo, returnTo);
     reset();
   };
 
@@ -154,7 +155,7 @@ export default function Capture() {
     void haptic.success();
     if (ok) toast(`已开始扫描 ${ok} 张试卷，可以先去做别的，好了会在列表里显示`, "success");
     reset();
-    nav(`/papers/${folder}`, { replace: true });
+    finishFlow(nav, returnTo, `/papers/${folder}`);
   };
 
   /** 扫描：压缩上传后交给服务器后台还原，立刻回到文件夹；进度在试卷行上显示，切走 App 也不影响。 */
@@ -166,7 +167,7 @@ export default function Capture() {
       await submitScan(state.folderId, state.paperId, state.pages, (stage) => setProgress({ stage, pct: stage.includes("上传") ? 60 : 20, elapsed: 0 }));
       void haptic.success();
       toast("已开始扫描，可以先去做别的，好了会在试卷上显示", "success");
-      nav(`/papers/${state.folderId}`, { replace: true });
+      finishFlow(nav, state.returnTo, `/papers/${state.folderId}`);
     } catch (e) {
       toastError(e);
     } finally {

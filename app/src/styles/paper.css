@@ -71,7 +71,7 @@
 .grp__nums { font-weight: 600; word-break: break-all; }
 
 .pick { width: 24px; height: 24px; border-radius: 12px; border: 2px solid var(--separator); background: transparent; color: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.pick.on { border: 0; background: var(--brand); }
+.pick.on { border: 0; background: var(--brand-solid); }
 
 /* 判定列（第 3 列）：表头和 ✅ / ❌ / 标签都居中 */
 .ans__row > :nth-child(3) { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; }

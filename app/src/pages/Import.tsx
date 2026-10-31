@@ -4,6 +4,7 @@ import { Icon } from "../components/Icon";
 import { Button, InlineNav, Segmented, Sheet } from "../components/ui";
 import { SubjectTile } from "../components/v2";
 import { addPaper, folderStats, listFolders, toPage, type Folder } from "../lib/folders";
+import { finishFlow } from "../lib/flow";
 import { submitScan } from "../lib/jobs";
 import { haptic } from "../lib/native";
 import { toast, toastError } from "../store/banner";
@@ -17,7 +18,7 @@ type Mode = "one" | "each";
  */
 export default function Import() {
   const nav = useNavigate();
-  const { sources, folderId, remove, setFolder, clear } = useImport();
+  const { sources, folderId, from, remove, setFolder, clear } = useImport();
   const [mode, setMode] = useState<Mode>("one");
   const [folders, setFolders] = useState<Folder[]>([]);
   const [picking, setPicking] = useState(false);
@@ -67,7 +68,7 @@ export default function Import() {
     void haptic.success();
     if (ok) toast(`已开始识别 ${ok} 份，好了会自动归档到知识点`, "success");
     clear();
-    nav(`/papers/${target}`, { replace: true });
+    finishFlow(nav, from, `/papers/${target}`);
   };
 
   return (

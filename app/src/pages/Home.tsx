@@ -40,7 +40,6 @@ export default function Home() {
   const papers = folders?.flatMap((f) => f.papers.map((p) => ({ f, p }))) ?? [];
   const scanning = papers.filter(({ p }) => p.scanJob);
   const failed = papers.filter(({ p }) => p.scanError && !p.scanJob);
-  const scanned = papers.filter(({ p }) => p.digitized).length;
   const exportSet = fresh.length > 0 ? fresh : errors;
 
   const now = new Date();
@@ -53,7 +52,7 @@ export default function Home() {
   const steps: { icon: IconName; title: string; go: () => void }[] = [
     { icon: "camera", title: "收集", go: add.open },
     { icon: "sparkles", title: "识别归档", go: () => nav("/papers") },
-    { icon: "chart", title: "分析", go: () => nav("/library") },
+    { icon: "chart", title: "分析", go: () => nav("/rank") },
     { icon: "printer", title: "导出", go: () => setExporting(true) },
   ];
 
@@ -107,7 +106,7 @@ export default function Home() {
 
         {recent.total > 0 && (
           <section className="card rise" style={{ gap: 14, ["--i" as string]: 3 }}>
-            <button style={{ display: "flex", alignItems: "center", gap: 8, textAlign: "left" }} onClick={() => nav("/library")}>
+            <button style={{ display: "flex", alignItems: "center", gap: 8, textAlign: "left" }} onClick={() => nav("/rank")}>
               <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
                 <span className="t-foot c-sec" style={{ fontWeight: 600 }}>近 30 天 · <CountUp value={recent.total} /> 道错题</span>
                 <span className="t-body" style={{ fontWeight: 600 }}>{recent.summary}</span>

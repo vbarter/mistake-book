@@ -12,19 +12,18 @@ import { listFolders, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL } from "../lib/format";
 import { RANGE_LABEL, analyze, inRange, type Range } from "../lib/insights";
 import { BOARDS, rank, type Board } from "../lib/ranks";
-import { useRankView } from "../store/rankView";
 import { useJobs } from "../lib/jobs";
-
+import { useRankView } from "../store/rankView";
 
 /**
  * 分析 = 错题榜。版式参照生活类 App 的榜单页：顶部时间范围，学科页签，左边切四个榜单，右边是带名次的榜单；点卡片进详情页，左右滑切换。
  * 易错指数由错题数量、是否真错、跨几份试卷、离现在多近算出（lib/ranks.ts），扫描完自动更新。
  */
-export default function Library() {
+export default function Ranking() {
   const [folders, setFolders] = useState<Folder[] | null>(null);
   const [range, setRange] = useState<Range>("30d");
   const [board, setBoard] = useState<Board>("question");
-  const [subject, setSubject] = useState<Subject | "all">("all");
+  const [pickedSubject, setSubject] = useState<Subject | "all">("all");
   const nav = useNavigate();
   const setView = useRankView((s) => s.set);
   const jobsVersion = useJobs((s) => s.version);
@@ -37,6 +36,7 @@ export default function Library() {
   const ranged = useMemo(() => inRange(errors, range), [errors, range]);
   const insight = useMemo(() => analyze(ranged), [ranged]);
   const subjects = insight.subjects.map(([s]) => s);
+  const subject = pickedSubject !== "all" && subjects.includes(pickedSubject) ? pickedSubject : "all"; // 换了时间范围后这一科可能没题了
   const scoped = useMemo(() => ranged.filter((e) => subject === "all" || e.subject === subject), [ranged, subject]);
   const rows = useMemo(() => rank(scoped, board), [scoped, board]);
   const boardInfo = BOARDS.find((b) => b.id === board)!;
@@ -47,11 +47,11 @@ export default function Library() {
     const entries = rows.flatMap((r, i) => r.items.map((e) => ({ key: e.key, rank: i + 1, score: r.score, group: board === "question" ? "" : r.title })));
     const start = rows.slice(0, rowIndex).reduce((n, r) => n + r.items.length, 0);
     setView(listTitle, entries);
-    nav(`/library/q/${start}`);
+    nav(`/rank/q/${start}`);
   };
 
   return (
-    <div className="screen rank-screen">
+    <div className="screen">
       <header className="topbar topbar--center">
         <div style={{ width: "min(280px, 100%)" }}>
           <Segmented value={range} onChange={setRange} options={(["7d", "30d", "all"] as Range[]).map((r) => ({ value: r, label: RANGE_LABEL[r] }))} />

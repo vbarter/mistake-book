@@ -7,7 +7,7 @@ import { Icon, type IconName } from "./Icon";
 const tabs: { to: string; label: string; icon: IconName }[] = [
   { to: "/home", label: "首页", icon: "house" },
   { to: "/papers", label: "试卷", icon: "folder" },
-  { to: "/library", label: "分析", icon: "chart" },
+  { to: "/rank", label: "分析", icon: "chart" },
   { to: "/profile", label: "我的", icon: "person" },
 ];
 
@@ -65,7 +65,6 @@ export function TabBar() {
         </span>
         {tabs.slice(2).map(tab)}
       </nav>
-      {add.sheet}
     </>
   );
 }

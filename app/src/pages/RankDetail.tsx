@@ -48,7 +48,7 @@ export default function RankDetail() {
     if (el) el.scrollTo({ left: el.clientWidth * i, behavior: "smooth" });
   };
 
-  if (items && slides.length === 0) return <Empty icon="seal" title="这道题找不到了" action={<button className="nav-btn" onClick={() => nav("/library", { replace: true })}>回到错题榜</button>} />;
+  if (items && slides.length === 0) return <Empty icon="seal" title="这道题找不到了" action={<button className="nav-btn" onClick={() => nav("/rank", { replace: true })}>回到错题榜</button>} />;
 
   return (
     <div className="screen detail-screen">
