@@ -90,6 +90,7 @@ class DigitizedBlock:
     knowledgePoints: list[str] = field(default_factory=list)
     tip: str = ""
     uncertainSpans: list[str] = field(default_factory=list)
+    topic: dict | None = None  # 图谱知识点 {id, name, subject, domain, grade, chapter}（见 app/taxonomy.py）；没标上就是 None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -118,6 +119,7 @@ class DigitizedQuestion:
     blockIndex: int = 0  # 所在版面块在 sheet.blocks 里的下标
     blankIds: list[str] = field(default_factory=list)  # 对应的空 id
     aiGraded: bool = False  # 有空是 AI 判的（老师没批改）
+    topic: dict | None = None  # 图谱知识点（随版面块），客户端按它的 chapter / id 归并错题
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -176,3 +178,7 @@ class AIProvider:
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:
         raise NotImplementedError
+
+    def tag_topics(self, sheets: list[DigitizedPage], grade: str) -> int:
+        """给做错 / 半对 / 没作答的题块挑图谱知识点（写进 block.topic）。返回标上的题块数；默认什么都不做。"""
+        return 0

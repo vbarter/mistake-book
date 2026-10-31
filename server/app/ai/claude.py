@@ -17,13 +17,14 @@ import re
 
 import anthropic
 
+from .. import taxonomy
 from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
 from . import ocr
 from . import queue as page_queue
 from .digitize import (
-    BLANK_RE, _nearby_wordbank, _render_text, apply_context_answer, apply_explanation, explain_targets, clear_listening_answers, clean_sheets, derive_questions, drop_ghost_sheets, join_page_breaks,
-    listening_blocks, merge_split_questions, needs_context, option_letter, parent_stems, reconcile_split_choices, set_split_choice, snap_figures, stem_lead, strip_page_chrome, unreadable,
+    BLANK_RE, _nearby_wordbank, _render_text, apply_context_answer, apply_explanation, apply_topic, explain_targets, clear_listening_answers, clean_sheets, derive_questions, drop_ghost_sheets, join_page_breaks,
+    listening_blocks, merge_split_questions, needs_context, option_letter, parent_stems, reconcile_split_choices, set_split_choice, snap_figures, stem_lead, strip_page_chrome, tag_targets, unreadable,
 )
 
 log = logging.getLogger(__name__)
@@ -390,6 +391,43 @@ def is_relay_base_url(url: str | None) -> bool:
     return bool(url) and "anthropic.com" not in url
 
 
+TAG_SYSTEM_PROMPT = (
+    "你是中小学教研员，负责把学生的错题归到课程知识图谱里的知识点上。"
+    "你会先收到某学科、某学段的知识点清单（每行：id｜名称｜章节），再收到一张试卷上的若干道错题（题干、选项、学生作答、参考答案，以及识别时写的知识点说法）。"
+    "为每道题从清单里挑**一个**最贴切的知识点 id：按题目实际考查的内容判断，不要只看名字是否相同（不同教材版本说法不同，例如上海教材的「锐角三角比」就是清单里的「锐角三角函数」）；"
+    "一题考多个点时选学生答错最直接相关的那个；小学和初中六年级（五四制）的卷子可能对应清单里高一个年级的内容，不要因为年级不符而放弃。"
+    "清单里确实没有对应内容（超纲、别的学科、看不出考什么）时 topicId 给 null，不要硬凑。"
+    "confidence：high 表示很确定，low 表示勉强对应或不确定。只输出 results，key 用题目的 key。"
+)
+
+TAG_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string"},
+                    "topicId": {"type": ["string", "null"]},
+                    "confidence": {"type": "string", "enum": ["high", "low"]},
+                },
+                "required": ["key", "topicId", "confidence"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["results"],
+    "additionalProperties": False,
+}
+
+
+def candidate_text(subject: str, grade: str) -> str:
+    """候选知识点清单：一行一个「id｜名称｜章节」。"""
+    rows = taxonomy.candidates(subject, grade)
+    return "\n".join(f"{t['id']}｜{t['name']}｜{taxonomy.chapter_title(t)}" for t in rows)
+
+
 class ClaudeProvider(AIProvider):
     def __init__(self, model: str = "claude-opus-5-5", relay: bool | None = None):
         # 凭据与地址从环境解析：ANTHROPIC_API_KEY、ANTHROPIC_BASE_URL（中转）或 `ant auth login` 的配置
@@ -637,6 +675,12 @@ class ClaudeProvider(AIProvider):
             self.explain(sheets, pages)
         except Exception as e:  # noqa: BLE001  失败就保留简短解析
             log.warning("explain failed: %s", e)
+        # 第四步：错题挑知识图谱里的知识点 id（开关 TAXONOMY_TAGGING）；失败就只留自由文本知识点
+        if taxonomy.enabled():
+            try:
+                self.tag_topics(sheets, grade)
+            except Exception as e:  # noqa: BLE001
+                log.warning("tag topics failed: %s", e)
         return sheets, derive_questions(sheets)
 
     def _resolve_with_context(self, sheets: list[DigitizedPage], pages: list[Crop], positions: list[tuple[int, int]], batch: int = 10) -> int:
@@ -758,6 +802,72 @@ class ClaudeProvider(AIProvider):
                 except Exception as e:  # noqa: BLE001  某一组失败不影响其他组，保留简短解析
                     log.warning("explain batch failed: %s", e)
         log.info("explained %d/%d blank(s)", done, sum(len(v) for v in by_pages.values()))
+        return done
+
+    def tag_topics(self, sheets: list[DigitizedPage], grade: str, batch: int = 30) -> int:
+        """识别后的第四步：做错 / 半对 / 没作答的题块按学科分组，连同该学科学段的知识点清单交给大模型挑一个知识点 id（纯文本，不传照片）。
+        挑中的写进 block.topic；confidence 为 low 的也写，但记日志。返回标上的题块数。"""
+        targets = tag_targets(sheets)
+        if not targets:
+            return 0
+        parents = parent_stems(sheets)
+        by_subject: dict[str, list[tuple[int, int]]] = {}
+        for si, bi in targets:
+            blk = sheets[si].blocks[bi]
+            by_subject.setdefault(blk.subject or sheets[si].subject, []).append((si, bi))
+
+        def run(subject: str, chunk: list[tuple[int, int]]) -> int:
+            listing = candidate_text(subject, grade)
+            if not listing:
+                return 0
+            todo: dict[str, object] = {}
+            parts = []
+            for n, (si, bi) in enumerate(chunk):
+                blk = sheets[si].blocks[bi]
+                key = f"q{n}"
+                wrong = [b for b in blk.blanks if b.mark in ("wrong", "partial", "blank")] or blk.blanks
+                stem = _render_text(blk.text, blk.blanks, None)
+                if (si, bi) in parents:
+                    stem = stem_lead(sheets[parents[(si, bi)][0]].blocks[parents[(si, bi)][1]]) + "\n" + stem
+                options = blk.options or (_nearby_wordbank(sheets[si].blocks, bi) if blk.type == "passage" else [])
+                parts.append("\n".join(x for x in [
+                    f"<question key=\"{key}\" number=\"{blk.number or (wrong[0].number if wrong else '')}\" type=\"{blk.questionType}\">",
+                    stem[:1500],
+                    f"选项：{'　'.join(options)[:400]}" if options else "",
+                    f"学生作答：{'；'.join(b.student for b in wrong if b.student.strip())[:200] or '（没作答）'}",
+                    f"参考答案：{'；'.join(b.answer for b in wrong if b.answer.strip())[:200]}",
+                    f"识别时写的知识点：{'、'.join(blk.knowledgePoints)}" if blk.knowledgePoints else "",
+                    "</question>",
+                ] if x))
+                todo[key] = blk
+            content = [
+                {"type": "text", "text": f"学科：{SUBJECT_LABELS.get(subject, subject)}；学生年级：{grade_label(grade)}。\n知识点清单（id｜名称｜章节）：\n{listing}"},
+                {"type": "text", "text": "要归类的错题（results 的 key 用 question 的 key）：\n\n" + "\n\n".join(parts)},
+            ]
+            data = self._call(TAG_SYSTEM_PROMPT, content, TAG_SCHEMA, max_tokens=4000)
+            done = 0
+            for r in data.get("results", []):
+                blk = todo.get(str(r.get("key"))) if isinstance(r, dict) else None
+                if blk is None:
+                    continue
+                tid = r.get("topicId")
+                if apply_topic(blk, str(tid) if tid else None):
+                    done += 1
+                    if r.get("confidence") == "low":
+                        log.info("topic low confidence: %s -> %s (%s)", blk.number, tid, "、".join(blk.knowledgePoints))
+                elif tid:
+                    log.info("topic id not in taxonomy: %s (%s)", tid, "、".join(blk.knowledgePoints))
+            return done
+
+        jobs = [(subj, v[i : i + batch]) for subj, v in by_subject.items() for i in range(0, len(v), batch)]
+        done = 0
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for f in [pool.submit(run, subj, c) for subj, c in jobs]:
+                try:
+                    done += f.result()
+                except Exception as e:  # noqa: BLE001  某一组失败不影响其他组，题保留自由文本知识点
+                    log.warning("tag topics batch failed: %s", e)
+        log.info("tagged %d/%d block(s) with taxonomy topics", done, len(targets))
         return done
 
     def _resolve_split_choices(self, unresolved: list) -> int:

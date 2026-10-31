@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS mistakes (
   user_id           VARCHAR(32)  NOT NULL,
   subject           VARCHAR(16)  NOT NULL COMMENT 'math / chinese / english / science',
   knowledge_points  JSON         NULL     COMMENT '知识点数组，1-3 个',
+  topic_id          VARCHAR(24)  NULL     COMMENT '知识图谱知识点 id（server/app/data/taxonomy.json）',
   question_type     VARCHAR(16)  NOT NULL DEFAULT 'solve' COMMENT 'choice / fill / solve',
   options           JSON         NULL     COMMENT '选择题选项数组',
   stem_text         TEXT         NULL     COMMENT '题干',
@@ -64,6 +65,7 @@ CREATE TABLE IF NOT EXISTS mistakes (
   updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY ix_mistakes_user_id (user_id),
+  KEY ix_mistakes_topic_id (topic_id),
   KEY ix_mistakes_subject (subject),
   KEY ix_mistakes_mastered (mastered),
   KEY ix_mistakes_next_due_at (next_due_at),
@@ -153,3 +155,4 @@ CREATE TABLE IF NOT EXISTS usage_events (
 -- ALTER TABLE users ADD COLUMN last_active_at DATETIME NULL COMMENT '最近一次打开 / 使用' AFTER created_at, ADD COLUMN last_platform VARCHAR(12) NULL COMMENT '最近用的端' AFTER last_active_at, ADD KEY ix_users_last_active_at (last_active_at);
 -- 已有库升级：管理后台按账号认人（用 root 执行）
 -- ALTER TABLE users ADD COLUMN apple_name VARCHAR(64) NULL COMMENT 'Apple 首次授权给的姓名' AFTER wx_openid, ADD COLUMN apple_email VARCHAR(128) NULL COMMENT 'Apple identityToken 里的邮箱' AFTER apple_name;
+-- ALTER TABLE mistakes ADD COLUMN topic_id VARCHAR(24) NULL COMMENT '知识图谱知识点 id' AFTER knowledge_points, ADD KEY ix_mistakes_topic_id (topic_id);

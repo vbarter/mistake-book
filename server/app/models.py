@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import JSON
 
 from .extensions import db
+from . import taxonomy
 
 
 def _uuid() -> str:
@@ -66,6 +67,7 @@ class Mistake(db.Model):
 
     subject = db.Column(db.String(16), nullable=False, index=True)
     knowledge_points = db.Column(JSON, default=list)
+    topic_id = db.Column(db.String(24), nullable=True, index=True)  # 知识图谱知识点 id（app/taxonomy.py），没标上为空
     question_type = db.Column(db.String(16), default="solve")
     options = db.Column(JSON, default=list)
     stem_text = db.Column(db.Text, default="")
@@ -108,6 +110,7 @@ class Mistake(db.Model):
             "id": self.id,
             "subject": self.subject,
             "knowledgePoints": self.knowledge_points or [],
+            "topic": taxonomy.view(self.topic_id) if self.topic_id else None,
             "questionType": self.question_type,
             "options": self.options or [],
             "stemText": self.stem_text,

@@ -52,6 +52,9 @@ class Config:
     APPLE_VERIFY = os.getenv("APPLE_VERIFY", "0") == "1"
     APPLE_BUNDLE_ID = os.getenv("APPLE_BUNDLE_ID", "com.zhicuoben.app")
 
+    # 知识图谱标注：识别完后把错题交给大模型挑图谱里的知识点 id（数据见 app/data/taxonomy.json）。默认关
+    TAXONOMY_TAGGING = os.getenv("TAXONOMY_TAGGING", "0") == "1"
+
     MAX_CROPS_PER_RECOGNIZE = 6
     MAX_PAGES_PER_SCAN = 100  # 前端不限照片张数；宽幅照片会拆成左右两张上传，这里只防滥用
     DAILY_REVIEW_LIMIT = 20
