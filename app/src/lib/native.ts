@@ -163,6 +163,16 @@ export async function openAppSettings() {
   } catch { /* ignore */ }
 }
 
+/** Blob 转 base64（不带 dataURL 前缀），给 Filesystem 写文件用 */
+export function blobToBase64(part: Blob): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(",")[1] ?? "");
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(part);
+  });
+}
+
 /** 本机已有的 PDF 文件拉起系统分享面板（可打印、存到「文件」、AirDrop） */
 export async function sharePdfFile(uri: string, filename: string): Promise<void> {
   const { Share } = await import("@capacitor/share");
@@ -178,15 +188,9 @@ export async function exportPdf(blob: Blob, filename: string): Promise<void> {
     const { Filesystem, Directory } = await import("@capacitor/filesystem");
     // 分段写：几 MB 的 PDF 整个转成一串 base64 一次走原生桥，WKWebView 内存紧张时会卡住；每段 768 KB 慢慢写
     const CHUNK = 768 * 1024; // 3 的倍数，每段 base64 不带填充，可以直接拼接
-    const toBase64 = (part: Blob) => new Promise<string>((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(String(fr.result).split(",")[1] ?? "");
-      fr.onerror = () => reject(fr.error);
-      fr.readAsDataURL(part);
-    });
-    const written = await Filesystem.writeFile({ path: filename, data: await toBase64(blob.slice(0, CHUNK)), directory: Directory.Cache });
+    const written = await Filesystem.writeFile({ path: filename, data: await blobToBase64(blob.slice(0, CHUNK)), directory: Directory.Cache });
     for (let at = CHUNK; at < blob.size; at += CHUNK) {
-      await Filesystem.appendFile({ path: filename, data: await toBase64(blob.slice(at, at + CHUNK)), directory: Directory.Cache });
+      await Filesystem.appendFile({ path: filename, data: await blobToBase64(blob.slice(at, at + CHUNK)), directory: Directory.Cache });
     }
     await sharePdfFile(written.uri, filename);
     return;

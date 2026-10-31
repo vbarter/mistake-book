@@ -1617,6 +1617,12 @@ def test_background_export_book_list_download_delete(client, auth):
     assert client.get(f"/api/exports/{job['id']}/file", headers=other).status_code == 404
     assert client.get("/api/exports", headers=other).get_json()["items"] == []
 
+    # App 按 256 KB 分段下载（线路不稳时断了只重试那一段）：下载接口要支持 Range
+    part = client.get(f"/api/exports/{job['id']}/file", headers={**auth, "Range": "bytes=0-99"})
+    assert part.status_code == 206 and part.data == f.data[:100]
+    tail = client.get(f"/api/exports/{job['id']}/file", headers={**auth, "Range": f"bytes=100-{job['size'] + 1000}"})
+    assert tail.status_code == 206 and part.data + tail.data == f.data
+
     assert client.delete(f"/api/exports/{job['id']}", headers=auth).status_code == 200
     assert client.get("/api/exports", headers=auth).get_json()["items"] == []
     assert client.get(f"/api/exports/{job['id']}/file", headers=auth).status_code == 404
