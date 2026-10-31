@@ -6,6 +6,7 @@ import { autoMark, getFolder, isDefaultFolderName, isDefaultPaperName, isProblem
 import { SUBJECT_LABEL } from "./format";
 import { isNative, prepareUpload, type UploadPart } from "./native";
 import { getCity } from "./prefs";
+import { findPaperMatch } from "./dedup";
 
 export interface ScanJob {
   id: string;
@@ -55,7 +56,8 @@ async function finishJob(folderId: string, paperId: string, job: DigitizeJob, pa
   const before = (await getFolder(folderId))?.papers.find((p) => p.id === paperId);
   const title = recognizedTitle(digitized);
   const name = before && isDefaultPaperName(before.name) && title ? title : undefined;
-  await updatePaper(folderId, paperId, { digitized, scannedAt, corrected: {}, subject, scanJob: undefined, scanError: undefined, gradedAt: undefined, taggedAt: undefined, ...(name ? { name } : {}) });
+  await updatePaper(folderId, paperId, { digitized, scannedAt, corrected: {}, subject, scanJob: undefined, scanError: undefined, gradedAt: undefined, taggedAt: undefined, printedAt: scannedAt, duplicateOf: undefined, keepDuplicate: undefined, ...(name ? { name } : {}) });
+  await markDuplicate(folderId, paperId);
   const folder = await getFolder(folderId);
   if (!folder) return;
   const level = digitized.pages.find((s) => s.examLevel)?.examLevel ?? "";
@@ -166,6 +168,7 @@ export function startJobPoller(): () => void {
   const tick = async () => {
     if (stopped) return;
     const pending = await pollPendingJobs();
+    if (pending === 0) void backfillPrints();
     timer = setTimeout(tick, pending > 0 ? 4000 : 20000);
   };
   void tick();
@@ -252,4 +255,58 @@ export async function gradeIfNeeded(folderId: string, paper: Paper): Promise<voi
     grading.delete(paper.id);
     useJobs.getState().bump();
   }
+}
+
+// ---------------------------------------------------------------- 重复试卷
+
+/** 扫完（或补完指纹）后看这份是不是本机另一份试卷重复扫的、重做的、其中几页；是就记在试卷上，打开时提示 */
+export async function markDuplicate(folderId: string, paperId: string): Promise<void> {
+  try {
+    const folders = await listFolders();
+    const paper = folders.find((f) => f.id === folderId)?.papers.find((p) => p.id === paperId);
+    if (!paper || paper.duplicateOf || paper.keepDuplicate) return;
+    const match = findPaperMatch(folders, paper);
+    if (match) await updatePaper(folderId, paperId, { duplicateOf: match });
+  } catch {
+    /* 判不了就不提示，不影响扫描结果 */
+  }
+}
+
+/** 用户说「不是同一份」：去掉标记，以后不再拿这两份比 */
+export async function notDuplicate(folderId: string, paper: Paper): Promise<void> {
+  const other = paper.duplicateOf?.paperId;
+  await updatePaper(folderId, paper.id, { duplicateOf: undefined, keepDuplicate: undefined, notDuplicateOf: [...new Set([...(paper.notDuplicateOf ?? []), ...(other ? [other] : [])])] });
+  useJobs.getState().bump();
+}
+
+const printing = new Set<string>();
+
+/** 升级前扫的试卷题目没有指纹：交给服务器补（/api/digitize/prints，不调大模型），写回本机后再判一次是不是重复的 */
+export async function printIfNeeded(folderId: string, paper: Paper): Promise<boolean> {
+  const d = validDigitized(paper.digitized);
+  if (!d || paper.scanJob || paper.printedAt || printing.has(paper.id) || d.questions.some((q) => q.qKey !== undefined)) return false;
+  printing.add(paper.id);
+  try {
+    const res = await api<{ pages: DigitizedResult["pages"]; questions: DigitizedQuestion[] }>("/api/digitize/prints", { method: "POST", body: { pages: d.pages }, timeoutMs: 60000 });
+    await updatePaper(folderId, paper.id, { digitized: { ...paper.digitized!, pages: res.pages, questions: res.questions }, printedAt: new Date().toISOString() });
+    await markDuplicate(folderId, paper.id);
+    return true;
+  } catch {
+    return false; /* 网络等问题：下次再补 */
+  } finally {
+    printing.delete(paper.id);
+  }
+}
+
+let backfilled = false;
+
+/** 启动后在后台把老试卷的指纹一份一份补上（每次启动只跑一遍），补完通知页面刷新汇总 */
+export async function backfillPrints(): Promise<void> {
+  if (backfilled) return;
+  backfilled = true;
+  let changed = 0;
+  for (const folder of await listFolders().catch(() => [] as Folder[])) {
+    for (const paper of folder.papers) if (await printIfNeeded(folder.id, paper)) changed += 1;
+  }
+  if (changed) useJobs.getState().bump();
 }

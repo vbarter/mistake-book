@@ -3,6 +3,7 @@
  * 一次考试一个文件夹，一个文件夹装多张试卷；每张试卷有若干照片和 AI 还原的电子版。
  * 错题不再单独"收录"：扫描完的试卷里判错的题（含未作答）自动算进文件夹和错题库。
  */
+import { dhashOf, shaOf } from "./photoPrint";
 import type { DigitizedQuestion, DigitizedResult, Mark, PhotoIssue, QuestionType, Subject } from "../api/types";
 
 export interface FolderPage {
@@ -10,6 +11,8 @@ export interface FolderPage {
   width: number;
   height: number;
   thumb?: string; // 小图 dataURL（最长边 THUMB_SIDE），列表和录入页显示用
+  sha?: string; // 原图内容的 SHA-256（前 16 位），同一张图再导入时认出来；旧照片没有
+  dhash?: string; // 小图的差值哈希（16 位十六进制），重新压缩过的同一张图也能认出来；旧照片没有
   src?: string; // 原图 dataURL：只在内存里带着（刚拍的、loadPages 读出来的）；存库时拆进照片表，文件夹记录里没有
 }
 
@@ -30,6 +33,21 @@ export interface Paper {
   scanError?: string; // 上次还原失败的原因
   gradedAt?: string; // 补做过 AI 阅卷的时间（避免反复请求）
   taggedAt?: string; // 补标过知识图谱知识点的时间（避免反复请求）
+  printedAt?: string; // 补算过题目指纹的时间（升级前扫的试卷没有 qKey）
+  duplicateOf?: PaperMatch; // 扫完发现和本机另一份试卷是同一份（lib/dedup.ts）；用户点「不是同一份」后清掉
+  notDuplicateOf?: string[]; // 用户说过「不是同一份」的试卷 id，不再提示
+  keepDuplicate?: boolean; // 重复扫描时用户选了「两份都留」：不再提示，这份的错题不重复计入
+}
+
+/** 这份试卷和本机哪份试卷是同一份：same 重复扫描（作答也一样）、retake 重做（作答不同）、partial 只拍了其中几页 */
+export interface PaperMatch {
+  folderId: string;
+  paperId: string;
+  paperName: string;
+  folderName: string;
+  kind: "same" | "retake" | "partial";
+  overlap: number; // 这份试卷的题有多少比例在那份里（0–1）
+  shared: number; // 重合的题数
 }
 
 export interface Folder {
@@ -106,7 +124,7 @@ function locked<T>(fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
-const strip = (pages: FolderPage[]): FolderPage[] => pages.map(({ id, width, height, thumb }) => ({ id, width, height, thumb }));
+const strip = (pages: FolderPage[]): FolderPage[] => pages.map(({ id, width, height, thumb, sha, dhash }) => ({ id, width, height, thumb, ...(sha ? { sha } : {}), ...(dhash ? { dhash } : {}) }));
 const pageIds = (folder: Folder) => new Set(folder.papers.flatMap((p) => p.pages.map((pg) => pg.id)));
 
 /** 存一个文件夹：带原图的照片写进照片表（已存过的 id 跳过），文件夹记录只留尺寸和小图；dropped 里不再被引用的照片删掉 */
@@ -320,7 +338,19 @@ export function deleteFolder(id: string): Promise<void> {
       t.objectStore(STORE).delete(id);
       for (const pid of folder ? pageIds(folder) : []) t.objectStore(PHOTOS).delete(pid);
     });
+    await unlinkDuplicates(new Set(folder?.papers.map((p) => p.id) ?? []));
   });
+}
+
+/** 删掉的试卷如果是别的试卷标的「同一份」，把标记去掉：原来那份没了，这份的错题要重新计入（在写入锁里调用） */
+async function unlinkDuplicates(gone: Set<string>): Promise<void> {
+  if (!gone.size) return;
+  const all = await run<(Folder | LegacyFolder)[]>(STORE, "readonly", (t) => t.objectStore(STORE).getAll());
+  for (const raw of all) {
+    const f = normalize(raw).folder;
+    if (!f.papers.some((p) => p.duplicateOf && gone.has(p.duplicateOf.paperId))) continue;
+    await putFolder({ ...f, papers: f.papers.map((p) => (p.duplicateOf && gone.has(p.duplicateOf.paperId) ? { ...p, duplicateOf: undefined, keepDuplicate: undefined } : p)) }, { stored: pageIds(f) });
+  }
 }
 
 /** 用户拖动调整文件夹里试卷的先后；不改 updatedAt */
@@ -364,18 +394,22 @@ export function deletePaper(folderId: string, paperId: string): Promise<Folder |
     const folder = await getFolder(folderId);
     if (!folder) return undefined;
     const gone = folder.papers.find((p) => p.id === paperId)?.pages.map((pg) => pg.id);
-    return saveFolder({ ...folder, papers: folder.papers.filter((p) => p.id !== paperId) }, { stored: pageIds(folder), dropped: gone });
+    const saved = await saveFolder({ ...folder, papers: folder.papers.filter((p) => p.id !== paperId) }, { stored: pageIds(folder), dropped: gone });
+    await unlinkDuplicates(new Set([paperId]));
+    return (await getFolder(folderId)) ?? saved;
   });
 }
 
 /** 把 dataURL 变成照片记录（读出尺寸、做好小图）。 */
-export function toPage(src: string): Promise<FullPage> {
-  return new Promise((resolve, reject) => {
+export async function toPage(src: string): Promise<FullPage> {
+  const page = await new Promise<FullPage>((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve({ id: newId(), src, width: img.naturalWidth, height: img.naturalHeight, thumb: thumbFrom(img) });
+    img.onload = () => resolve({ id: newId(), src, width: img.naturalWidth, height: img.naturalHeight, thumb: thumbFrom(img), dhash: dhashOf(img) });
     img.onerror = reject;
     img.src = src;
   });
+  const sha = await shaOf(src);
+  return sha ? { ...page, sha } : page;
 }
 
 /** 列表里显示的小图：没有小图（极少数做小图失败的旧数据）时才用原图 */

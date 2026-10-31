@@ -9,6 +9,7 @@ import logging
 import re
 
 from ..constants import QUESTION_TYPES, SUBJECTS
+from .prints import add_prints
 from .base import BLOCK_TYPES, DigitizedBlank, DigitizedBlock, DigitizedPage, DigitizedQuestion
 
 log = logging.getLogger(__name__)
@@ -1139,6 +1140,7 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
     # 没有空、题号又和别的题重复的（短文里的空 [[83]]，下面又单独印了一行「83. 问题…」）：同一题，去掉没有空的那个
     answered = {q.number for q in questions if q.blankIds}
     questions = [q for q in questions if q.blankIds or not ((q.sheet, q.blockIndex) in heads or q.number in answered or any(n.startswith(q.number + "(") for n in numbers if q.number))]
+    add_prints(questions, sheets)
     return questions
 
 

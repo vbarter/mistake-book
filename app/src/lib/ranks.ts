@@ -1,6 +1,6 @@
 /** 错题榜：把一段时间里的错题排成几张榜单。易错指数 0–100，越高越该先复习，全部在本机算。 */
 import type { Subject } from "../api/types";
-import type { ErrorItem } from "./errors";
+import { paperIdsOf, timesWrong, type ErrorItem } from "./errors";
 
 export type Board = "question" | "knowledge" | "repeat" | "blank";
 
@@ -38,11 +38,11 @@ function byKnowledge(items: ErrorItem[]): Map<string, ErrorItem[]> {
 
 /** 一道题的易错指数：同知识点错得越多、越是真错（不是半对）、越近，分越高 */
 function questionScore(e: ErrorItem, kpCount: number, maxKp: number, now: number): number {
-  return round1(52 + 24 * (kpCount / maxKp) + 12 * kindWeight(e) + 9 * recency(e, now) - (e.q.tip ? 0 : 0.5));
+  return round1(Math.min(99.9, 52 + 24 * (kpCount / maxKp) + 12 * kindWeight(e) + 9 * recency(e, now) + 6 * Math.min(2, timesWrong(e) - 1) - (e.q.tip ? 0 : 0.5)));
 }
 
 function kpRow(k: string, list: ErrorItem[], maxCount: number, now: number, extra?: string): RankRow {
-  const papers = new Set(list.map((e) => e.paperId)).size;
+  const papers = new Set(list.flatMap(paperIdsOf)).size;
   const latest = [...list].sort((a, b) => b.scannedAt.localeCompare(a.scannedAt))[0];
   const score = round1(52 + 30 * (list.length / maxCount) + 8 * Math.min(1, (papers - 1) / 2) + 7 * Math.max(...list.map((e) => recency(e, now))));
   const tip = list.find((e) => e.q.tip)?.q.tip;
@@ -69,7 +69,7 @@ export function rank(items: ErrorItem[], board: Board, now = Date.now()): RankRo
           title: snippet(e.stem),
           subject: e.subject,
           score: questionScore(e, kps.get(e.knowledge)?.length ?? 1, maxKp, now),
-          meta: [e.knowledge, `${e.paperName} 第 ${e.q.number} 题`],
+          meta: [e.knowledge, `${e.paperName} 第 ${e.q.number} 题`, ...(timesWrong(e) > 1 ? [`错过 ${timesWrong(e)} 次`] : [])],
           quote: e.q.tip ? `下次注意：${e.q.tip}` : answer,
           items: [e],
         };
@@ -81,8 +81,8 @@ export function rank(items: ErrorItem[], board: Board, now = Date.now()): RankRo
   }
   if (board === "repeat") {
     return [...kps.entries()]
-      .filter(([, l]) => new Set(l.map((e) => e.paperId)).size >= 2)
-      .map(([k, l]) => kpRow(k, l, maxKp, now, `${new Set(l.map((e) => e.paperId)).size} 份试卷都错`))
+      .filter(([, l]) => new Set(l.flatMap(paperIdsOf)).size >= 2)
+      .map(([k, l]) => kpRow(k, l, maxKp, now, `${new Set(l.flatMap(paperIdsOf)).size} 份试卷都错`))
       .sort((a, b) => b.score - a.score);
   }
   const blanks = byKnowledge(items.filter((e) => e.kind === "未作答"));

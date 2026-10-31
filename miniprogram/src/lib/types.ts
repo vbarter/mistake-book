@@ -142,6 +142,9 @@ export interface DigitizedQuestion {
   blankIds: string[];
   aiGraded?: boolean; // 有空是 AI 判的（老师没批改）
   topic?: TopicRef | null; // 知识图谱知识点（服务端识别后标的）；没标上为空，按 knowledgePoints 归类
+  qKey?: string; // 题目指纹（服务端 ai/prints.py）：只看印刷题干，相同即同一题；题干太短为空
+  qSim?: string; // 题干 SimHash，16 位十六进制，模糊匹配用
+  qNums?: string; // 题干里的数字（短文空前面带 #空号），模糊匹配时必须相同
 }
 
 /** 知识图谱里的一个知识点（服务端 app/data/taxonomy.json）；chapter 是章，错题按它归并 */
@@ -170,6 +173,7 @@ export interface DigitizedPage {
   syllabus: string; // 知识点归类依据的考纲 / 课标
   photoIssues?: PhotoIssue[]; // 照片问题（新扫描才有）
   photoNote?: string; // 哪里受影响
+  textSim?: string; // 卷面印刷文字的 SimHash（服务端算），判断是不是同一页
   rotation?: number; // 照片内容逆时针转了几个 90°（OCR 判断），裁插图后转正
   blocks: DigitizedBlock[];
 }

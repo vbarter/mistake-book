@@ -355,6 +355,24 @@ def digitize_tag():
     return jsonify({"pages": [s.to_dict() for s in sheets], "questions": questions, "tagged": tagged, "enabled": taxonomy.enabled()})
 
 
+@bp.post("/digitize/prints")
+@login_required
+def digitize_prints():
+    """给升级前扫过的电子版补指纹：只重新派生题目、算 qKey / textSim，不调模型。
+    客户端拿回来写进本机，用于识别重复扫描的试卷和不同试卷里的同一道题。"""
+    data = request.get_json(silent=True) or {}
+    pages = data.get("pages")
+    if not isinstance(pages, list) or not pages:
+        abort(400, "缺少电子版内容")
+    sheets = sheets_from_dicts(pages)
+    questions = []
+    for i, q in enumerate(derive_questions(sheets)):
+        d = q.to_dict()
+        d["index"] = i
+        questions.append(d)
+    return jsonify({"pages": [s.to_dict() for s in sheets], "questions": questions})
+
+
 @bp.get("/taxonomy/topics/<topic_id>")
 @login_required
 def taxonomy_topic(topic_id: str):

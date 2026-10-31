@@ -120,6 +120,9 @@ class DigitizedQuestion:
     blankIds: list[str] = field(default_factory=list)  # 对应的空 id
     aiGraded: bool = False  # 有空是 AI 判的（老师没批改）
     topic: dict | None = None  # 图谱知识点（随版面块），客户端按它的 chapter / id 归并错题
+    qKey: str = ""  # 题目指纹（ai/prints.py）：印刷题干规范化后的哈希，相同即同一题；题干太短为空
+    qSim: str = ""  # 题干 SimHash（16 位十六进制），模糊匹配用
+    qNums: str = ""  # 题干里的数字（短文空前面带 #空号），模糊匹配时必须相同
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -142,6 +145,7 @@ class DigitizedPage:
     ocrText: str = ""  # OCR 模型逐行识别出的原文（印刷文字，公式为 LaTeX），同一张照片的几个 sheet 相同
     photoIssues: list[str] = field(default_factory=list)  # 照片问题：blurry 模糊 / cropped 不完整 / dark 太暗 / glare 反光 / tilted 歪斜 / covered 遮挡折痕
     photoNote: str = ""  # 哪里受影响，如「右下角反光，第 38–40 题看不清」
+    textSim: str = ""  # 卷面印刷文字的 SimHash（ai/prints.py），判断两张照片是不是同一页
     rotation: int = 0  # 照片内容相对正向逆时针转了几个 90°（0–3，来自 OCR 方向检测）；客户端裁插图后顺时针转回
     blocks: list[DigitizedBlock] = field(default_factory=list)
 

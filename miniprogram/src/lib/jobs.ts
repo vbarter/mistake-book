@@ -3,7 +3,8 @@ import Taro from "@tarojs/taro";
 import { api } from "./api";
 import type { DigitizeJob, DigitizedQuestion, DigitizedResult } from "./types";
 import { autoMark, isProblem, isUnreadable, validDigitized } from "./logic";
-import { getFolder, listFolders, saveFolder, updatePaper, type FolderPage, type Paper } from "./store";
+import { getFolder, listFolders, saveFolder, updatePaper, type Folder, type FolderPage, type Paper } from "./store";
+import { findPaperMatch } from "./dedup";
 
 export interface ScanJob {
   id: string;
@@ -47,7 +48,8 @@ function finishJob(folderId: string, paperId: string, job: DigitizeJob, parts: S
   const scannedAt = (job.status === "done" && job.updatedAt) || new Date().toISOString();
   const digitized: DigitizedResult = { ...remapParts(result, parts), provider: result.provider, at: scannedAt };
   const subject = digitized.pages.find((s) => s.subject)?.subject;
-  updatePaper(folderId, paperId, { digitized, scannedAt, subject, scanJob: undefined, scanError: undefined, gradedAt: undefined, taggedAt: undefined });
+  updatePaper(folderId, paperId, { digitized, scannedAt, subject, scanJob: undefined, scanError: undefined, gradedAt: undefined, taggedAt: undefined, printedAt: scannedAt, duplicateOf: undefined, keepDuplicate: undefined });
+  markDuplicate(folderId, paperId);
   const folder = getFolder(folderId);
   if (folder && !folder.subject && subject) saveFolder({ ...folder, subject });
 }
@@ -194,6 +196,7 @@ export function startJobPoller() {
   stopJobPoller();
   const tick = async () => {
     const pending = await pollPendingJobs();
+    if (pending === 0) void backfillPrints();
     timer = setTimeout(tick, pending > 0 ? 4000 : 20000);
   };
   void tick();
@@ -262,4 +265,59 @@ export async function gradeIfNeeded(folderId: string, paper: Paper): Promise<voi
     grading.delete(paper.id);
     bump();
   }
+}
+
+// ---------------------------------------------------------------- 重复试卷
+
+/** 扫完（或补完指纹）后看这份是不是本机另一份试卷重复扫的、重做的、其中几页；是就记在试卷上，打开时提示 */
+export function markDuplicate(folderId: string, paperId: string) {
+  try {
+    const folders = listFolders();
+    const paper = folders.find((f) => f.id === folderId)?.papers.find((p) => p.id === paperId);
+    if (!paper || paper.duplicateOf || paper.keepDuplicate) return;
+    const match = findPaperMatch(folders, paper);
+    if (match) updatePaper(folderId, paperId, { duplicateOf: match });
+  } catch {
+    /* 判不了就不提示 */
+  }
+}
+
+/** 用户说「不是同一份」：去掉标记，以后不再拿这两份比 */
+export function notDuplicate(folderId: string, paper: Paper) {
+  const other = paper.duplicateOf?.paperId;
+  updatePaper(folderId, paper.id, { duplicateOf: undefined, keepDuplicate: undefined, notDuplicateOf: [...new Set([...(paper.notDuplicateOf ?? []), ...(other ? [other] : [])])] });
+  bump();
+}
+
+const printing = new Set<string>();
+
+/** 升级前扫的试卷题目没有指纹：交给服务器补（/api/digitize/prints，不调大模型），写回本机后再判一次是不是重复的 */
+export async function printIfNeeded(folderId: string, paper: Paper): Promise<boolean> {
+  const d = validDigitized(paper.digitized);
+  if (!d || paper.scanJob || paper.printedAt || printing.has(paper.id) || d.questions.some((q) => q.qKey !== undefined)) return false;
+  printing.add(paper.id);
+  try {
+    const res = await api<{ pages: DigitizedResult["pages"]; questions: DigitizedQuestion[] }>("/api/digitize/prints", { method: "POST", body: { pages: d.pages }, timeoutMs: 60000 });
+    updatePaper(folderId, paper.id, { digitized: { ...paper.digitized!, pages: res.pages, questions: res.questions }, printedAt: new Date().toISOString() });
+    markDuplicate(folderId, paper.id);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    printing.delete(paper.id);
+  }
+}
+
+let backfilled = false;
+
+/** 启动后在后台把老试卷的指纹一份一份补上（每次启动只跑一遍），补完通知页面刷新 */
+export async function backfillPrints(): Promise<void> {
+  if (backfilled) return;
+  backfilled = true;
+  let changed = 0;
+  const folders: Folder[] = listFolders();
+  for (const folder of folders) {
+    for (const paper of folder.papers) if (await printIfNeeded(folder.id, paper)) changed += 1;
+  }
+  if (changed) bump();
 }

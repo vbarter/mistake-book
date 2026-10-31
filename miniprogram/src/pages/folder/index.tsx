@@ -141,6 +141,7 @@ export default function FolderPage() {
                     {st.blank > 0 && <Tag kind="pending">{st.blank} 空</Tag>}
                     <Tag kind="correct">{st.correct} 对</Tag>
                     {q.warn && <Tag kind="pending">{q.label}</Tag>}
+                    {p.duplicateOf && <Tag kind="neutral">{p.duplicateOf.kind === "retake" ? "重做" : "扫过了"}</Tag>}
                   </>
                 ) : (
                   <Tag kind="pending">待扫描</Tag>

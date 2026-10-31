@@ -1,6 +1,6 @@
 import type { Mark } from "../api/types";
 import type { ErrorItem, ErrorPart } from "../lib/errors";
-import { QTYPE_LABEL } from "../lib/format";
+import { QTYPE_LABEL, formatDate } from "../lib/format";
 import { Figures } from "./FigureImage";
 import { answerLabels } from "../lib/figures";
 import { Icon } from "./Icon";
@@ -97,7 +97,8 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
         <span className="t-headline">第 {q.number} 题</span>
         <SubjectChip subject={q.subject} small />
         <span className="t-cap c-sec">{QTYPE_LABEL[q.questionType]}</span>
-        <span style={{ marginLeft: "auto" }}>
+        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
+          {item.repeats && item.repeats.length > 0 && <Tag kind="wrong" icon="refresh">错过 {item.repeats.length + 1} 次</Tag>}
           <Tag kind={item.kind === "未作答" ? "pending" : item.kind === "半对" ? "partial" : "wrong"} icon={item.kind === "未作答" ? "alert" : item.kind === "半对" ? "warning" : "xmark"}>{item.kind}</Tag>
         </span>
       </div>
@@ -128,6 +129,16 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
         {q.tip && <span>下次注意：<MathText text={q.tip} /></span>}
         {item.subKnowledge.length > 0 && <span className="t-cap">细分：{item.subKnowledge.join("、")}</span>}
       </div>
+      {item.repeats && item.repeats.length > 0 && (
+        <div className="t-cap c-sec" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span>之前也错过：</span>
+          {item.repeats.map((r) => (
+            <span key={r.key}>
+              {formatDate(r.scannedAt)} · {r.folderName} · {r.paperName} 第 {r.q.number} 题 · {r.kind === "未作答" ? "没作答" : `写的：${r.q.studentAnswer || "—"}`}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -125,6 +125,7 @@ export default function FolderDetail() {
                     <Tag kind="wrong">{st.wrong} 错</Tag>
                     {st.blank > 0 && <Tag kind="pending" icon="alert">{st.blank} 空</Tag>}
                     <Tag kind="correct">{st.correct} 对</Tag>
+                    {p.duplicateOf && <Tag kind="neutral" icon="info">{p.duplicateOf.kind === "retake" ? "重做" : "扫过了"}</Tag>}
                   </>
                 ) : (
                   <Tag kind="pending">待扫描</Tag>

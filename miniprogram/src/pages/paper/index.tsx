@@ -10,7 +10,7 @@ import { retake } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { formatDateTime, unwrapLines } from "../../lib/format";
 import { useDataVersion } from "../../lib/hooks";
-import { gradeIfNeeded, isGrading, scanStageText, tagIfNeeded } from "../../lib/jobs";
+import { gradeIfNeeded, isGrading, notDuplicate, printIfNeeded, scanStageText, tagIfNeeded } from "../../lib/jobs";
 import { autoMark, paperQuality, paperStats, validDigitized } from "../../lib/logic";
 import { mathPlain } from "../../lib/math";
 import { deletePaper, getFolder, updatePaper } from "../../lib/store";
@@ -61,7 +61,7 @@ export default function PaperPage() {
     if (paper) Taro.setNavigationBarTitle({ title: paper.name });
   }, [paper?.name]);
   useEffect(() => {
-    if (folder && paper) void gradeIfNeeded(folder.id, paper).then(() => tagIfNeeded(folder.id, paper));
+    if (folder && paper) void printIfNeeded(folder.id, paper).then((done) => (done ? refresh() : undefined)).then(() => gradeIfNeeded(folder.id, paper)).then(() => tagIfNeeded(folder.id, paper));
   }, [paper?.id, Boolean(folder), Boolean(digitized)]);
 
   const errors = useMemo(() => (folder && paper ? paperErrors(folder, paper) : []), [folder, paper]);
@@ -331,6 +331,32 @@ export default function PaperPage() {
           </View>
         </View>
       )}
+      {paper.duplicateOf && !paper.keepDuplicate && (() => {
+        const m = paper.duplicateOf;
+        const other = `「${m.paperName}」`;
+        const text =
+          m.kind === "retake"
+            ? `这是${other}重做的一遍，有 ${m.shared} 道题相同。两次都错的题会合并显示「错过 2 次」。`
+            : m.kind === "partial"
+              ? `这份是${other}其中几页又扫了一遍，${m.shared} 道题和作答都一样。这份的错题不再重复计入。`
+              : `这份和${other}是同一份，作答也一样，可能扫了两次。这份的错题不再重复计入。`;
+        const openOther = () => Taro.redirectTo({ url: `/pages/paper/index?folderId=${m.folderId}&paperId=${m.paperId}` });
+        return (
+          <View className="quality-card">
+            <View className="flex1 col gap4">
+              <Text className="b">{m.kind === "retake" ? "重做的试卷" : "扫过的试卷"}</Text>
+              <Text className="t-foot">{text}{m.folderId !== folderId ? `（在「${m.folderName}」里）` : ""}</Text>
+              <View className="row-wrap">
+                {m.kind !== "retake" && (
+                  <View className="btn btn--sm btn--tinted" onClick={() => { deletePaper(folderId, paperId); void openOther(); }}>删掉这份</View>
+                )}
+                <View className="btn btn--sm btn--tinted" onClick={() => { updatePaper(folderId, paperId, { keepDuplicate: true }); refresh(); }}>{m.kind === "retake" ? "知道了" : "两份都留"}</View>
+                <View className="btn btn--sm btn--plain" onClick={() => { notDuplicate(folderId, paper); refresh(); }}>不是同一份</View>
+              </View>
+            </View>
+          </View>
+        );
+      })()}
       <Segmented value={tab} onChange={setTab} options={[{ value: "paper", label: "试卷" }, { value: "answers", label: "作答" }, { value: "errors", label: `错题 ${stats.problems}` }]} />
 
       {tab === "paper" && paperTab}
