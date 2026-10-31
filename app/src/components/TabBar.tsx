@@ -39,7 +39,7 @@ export function TabBar() {
         }}
       >
         <span className="tab__icon"><Icon name={t.icon} size={26} fill={on} stroke={1.8} /></span>
-        {t.label}
+        <span className="tab__label">{t.label}</span>
       </NavLink>
     );
   };

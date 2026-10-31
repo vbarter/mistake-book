@@ -3,7 +3,7 @@
 .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: calc(var(--safe-top) + 52px); padding: calc(var(--safe-top) + 10px) 16px 10px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
 .topbar--center { justify-content: center; }
 
-.tab__icon { display: inline-flex; }
+.tab__icon { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; }
 .tab.on .tab__icon { animation: tab-pop 0.45s var(--spring); }
 .tab--fab { position: relative; }
 .fab { position: absolute; left: 50%; top: -22px; width: 62px; height: 62px; margin-left: -31px; border-radius: 31px; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--brand-gradient); box-shadow: 0 8px 20px var(--brand-glow), 0 0 0 5px var(--bg), 0 0 0 7px var(--tie-trim); transition: transform 0.35s var(--spring); }

@@ -130,7 +130,9 @@ textarea.input { resize: none; }
 
 /* Tab 栏 */
 .tabbar { position: fixed; left: 0; right: 0; bottom: 0; height: calc(var(--tabbar-h) + var(--safe-bottom)); padding-bottom: var(--safe-bottom); background: var(--bar); backdrop-filter: saturate(180%) blur(20px); border-top: 1px solid var(--separator); display: flex; z-index: 30; }
-.tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 10px; font-weight: 500; color: var(--secondary); }
+/* line-height 要显式给：否则继承 body 的 22px，10px 的字占 22px 高，图标+文字（26+2+22）比 48px 的可用高度还高，整体就偏了 */
+.tab { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10px; line-height: 12px; font-weight: 500; color: var(--secondary); }
+.tab__label { display: block; white-space: nowrap; }
 .tab.on { color: var(--brand); }
 
 /* 复习 / 答题 */

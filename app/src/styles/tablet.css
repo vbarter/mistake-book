@@ -37,7 +37,7 @@
 
   /* Tab 栏：iPad 风格，图标和文字横排，整体居中 */
   .tabbar { justify-content: center; gap: 8px; }
-  .tab { flex: 0 0 168px; flex-direction: row; gap: 8px; font-size: 14px; font-weight: 600; }
+  .tab { flex: 0 0 168px; flex-direction: row; gap: 8px; font-size: 14px; line-height: 20px; font-weight: 600; }
 
   /* 拍照页的照片缩略图：一行放更多 */
   .thumb-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
