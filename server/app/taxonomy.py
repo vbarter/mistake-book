@@ -2,9 +2,9 @@
 
 数据由 scripts/build_taxonomy.py 生成，启动后第一次用到时加载进内存。来源与许可见 data/TAXONOMY_NOTICE.md。
 
-年级：图谱的高中 grade 是「册」不是学年（数学 10 必修一、11 必修二、12–14 选必；英语 10–16；物理 10–15）。
-候选池不按年级过滤，给整个学科（一科最多八百多条）：账号年级常和卷子对不上（家长账号扫孩子的卷子、复习往年内容、
-上海五四制六年级学的是图谱里七年级的内容），章节名里带年级，由大模型结合卷面自己判断。
+年级：图谱的高中 grade 是「册」不是学年（数学 10 必修一、11 必修二、12–14 选必；英语 10–16；物理 10–15），
+所以候选池按**学段**取（小学 1–6、初中 7–9、高中 10 以上），不按年级精确过滤；初中按学生年级 ±1 排前面。
+上海初中是五四制，六年级学的是图谱里七年级的内容，按学段取正好避开这个错位。
 """
 from __future__ import annotations
 
@@ -86,6 +86,19 @@ def subjects() -> frozenset[str]:
     return frozenset(t["subject"] for t in _load()["topics"].values())
 
 
+def stage_of(grade: int | str | None) -> str:
+    """小学 primary（1–6）、初中 junior（7–9）、高中 senior（10 以上）；判断不了按初中。"""
+    try:
+        g = int(grade)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return "junior"
+    if g <= 6:
+        return "primary"
+    if g <= 9:
+        return "junior"
+    return "senior"
+
+
 def chapter_title(topic: dict) -> str:
     """章节去掉末尾小节号：「九上 第二十一章 一元二次方程 21.1」→「九上 第二十一章 一元二次方程」。"""
     return _SECTION_RE.sub("", topic.get("chapter") or "").strip()
@@ -107,10 +120,19 @@ def get(topic_id: str) -> dict | None:
     return _load()["topics"].get(topic_id)
 
 
-def candidates(subject: str) -> list[dict]:
-    """某学科的全部候选知识点，按年级、id 排（即课本顺序）。没有该学科返回空。"""
-    pool = [t for t in _load()["topics"].values() if t["subject"] == subject]
-    return sorted(pool, key=lambda t: (t["grade"], t["id"]))
+def candidates(subject: str, grade: int | str | None) -> list[dict]:
+    """某学科、某学段的候选知识点：学生年级 ±1 的排前面，其余按年级、id 排。没有该学科返回空。"""
+    stage = stage_of(grade)
+    try:
+        g = int(grade)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        g = {"primary": 5, "junior": 8, "senior": 10}[stage]
+    pool = [t for t in _load()["topics"].values() if t["subject"] == subject
+            and (stage in t["stages"] if t.get("extra") else stage_of(t["grade"]) == stage)]
+    # 高中 grade 是册次，不按距离排
+    if stage == "senior":
+        return sorted(pool, key=lambda t: (t["grade"], t["id"]))
+    return sorted(pool, key=lambda t: (abs(t["grade"] - g) > 1, t["grade"], t["id"]))
 
 
 def resolve_alias(subject: str, name: str) -> str | None:
