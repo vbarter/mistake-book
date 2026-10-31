@@ -86,6 +86,37 @@ def subjects() -> frozenset[str]:
     return frozenset(t["subject"] for t in _load()["topics"].values())
 
 
+_CN_NUM = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+
+
+def parse_grade(text: str | None, region: str = "") -> int | None:
+    """卷面识别出的年级文字 → 1–12：「九年级」「初三」「高一」「预备班」「7年级」；上海（五四制）的六年级和预备班学的是图谱七年级的内容，记成 7。认不出返回 None。"""
+    t = (text or "").strip()
+    if not t:
+        return None
+    g: int | None = None
+    m = re.search(r"(\d{1,2})\s*年级", t)
+    if m:
+        g = int(m.group(1))
+    elif (m := re.search(r"([一二三四五六七八九])\s*年级", t)):
+        g = _CN_NUM[m.group(1)]
+    elif (m := re.search(r"初\s*([一二三1-3])", t)):
+        g = 6 + (_CN_NUM.get(m.group(1)) or int(m.group(1)))
+    elif (m := re.search(r"高\s*([一二三1-3])", t)):
+        g = 9 + (_CN_NUM.get(m.group(1)) or int(m.group(1)))
+    elif "预备" in t:
+        g = 7
+    elif "中考" in t:
+        g = 9
+    elif "高考" in t:
+        g = 12
+    if g is None or not 1 <= g <= 12:
+        return None
+    if g == 6 and "上海" in (region or ""):
+        g = 7
+    return g
+
+
 def stage_of(grade: int | str | None) -> str:
     """小学 primary（1–6）、初中 junior（7–9）、高中 senior（10 以上）；判断不了按初中。"""
     try:
@@ -121,18 +152,16 @@ def get(topic_id: str) -> dict | None:
 
 
 def candidates(subject: str, grade: int | str | None) -> list[dict]:
-    """某学科、某学段的候选知识点：学生年级 ±1 的排前面，其余按年级、id 排。没有该学科返回空。"""
+    """某学科的全部候选知识点（小学到高中都给，让模型自己判断，年级只影响顺序）：
+    和学生年级同学段的排前面、离得近的更前，其余按学段、年级、id 排。没有该学科返回空。"""
     stage = stage_of(grade)
     try:
         g = int(grade)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         g = {"primary": 5, "junior": 8, "senior": 10}[stage]
-    pool = [t for t in _load()["topics"].values() if t["subject"] == subject
-            and (stage in t["stages"] if t.get("extra") else stage_of(t["grade"]) == stage)]
-    # 高中 grade 是册次，不按距离排
-    if stage == "senior":
-        return sorted(pool, key=lambda t: (t["grade"], t["id"]))
-    return sorted(pool, key=lambda t: (abs(t["grade"] - g) > 1, t["grade"], t["id"]))
+    order = {"primary": 0, "junior": 1, "senior": 2}
+    pool = [t for t in _load()["topics"].values() if t["subject"] == subject]
+    return sorted(pool, key=lambda t: (stage_of(t["grade"]) != stage, abs(order[stage_of(t["grade"])] - order[stage]), abs(t["grade"] - g) > 1, t["grade"], t["id"]))
 
 
 def resolve_alias(subject: str, name: str) -> str | None:

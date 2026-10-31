@@ -1433,9 +1433,10 @@ def test_taxonomy_candidates_by_stage():
     """候选池按学段取：初中数学只有 7–9 年级的点，学生年级 ±1 排前面；高中按册；没有的学科为空。"""
     from app import taxonomy
 
-    junior = taxonomy.candidates("math", "8")
-    assert junior and {t["grade"] for t in junior} == {7, 8, 9}
-    assert all(abs(t["grade"] - 8) <= 1 for t in junior[:50])
+    pool = taxonomy.candidates("math", "8")
+    assert len(pool) == 870 and {t["grade"] for t in pool} >= {1, 7, 8, 9, 10}  # 全学段都给，年级只决定顺序
+    assert all(7 <= t["grade"] <= 9 for t in pool[:315]) and all(abs(t["grade"] - 8) <= 1 for t in pool[:50])
+    assert all(t["grade"] >= 10 for t in taxonomy.candidates("math", "11")[:271])
     assert taxonomy.stage_of("6") == "primary" and taxonomy.stage_of("10") == "senior" and taxonomy.stage_of(None) == "junior"
     assert taxonomy.candidates("chemistry", "9") == []
     v = taxonomy.view("cnm_276")
@@ -1470,7 +1471,7 @@ def test_tag_topics_sends_candidates_and_applies_valid_ids(monkeypatch):
     assert provider.tag_topics(sheets, grade="9") == 1
     assert len(calls) == 1
     listing, questions = calls[0][0]["text"], calls[0][1]["text"]
-    assert "cnm_221｜配方法" in listing and "cnm_p001" not in listing and "cnm_h001" not in listing
+    assert "cnm_221｜配方法" in listing and listing.index("cnm_221｜") < listing.index("cnm_h001｜") < listing.index("cnm_p001｜")  # 九年级：初中在前，其次高中，最后小学
     assert 'key="q0"' in questions and 'key="q1"' in questions and "q2" not in questions and "化学题" not in questions
     assert sheets[0].blocks[0].topic == taxonomy.view("cnm_221") and sheets[0].blocks[1].topic is None
     qs = derive_questions(sheets)
@@ -1529,9 +1530,52 @@ def test_taxonomy_extra_topics_join_candidates():
     junior = {t["id"] for t in taxonomy.candidates("english", "9")}
     assert "zcb_e012" in junior and "cne_j243" in junior
     assert "zcb_e012" in {t["id"] for t in taxonomy.candidates("english", "11")}
-    assert "zcb_e012" not in {t["id"] for t in taxonomy.candidates("english", "4")}
     assert "zcb_e012" not in {t["id"] for t in taxonomy.candidates("math", "9")}
     v = taxonomy.view("zcb_e012")
     assert v["chapter"] == "构词法" and v["subject"] == "english"
     blk = DigitizedBlock(type="item", subject="english")
     assert apply_topic(blk, "zcb_e012") and blk.topic["id"] == "zcb_e012"
+
+
+def test_tag_topics_tolerates_relay_output(monkeypatch, caplog):
+    """中转模型不按 schema：key 写成题号、topicId 带名称、results 是对象；一道没标上时把原文记进日志。"""
+    import logging
+    from app.ai.base import DigitizedBlank, DigitizedBlock, DigitizedPage
+    from app.ai.claude import ClaudeProvider
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    sheets = [DigitizedPage(page=0, subject="math", blocks=[
+        DigitizedBlock(type="item", number="例10", text="平移 [[1]]", subject="math", questionType="solve", knowledgePoints=["二次函数图象的平移"], blanks=[DigitizedBlank(id="1", number="例10", student="", mark="blank", answer="x")]),
+        DigitizedBlock(type="item", number="例11", text="最值 [[2]]", subject="math", questionType="solve", knowledgePoints=["二次函数的最值"], blanks=[DigitizedBlank(id="2", number="例11", student="", mark="blank", answer="x")]),
+    ])]
+    monkeypatch.setattr(provider, "_call", lambda *a, **k: {"results": {"例10": {"topicId": "cnm_231｜y=a(x-h)²+k 的图象与平移", "confidence": "high"}, "q1": "cnm_235 二次函数的最值"}})
+    assert provider.tag_topics(sheets, grade="9") == 2
+    assert sheets[0].blocks[0].topic["id"] == "cnm_231" and sheets[0].blocks[1].topic["id"] == "cnm_235"
+
+    sheets[0].blocks[0].topic = sheets[0].blocks[1].topic = None
+    monkeypatch.setattr(provider, "_call", lambda *a, **k: {"results": [{"key": "q0", "topicId": None, "confidence": "low"}, {"key": "zzz", "topicId": "cnm_231", "confidence": "high"}]})
+    with caplog.at_level(logging.WARNING, logger="app.ai.claude"):
+        assert provider.tag_topics(sheets, grade="9") == 0
+    assert any("0/2 tagged (null 1, unmatched key 1)" in r.message for r in caplog.records)
+
+
+def test_tag_topics_prefers_paper_grade(monkeypatch):
+    """标注用卷面识别出的年级：个人资料年级是 5，卷面是九年级，候选池得是初中的；上海六年级按七年级。"""
+    from app import taxonomy
+    from app.ai.base import DigitizedBlank, DigitizedBlock, DigitizedPage
+    from app.ai.claude import ClaudeProvider
+
+    assert taxonomy.parse_grade("九年级") == 9 and taxonomy.parse_grade("初三") == 9 and taxonomy.parse_grade("高一") == 10
+    assert taxonomy.parse_grade("7年级") == 7 and taxonomy.parse_grade("预备班") == 7 and taxonomy.parse_grade("") is None and taxonomy.parse_grade("小学") is None
+    assert taxonomy.parse_grade("六年级") == 6 and taxonomy.parse_grade("六年级", "上海") == 7
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    seen = []
+    monkeypatch.setattr(provider, "_call", lambda system, content, schema, **k: (seen.append(content[0]["text"]), {"results": []})[1])
+    sheets = [DigitizedPage(page=0, subject="math", examGrade="九年级", blocks=[
+        DigitizedBlock(type="item", number="1", text="[[1]]", subject="math", questionType="solve", blanks=[DigitizedBlank(id="1", number="1", student="", mark="blank", answer="x")]),
+    ])]
+    provider.tag_topics(sheets, grade="5")
+    assert seen[0].index("cnm_231｜") < seen[0].index("cnm_p001｜") and "九年级" in seen[0]
