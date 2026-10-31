@@ -2,11 +2,10 @@
 import { create } from "zustand";
 import { api } from "../api/client";
 import type { DigitizeJob, DigitizedQuestion, DigitizedResult } from "../api/types";
-import { autoMark, getFolder, isDefaultFolderName, isDefaultPaperName, isUnreadable, listFolders, recognizedTitle, saveFolder, updatePaper, validDigitized, type Paper } from "./folders";
+import { autoMark, getFolder, isDefaultFolderName, isDefaultPaperName, isUnreadable, listFolders, loadPages, recognizedTitle, updateFolder, updatePaper, validDigitized, type Folder, type FullPage, type Paper } from "./folders";
 import { SUBJECT_LABEL } from "./format";
 import { isNative, prepareUpload, type UploadPart } from "./native";
 import { getCity } from "./prefs";
-import type { CapturePage } from "../store/capture";
 
 export interface ScanJob {
   id: string;
@@ -61,11 +60,11 @@ async function finishJob(folderId: string, paperId: string, job: DigitizeJob, pa
   if (!folder) return;
   const level = digitized.pages.find((s) => s.examLevel)?.examLevel ?? "";
   const rename = isDefaultFolderName(folder.name) && subject ? `${folder.name.replace(/ 试卷$/, "")} ${SUBJECT_LABEL[subject]}${level ? ` · ${level}` : ""}` : null;
-  if ((!folder.subject && subject) || rename) await saveFolder({ ...folder, subject: folder.subject ?? subject, name: rename ?? folder.name });
+  if ((!folder.subject && subject) || rename) await updateFolder(folderId, { subject: folder.subject ?? subject, name: rename ?? folder.name });
 }
 
 /** 压缩、上传、提交任务，任务号存到试卷上。返回时服务器已经在后台跑了。 */
-export async function submitScan(folderId: string, paperId: string, pages: CapturePage[], onStage?: (stage: string) => void): Promise<ScanJob> {
+export async function submitScan(folderId: string, paperId: string, pages: FullPage[], onStage?: (stage: string) => void): Promise<ScanJob> {
   onStage?.("正在压缩试卷");
   const uploads: UploadPart[] = [];
   for (let i = 0; i < pages.length; i++) uploads.push(...(await prepareUpload(pages[i].src, i)));
@@ -84,6 +83,31 @@ export async function submitScan(folderId: string, paperId: string, pages: Captu
   await updatePaper(folderId, paperId, { scanJob, scanError: undefined });
   useJobs.getState().bump();
   return scanJob;
+}
+
+/** 拍好了还没交给服务器扫描的试卷（含上次扫描失败的） */
+export const needsScan = (p: Paper) => p.pages.length > 0 && !p.scanJob && !validDigitized(p.digitized);
+
+/**
+ * 一键扫描：把文件夹里拍好、还没扫描的试卷一份一份上传提交。
+ * 每次只读一份试卷的原图，传完就丢，不会同时把所有照片放在内存里。返回成功提交的份数。
+ */
+export async function scanPending(folder: Folder, onStage?: (i: number, n: number) => void): Promise<number> {
+  const todo = folder.papers.filter(needsScan);
+  let ok = 0;
+  for (let i = 0; i < todo.length; i++) {
+    onStage?.(i, todo.length);
+    try {
+      const pages = await loadPages(todo[i]);
+      if (!pages.length) continue;
+      await submitScan(folder.id, todo[i].id, pages);
+      ok += 1;
+    } catch (e) {
+      await updatePaper(folder.id, todo[i].id, { scanError: (e as Error).message || "上传失败，请重试" }).catch(() => undefined);
+    }
+  }
+  useJobs.getState().bump();
+  return ok;
 }
 
 let polling = false;

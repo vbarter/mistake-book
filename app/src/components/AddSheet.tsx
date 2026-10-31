@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { autoTargetFolder } from "../lib/folders";
+import { autoTargetFolder, toPage, type FullPage } from "../lib/folders";
 import { pickImages } from "../lib/native";
-import { toastError } from "../store/banner";
+import { toast, toastError } from "../store/banner";
 import { useCapture } from "../store/capture";
 import { useImport } from "../store/importer";
 import { Icon, type IconName } from "./Icon";
@@ -34,7 +34,11 @@ export function useAddPaper(folderId?: string) {
     try {
       const list = await pickImages(0);
       if (!list.length) return;
-      setImport(list, await target(), pathname);
+      if (list.length > 3) toast(`正在读取 ${list.length} 张照片…`);
+      // 先做好小图：导入页的预览只显示小图，不同时解码一排原图
+      const pages: FullPage[] = [];
+      for (const src of list) pages.push(await toPage(src));
+      setImport(pages, await target(), pathname);
       nav("/import");
     } catch (e) {
       toastError((e as Error).message === "permission_denied" ? new Error("需要相册权限，可以在系统设置里打开") : e);
@@ -52,7 +56,7 @@ export function useAddPaper(folderId?: string) {
   const sheet = (
     <Sheet open={open} onClose={() => setOpen(false)} title="添加试卷">
       <div className="add-grid">
-        <AddTile icon="camera" title="拍照" sub="一页一页拍，拍完自动识别" onClick={camera} />
+        <AddTile icon="camera" title="拍照" sub="连着拍几页，拍完一键识别" onClick={camera} />
         <AddTile icon="photo" title="相册导入" sub="一次选多张，自动排目录" onClick={photos} />
       </div>
       <button className="t-sub" style={{ color: "var(--brand)", minHeight: 40 }} onClick={sample}>没有试卷？用示例试卷试试</button>

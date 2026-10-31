@@ -8,7 +8,7 @@ import { Button, Sheet } from "../components/ui";
 import { toast } from "../store/banner";
 import { SubjectTile, Tag, WrongRing, subjectColors } from "../components/v2";
 import { folderErrors, groupByKnowledge } from "../lib/errors";
-import { deleteFolder, folderStats, listFolders, reorderFolders, type Folder } from "../lib/folders";
+import { deleteFolder, folderStats, listFolders, reorderFolders, thumbOf, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL, formatDate } from "../lib/format";
 import { scanStageText, useJobs } from "../lib/jobs";
 
@@ -55,12 +55,12 @@ export default function Papers() {
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <span style={{ position: "relative", flexShrink: 0, width: 48, height: 60 }}>
-                    {f.papers[0]?.pages[0]?.src ? (
-                      <img className="thumb" src={f.papers[0].pages[0].src} alt="" style={{ width: 48, height: 60 }} />
+                    {f.papers[0]?.pages[0] ? (
+                      <img className="thumb" src={thumbOf(f.papers[0].pages[0])} alt="" style={{ width: 48, height: 60 }} />
                     ) : (
                       <SubjectTile subject={st.subject} size="md" style={{ width: 48, height: 60, borderRadius: 10 }} />
                     )}
-                    {f.papers[0]?.pages[0]?.src && <SubjectTile subject={st.subject} size="xs" style={{ position: "absolute", right: -6, bottom: -6, boxShadow: "0 0 0 2px var(--card)" }} />}
+                    {f.papers[0]?.pages[0] && <SubjectTile subject={st.subject} size="xs" style={{ position: "absolute", right: -6, bottom: -6, boxShadow: "0 0 0 2px var(--card)" }} />}
                   </span>
                   <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                     <span className="t-headline ellipsis" style={{ fontWeight: 700 }}>{f.name}{st.subjects.length > 1 ? <span className="t-foot c-sec" style={{ fontWeight: 500 }}> · {st.subjects.map((s) => SUBJECT_LABEL[s]).join(" / ")}</span> : ""}</span>

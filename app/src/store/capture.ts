@@ -1,12 +1,9 @@
 import { create } from "zustand";
 import type { DigitizedResult } from "../api/types";
+import type { FullPage } from "../lib/folders";
 
-export interface CapturePage {
-  id: string;
-  src: string; // dataURL
-  width: number;
-  height: number;
-}
+/** 录入页内存里的照片：带原图（扫描上传用）和小图（页面上显示用） */
+export type CapturePage = FullPage;
 
 /** 正在录入 / 查看的那张试卷（文件夹里的一张）。电子版与照片一一对应，照片增减后电子版作废。 */
 interface CaptureState {

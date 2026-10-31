@@ -4,7 +4,7 @@ import { Icon } from "../components/Icon";
 import { Button, Row, Sheet } from "../components/ui";
 import { SubjectTile } from "../components/v2";
 import { allErrors } from "../lib/errors";
-import { listFolders, type Folder } from "../lib/folders";
+import { listFolders, photoBytes, type Folder } from "../lib/folders";
 import { GRADE_LABEL, SUBJECT_LABEL } from "../lib/format";
 import { getCity } from "../lib/prefs";
 import { WEB_VERSION, appVersion } from "../lib/version";
@@ -17,6 +17,7 @@ export default function Profile() {
   const nav = useNavigate();
   const { user, updateProfile } = useAuth();
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [bytes, setBytes] = useState(0);
   const [city, setCityState] = useState("");
   const [editName, setEditName] = useState(false);
   const [name, setName] = useState(user?.nickname ?? "");
@@ -24,6 +25,7 @@ export default function Profile() {
   const [version, setVersion] = useState(WEB_VERSION);
   useEffect(() => {
     listFolders().then(setFolders).catch(() => setFolders([]));
+    photoBytes().then(setBytes).catch(() => setBytes(0));
     getCity().then(setCityState);
     appVersion().then(setVersion);
   }, []);
@@ -31,9 +33,8 @@ export default function Profile() {
   const stats = useMemo(() => {
     const errors = allErrors(folders);
     const papers = folders.reduce((n, f) => n + f.papers.length, 0);
-    const bytes = folders.reduce((n, f) => n + f.papers.reduce((m, p) => m + p.pages.reduce((k, pg) => k + pg.src.length * 0.75, 0), 0), 0);
     return { papers, wrong: errors.filter((e) => e.kind !== "未作答").length, blank: errors.filter((e) => e.kind === "未作答").length, mb: Math.round(bytes / 1048576) };
-  }, [folders]);
+  }, [folders, bytes]);
 
   if (!user) return null;
   const grade = GRADE_LABEL[user.grade] ?? `${user.grade} 年级`;

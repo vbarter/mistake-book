@@ -7,10 +7,14 @@ import type { DigitizedQuestion, DigitizedResult, Mark, PhotoIssue, QuestionType
 
 export interface FolderPage {
   id: string;
-  src: string; // dataURL
   width: number;
   height: number;
+  thumb?: string; // 小图 dataURL（最长边 THUMB_SIDE），列表和录入页显示用
+  src?: string; // 原图 dataURL：只在内存里带着（刚拍的、loadPages 读出来的）；存库时拆进照片表，文件夹记录里没有
 }
+
+/** 带着原图的照片（扫描上传、裁插图时用） */
+export type FullPage = FolderPage & { src: string };
 
 export interface Paper {
   id: string;
@@ -50,30 +54,150 @@ interface LegacyFolder {
 
 const DB = "zhicuoben";
 const STORE = "folders";
+/** 原图单独存（{ id, src }，id 即照片 id）：读文件夹列表、轮询进度时不会把所有照片一起读进内存 */
+const PHOTOS = "photos";
 
+let conn: Promise<IDBDatabase> | null = null;
+
+/** 整个 App 共用一个连接，不再每次读写都开关数据库 */
 function open(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1);
+  if (conn) return conn;
+  conn = new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open(DB, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(PHOTOS)) db.createObjectStore(PHOTOS, { keyPath: "id" });
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => { db.close(); conn = null; };
+      db.onclose = () => { conn = null; };
+      resolve(db);
+    };
+    req.onerror = () => { conn = null; reject(req.error); };
   });
+  return conn;
 }
 
-function tx<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+/** 一个事务：fn 里发请求，事务提交后返回 fn 返回的那个请求的结果 */
+function run<T = undefined>(stores: string | string[], mode: IDBTransactionMode, fn: (t: IDBTransaction) => IDBRequest<T> | void): Promise<T> {
   return open().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const t = db.transaction(STORE, mode);
-        const req = fn(t.objectStore(STORE));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-        t.oncomplete = () => db.close();
+        const t = db.transaction(stores, mode);
+        const req = fn(t);
+        t.oncomplete = () => resolve(req ? req.result : (undefined as T));
+        t.onerror = () => reject(t.error);
+        t.onabort = () => reject(t.error ?? new Error("存储失败"));
       }),
   );
+}
+
+/**
+ * 写入排队：所有改文件夹的操作一个接一个做，每次都在锁里重新读最新的记录再改。
+ * 以前扫描轮询、批量建卷、补阅卷同时「读整个文件夹 → 改 → 写回」，后写的会把先写的盖掉（试卷或进度丢失）。
+ */
+let writing: Promise<unknown> = Promise.resolve();
+function locked<T>(fn: () => Promise<T>): Promise<T> {
+  const next = writing.then(fn, fn);
+  writing = next.catch(() => undefined);
+  return next;
+}
+
+const strip = (pages: FolderPage[]): FolderPage[] => pages.map(({ id, width, height, thumb }) => ({ id, width, height, thumb }));
+const pageIds = (folder: Folder) => new Set(folder.papers.flatMap((p) => p.pages.map((pg) => pg.id)));
+
+/** 存一个文件夹：带原图的照片写进照片表（已存过的 id 跳过），文件夹记录只留尺寸和小图；dropped 里不再被引用的照片删掉 */
+function putFolder(folder: Folder, opts: { stored?: Set<string>; dropped?: Iterable<string> } = {}): Promise<undefined> {
+  const keep = pageIds(folder);
+  return run([STORE, PHOTOS], "readwrite", (t) => {
+    const photos = t.objectStore(PHOTOS);
+    for (const paper of folder.papers)
+      for (const pg of paper.pages) if (pg.src && !opts.stored?.has(pg.id)) photos.put({ id: pg.id, src: pg.src });
+    for (const id of opts.dropped ?? []) if (!keep.has(id)) photos.delete(id);
+    t.objectStore(STORE).put({ ...folder, papers: folder.papers.map((p) => ({ ...p, pages: strip(p.pages) })) });
+  });
+}
+
+let migration: Promise<void> | null = null;
+
+/** 第一次用到存储时：把旧版本存在文件夹记录里的原图拆进照片表并补小图，一个文件夹一个文件夹地做，免得一次读进所有照片 */
+function ready(): Promise<void> {
+  migration ??= (async () => {
+    const keys = await run<IDBValidKey[]>(STORE, "readonly", (t) => t.objectStore(STORE).getAllKeys());
+    for (const key of keys) {
+      try {
+        const raw = await run<Folder | LegacyFolder | undefined>(STORE, "readonly", (t) => t.objectStore(STORE).get(key));
+        if (!raw) continue;
+        const { folder, migrated } = normalize(raw);
+        if (!migrated && !folder.papers.some((p) => p.pages.some((pg) => pg.src))) continue;
+        for (const p of folder.papers)
+          for (const pg of p.pages) if (pg.src && !pg.thumb) pg.thumb = await makeThumb(pg.src).catch(() => undefined);
+        await putFolder(folder);
+      } catch {
+        /* 这个文件夹拆不动就先留着内嵌的原图，照样能读 */
+      }
+    }
+  })().catch(() => undefined);
+  return migration;
+}
+
+/** 列表缩略图的最长边 */
+export const THUMB_SIDE = 360;
+
+function thumbFrom(img: HTMLImageElement): string {
+  const scale = Math.min(1, THUMB_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const out = canvas.toDataURL("image/jpeg", 0.72);
+  canvas.width = canvas.height = 0; // 马上还掉画布内存（iOS 对画布总内存有上限）
+  return out;
+}
+
+function makeThumb(src: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(thumbFrom(img));
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+/** 一张照片的原图；旧数据没拆出来的直接用记录里的 */
+export async function loadPhoto(page: Pick<FolderPage, "id" | "src">): Promise<string | null> {
+  if (page.src) return page.src;
+  await ready();
+  const row = await run<{ id: string; src: string } | undefined>(PHOTOS, "readonly", (t) => t.objectStore(PHOTOS).get(page.id));
+  return row?.src ?? null;
+}
+
+/** 一张试卷带原图的全部照片（找不到原图的跳过） */
+export async function loadPages(paper: Pick<Paper, "pages">): Promise<FullPage[]> {
+  const out: FullPage[] = [];
+  for (const pg of paper.pages) {
+    const src = await loadPhoto(pg);
+    if (src) out.push({ ...pg, src });
+  }
+  return out;
+}
+
+/** 本机照片一共占多少字节（逐条数，不一次读进内存） */
+export async function photoBytes(): Promise<number> {
+  await ready();
+  let bytes = 0;
+  await run(PHOTOS, "readonly", (t) => {
+    const req = t.objectStore(PHOTOS).openCursor();
+    req.onsuccess = () => {
+      const cur = req.result;
+      if (!cur) return;
+      bytes += String((cur.value as { src: string }).src).length * 0.75;
+      cur.continue();
+    };
+  });
+  return bytes;
 }
 
 export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -119,15 +243,11 @@ function normalize(raw: Folder | LegacyFolder): { folder: Folder; migrated: bool
   return { folder: { id: old.id, name: old.name, createdAt: old.createdAt, updatedAt: old.updatedAt, papers: paper.pages.length ? [paper] : [] }, migrated: true };
 }
 
+/** 读出来的文件夹里只有照片的尺寸和小图，原图用 loadPhoto / loadPages 按需读 */
 export async function listFolders(): Promise<Folder[]> {
-  const all = await tx<(Folder | LegacyFolder)[]>("readonly", (s) => s.getAll());
-  const out: Folder[] = [];
-  for (const raw of all) {
-    const { folder, migrated } = normalize(raw);
-    if (migrated) await tx("readwrite", (s) => s.put(folder));
-    out.push(folder);
-  }
-  return out.sort(compareFolders);
+  await ready();
+  const all = await run<(Folder | LegacyFolder)[]>(STORE, "readonly", (t) => t.objectStore(STORE).getAll());
+  return all.map((raw) => normalize(raw).folder).sort(compareFolders);
 }
 
 /** 没手动排过的在前（更新时间倒序），手动排过的按 order */
@@ -140,86 +260,125 @@ function compareFolders(a: Folder, b: Folder): number {
 }
 
 /** 用户拖动排序后按新顺序写 order；不改 updatedAt */
-export async function reorderFolders(ids: string[]): Promise<void> {
-  const all = await listFolders();
-  const byId = new Map(all.map((f) => [f.id, f]));
-  const ordered = [...ids.filter((id) => byId.has(id)), ...all.filter((f) => !ids.includes(f.id)).map((f) => f.id)];
-  for (let i = 0; i < ordered.length; i++) {
-    const f = byId.get(ordered[i])!;
-    if (f.order !== i) await tx("readwrite", (s) => s.put({ ...f, order: i }));
-  }
+export function reorderFolders(ids: string[]): Promise<void> {
+  return locked(async () => {
+    const all = await listFolders();
+    const byId = new Map(all.map((f) => [f.id, f]));
+    const ordered = [...ids.filter((id) => byId.has(id)), ...all.filter((f) => !ids.includes(f.id)).map((f) => f.id)];
+    for (let i = 0; i < ordered.length; i++) {
+      const f = byId.get(ordered[i])!;
+      if (f.order !== i) await putFolder({ ...f, order: i });
+    }
+  });
 }
 
 export async function getFolder(id: string): Promise<Folder | undefined> {
-  const raw = await tx<Folder | LegacyFolder | undefined>("readonly", (s) => s.get(id));
-  if (!raw) return undefined;
-  const { folder, migrated } = normalize(raw);
-  if (migrated) await tx("readwrite", (s) => s.put(folder));
-  return folder;
+  await ready();
+  const raw = await run<Folder | LegacyFolder | undefined>(STORE, "readonly", (t) => t.objectStore(STORE).get(id));
+  return raw ? normalize(raw).folder : undefined;
 }
 
-export async function saveFolder(folder: Folder): Promise<Folder> {
+async function saveFolder(folder: Folder, opts?: Parameters<typeof putFolder>[1]): Promise<Folder> {
   const next = { ...folder, updatedAt: new Date().toISOString() };
-  await tx("readwrite", (s) => s.put(next));
+  await putFolder(next, opts);
   return next;
 }
 
-export async function createFolder(name: string, subject?: Subject): Promise<Folder> {
+/** 改文件夹的名字 / 学科（在写入队列里重新读最新的记录再改，不会盖掉同时进来的扫描结果） */
+export function updateFolder(id: string, patch: Partial<Pick<Folder, "name" | "subject">>): Promise<Folder | undefined> {
+  return locked(async () => {
+    const folder = await getFolder(id);
+    return folder ? saveFolder({ ...folder, ...patch }) : undefined;
+  });
+}
+
+const newFolder = (name: string, subject?: Subject): Promise<Folder> => {
   const now = new Date().toISOString();
   return saveFolder({ id: newId(), name: name.trim() || defaultFolderName(), subject, createdAt: now, updatedAt: now, papers: [] });
+};
+
+export function createFolder(name: string, subject?: Subject): Promise<Folder> {
+  return locked(() => newFolder(name, subject));
 }
 
 /** 清空本机全部文件夹、试卷照片和电子版（账号不受影响） */
-export async function clearAllFolders(): Promise<void> {
-  await tx("readwrite", (s) => s.clear());
+export function clearAllFolders(): Promise<void> {
+  return locked(async () => {
+    await ready();
+    await run([STORE, PHOTOS], "readwrite", (t) => {
+      t.objectStore(STORE).clear();
+      t.objectStore(PHOTOS).clear();
+    });
+  });
 }
 
-export async function deleteFolder(id: string): Promise<void> {
-  await tx("readwrite", (s) => s.delete(id));
+export function deleteFolder(id: string): Promise<void> {
+  return locked(async () => {
+    const folder = await getFolder(id);
+    await run([STORE, PHOTOS], "readwrite", (t) => {
+      t.objectStore(STORE).delete(id);
+      for (const pid of folder ? pageIds(folder) : []) t.objectStore(PHOTOS).delete(pid);
+    });
+  });
 }
 
 /** 用户拖动调整文件夹里试卷的先后；不改 updatedAt */
-export async function reorderPapers(folderId: string, ids: string[]): Promise<Folder | undefined> {
-  const folder = await getFolder(folderId);
-  if (!folder) return undefined;
-  const byId = new Map(folder.papers.map((p) => [p.id, p]));
-  const papers = [...ids.map((id) => byId.get(id)).filter((p): p is Paper => Boolean(p)), ...folder.papers.filter((p) => !ids.includes(p.id))];
-  const next = { ...folder, papers };
-  await tx("readwrite", (s) => s.put(next));
-  return next;
+export function reorderPapers(folderId: string, ids: string[]): Promise<Folder | undefined> {
+  return locked(async () => {
+    const folder = await getFolder(folderId);
+    if (!folder) return undefined;
+    const byId = new Map(folder.papers.map((p) => [p.id, p]));
+    const papers = [...ids.map((id) => byId.get(id)).filter((p): p is Paper => Boolean(p)), ...folder.papers.filter((p) => !ids.includes(p.id))];
+    const next = { ...folder, papers };
+    await putFolder(next);
+    return next;
+  });
 }
 
-/** 往文件夹里加一张试卷（没有文件夹就先建一个） */
-export async function addPaper(folderId: string | null, pages: FolderPage[], name?: string): Promise<{ folder: Folder; paper: Paper }> {
-  const folder = (folderId && (await getFolder(folderId))) || (await createFolder(defaultFolderName()));
-  const now = new Date().toISOString();
-  const paper: Paper = { id: newId(), name: name?.trim() || defaultPaperName(folder), createdAt: now, updatedAt: now, pages, corrected: {} };
-  const saved = await saveFolder({ ...folder, papers: [...folder.papers, paper] });
-  return { folder: saved, paper };
+/** 往文件夹里加一张试卷（没有文件夹就先建一个）。pages 要带原图，原图写进照片表 */
+export function addPaper(folderId: string | null, pages: FolderPage[], name?: string): Promise<{ folder: Folder; paper: Paper }> {
+  return locked(async () => {
+    const folder = (folderId && (await getFolder(folderId))) || (await newFolder(defaultFolderName()));
+    const now = new Date().toISOString();
+    const paper: Paper = { id: newId(), name: name?.trim() || defaultPaperName(folder), createdAt: now, updatedAt: now, pages: strip(pages), corrected: {} };
+    const saved = await saveFolder({ ...folder, papers: [...folder.papers, { ...paper, pages }] }, { stored: pageIds(folder) });
+    return { folder: saved, paper };
+  });
 }
 
-export async function updatePaper(folderId: string, paperId: string, patch: Partial<Paper>): Promise<Folder | undefined> {
-  const folder = await getFolder(folderId);
-  if (!folder) return undefined;
-  const now = new Date().toISOString();
-  return saveFolder({ ...folder, papers: folder.papers.map((p) => (p.id === paperId ? { ...p, ...patch, updatedAt: now } : p)) });
+/** 改一张试卷。patch.pages 里新加的照片要带原图；去掉的照片连原图一起删 */
+export function updatePaper(folderId: string, paperId: string, patch: Partial<Paper>): Promise<Folder | undefined> {
+  return locked(async () => {
+    const folder = await getFolder(folderId);
+    if (!folder) return undefined;
+    const now = new Date().toISOString();
+    const before = folder.papers.find((p) => p.id === paperId);
+    const next = { ...folder, papers: folder.papers.map((p) => (p.id === paperId ? { ...p, ...patch, updatedAt: now } : p)) };
+    return saveFolder(next, { stored: pageIds(folder), dropped: patch.pages ? before?.pages.map((pg) => pg.id) : undefined });
+  });
 }
 
-export async function deletePaper(folderId: string, paperId: string): Promise<Folder | undefined> {
-  const folder = await getFolder(folderId);
-  if (!folder) return undefined;
-  return saveFolder({ ...folder, papers: folder.papers.filter((p) => p.id !== paperId) });
+export function deletePaper(folderId: string, paperId: string): Promise<Folder | undefined> {
+  return locked(async () => {
+    const folder = await getFolder(folderId);
+    if (!folder) return undefined;
+    const gone = folder.papers.find((p) => p.id === paperId)?.pages.map((pg) => pg.id);
+    return saveFolder({ ...folder, papers: folder.papers.filter((p) => p.id !== paperId) }, { stored: pageIds(folder), dropped: gone });
+  });
 }
 
-/** 把 dataURL 变成照片记录（读出尺寸）。 */
-export function toPage(src: string): Promise<FolderPage> {
+/** 把 dataURL 变成照片记录（读出尺寸、做好小图）。 */
+export function toPage(src: string): Promise<FullPage> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve({ id: newId(), src, width: img.naturalWidth, height: img.naturalHeight });
+    img.onload = () => resolve({ id: newId(), src, width: img.naturalWidth, height: img.naturalHeight, thumb: thumbFrom(img) });
     img.onerror = reject;
     img.src = src;
   });
 }
+
+/** 列表里显示的小图：没有小图（极少数做小图失败的旧数据）时才用原图 */
+export const thumbOf = (page: FolderPage | undefined) => page?.thumb ?? page?.src ?? "";
 
 /** 旧版本存的电子版没有版面块（blocks）或空 id（blankIds），当作未扫描，重扫即可 */
 /** 学生作答整个看不清：去掉空白和标点后只剩「□」 */

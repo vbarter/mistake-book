@@ -8,7 +8,7 @@ import { Buddy } from "../components/Illustration";
 import { CountUp } from "../components/Motion";
 import { Button } from "../components/ui";
 import { allErrors } from "../lib/errors";
-import { listFolders, type Folder } from "../lib/folders";
+import { listFolders, thumbOf, type Folder } from "../lib/folders";
 import { analyze, inRange, since } from "../lib/insights";
 import { scanStageText, useJobs } from "../lib/jobs";
 import { getLastExportAt } from "../lib/prefs";
@@ -86,7 +86,7 @@ export default function Home() {
             <div className="group__header"><span>正在识别</span><span>好了会自动归档</span></div>
             {scanning.map(({ f, p }) => (
               <button key={p.id} className="row" style={{ minHeight: 60 }} onClick={() => nav(`/papers/${f.id}`)}>
-                <img className="thumb thumb--sm" src={p.pages[0]?.src} alt="" />
+                <img className="thumb thumb--sm" src={thumbOf(p.pages[0])} alt="" />
                 <span className="row__main">
                   <span className="row__title ellipsis">{p.name}</span>
                   <span className="progress" style={{ background: "var(--brand-tint)" }}><span style={{ width: `${Math.max(6, p.scanJob!.progress)}%` }} /></span>
