@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cropFigure, type FigureRef } from "../lib/figures";
+import { CropCancelled, cropFigure, type FigureRef } from "../lib/figures";
 import { MathText } from "./MathText";
 
 /** 从原照片裁出来的插图；点一下放大 / 缩小。裁不出来时显示文字说明。
@@ -11,9 +11,16 @@ export function FigureImage({ fig, mark }: { fig: FigureRef; mark?: "right" | "w
   useEffect(() => {
     let alive = true;
     setFailed(false);
-    cropFigure(fig)
-      .then((u) => alive && setUrl(u))
-      .catch(() => alive && setFailed(true));
+    // 排到号时已经滑走（卸载）了就不裁；别处同一张图被取消、这里还在屏幕上的，重新排一次
+    const load = (): Promise<void> =>
+      cropFigure(fig, undefined, undefined, () => alive)
+        .then((u) => { if (alive) setUrl(u); })
+        .catch((e) => {
+          if (!alive) return;
+          if (e instanceof CropCancelled) return load();
+          setFailed(true);
+        });
+    void load();
     return () => {
       alive = false;
     };

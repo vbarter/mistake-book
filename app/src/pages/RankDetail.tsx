@@ -4,6 +4,7 @@ import { ErrorCard } from "../components/ErrorCard";
 import { Icon } from "../components/Icon";
 import { Empty, InlineNav } from "../components/ui";
 import { allErrors, type ErrorItem } from "../lib/errors";
+import { releaseFigureSources } from "../lib/figures";
 import { listFolders } from "../lib/folders";
 import { haptic } from "../lib/native";
 import { useRankView } from "../store/rankView";
@@ -11,7 +12,11 @@ import { useRankView } from "../store/rankView";
 /**
  * 错题详情：从错题榜点进来，整张榜的题按名次排成一行，左右滑一张一张看（scroll-snap，手感和系统相册一样）。
  * 每张顶部是名次、所属知识点和易错指数，下面是原题、作答、正确答案和解析。
+ * 只渲染当前这张和左右各 NEAR 张，其余是同宽的空位：以前一进来就把整张榜（上百题）全画出来，
+ * 所有插图同时从原照片解码裁图，内存一下涨 150MB 以上，iOS 上网页进程会被系统杀掉（看起来像 App 闪退重启）。
  */
+const NEAR = 1;
+
 export default function RankDetail() {
   const nav = useNavigate();
   const { index = "0" } = useParams();
@@ -19,6 +24,8 @@ export default function RankDetail() {
   const [items, setItems] = useState<Map<string, ErrorItem> | null>(null);
   const [current, setCurrent] = useState(Number(index) || 0);
   const track = useRef<HTMLDivElement>(null);
+
+  useEffect(() => releaseFigureSources, []);
 
   useEffect(() => {
     listFolders().then((fs) => setItems(new Map(allErrors(fs).map((e) => [e.key, e])))).catch(() => setItems(new Map()));
@@ -54,7 +61,9 @@ export default function RankDetail() {
     <div className="screen detail-screen">
       <InlineNav title={title || "错题详情"} back backLabel="错题榜" />
       <div className="detail-track" ref={track} onScroll={onScroll}>
-        {slides.map(({ en, item }, i) => (
+        {slides.map(({ en, item }, i) => Math.abs(i - current) > NEAR ? (
+          <section key={item.key} className="detail-slide" aria-hidden="true" />
+        ) : (
           <section key={item.key} className="detail-slide" aria-roledescription="slide" aria-label={`第 ${i + 1} 道，共 ${slides.length} 道`}>
             <div className={`detail-head${i === current ? " on" : ""}`}>
               <span className={`rank-badge${en.rank <= 3 ? " rank-badge--top" : ""}`}>{en.rank}</span>

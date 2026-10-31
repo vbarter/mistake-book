@@ -75,7 +75,7 @@ export function figuresOfQuestion(paper: Paper, q: DigitizedQuestion): FigureRef
 }
 
 /** 裁好的图最多留这么多张（按最近使用），错题榜一路翻下去也不会越攒越多 */
-const CACHE_MAX = 60;
+const CACHE_MAX = 24;
 const cache = new Map<string, Promise<string>>();
 
 /** 同一时间最多解码两张原照片：一页错题十几张插图同时裁，每张原图解码要几十 MB */
@@ -88,13 +88,70 @@ async function slot<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } finally {
     active -= 1;
-    waiting.shift()?.();
+    const next = waiting.shift();
+    if (next) next();
+    else if (active === 0) releaseFigureSources(); // 这一批裁完了：解码的原图不再留着
   }
 }
 
-/** 裁图：四周留 1.5% 边，最长边不超过 maxSide（屏幕上看 1400），转正后输出 JPEG dataURL */
-export function cropFigure(f: FigureRef, maxSide = 1400, quality = 0.88): Promise<string> {
-  const key = maxSide === 1400 ? f.key : `${f.key}@${maxSide}`;
+/**
+ * 解码好的原照片：同一张照片上的几张插图共用一次解码（以前每裁一张都重新读库、重新解码一张 2400px 原图，约 30MB）。
+ * 只在一批裁图进行中留着（最多两张），这批裁完就把 img.src 清空，解码出来的位图马上还给系统，不等垃圾回收。
+ */
+const SOURCE_MAX = 2;
+const sources = new Map<string, { img: Promise<HTMLImageElement>; users: number }>();
+
+function dropSource(id: string) {
+  const s = sources.get(id);
+  if (!s || s.users > 0) return;
+  sources.delete(id);
+  void s.img.then((img) => { img.src = ""; }).catch(() => undefined);
+}
+
+async function withSource<T>(photo: FigureRef["photo"], fn: (img: HTMLImageElement) => T): Promise<T> {
+  let s = sources.get(photo.id);
+  if (s) {
+    sources.delete(photo.id);
+    sources.set(photo.id, s);
+  } else {
+    const img = loadPhoto(photo).then((src) => {
+      if (!src) throw new Error("照片不见了");
+      return loadImage(src);
+    });
+    s = { img, users: 0 };
+    sources.set(photo.id, s);
+    img.catch(() => sources.get(photo.id) === s && sources.delete(photo.id));
+  }
+  s.users += 1;
+  try {
+    return fn(await s.img);
+  } finally {
+    s.users -= 1;
+    // 超出的、没人在用的按最久没用的先放掉（正在用的跳过，等它用完下一次再放）
+    for (const id of [...sources.keys()]) if (sources.size > SOURCE_MAX) dropSource(id);
+  }
+}
+
+/** 离开错题详情 / 试卷页时调：把留着的解码原图都放掉 */
+export function releaseFigureSources() {
+  for (const id of [...sources.keys()]) dropSource(id);
+}
+
+/** 屏幕上看的插图最长边：手机满宽约 1100 物理像素，点开放大也够清楚 */
+export const SCREEN_FIGURE_SIDE = 1200;
+
+export class CropCancelled extends Error {
+  constructor() {
+    super("裁图已取消");
+  }
+}
+
+/**
+ * 裁图：四周留 1.5% 边，最长边不超过 maxSide，转正后输出 JPEG dataURL。
+ * wanted：排到号时再问一次还要不要（插图已经滑出屏幕附近就不裁了），不要就以 CropCancelled 结束，不进缓存。
+ */
+export function cropFigure(f: FigureRef, maxSide = SCREEN_FIGURE_SIDE, quality = 0.88, wanted?: () => boolean): Promise<string> {
+  const key = maxSide === SCREEN_FIGURE_SIDE ? f.key : `${f.key}@${maxSide}`;
   const hit = cache.get(key);
   if (hit) {
     cache.delete(key);
@@ -102,42 +159,42 @@ export function cropFigure(f: FigureRef, maxSide = 1400, quality = 0.88): Promis
     return hit;
   }
   const job = slot(async () => {
-    const src = await loadPhoto(f.photo);
-    if (!src) throw new Error("照片不见了");
-    const img = await loadImage(src);
-    const W = img.naturalWidth;
-    const H = img.naturalHeight;
-    const pad = 0.015;
-    const x0 = Math.max(0, f.bbox[0] - pad) * W;
-    const y0 = Math.max(0, f.bbox[1] - pad) * H;
-    const x1 = Math.min(1, f.bbox[2] + pad) * W;
-    const y1 = Math.min(1, f.bbox[3] + pad) * H;
-    const sw = Math.max(1, x1 - x0);
-    const sh = Math.max(1, y1 - y0);
-    const scale = Math.min(1, maxSide / Math.max(sw, sh));
-    const w = Math.round(sw * scale);
-    const h = Math.round(sh * scale);
-    const turns = ((f.rotation % 4) + 4) % 4; // 内容逆时针转了几个 90°，这里顺时针转回去
-    const canvas = document.createElement("canvas");
-    canvas.width = turns % 2 ? h : w;
-    canvas.height = turns % 2 ? w : h;
-    const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate((turns * Math.PI) / 2);
-    ctx.drawImage(img, x0, y0, sw, sh, -w / 2, -h / 2, w, h);
-    const out = canvas.toDataURL("image/jpeg", quality);
-    releaseCanvas(canvas);
-    return out;
+    if (wanted && !wanted()) throw new CropCancelled();
+    return withSource(f.photo, (img) => {
+      const W = img.naturalWidth;
+      const H = img.naturalHeight;
+      const pad = 0.015;
+      const x0 = Math.max(0, f.bbox[0] - pad) * W;
+      const y0 = Math.max(0, f.bbox[1] - pad) * H;
+      const x1 = Math.min(1, f.bbox[2] + pad) * W;
+      const y1 = Math.min(1, f.bbox[3] + pad) * H;
+      const sw = Math.max(1, x1 - x0);
+      const sh = Math.max(1, y1 - y0);
+      const scale = Math.min(1, maxSide / Math.max(sw, sh));
+      const w = Math.round(sw * scale);
+      const h = Math.round(sh * scale);
+      const turns = ((f.rotation % 4) + 4) % 4; // 内容逆时针转了几个 90°，这里顺时针转回去
+      const canvas = document.createElement("canvas");
+      canvas.width = turns % 2 ? h : w;
+      canvas.height = turns % 2 ? w : h;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((turns * Math.PI) / 2);
+      ctx.drawImage(img, x0, y0, sw, sh, -w / 2, -h / 2, w, h);
+      const out = canvas.toDataURL("image/jpeg", quality);
+      releaseCanvas(canvas);
+      return out;
+    });
   });
   cache.set(key, job);
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
-  job.catch(() => cache.delete(key));
+  job.catch(() => cache.get(key) === job && cache.delete(key));
   return job;
 }
 
-/** PDF 里插图最多占半页宽（约 110mm），按打印 200dpi 算 900 像素就够了；用屏幕上的 1400 像素图，上百题的错题本请求体和 PDF 都会大好几倍 */
+/** PDF 里插图最多占半页宽（约 110mm），按打印 200dpi 算 900 像素就够了；用屏幕上的 1200 像素图，上百题的错题本请求体和 PDF 都会大好几倍 */
 const PDF_FIGURE_SIDE = 900;
 
 /** 导出 PDF 用：带上裁好的图；裁不出来就只给文字说明 */
