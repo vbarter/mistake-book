@@ -82,7 +82,7 @@
 /* 可拖动排序 + 左滑删除的列表 */
 .swipe-list { display: flex; flex-direction: column; }
 .swipe-item { position: relative; border-radius: var(--radius-card); overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.swipe-item__content { position: relative; z-index: 1; background: var(--card); border-radius: var(--radius-card); }
+.swipe-item__content { position: relative; z-index: 1; overflow: hidden; background: var(--card); border-radius: var(--radius-card); }
 .swipe-item__content > * { width: 100%; }
 .swipe-item__actions { position: absolute; inset: 0 0 0 auto; width: 88px; display: flex; background: var(--wrong); border-radius: 0 var(--radius-card) var(--radius-card) 0; }
 .swipe-item__delete { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #fff; font-size: 12px; font-weight: 600; border: 0; background: transparent; }
