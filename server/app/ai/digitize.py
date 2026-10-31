@@ -432,7 +432,10 @@ def sheets_from_dicts(pages: list) -> list[DigitizedPage]:
             if not isinstance(b, dict):
                 continue
             blanks = [DigitizedBlank(**pick(DigitizedBlank, x)) for x in (b.get("blanks") or []) if isinstance(x, dict) and x.get("id")]
-            blocks.append(DigitizedBlock(**{**pick(DigitizedBlock, b), "blanks": blanks}))
+            fields_b = pick(DigitizedBlock, b)
+            if not isinstance(fields_b.get("topic"), dict) or not fields_b["topic"].get("id"):
+                fields_b["topic"] = None
+            blocks.append(DigitizedBlock(**{**fields_b, "blanks": blanks}))
         out.append(DigitizedPage(**{**pick(DigitizedPage, p), "blocks": blocks}))
     return out
 
@@ -865,6 +868,7 @@ def _merge_group(sheets: list[DigitizedPage], group: list[tuple[int, int]]) -> t
         subject=base_blk.subject,
         questionType="choice" if len(options) >= 2 else (head.questionType if head.type == "item" else base_blk.questionType),
         knowledgePoints=list(base_blk.knowledgePoints),
+        topic=dict(base_blk.topic) if base_blk.topic else None,
         tip=next((b.tip for b in items if b.tip), ""),
         uncertainSpans=[x for b in blocks for x in b.uncertainSpans],
     )
@@ -1093,6 +1097,7 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
                         blockIndex=bi,
                         blankIds=[b.id for b in blanks],
                         aiGraded=any(b.aiGraded for b in blanks),
+                        topic=dict(block.topic) if block.topic else None,
                     )
                 )
             elif block.type == "passage":
@@ -1124,6 +1129,7 @@ def derive_questions(sheets: list[DigitizedPage]) -> list[DigitizedQuestion]:
                             blockIndex=bi,
                             blankIds=[b.id],
                             aiGraded=other.aiGraded if use_other else b.aiGraded,
+                            topic=dict(block.topic) if block.topic else None,
                         )
                     )
     _with_parent_numbers(questions, sheets)
@@ -1198,4 +1204,36 @@ def apply_explanation(blk: DigitizedBlock, blank: DigitizedBlank, r: dict) -> bo
     if answer and not _same_answer(answer, blank.answer):
         apply_context_answer(blk, blank, answer, text)
     blank.analysis = text[:3000]
+    return True
+
+
+# ---------- 知识图谱标注 ----------
+
+
+def tag_targets(sheets: list[DigitizedPage]) -> list[tuple[int, int]]:
+    """要挑图谱知识点的题块：有做错、半对、没作答的空，学科在图谱覆盖范围内；听力题不标。"""
+    from .. import taxonomy
+
+    covered = taxonomy.subjects()
+    listening = listening_blocks(sheets)
+    out = []
+    for si, sheet in enumerate(sheets):
+        for bi, blk in enumerate(sheet.blocks):
+            if blk.type not in ("item", "passage") or (si, bi) in listening:
+                continue
+            if (blk.subject or sheet.subject) not in covered:
+                continue
+            if any(b.mark in EXPLAIN_MARKS for b in blk.blanks):
+                out.append((si, bi))
+    return out
+
+
+def apply_topic(block: DigitizedBlock, topic_id: str | None) -> bool:
+    """把模型挑的 id 校验后写进题块；id 不在图谱里当没标。返回是否标上。"""
+    from .. import taxonomy
+
+    v = taxonomy.view(topic_id) if topic_id else None
+    if v is None:
+        return False
+    block.topic = v
     return True

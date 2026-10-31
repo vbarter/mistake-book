@@ -14,6 +14,7 @@ from ..ai import AIError, get_provider
 from ..auth_utils import current_user, login_required
 from ..constants import QUESTION_TYPES, REASONS, SUBJECTS
 from ..extensions import db
+from .. import taxonomy
 from ..models import Mistake, ReviewLog
 from ..scheduler import effective_state, mark_mastered, reinstate, schedule_new
 
@@ -67,6 +68,12 @@ def _apply_fields(m: Mistake, data: dict) -> None:
     if "knowledgePoints" in data:
         kps = [str(k).strip() for k in data["knowledgePoints"] if str(k).strip()]
         m.knowledge_points = kps[:3] or ["未分类"]
+    if "topic" in data or "topicId" in data:
+        # 图谱知识点：客户端传 topic {id,…} 或 topicId；不在图谱里的当没标
+        raw_topic = data.get("topic")
+        tid = raw_topic.get("id") if isinstance(raw_topic, dict) else data.get("topicId")
+        v = taxonomy.view(str(tid)) if tid else None
+        m.topic_id = v["id"] if v else None
     if "questionType" in data and data["questionType"] in QUESTION_TYPES:
         m.question_type = data["questionType"]
     if "options" in data:

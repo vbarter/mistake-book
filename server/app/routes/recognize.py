@@ -11,6 +11,7 @@ from flask import Blueprint, Response, abort, current_app, jsonify, request
 from ..ai import AIError, Crop, get_provider, provider_name
 from ..ai import queue as page_queue
 from ..ai.digitize import derive_questions, sheets_from_dicts
+from .. import taxonomy
 from ..extensions import db
 from ..usage import track
 from ..models import DigitizeJob
@@ -328,6 +329,40 @@ def digitize_grade():
         d["index"] = i
         questions.append(d)
     return jsonify({"pages": [s.to_dict() for s in sheets], "questions": questions, "graded": graded})
+
+
+@bp.post("/digitize/tag")
+@login_required
+def digitize_tag():
+    """给已经存在 App 里的电子版补标知识图谱知识点：做错 / 半对 / 没作答的题块挑一个图谱 id，返回标完的卷面和题目。
+    开关 TAXONOMY_TAGGING 关着时原样返回（tagged 为 0），客户端不用区分。"""
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    pages = data.get("pages")
+    if not isinstance(pages, list) or not pages:
+        abort(400, "缺少电子版内容")
+    sheets = sheets_from_dicts(pages)
+    grade = str(data.get("grade") or user.grade or "5")
+    tagged = 0
+    if taxonomy.enabled():
+        track(user, "tag")
+        tagged = get_provider().tag_topics(sheets, grade)
+    questions = []
+    for i, q in enumerate(derive_questions(sheets)):
+        d = q.to_dict()
+        d["index"] = i
+        questions.append(d)
+    return jsonify({"pages": [s.to_dict() for s in sheets], "questions": questions, "tagged": tagged})
+
+
+@bp.get("/taxonomy/topics/<topic_id>")
+@login_required
+def taxonomy_topic(topic_id: str):
+    """一个图谱知识点和它的先修（沿 hard 边向上两层），给错题详情页「建议先复习」用。"""
+    v = taxonomy.view(topic_id)
+    if v is None:
+        abort(404, "没有这个知识点")
+    return jsonify({**v, "prerequisites": taxonomy.prerequisites(v["id"], depth=2)})
 
 
 def _pdf_error_message(what: str, e: Exception) -> str:

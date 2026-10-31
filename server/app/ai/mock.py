@@ -201,7 +201,34 @@ class MockProvider(AIProvider):
                 DigitizedBlock(type="text", text="第 1 页 共 1 页", bbox=[0.40, 0.98, 0.60, 1.0]),
             ]
             sheets.append(DigitizedPage(page=p, label=f"第 {p + 1} 页", title="五年级随堂练习", score="82", note="订正提醒：注意题目中的“剩下的”和“last weekend”，它们会影响解题方法。", subject="math", examLevel="日常练习", examGrade="五年级", region="", syllabus="小学五年级课标", blocks=blocks))
+        from .. import taxonomy
+
+        if taxonomy.enabled():
+            self.tag_topics(sheets, grade)
         return sheets, derive_questions(sheets)
+
+    def tag_topics(self, sheets: list[DigitizedPage], grade: str) -> int:
+        """本地演示：按自由文本知识点和图谱知识点名称的字面重合挑一个（真实环境由大模型按题意挑）。"""
+        from .. import taxonomy
+        from .digitize import apply_topic, tag_targets
+
+        done = 0
+        for si, bi in tag_targets(sheets):
+            blk = sheets[si].blocks[bi]
+            subject = blk.subject or sheets[si].subject
+            best, score = None, 0
+            for t in taxonomy.candidates(subject, grade):
+                for kp in blk.knowledgePoints:
+                    alias = taxonomy.resolve_alias(subject, kp)
+                    if alias == t["id"]:
+                        best, score = t["id"], 99
+                    elif t["name"] and (t["name"] in kp or kp in t["name"]):
+                        n = min(len(t["name"]), len(kp))
+                        if n > score:
+                            best, score = t["id"], n
+            if best and apply_topic(blk, best):
+                done += 1
+        return done
 
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:
         subject = mistake.get("subject", "math")

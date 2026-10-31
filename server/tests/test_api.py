@@ -1424,3 +1424,97 @@ def test_book_pdf_has_toc_with_page_numbers(monkeypatch):
     assert pdf.build_book_pdf("t", "s", items).startswith(b"%PDF")
     assert seen[0] == {} and set(seen[1]) == {"kp0", "kp1", "kp2"}
     assert seen[1]["kp0"] == 2 and seen[1]["kp0"] <= seen[1]["kp1"] <= seen[1]["kp2"]
+
+
+# ---------------------------------------------------------------- 知识图谱标注
+
+
+def test_taxonomy_candidates_by_stage():
+    """候选池按学段取：初中数学只有 7–9 年级的点，学生年级 ±1 排前面；高中按册；没有的学科为空。"""
+    from app import taxonomy
+
+    junior = taxonomy.candidates("math", "8")
+    assert junior and {t["grade"] for t in junior} == {7, 8, 9}
+    assert all(abs(t["grade"] - 8) <= 1 for t in junior[:50])
+    assert taxonomy.stage_of("6") == "primary" and taxonomy.stage_of("10") == "senior" and taxonomy.stage_of(None) == "junior"
+    assert taxonomy.candidates("chemistry", "9") == []
+    v = taxonomy.view("cnm_276")
+    assert v and v["name"] == "锐角三角函数的定义" and v["chapter"] == "九下 第三十二章 锐角三角函数" and v["subject"] == "math"
+    assert taxonomy.resolve_alias("math", "锐角三角比") == "cnm_276"
+    pre = taxonomy.prerequisites("cnm_221", depth=2)
+    assert pre and all(p["id"] != "cnm_221" for p in pre) and len({p["id"] for p in pre}) == len(pre)
+
+
+def test_tag_topics_sends_candidates_and_applies_valid_ids(monkeypatch):
+    """错题按学科合批交给大模型：提示词里有该学段的知识点清单；挑中的 id 写进题块和派生题，不在图谱里的 id 丢掉。"""
+    from app import taxonomy
+    from app.ai.base import DigitizedBlank, DigitizedBlock, DigitizedPage
+    from app.ai.claude import ClaudeProvider
+    from app.ai.digitize import derive_questions
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    calls = []
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        calls.append(content)
+        return {"results": [{"key": "q0", "topicId": "cnm_221", "confidence": "high"}, {"key": "q1", "topicId": "nope_1", "confidence": "low"}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    sheets = [DigitizedPage(page=0, subject="math", blocks=[
+        DigitizedBlock(type="item", number="1", text="用配方法解方程 [[1]]", subject="math", questionType="solve", knowledgePoints=["数与代数 · 一元二次方程", "配方法"], blanks=[DigitizedBlank(id="1", number="1", student="x=1", mark="wrong", answer="x=1 或 x=3")]),
+        DigitizedBlock(type="item", number="2", text="计算 [[2]]", subject="math", questionType="fill", knowledgePoints=["有理数"], blanks=[DigitizedBlank(id="2", number="2", student="", mark="blank", answer="3")]),
+        DigitizedBlock(type="item", number="3", text="做对的题 [[3]]", subject="math", questionType="fill", blanks=[DigitizedBlank(id="3", number="3", student="5", mark="correct")]),
+        DigitizedBlock(type="item", number="4", text="化学题 [[4]]", subject="chemistry", questionType="fill", blanks=[DigitizedBlank(id="4", number="4", student="", mark="wrong", answer="O2")]),
+    ])]
+    assert provider.tag_topics(sheets, grade="9") == 1
+    assert len(calls) == 1
+    listing, questions = calls[0][0]["text"], calls[0][1]["text"]
+    assert "cnm_221｜配方法" in listing and "cnm_p001" not in listing and "cnm_h001" not in listing
+    assert 'key="q0"' in questions and 'key="q1"' in questions and "q2" not in questions and "化学题" not in questions
+    assert sheets[0].blocks[0].topic == taxonomy.view("cnm_221") and sheets[0].blocks[1].topic is None
+    qs = derive_questions(sheets)
+    assert qs[0].topic["id"] == "cnm_221" and qs[0].to_dict()["topic"]["chapter"] == "九上 第二十五章 一元二次方程" and qs[1].topic is None
+
+
+def test_digitize_tag_endpoint_and_flag(client, auth, app):
+    """补标接口：开关关着原样返回；开着时 mock 按知识点名称挑 id，旧 id 按别名表迁移；回传带 topic 的电子版能原样读回。"""
+    pages = [{"page": 0, "subject": "math", "blocks": [
+        {"type": "item", "number": "1", "text": "解方程 [[1]]", "subject": "math", "questionType": "solve", "knowledgePoints": ["一元二次方程的概念"],
+         "blanks": [{"id": "1", "number": "1", "student": "2", "mark": "wrong", "answer": "1", "analysis": "", "note": ""}]},
+        {"type": "item", "number": "2", "text": "tan [[2]]", "subject": "math", "questionType": "fill", "knowledgePoints": ["锐角三角比"],
+         "blanks": [{"id": "2", "number": "2", "student": "", "mark": "blank", "answer": "1", "analysis": "", "note": ""}]},
+    ]}]
+    r = client.post("/api/digitize/tag", json={"pages": pages, "grade": "9"}, headers=auth)
+    assert r.status_code == 200 and r.get_json()["tagged"] == 0 and r.get_json()["questions"][0]["topic"] is None
+
+    app.config["TAXONOMY_TAGGING"] = True
+    r = client.post("/api/digitize/tag", json={"pages": pages, "grade": "9"}, headers=auth)
+    body = r.get_json()
+    assert r.status_code == 200 and body["tagged"] == 2
+    assert body["questions"][0]["topic"]["id"] == "cnm_219" and body["questions"][1]["topic"]["id"] == "cnm_276"
+    assert body["pages"][0]["blocks"][1]["topic"]["name"] == "锐角三角函数的定义"
+
+    # 带 topic 回传（比如再做一次阅卷）不会丢；坏的 topic 当没标
+    body["pages"][0]["blocks"][0]["topic"] = {"bogus": 1}
+    r = client.post("/api/digitize/grade", json={"pages": body["pages"]}, headers=auth)
+    qs = r.get_json()["questions"]
+    assert qs[0]["topic"] is None and qs[1]["topic"]["id"] == "cnm_276"
+
+    r = client.get("/api/taxonomy/topics/cnm_276", headers=auth)
+    assert r.status_code == 200 and r.get_json()["name"] == "锐角三角函数的定义" and r.get_json()["prerequisites"]
+    assert client.get("/api/taxonomy/topics/none", headers=auth).status_code == 404
+
+
+def test_mistake_stores_topic_id(client, auth):
+    """错题入库带 topic 时存 id，读回时展开成图谱知识点；不在图谱里的 id 不存。"""
+    r = client.post("/api/mistakes", json={"items": [
+        {"subject": "math", "knowledgePoints": ["配方法"], "stemText": "题一", "reasons": ["concept"], "topic": {"id": "cnm_221", "name": "配方法"}},
+        {"subject": "math", "knowledgePoints": ["x"], "stemText": "题二", "reasons": ["concept"], "topicId": "bad_id"},
+    ]}, headers=auth)
+    assert r.status_code == 201
+    created = r.get_json()["created"]
+    assert created[0]["topic"]["id"] == "cnm_221" and created[0]["topic"]["chapter"] == "九上 第二十五章 一元二次方程"
+    assert created[1]["topic"] is None
+    r = client.patch(f"/api/mistakes/{created[1]['id']}", json={"topicId": "cnm_276"}, headers=auth)
+    assert r.status_code == 200 and r.get_json()["mistake"]["topic"]["id"] == "cnm_276"
