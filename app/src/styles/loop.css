@@ -1,10 +1,10 @@
 /* 3.0 闭环：首页主入口、闭环四步、批量导入、分析图表、自动目录。沿用 iOS 分组列表与材质，主色只用在一个主动作上。 */
 
 /* 首页主入口 */
-.hero { border-radius: 24px; padding: 20px; display: flex; flex-direction: column; gap: 18px; color: #fff; background: linear-gradient(145deg, #3b7bff 0%, #2f6fed 45%, #5b4fe0 100%); box-shadow: 0 12px 32px rgba(47, 111, 237, 0.28); }
+.hero { border-radius: 24px; padding: 20px; display: flex; flex-direction: column; gap: 18px; color: #fff; background: var(--hero-bg); box-shadow: 0 12px 32px var(--brand-glow); }
 .hero__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .hero__btn { height: 56px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 17px; font-weight: 600; color: #fff; background: rgba(255, 255, 255, 0.18); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: transform 0.12s ease; }
-.hero__btn--solid { background: #fff; color: #2f6fed; }
+.hero__btn--solid { background: #fff; color: var(--brand); }
 .hero__btn:active { transform: scale(0.97); }
 
 /* 闭环四步 */
@@ -13,7 +13,7 @@
 .loop__step:not(:last-child)::after { content: ""; position: absolute; top: 22px; right: -6px; width: 12px; height: 2px; border-radius: 1px; background: var(--separator); }
 .loop__step:active { background: var(--fill-light); }
 .loop__icon { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; background: var(--fill-light); color: var(--secondary); }
-.loop__step.on .loop__icon { background: var(--brand); color: #fff; box-shadow: 0 4px 12px rgba(47, 111, 237, 0.32); }
+.loop__step.on .loop__icon { background: var(--brand); color: #fff; box-shadow: 0 4px 12px var(--brand-glow); }
 .loop__step.on { color: var(--label); }
 .loop__title { font-size: 13px; line-height: 17px; font-weight: 600; color: var(--label); }
 .loop__value { font-size: 11px; line-height: 14px; text-align: center; }
@@ -69,7 +69,7 @@
 /* ---------- 第二版：去大标题、中间相机键、插画、动画 ---------- */
 :root {
   --ill-paper: #ffffff; --ill-paper2: #dfe8ff; --ill-line: #2f4a8a; --ill-ink: #1f2a44; --ill-cheek: #ffb4a8;
-  --ill-brand: #2f6fed; --ill-accent: #ffb547; --ill-star: #ffc94d; --ill-ok: #1e9e5a; --ill-ok-bg: #dcf5e7; --ill-shadow: rgba(31, 42, 68, 0.12);
+  --ill-brand: var(--brand); --ill-accent: #ffb547; --ill-star: #ffc94d; --ill-ok: #1e9e5a; --ill-ok-bg: #dcf5e7; --ill-shadow: rgba(31, 42, 68, 0.12);
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @media (prefers-color-scheme: dark) {
@@ -119,7 +119,7 @@
 
 /* 闭环：当前那一步呼吸光圈 */
 .loop__step.on .loop__icon { animation: pulse 2s ease-out infinite; }
-@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(47, 111, 237, 0.45); } 70% { box-shadow: 0 0 0 12px rgba(47, 111, 237, 0); } 100% { box-shadow: 0 0 0 0 rgba(47, 111, 237, 0); } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--brand-glow); } 70% { box-shadow: 0 0 0 12px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
 /* 图表长出来 */
 .trend__bar { animation: grow-y 0.7s var(--spring) both; transform-origin: bottom; }
@@ -143,11 +143,11 @@
 .tab.on .tab__icon { animation: tab-pop 0.45s var(--spring); }
 @keyframes tab-pop { 40% { transform: scale(1.22) translateY(-2px); } }
 .tab--fab { position: relative; }
-.fab { position: absolute; left: 50%; top: -22px; width: 62px; height: 62px; margin-left: -31px; border-radius: 31px; display: flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(145deg, #3b7bff, #5b4fe0); box-shadow: 0 8px 20px rgba(47, 111, 237, 0.4), 0 0 0 5px var(--bg); transition: transform 0.35s var(--spring); }
+.fab { position: absolute; left: 50%; top: -22px; width: 62px; height: 62px; margin-left: -31px; border-radius: 31px; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--fab-bg); box-shadow: 0 8px 20px var(--brand-glow), 0 0 0 5px var(--bg); transition: transform 0.35s var(--spring); }
 .fab:active { transform: scale(0.9); }
 .fab svg { transition: transform 0.35s var(--spring); }
 .fab.open svg { transform: rotate(135deg); }
-.fab__ring { position: absolute; inset: -5px; border-radius: 50%; border: 2px solid rgba(47, 111, 237, 0.35); animation: ring 2.4s ease-out infinite; pointer-events: none; }
+.fab__ring { position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--accent-trim); animation: ring 2.4s ease-out infinite; pointer-events: none; }
 .fab.open .fab__ring { display: none; }
 @keyframes ring { from { transform: scale(0.9); opacity: 1; } to { transform: scale(1.35); opacity: 0; } }
 .fab-scrim { position: fixed; inset: 0; z-index: 29; background: rgba(10, 16, 32, 0.28); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: fade-in 0.2s ease; }
@@ -159,3 +159,35 @@
 .fab-menu.open .fab-bubble--left { transform: translate(calc(-50% - 62px), 0) scale(1); }
 .fab-menu.open .fab-bubble--right { transform: translate(calc(-50% + 62px), 0) scale(1); transition-delay: 0.05s; }
 .fab-bubble:active .fab-bubble__icon { transform: scale(0.92); }
+
+/* ---------- 主题：上海初中校服（藏青西装 + 白衬衫 + 酒红领带） ---------- */
+:root {
+  --brand: #1f3b73; --brand-pressed: #162c58; --brand-tint: #e6ebf5; --brand-on-tint: #1f3b73;
+  --brand-glow: rgba(31, 59, 115, 0.32);
+  --tie: #a3303f; --tie-bg: #f8e6e8; --accent-trim: rgba(163, 48, 63, 0.55);
+  --bg: #f3f4f8;
+  --hero-bg: linear-gradient(150deg, #2a4a8a 0%, #1f3b73 50%, #152a55 100%);
+  --fab-bg: linear-gradient(150deg, #2a4a8a, #152a55);
+  --ill-paper2: #dbe2f0; --ill-line: #1f3b73; --ill-tie: #a3303f; --ill-accent: #a3303f; --ill-star: #e0b252;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand: #8fa9e6; --brand-pressed: #a9bdee; --brand-tint: #1a2440; --brand-on-tint: #b4c6f0;
+    --brand-glow: rgba(0, 0, 0, 0.5);
+    --tie: #e07a86; --tie-bg: #3a1a20; --accent-trim: rgba(224, 122, 134, 0.55);
+    --hero-bg: linear-gradient(150deg, #22396b 0%, #18294f 55%, #101c38 100%);
+    --fab-bg: linear-gradient(150deg, #2a4a8a, #18294f);
+    --ill-paper2: #33456e; --ill-line: #b4c6f0; --ill-tie: #e07a86;
+  }
+}
+.btn--primary { box-shadow: 0 6px 16px var(--brand-glow); }
+.btn--outline { border-color: var(--brand-tint); }
+/* 酒红只做点缀：当前一步的小红点、自动总结的标签、FAB 外圈 */
+.loop__step.on .loop__title { color: var(--brand); }
+.loop__step.on::before { content: ""; position: absolute; top: 2px; left: calc(50% + 14px); width: 8px; height: 8px; border-radius: 4px; background: var(--tie); box-shadow: 0 0 0 2px var(--card); z-index: 1; }
+.insight .t-foot { color: var(--tie) !important; }
+.insight { background: linear-gradient(160deg, var(--brand-tint), var(--card) 70%); }
+.fab { box-shadow: 0 8px 20px var(--brand-glow), 0 0 0 5px var(--bg), 0 0 0 7px var(--accent-trim); }
+.tab.on { color: var(--brand); }
+.hero::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--tie); opacity: 0.9; }
+:root { --avatar-bg: var(--tie-bg); --avatar-fg: var(--tie); }

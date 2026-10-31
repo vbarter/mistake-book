@@ -25,6 +25,10 @@ export function Buddy({ scene = "hero", size = 140, style }: { scene?: Scene; si
         <path d="M70 98q6 6 12 0" stroke="var(--ill-ink)" strokeWidth="3" strokeLinecap="round" />
         <circle cx="56" cy="96" r="5" fill="var(--ill-cheek)" />
         <circle cx="96" cy="96" r="5" fill="var(--ill-cheek)" />
+        {/* 校服领子和领带 */}
+        <path d="M58 122l18-12 18 12" fill="var(--ill-line)" />
+        <path d="M70 110l6 5 6-5" fill="#ffffff" stroke="var(--ill-line)" strokeWidth="1.5" strokeLinejoin="round" />
+        <path className="buddy__tie" d="M76 114l-4 3 2 4-3 9 5 4 5-4-3-9 2-4z" fill="var(--ill-tie)" />
         {/* 小手 */}
         {scene === "empty" ? (
           <path className="buddy__wave" d="M112 78q14-6 16-20" stroke="var(--ill-line)" strokeWidth="5" strokeLinecap="round" />
