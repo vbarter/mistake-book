@@ -1,12 +1,12 @@
 /** 插图：识别结果里的 figure 块只有位置（bbox，相对原照片 0–1），图本身从本机保存的原照片里裁出来。
- *  照片拍倒了时（rotation：内容逆时针转了几个 90°）裁完再转正。裁好的图缓存在内存里。 */
+ *  照片拍倒了时（rotation：内容逆时针转了几个 90°）裁完再转正。裁好的图在内存里留最近用过的一批。 */
 import type { DigitizedBlock, DigitizedQuestion } from "../api/types";
-import { validDigitized, type Paper } from "./folders";
-import { loadImage } from "./native";
+import { loadPhoto, validDigitized, type FolderPage, type Paper } from "./folders";
+import { loadImage, releaseCanvas } from "./native";
 
 export interface FigureRef {
   key: string;
-  src: string; // 原照片
+  photo: Pick<FolderPage, "id" | "src">; // 原照片（原图按需从本机读）
   bbox: number[];
   rotation: number;
   title: string;
@@ -27,10 +27,9 @@ function refOf(paper: Paper, sheetIndex: number, blockIndex: number, block: Digi
   const d = validDigitized(paper.digitized);
   const sheet = d?.pages[sheetIndex];
   const photo = sheet ? paper.pages[sheet.page] : undefined;
-  const src = photo?.src;
-  if (!sheet || !photo || !src || block.type !== "figure" || block.bbox.length !== 4) return null;
+  if (!sheet || !photo || block.type !== "figure" || block.bbox.length !== 4) return null;
   // 照片 id 也进 key：重拍后同样位置的图不会用到旧照片的裁图
-  return { key: `${paper.id}:${photo.id}:${sheetIndex}:${blockIndex}:${block.bbox.map((v) => v.toFixed(3)).join(",")}`, src, bbox: block.bbox, rotation: sheet.rotation ?? 0, title: block.title, label: (block.label || "").trim(), text: block.text };
+  return { key: `${paper.id}:${photo.id}:${sheetIndex}:${blockIndex}:${block.bbox.map((v) => v.toFixed(3)).join(",")}`, photo: { id: photo.id, src: photo.src }, bbox: block.bbox, rotation: sheet.rotation ?? 0, title: block.title, label: (block.label || "").trim(), text: block.text };
 }
 
 /** 试卷页上某个 figure 块 */
@@ -75,14 +74,36 @@ export function figuresOfQuestion(paper: Paper, q: DigitizedQuestion): FigureRef
   return after.length ? after : near(-1);
 }
 
+/** 裁好的图最多留这么多张（按最近使用），错题榜一路翻下去也不会越攒越多 */
+const CACHE_MAX = 60;
 const cache = new Map<string, Promise<string>>();
+
+/** 同一时间最多解码两张原照片：一页错题十几张插图同时裁，每张原图解码要几十 MB */
+let active = 0;
+const waiting: (() => void)[] = [];
+async function slot<T>(fn: () => Promise<T>): Promise<T> {
+  if (active >= 2) await new Promise<void>((r) => waiting.push(r));
+  active += 1;
+  try {
+    return await fn();
+  } finally {
+    active -= 1;
+    waiting.shift()?.();
+  }
+}
 
 /** 裁图：四周留 1.5% 边，最长边不超过 1400，转正后输出 JPEG dataURL */
 export function cropFigure(f: FigureRef): Promise<string> {
   const hit = cache.get(f.key);
-  if (hit) return hit;
-  const job = (async () => {
-    const img = await loadImage(f.src);
+  if (hit) {
+    cache.delete(f.key);
+    cache.set(f.key, hit);
+    return hit;
+  }
+  const job = slot(async () => {
+    const src = await loadPhoto(f.photo);
+    if (!src) throw new Error("照片不见了");
+    const img = await loadImage(src);
     const W = img.naturalWidth;
     const H = img.naturalHeight;
     const pad = 0.015;
@@ -105,9 +126,12 @@ export function cropFigure(f: FigureRef): Promise<string> {
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((turns * Math.PI) / 2);
     ctx.drawImage(img, x0, y0, sw, sh, -w / 2, -h / 2, w, h);
-    return canvas.toDataURL("image/jpeg", 0.88);
-  })();
+    const out = canvas.toDataURL("image/jpeg", 0.88);
+    releaseCanvas(canvas);
+    return out;
+  });
   cache.set(f.key, job);
+  while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
   job.catch(() => cache.delete(f.key));
   return job;
 }

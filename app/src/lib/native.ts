@@ -98,7 +98,9 @@ export async function downscale(source: File | string, maxSide: number, quality 
   canvas.height = Math.round(img.naturalHeight * scale);
   canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
   if (typeof source !== "string") URL.revokeObjectURL(url);
-  return canvas.toDataURL("image/jpeg", quality);
+  const out = canvas.toDataURL("image/jpeg", quality);
+  releaseCanvas(canvas);
+  return out;
 }
 
 /** 模型会把图片压到最长边约 1568px；两页并排的宽幅照片直接上传等于每页只剩七八百像素，手写就糊了 */
@@ -132,8 +134,15 @@ export async function prepareUpload(src: string, page: number, quality = 0.85): 
     canvas.height = Math.round(H * scale);
     canvas.getContext("2d")!.drawImage(img, sx, 0, sw, H, 0, 0, canvas.width, canvas.height);
     out.push({ page, image: canvas.toDataURL("image/jpeg", quality), x0: part.x0, w: part.w });
+    releaseCanvas(canvas);
   }
   return out;
+}
+
+/** 用完的画布立刻缩成 0×0：iOS 对所有画布的总内存有上限，等垃圾回收太慢，连着处理多张照片会超限 */
+export function releaseCanvas(canvas: HTMLCanvasElement) {
+  canvas.width = 0;
+  canvas.height = 0;
 }
 
 export function loadImage(src: string): Promise<HTMLImageElement> {

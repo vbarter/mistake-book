@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Icon } from "../../components/Icon";
-import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
-import { addPaper, deletePaper, getFolder, toPage, updatePaper, validDigitized } from "../../lib/folders";
+import { Button, Empty, InlineNav, Segmented, Sheet } from "../../components/ui";
+import { addPaper, deletePaper, getFolder, loadPages, thumbOf, toPage, updatePaper, validDigitized } from "../../lib/folders";
 import { finishFlow } from "../../lib/flow";
 import { submitScan } from "../../lib/jobs";
 import { haptic, pickImage, pickImages } from "../../lib/native";
@@ -10,9 +10,13 @@ import { toast, toastError } from "../../store/banner";
 import { useCapture, type CapturePage } from "../../store/capture";
 
 type Progress = { stage: string; pct: number; elapsed: number };
+type Mode = "one" | "each";
 type EntryState = { folderId?: string | null; paperId?: string | null; source?: "camera" | "photos" | "sample" } | null;
 
-/** 录入一张试卷：进入即起相机 / 相册 → 照片存进文件夹里的这张试卷 → 扫描还原电子版 → 进电子版页。 */
+/**
+ * 录入试卷：进入即起相机 / 相册 → 照片存进文件夹里的这张试卷 → 一键扫描还原电子版。
+ * 拍照是连拍：拍完一张接着起相机，在相机里点取消才停；每张拍完就存进手机，App 退出也不会丢，回来在文件夹里接着扫。
+ */
 export default function Capture() {
   const nav = useNavigate();
   const loc = useLocation();
@@ -22,6 +26,7 @@ export default function Capture() {
   const [rename, setRename] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [mode, setMode] = useState<Mode>("one");
   const autoStarted = useRef(false);
   const autoScanRef = useRef(false);
   const entry = (loc.state as EntryState) ?? null;
@@ -30,14 +35,13 @@ export default function Capture() {
   /** 照片落盘：第一次加页时在文件夹里建这张试卷；之后更新照片并作废旧电子版 */
   const persist = async (nextPages: CapturePage[]) => {
     if (nextPages.length === 0) return;
-    const photos = nextPages.map(({ id, src, width, height }) => ({ id, src, width, height }));
     const state = useCapture.getState();
     if (!state.paperId) {
-      const { folder, paper } = await addPaper(targetFolder, photos);
+      const { folder, paper } = await addPaper(targetFolder, nextPages);
       setPaper(folder.id, paper.id, paper.name, nextPages);
       return;
     }
-    if (state.folderId) await updatePaper(state.folderId, state.paperId, { pages: photos, digitized: undefined, scannedAt: undefined, corrected: {} });
+    if (state.folderId) await updatePaper(state.folderId, state.paperId, { pages: nextPages, digitized: undefined, scannedAt: undefined, corrected: {} });
   };
 
   const addSources = async (sources: string[]) => {
@@ -66,13 +70,23 @@ export default function Capture() {
           await scanEach(list);
           return true;
         }
-        autoScanRef.current = true;
+        // 一次选齐一整张卷子就直接扫；往已经拍了几张的草稿里补照片时不自动扫，等一键扫描
+        autoScanRef.current = useCapture.getState().pages.length === 0;
         await addSources(list);
         return true;
       }
       const src = await pickImage("camera");
       if (!src) return false;
       await addSources([src]);
+      // 连拍：接着起相机，直到在相机里点取消。稍等一下让上一个相机界面收起来，iOS 上连着弹太快会弹不出来
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 400));
+        const next = await pickImage("camera");
+        if (!next) break;
+        await addSources([next]);
+      }
+      const n = useCapture.getState().pages.length;
+      if (n > 1) toast(`已拍 ${n} 张，都存在手机上了，拍完点「一键扫描」`, "success");
       return true;
     } catch (e) {
       if ((e as Error).message === "permission_denied") setDenied(true);
@@ -96,7 +110,7 @@ export default function Capture() {
       if (entry?.paperId && entry.folderId && pages.length === 0) {
         const folder = await getFolder(entry.folderId);
         const paper = folder?.papers.find((p) => p.id === entry.paperId);
-        if (folder && paper) setPaper(folder.id, paper.id, paper.name, paper.pages, validDigitized(paper.digitized));
+        if (folder && paper) setPaper(folder.id, paper.id, paper.name, await loadPages(paper), validDigitized(paper.digitized));
       }
       if (entry?.source && useCapture.getState().pages.length === 0) {
         const got = await pick(entry.source);
@@ -124,7 +138,7 @@ export default function Capture() {
       setPaper(folderId, null, "", []);
       return;
     }
-    await updatePaper(folderId, paperId, { pages: next.map(({ id: pid, src, width, height }) => ({ id: pid, src, width, height })), digitized: undefined, scannedAt: undefined, corrected: {} });
+    await updatePaper(folderId, paperId, { pages: next, digitized: undefined, scannedAt: undefined, corrected: {} });
   };
 
   const saveName = async () => {
@@ -158,15 +172,40 @@ export default function Capture() {
     finishFlow(nav, returnTo, `/papers/${folder}`);
   };
 
-  /** 扫描：压缩上传后交给服务器后台还原，立刻回到文件夹；进度在试卷行上显示，切走 App 也不影响。 */
+  /** 「每张单独一份」：第一张留在这份试卷，其余每张在同一个文件夹里各建一份（照片已经存过，不再重复写） */
+  const splitEach = async (fid: string, pid: string, all: CapturePage[]): Promise<{ paperId: string; pages: CapturePage[] }[]> => {
+    const out = [{ paperId: pid, pages: [all[0]] }];
+    for (const page of all.slice(1)) {
+      const { paper } = await addPaper(fid, [page]);
+      out.push({ paperId: paper.id, pages: [page] });
+    }
+    await updatePaper(fid, pid, { pages: [all[0]], digitized: undefined, scannedAt: undefined, corrected: {} });
+    return out;
+  };
+
+  /** 一键扫描：压缩上传后交给服务器后台还原，立刻回到文件夹；进度在试卷行上显示，切走 App 也不影响。 */
   const scan = async () => {
     const state = useCapture.getState();
     if (state.pages.length === 0 || !state.folderId || !state.paperId) return;
     setProgress({ stage: "正在压缩试卷", pct: 10, elapsed: 0 });
     try {
-      await submitScan(state.folderId, state.paperId, state.pages, (stage) => setProgress({ stage, pct: stage.includes("上传") ? 60 : 20, elapsed: 0 }));
+      const batch = mode === "each" && state.pages.length > 1 ? await splitEach(state.folderId, state.paperId, state.pages) : [{ paperId: state.paperId, pages: state.pages }];
+      let ok = 0;
+      for (let i = 0; i < batch.length; i++) {
+        const label = batch.length > 1 ? `第 ${i + 1} / ${batch.length} 份：` : "";
+        const base = (i / batch.length) * 100;
+        try {
+          await submitScan(state.folderId, batch[i].paperId, batch[i].pages, (stage) => setProgress({ stage: label + stage, pct: Math.round(base + (stage.includes("上传") ? 0.6 : 0.2) * (100 / batch.length)), elapsed: 0 }));
+          ok += 1;
+        } catch (e) {
+          if (batch.length === 1) throw e;
+          toastError(e);
+        }
+      }
+      if (!ok) return;
       void haptic.success();
-      toast("已开始扫描，可以先去做别的，好了会在试卷上显示", "success");
+      toast(batch.length > 1 ? `已开始扫描 ${ok} 份，可以先去做别的，好了会在试卷上显示` : "已开始扫描，可以先去做别的，好了会在试卷上显示", "success");
+      reset();
       finishFlow(nav, state.returnTo, `/papers/${state.folderId}`);
     } catch (e) {
       toastError(e);
@@ -191,7 +230,7 @@ export default function Capture() {
           <Empty
             icon="camera"
             title="把试卷平放，对准整页拍"
-            text="一次拍一页、让试卷铺满画面，图表和小字才认得清。从相册选好后会自动开始扫描。"
+            text="一次拍一页、让试卷铺满画面，图表和小字才认得清。可以连着拍好几页，都存在手机上，拍完再一键扫描。"
             action={<Button size="xs" variant="plain" onClick={() => pick("sample")} disabled={busy}>没有试卷？用示例试卷试试</Button>}
           />
         )}
@@ -208,7 +247,7 @@ export default function Capture() {
             <div className="thumb-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
               {pages.map((p, i) => (
                 <div key={p.id} style={{ position: "relative" }}>
-                  <img src={p.src} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 10, border: "1px solid var(--separator-light)" }} />
+                  <img src={thumbOf(p)} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 10, border: "1px solid var(--separator-light)" }} />
                   <span className="chip chip--sm" style={{ position: "absolute", left: 6, top: 6, background: "rgba(0,0,0,.55)", color: "#fff" }}>第 {i + 1} 张</span>
                   <button className="icon-btn" style={{ position: "absolute", right: 0, bottom: 0, width: 36, height: 36, color: "#fff", background: "rgba(0,0,0,.45)", borderRadius: "10px 0 10px 0" }} aria-label="删除这张照片" onClick={() => removeCurrentPage(p.id)}>
                     <Icon name="trash" size={16} />
@@ -220,20 +259,27 @@ export default function Capture() {
                 <span className="t-foot">加照片</span>
               </button>
             </div>
-            <span className="t-foot c-sec">已自动保存 · 拍完所有页再扫描</span>
+            <span className="t-foot c-sec">每张都已存在手机上 · 拍完所有页再一键扫描</span>
+          </div>
+        )}
+
+        {pages.length > 1 && !digitized && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <Segmented value={mode} onChange={setMode} options={[{ value: "one", label: "合成一份试卷" }, { value: "each", label: "每张单独一份" }]} />
+            <span className="t-foot c-sec" style={{ padding: "0 4px" }}>{mode === "one" ? "同一张卷子的几页选这个，跨页的题会自动接上。" : "拍的是几张不同的卷子选这个，每张各自识别、各自成卷。"}</span>
           </div>
         )}
 
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", gap: 10 }}>
-            <Button variant="tinted" icon="camera" onClick={() => pick("camera")} disabled={busy} style={{ flex: 1 }}>{pages.length ? "再拍一页" : "拍照"}</Button>
+            <Button variant="tinted" icon="camera" onClick={() => pick("camera")} disabled={busy} style={{ flex: 1 }}>{pages.length ? "接着拍" : "连续拍照"}</Button>
             <Button variant="tinted" icon="photo" onClick={() => pick("photos")} disabled={busy} style={{ flex: 1 }}>从相册选</Button>
           </div>
           {digitized && pages.length > 0 && folderId && paperId ? (
             <Button icon="document" onClick={() => nav(`/papers/${folderId}/${paperId}`)} disabled={busy}>查看电子版 · {digitized.questions.length} 题</Button>
           ) : (
             <Button icon="sparkles" onClick={scan} disabled={pages.length === 0 || busy}>
-              {busy ? "处理中…" : `扫描试卷${pages.length > 1 ? `（${pages.length} 张照片）` : ""}`}
+              {busy ? "处理中…" : pages.length > 1 ? (mode === "each" ? `一键扫描 ${pages.length} 份` : `一键扫描（${pages.length} 张照片）`) : "一键扫描"}
             </Button>
           )}
           {digitized && pages.length > 0 && (

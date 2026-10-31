@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { Button, InlineNav, Segmented, Sheet } from "../components/ui";
 import { SubjectTile } from "../components/v2";
-import { addPaper, folderStats, listFolders, toPage, type Folder } from "../lib/folders";
+import { addPaper, folderStats, listFolders, thumbOf, type Folder } from "../lib/folders";
 import { finishFlow } from "../lib/flow";
 import { submitScan } from "../lib/jobs";
 import { haptic } from "../lib/native";
@@ -49,7 +49,7 @@ export default function Import() {
       for (let t = 0; t < toc.length; t++) {
         setProgress(toc.length > 1 ? `正在上传第 ${t + 1} / ${toc.length} 份` : "正在上传试卷");
         const pages = [];
-        for (const i of toc[t].pages) pages.push(await toPage(sources[i]));
+        for (const i of toc[t].pages) pages.push(sources[i]);
         const { folder: f, paper } = await addPaper(target, pages, toc[t].name);
         target = f.id;
         try {
@@ -76,9 +76,9 @@ export default function Import() {
       <InlineNav title="批量导入" subtitle={`${sources.length} 张照片`} right={<button className="nav-btn" onClick={leave}>取消</button>} />
       <div className="screen__content screen__content--modal" style={{ gap: 16, paddingTop: 4 }}>
         <div className="thumb-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
-          {sources.map((src, i) => (
-            <div key={i} style={{ position: "relative" }}>
-              <img src={src} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 10, border: "1px solid var(--separator-light)" }} />
+          {sources.map((page, i) => (
+            <div key={page.id} style={{ position: "relative" }}>
+              <img src={thumbOf(page)} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 10, border: "1px solid var(--separator-light)" }} />
               <span className="chip chip--sm" style={{ position: "absolute", left: 4, top: 4, background: "rgba(0,0,0,.55)", color: "#fff" }}>{i + 1}</span>
               {sources.length > 1 && (
                 <button className="icon-btn" style={{ position: "absolute", right: 2, top: 2, width: 26, height: 26, color: "#fff", background: "rgba(0,0,0,.45)" }} aria-label={`去掉第 ${i + 1} 张`} onClick={() => remove(i)}>

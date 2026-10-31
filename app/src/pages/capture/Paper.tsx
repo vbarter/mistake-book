@@ -5,13 +5,14 @@ import { ErrorCard } from "../../components/ErrorCard";
 import { MathText, mathNodes } from "../../components/MathText";
 import { ExportSheet } from "../../components/ExportSheet";
 import { Figures } from "../../components/FigureImage";
+import { StoredPhoto } from "../../components/Photo";
 import { figureAt, type FigureRef } from "../../lib/figures";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
 import { formatDateTime, unwrapLines } from "../../lib/format";
 import { groupBySection, paperErrors } from "../../lib/errors";
-import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperStats, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
+import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperStats, thumbOf, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { gradeIfNeeded, isGrading, scanStageText, useJobs } from "../../lib/jobs";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
@@ -221,7 +222,7 @@ export default function Paper() {
           {sheet.note && <p className="paper__note">{sheet.note}</p>}
         </div>
       ))}
-      {showOriginal && paper.pages.map((p, i) => <img key={p.id} src={p.src} alt={`原图 ${i + 1}`} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--separator-light)" }} />)}
+      {showOriginal && paper.pages.map((p, i) => <StoredPhoto key={p.id} page={p} alt={`原图 ${i + 1}`} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--separator-light)" }} />)}
     </>
   );
 
@@ -293,7 +294,7 @@ export default function Paper() {
       <InlineNav title="" back backLabel={folder.name} right={<button className="icon-btn" aria-label="更多" style={{ color: "var(--brand)" }} onClick={() => setMenu(true)}><Icon name="ellipsis" size={24} /></button>} />
       <div className="screen__content screen__content--modal" style={{ gap: 12, paddingTop: 0, paddingBottom: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img className="thumb" src={paper.pages[0]?.src} alt="" />
+          <img className="thumb" src={thumbOf(paper.pages[0])} alt="" />
           <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
             <h1 className="t-title3 ellipsis" style={{ fontWeight: 800 }}>{paper.name}</h1>
             {paper.scannedAt && (

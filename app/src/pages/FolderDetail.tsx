@@ -9,10 +9,10 @@ import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
 import { folderErrors, groupByKnowledge, groupBySection, paperErrors } from "../lib/errors";
-import { deleteFolder, deletePaper, folderStats, getFolder, paperQuality, paperStats, paperSubject, reorderPapers, saveFolder, type Folder } from "../lib/folders";
+import { deleteFolder, deletePaper, folderStats, getFolder, paperQuality, paperStats, paperSubject, reorderPapers, thumbOf, updateFolder, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
-import { gradeIfNeeded, scanStageText, useJobs } from "../lib/jobs";
-import { toast } from "../store/banner";
+import { gradeIfNeeded, needsScan, scanPending, scanStageText, useJobs } from "../lib/jobs";
+import { toast, toastError } from "../store/banner";
 
 type Tab = "papers" | "errors";
 
@@ -32,6 +32,7 @@ export default function FolderDetail() {
   const [deletingPaper, setDeletingPaper] = useState<string | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<Subject | null>(null);
   const [filter, setFilter] = useState<ErrorFilter>("all");
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const jobsVersion = useJobs((s) => s.version);
   const reload = useCallback(() => getFolder(folderId).then((f) => setFolder(f ?? null)), [folderId]);
@@ -58,14 +59,38 @@ export default function FolderDetail() {
   if (folder === null || !stats) return <Empty icon="folder" title="文件夹不存在" action={<Button size="sm" variant="tinted" onClick={() => nav("/papers")}>回到试卷</Button>} />;
 
   const saveMeta = async () => {
-    await saveFolder({ ...folder, name: name.trim() || folder.name, subject });
+    await updateFolder(folder.id, { name: name.trim() || folder.name, subject });
     setRename(false);
     await reload();
+  };
+
+  const pendingScan = folder.papers.filter(needsScan).length;
+  /** 一键扫描：拍好存在手机上、还没扫描的试卷一起发给服务器 */
+  const scanAll = async () => {
+    setUploading("正在上传");
+    try {
+      const ok = await scanPending(folder, (i, n) => setUploading(n > 1 ? `正在上传第 ${i + 1} / ${n} 份` : "正在上传"));
+      if (ok) toast(`已开始扫描 ${ok} 份，好了会在试卷上显示`, "success");
+      else toastError(new Error("没传上去，检查一下网络再试"));
+    } finally {
+      setUploading(null);
+      await reload();
+    }
   };
 
   const papersTab = (
     <>
       {folder.papers.length === 0 && <Empty icon="document" title="还没有试卷" text="拍一张或从相册选，扫描后错题会自动汇总。" />}
+      {pendingScan > 0 && (
+        <div className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Icon name="sparkles" size={22} style={{ color: "var(--brand)", flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            <span className="t-headline">{pendingScan} 份试卷还没扫描</span>
+            <span className="t-foot c-sec">照片都存在手机上，一起发给服务器识别</span>
+          </span>
+          <Button size="sm" onClick={scanAll} disabled={Boolean(uploading)}>一键扫描</Button>
+        </div>
+      )}
       <SwipeSortList
         items={folder.papers}
         keyOf={(p) => p.id}
@@ -80,7 +105,7 @@ export default function FolderDetail() {
         return (
             <button className="card card--row" style={{ flexWrap: "wrap" }} onClick={() => (p.scanJob ? toast(`${scanStageText(p.scanJob)}，好了会自动更新`) : nav(`/papers/${folder.id}/${p.id}`))}>
             <span className="toc-num">{String(folder.papers.indexOf(p) + 1).padStart(2, "0")}</span>
-            <img className="thumb" src={p.pages[0]?.src} alt="" />
+            <img className="thumb" src={thumbOf(p.pages[0])} alt="" />
             <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
               <span className="t-headline ellipsis" style={{ display: "flex", alignItems: "center", gap: 6 }}>{paperSubject(p) && stats.subjects.length > 1 && <SubjectTile subject={paperSubject(p)} size="xs" />}{p.name}</span>
               <span className="t-foot c-sec">{p.pages.length} 张照片{st.scanned ? ` · ${st.total} 题` : ""} · {p.scannedAt ? `扫描于 ${formatDateTime(p.scannedAt)}` : `拍摄于 ${formatDate(p.createdAt)}`}</span>
@@ -225,6 +250,16 @@ export default function FolderDetail() {
         <Button variant="danger" onClick={async () => { if (deletingPaper) await deletePaper(folder.id, deletingPaper); setDeletingPaper(null); await reload(); }}>删除</Button>
         <Button variant="plain" onClick={() => setDeletingPaper(null)}>取消</Button>
       </Sheet>
+
+      {uploading && (
+        <div className="hud" role="dialog" aria-live="polite">
+          <div className="hud__card">
+            <span className="spinner-ring" />
+            <span className="t-headline">{uploading}…</span>
+            <span className="t-foot c-sec">上传完就可以离开，扫描在服务器上继续</span>
+          </div>
+        </div>
+      )}
 
       <ExportSheet open={exporting} onClose={() => setExporting(false)} title={subjectFilter ? `${folder.name} · ${SUBJECT_LABEL[subjectFilter]}` : folder.name} subtitle={stats.syllabus ? `按${stats.syllabus}归类` : stats.exam} errors={errors} papers={subjectFilter ? folder.papers.filter((p) => paperSubject(p) === subjectFilter) : folder.papers} />
     </div>
