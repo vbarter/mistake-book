@@ -125,6 +125,8 @@ textarea.input { resize: none; }
 /* 面板内容多时整块滚动：子元素不许被压扁（否则列表被裁掉、最后几项和按钮滚不到） */
 .sheet > * { flex-shrink: 0; }
 .sheet__grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--fill); margin: 0 auto 4px; }
+/* 键盘弹出：遮罩已缩到键盘上方，面板不再需要底部安全区留白，最高也只能占满可见区域 */
+.sheet-backdrop--kb .sheet { padding-bottom: 12px; max-height: calc(100% - 12px); }
 @keyframes sheet-in { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 

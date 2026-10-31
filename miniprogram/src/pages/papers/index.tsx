@@ -156,7 +156,7 @@ export default function Papers() {
       </Sheet>
 
       <Sheet open={Boolean(creating)} onClose={() => setCreating(null)} title="新建文件夹">
-        <Input className="input" value={name} maxlength={30} placeholder={defaultFolderName()} onInput={(e) => setName(e.detail.value)} />
+        <Input className="input" value={name} maxlength={30} adjustPosition={false} cursorSpacing={16} placeholder={defaultFolderName()} onInput={(e) => setName(e.detail.value)} />
         <View className="row-wrap">
           {SUBJECTS.map((s) => (
             <View key={s} className={`chip${subject === s ? " chip--on" : ""}`} onClick={() => setSubject(subject === s ? undefined : s)}>

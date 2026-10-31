@@ -252,6 +252,9 @@ page {
   box-sizing: border-box;
 }
 /* 面板内容区：超出时在 ScrollView 里滚动；标题固定在上面 */
+/* 键盘弹出：面板已抬到键盘上方，去掉底部安全区留白，并让过渡顺一点 */
+.sheet__panel { transition: bottom 0.2s ease; }
+.sheet__panel--kb { padding-bottom: 12px; }
 .sheet__title { flex-shrink: 0; }
 .sheet__body { flex: 1 1 auto; min-height: 0; max-height: calc(80vh - 90px); }
 .sheet__content { display: flex; flex-direction: column; gap: 12px; padding-bottom: 4px; }
