@@ -68,7 +68,8 @@ def create_app(test_config: dict | None = None) -> Flask:
     def http_error(e: HTTPException):
         return jsonify({"error": (e.name or "error").lower().replace(" ", "_"), "message": e.description or "请求失败"}), e.code or 500
 
-    # gunicorn 下把应用与各模块的日志接到 gunicorn 的 error log，后台任务里的异常才看得到
+    # gunicorn 下把应用与各模块的日志接到 gunicorn 的 error log，后台任务里的异常才看得到。
+    # handler 只挂在 root 上：app.logger（名字是 "app"）和 app.* 模块的日志都会冒泡到 root，再挂一份就会每行写两遍
     import logging
 
     gunicorn_logger = logging.getLogger("gunicorn.error")
@@ -76,7 +77,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         root_logger = logging.getLogger()
         root_logger.handlers = gunicorn_logger.handlers
         root_logger.setLevel(gunicorn_logger.level or logging.INFO)
-        app.logger.handlers = gunicorn_logger.handlers
+        app.logger.handlers = []
         app.logger.setLevel(gunicorn_logger.level or logging.INFO)
 
     with app.app_context():
