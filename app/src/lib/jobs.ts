@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import { api } from "../api/client";
 import type { DigitizeJob, DigitizedQuestion, DigitizedResult } from "../api/types";
-import { autoMark, getFolder, isDefaultFolderName, isDefaultPaperName, isUnreadable, listFolders, loadPages, recognizedTitle, updateFolder, updatePaper, validDigitized, type Folder, type FullPage, type Paper } from "./folders";
+import { autoMark, getFolder, isDefaultFolderName, isDefaultPaperName, isProblem, isUnreadable, listFolders, loadPages, recognizedTitle, updateFolder, updatePaper, validDigitized, type Folder, type FullPage, type Paper } from "./folders";
 import { SUBJECT_LABEL } from "./format";
 import { isNative, prepareUpload, type UploadPart } from "./native";
 import { getCity } from "./prefs";
@@ -55,7 +55,7 @@ async function finishJob(folderId: string, paperId: string, job: DigitizeJob, pa
   const before = (await getFolder(folderId))?.papers.find((p) => p.id === paperId);
   const title = recognizedTitle(digitized);
   const name = before && isDefaultPaperName(before.name) && title ? title : undefined;
-  await updatePaper(folderId, paperId, { digitized, scannedAt, corrected: {}, subject, scanJob: undefined, scanError: undefined, ...(name ? { name } : {}) });
+  await updatePaper(folderId, paperId, { digitized, scannedAt, corrected: {}, subject, scanJob: undefined, scanError: undefined, gradedAt: undefined, taggedAt: undefined, ...(name ? { name } : {}) });
   const folder = await getFolder(folderId);
   if (!folder) return;
   const level = digitized.pages.find((s) => s.examLevel)?.examLevel ?? "";
@@ -205,6 +205,37 @@ export function needsGrading(paper: Paper): boolean {
 
 /** 这张试卷正在补做阅卷（界面上把「未批改」显示成「批改中」） */
 export const isGrading = (paperId: string) => grading.has(paperId);
+
+const tagging = new Set<string>();
+let taggingDisabled = false; // 服务器说开关没开：这次启动里不再问
+
+/** 有判错 / 没作答、还没标上图谱知识点的题 */
+export function needsTagging(paper: Paper): boolean {
+  const d = validDigitized(paper.digitized);
+  if (!d || paper.scanJob) return false;
+  return d.questions.some((q) => isProblem(q) && !q.topic);
+}
+
+/** 错题还没标图谱知识点的试卷交给服务器补标（/api/digitize/tag），标完写回本机。
+ * 每张试卷只补一次（taggedAt）；服务器开关没开时不记 taggedAt，开了以后旧试卷还能补上。 */
+export async function tagIfNeeded(folderId: string, paper: Paper): Promise<void> {
+  if (taggingDisabled || tagging.has(paper.id) || paper.taggedAt || !needsTagging(paper)) return;
+  const d = validDigitized(paper.digitized)!;
+  tagging.add(paper.id);
+  try {
+    const res = await api<{ pages: DigitizedResult["pages"]; questions: DigitizedQuestion[]; tagged: number; enabled: boolean }>("/api/digitize/tag", { method: "POST", body: { pages: d.pages }, timeoutMs: 120000 });
+    if (!res.enabled) {
+      taggingDisabled = true;
+      return;
+    }
+    await updatePaper(folderId, paper.id, { digitized: { ...paper.digitized!, pages: res.pages, questions: res.questions }, taggedAt: new Date().toISOString() });
+    useJobs.getState().bump();
+  } catch {
+    /* 网络等问题：下次打开再试 */
+  } finally {
+    tagging.delete(paper.id);
+  }
+}
 
 /** 还有没批改的空就交给服务器的大模型补判；判完写回本机。每张试卷只自动补一次（gradedAt），失败下次打开再试。 */
 export async function gradeIfNeeded(folderId: string, paper: Paper): Promise<void> {

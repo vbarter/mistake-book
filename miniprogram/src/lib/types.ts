@@ -116,6 +116,7 @@ export interface DigitizedBlock {
   knowledgePoints: string[];
   tip: string;
   uncertainSpans: string[];
+  topic?: TopicRef | null;
 }
 
 /** 从版面块派生出的一道可收录的题（一个编号空 = 一题） */
@@ -140,6 +141,17 @@ export interface DigitizedQuestion {
   blockIndex: number;
   blankIds: string[];
   aiGraded?: boolean; // 有空是 AI 判的（老师没批改）
+  topic?: TopicRef | null; // 知识图谱知识点（服务端识别后标的）；没标上为空，按 knowledgePoints 归类
+}
+
+/** 知识图谱里的一个知识点（服务端 app/data/taxonomy.json）；chapter 是章，错题按它归并 */
+export interface TopicRef {
+  id: string;
+  name: string;
+  subject: Subject;
+  domain: string;
+  grade: number;
+  chapter: string;
 }
 
 /** 一张电子版卷面；一张照片拍到左右两页时对应两个 sheet */

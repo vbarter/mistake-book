@@ -8,7 +8,7 @@ import { captureInto, type Source } from "../../lib/capture";
 import { folderErrors, groupByKnowledge } from "../../lib/errors";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../../lib/format";
 import { toast, useDataVersion } from "../../lib/hooks";
-import { gradeIfNeeded, scanStageText } from "../../lib/jobs";
+import { gradeIfNeeded, scanStageText, tagIfNeeded } from "../../lib/jobs";
 import { folderStats, paperQuality, paperStats, paperSubject } from "../../lib/logic";
 import { deleteFolder, deletePaper, getFolder, movePaper, saveFolder, updatePaper, type Paper } from "../../lib/store";
 import type { Subject } from "../../lib/types";
@@ -36,7 +36,10 @@ export default function FolderPage() {
   useEffect(() => {
     if (!folder) return;
     void (async () => {
-      for (const p of folder.papers) await gradeIfNeeded(folder.id, p);
+      for (const p of folder.papers) {
+        await gradeIfNeeded(folder.id, p);
+        await tagIfNeeded(folder.id, p);
+      }
     })();
   }, [folder?.id]);
 

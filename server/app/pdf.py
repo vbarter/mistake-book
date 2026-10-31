@@ -307,7 +307,8 @@ def _summary_part(story: list, sheets: list[dict], questions: list[dict]) -> Non
 
     by_kp: "OrderedDict[str, list[dict]]" = OrderedDict()
     for q in wrong:
-        kp = (q.get("knowledgePoints") or ["（未标注知识点）"])[0]
+        # 标上了图谱知识点的按它的章归并（和客户端错题榜一致），否则按识别时写的第一项
+        kp = (q.get("topic") or {}).get("chapter") or (q.get("knowledgePoints") or ["（未标注知识点）"])[0]
         by_kp.setdefault(kp, []).append(q)
     story.append(Paragraph("按知识点", S_H))
     for k, qs in sorted(by_kp.items(), key=lambda kv: -len(kv[1])):

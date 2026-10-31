@@ -27,6 +27,7 @@ export interface Paper {
   scanJob?: ScanJob;
   scanError?: string;
   gradedAt?: string;
+  taggedAt?: string; // 补标过知识图谱知识点的时间
 }
 
 export interface Folder {

@@ -11,7 +11,7 @@ import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack
 import { folderErrors, groupByKnowledge, groupBySection, paperErrors } from "../lib/errors";
 import { deleteFolder, deletePaper, folderStats, getFolder, paperQuality, paperStats, paperSubject, reorderPapers, thumbOf, updateFolder, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
-import { gradeIfNeeded, needsScan, scanPending, scanStageText, useJobs } from "../lib/jobs";
+import { gradeIfNeeded, needsScan, scanPending, scanStageText, tagIfNeeded, useJobs } from "../lib/jobs";
 import { toast, toastError } from "../store/banner";
 
 type Tab = "papers" | "errors";
@@ -43,7 +43,10 @@ export default function FolderDetail() {
   useEffect(() => {
     if (!folder) return;
     void (async () => {
-      for (const p of folder.papers) await gradeIfNeeded(folder.id, p);
+      for (const p of folder.papers) {
+        await gradeIfNeeded(folder.id, p);
+        await tagIfNeeded(folder.id, p);
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folder?.id]);
