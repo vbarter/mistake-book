@@ -143,17 +143,6 @@ export function groupBySection(items: ErrorItem[]): [string, ErrorItem[]][] {
   return out;
 }
 
-/** 按月份分组（新的在前），组内按文件夹 */
-export function groupByMonth(items: ErrorItem[]): [string, ErrorItem[]][] {
-  const map = new Map<string, ErrorItem[]>();
-  for (const it of [...items].sort((a, b) => b.scannedAt.localeCompare(a.scannedAt))) {
-    const d = new Date(it.scannedAt);
-    const k = `${d.getFullYear()}年${d.getMonth() + 1}月`;
-    map.set(k, [...(map.get(k) ?? []), it]);
-  }
-  return [...map.entries()];
-}
-
 export function groupBySubject(items: ErrorItem[]): [Subject, ErrorItem[]][] {
   const map = new Map<Subject, ErrorItem[]>();
   for (const it of items) map.set(it.subject, [...(map.get(it.subject) ?? []), it]);

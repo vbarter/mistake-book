@@ -4,6 +4,10 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./styles/base.css";
 import "./styles/v2.css";
+import "./styles/motion.css";
+import "./styles/nav.css";
+import "./styles/home.css";
+import "./styles/rank.css";
 import "./styles/tablet.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

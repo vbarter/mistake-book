@@ -209,7 +209,7 @@ export function Privacy() {
       await clearAllFolders();
       setConfirm(false);
       toast("已清空", "success");
-      nav("/papers", { replace: true });
+      nav("/home", { replace: true });
     } catch (e) {
       toastError(e);
     } finally {

@@ -30,7 +30,7 @@ export default function Login() {
   const [unregistered, setUnregistered] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const done = () => nav(state.from || "/papers", { replace: true });
+  const done = () => nav(state.from || "/home", { replace: true });
   const goRegister = () => nav("/register", { replace: true, state: { phone } });
   const changePhone = (v: string) => {
     setPhone(v);

@@ -1,26 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Subject } from "../api/types";
+import { useAddPaper } from "../components/AddSheet";
 import { ErrorCard, jumpToError } from "../components/ErrorCard";
 import { ExportSheet } from "../components/ExportSheet";
 import { SwipeSortList } from "../components/SwipeSortList";
 import { Icon } from "../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../components/v2";
-import { folderErrors, groupByKnowledge } from "../lib/errors";
+import { folderErrors, groupByKnowledge, groupBySection, paperErrors } from "../lib/errors";
 import { deleteFolder, deletePaper, folderStats, getFolder, paperQuality, paperStats, paperSubject, reorderPapers, saveFolder, type Folder } from "../lib/folders";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
 import { gradeIfNeeded, scanStageText, useJobs } from "../lib/jobs";
 import { toast } from "../store/banner";
-import { useCapture } from "../store/capture";
 
 type Tab = "papers" | "errors";
 
-/** 文件夹：上半是这次考试的试卷，下半是跨试卷合并、按知识点归类的错题汇总；底栏导出与加卷。 */
+/** 文件夹：「目录」是自动生成的试卷目录（序号 · 卷头标题 · 大题与错题数），「错题汇总」跨试卷合并、按知识点归类；底栏导出与加卷。 */
 export default function FolderDetail() {
   const nav = useNavigate();
   const { folderId = "" } = useParams();
-  const { reset, setReturnTo } = useCapture();
+  const add = useAddPaper(folderId);
   const [folder, setFolder] = useState<Folder | null | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("papers");
   const [menu, setMenu] = useState(false);
@@ -28,7 +28,6 @@ export default function FolderDetail() {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState<Subject | undefined>();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [addSheet, setAddSheet] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deletingPaper, setDeletingPaper] = useState<string | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<Subject | null>(null);
@@ -58,13 +57,6 @@ export default function FolderDetail() {
   if (folder === undefined) return null;
   if (folder === null || !stats) return <Empty icon="folder" title="文件夹不存在" action={<Button size="sm" variant="tinted" onClick={() => nav("/papers")}>回到试卷</Button>} />;
 
-  const openCapture = (source: "camera" | "photos") => {
-    reset();
-    setReturnTo(`/papers/${folder.id}`);
-    setAddSheet(false);
-    nav("/capture", { state: { folderId: folder.id, source } });
-  };
-
   const saveMeta = async () => {
     await saveFolder({ ...folder, name: name.trim() || folder.name, subject });
     setRename(false);
@@ -86,7 +78,8 @@ export default function FolderDetail() {
         render={(p) => {
         const st = paperStats(p);
         return (
-            <button className="card card--row" onClick={() => (p.scanJob ? toast(`${scanStageText(p.scanJob)}，好了会自动更新`) : nav(`/papers/${folder.id}/${p.id}`))}>
+            <button className="card card--row" style={{ flexWrap: "wrap" }} onClick={() => (p.scanJob ? toast(`${scanStageText(p.scanJob)}，好了会自动更新`) : nav(`/papers/${folder.id}/${p.id}`))}>
+            <span className="toc-num">{String(folder.papers.indexOf(p) + 1).padStart(2, "0")}</span>
             <img className="thumb" src={p.pages[0]?.src} alt="" />
             <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
               <span className="t-headline ellipsis" style={{ display: "flex", alignItems: "center", gap: 6 }}>{paperSubject(p) && stats.subjects.length > 1 && <SubjectTile subject={paperSubject(p)} size="xs" />}{p.name}</span>
@@ -112,11 +105,12 @@ export default function FolderDetail() {
             </span>
             {p.scanJob && <Icon name="sparkles" size={20} style={{ color: "var(--brand)" }} />}
             {!p.scanJob && paperQuality(p).warn && <span className="quality-tag"><Icon name="alert" size={13} stroke={2.4} />{paperQuality(p).label}</span>}
+            {st.scanned && <Outline sections={outlineOf(folder, p)} />}
             </button>
         );
         }}
       />
-      {folder.papers.length > 0 && <Hint>点一张试卷看电子版。新加的试卷扫完会自动并进「错题汇总」。</Hint>}
+      {folder.papers.length > 0 && <Hint>目录按识别结果自动生成：卷头标题当试卷名，下面列出大题和错题数。点一张看电子版。</Hint>}
     </>
   );
 
@@ -191,20 +185,17 @@ export default function FolderDetail() {
           <Stat label="错题" value={stats.wrong} icon="xcircle" color="var(--wrong)" />
           <Stat label="未作答" value={stats.blank} icon="alert" color="var(--accent-on)" />
         </div>
-        <IconSegmented value={tab} onChange={setTab} options={[{ value: "papers", label: `试卷 ${stats.papers}`, icon: "document" }, { value: "errors", label: `错题汇总 ${stats.problems}`, icon: "list" }]} />
+        <IconSegmented value={tab} onChange={setTab} options={[{ value: "papers", label: `目录 ${stats.papers}`, icon: "list" }, { value: "errors", label: `错题汇总 ${stats.problems}`, icon: "target" }]} />
 
         {tab === "papers" ? papersTab : errorsTab}
 
         <div className="bottom-bar" style={{ marginTop: "auto" }}>
           <Button variant="outline" icon="export" onClick={() => setExporting(true)} style={{ flex: 1 }} disabled={stats.papers === 0}>导出</Button>
-          <Button icon="camera" onClick={() => setAddSheet(true)} style={{ flex: 1.3 }}>{stats.papers ? "再拍一张" : "拍试卷"}</Button>
+          <Button icon="plus" onClick={add.open} style={{ flex: 1.3 }}>添加试卷</Button>
         </div>
       </div>
 
-      <Sheet open={addSheet} onClose={() => setAddSheet(false)} title="加一张试卷">
-        <Button icon="camera" onClick={() => openCapture("camera")}>拍照</Button>
-        <Button variant="tinted" icon="photo" onClick={() => openCapture("photos")}>从相册选（可多选）</Button>
-      </Sheet>
+      {add.sheet}
 
       <Sheet open={menu} onClose={() => setMenu(false)} title={folder.name}>
         <Button variant="tinted" icon="pencil" onClick={() => { setMenu(false); setName(folder.name); setSubject(folder.subject ?? stats.subject ?? undefined); setRename(true); }}>重命名 / 改学科</Button>
@@ -237,5 +228,39 @@ export default function FolderDetail() {
 
       <ExportSheet open={exporting} onClose={() => setExporting(false)} title={subjectFilter ? `${folder.name} · ${SUBJECT_LABEL[subjectFilter]}` : folder.name} subtitle={stats.syllabus ? `按${stats.syllabus}归类` : stats.exam} errors={errors} papers={subjectFilter ? folder.papers.filter((p) => paperSubject(p) === subjectFilter) : folder.papers} />
     </div>
+  );
+}
+
+/** 一张试卷的目录：大题（卷面顺序）和每个大题里的错题数 */
+function outlineOf(folder: Folder, paper: Folder["papers"][number]): { label: string; total: number; wrong: number }[] {
+  const d = paper.digitized;
+  if (!d) return [];
+  const wrong = new Map(groupBySection(paperErrors(folder, paper)).map(([k, list]) => [k, list.length]));
+  const out: { label: string; total: number; wrong: number }[] = [];
+  for (const sheet of d.pages) {
+    let current: { label: string; total: number; wrong: number } | null = null;
+    for (const b of sheet.blocks) {
+      if (b.type === "section") {
+        const label = [b.label, b.title].filter(Boolean).join(" ");
+        current = out.find((o) => o.label === label) ?? { label, total: 0, wrong: wrong.get(label) ?? 0 };
+        if (!out.includes(current)) out.push(current);
+      } else if (current) current.total += b.blanks.length;
+    }
+  }
+  return out.filter((o) => o.label);
+}
+
+function Outline({ sections }: { sections: { label: string; total: number; wrong: number }[] }) {
+  if (sections.length === 0) return null;
+  return (
+    <span className="outline">
+      {sections.slice(0, 8).map((s) => (
+        <span key={s.label} className="outline__row">
+          <span className="ellipsis" style={{ flex: 1, minWidth: 0 }}>{s.label}</span>
+          {s.wrong > 0 ? <span className="outline__wrong">{s.wrong} 错</span> : <span className="outline__ok"><Icon name="check" size={12} stroke={2.8} /></span>}
+        </span>
+      ))}
+      {sections.length > 8 && <span className="outline__row c-sec">还有 {sections.length - 8} 个大题</span>}
+    </span>
   );
 }

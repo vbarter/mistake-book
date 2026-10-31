@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/Icon";
-import { Button, LargeNav, Row, Sheet } from "../components/ui";
+import { Button, Row, Sheet } from "../components/ui";
 import { SubjectTile } from "../components/v2";
 import { allErrors } from "../lib/errors";
 import { listFolders, type Folder } from "../lib/folders";
@@ -51,8 +51,7 @@ export default function Profile() {
 
   return (
     <div className="screen">
-      <LargeNav title="我的" />
-      <div className="screen__content" style={{ gap: 14, paddingTop: 6 }}>
+      <div className="screen__content" style={{ gap: 14, paddingTop: "calc(var(--safe-top) + 16px)" }}>
         <button className="card card--row" style={{ padding: 16 }} onClick={() => { setName(user.nickname); setEditName(true); }}>
           <span style={{ position: "relative", flexShrink: 0 }}>
             <span aria-hidden="true" style={{ width: 60, height: 60, borderRadius: 30, background: "var(--avatar-bg)", color: "var(--avatar-fg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800 }}>{user.nickname.slice(-1)}</span>

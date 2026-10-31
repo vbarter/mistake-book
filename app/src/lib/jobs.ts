@@ -2,7 +2,8 @@
 import { create } from "zustand";
 import { api } from "../api/client";
 import type { DigitizeJob, DigitizedQuestion, DigitizedResult } from "../api/types";
-import { autoMark, getFolder, isUnreadable, listFolders, saveFolder, updatePaper, validDigitized, type Paper } from "./folders";
+import { autoMark, getFolder, isDefaultFolderName, isDefaultPaperName, isUnreadable, listFolders, recognizedTitle, saveFolder, updatePaper, validDigitized, type Paper } from "./folders";
+import { SUBJECT_LABEL } from "./format";
 import { isNative, prepareUpload, type UploadPart } from "./native";
 import { getCity } from "./prefs";
 import type { CapturePage } from "../store/capture";
@@ -51,9 +52,16 @@ async function finishJob(folderId: string, paperId: string, job: DigitizeJob, pa
   const scannedAt = (job.status === "done" && job.updatedAt) || new Date().toISOString();
   const digitized: DigitizedResult = { ...remapParts(result, parts), provider: result.provider, at: scannedAt };
   const subject = digitized.pages.find((s) => s.subject)?.subject;
-  await updatePaper(folderId, paperId, { digitized, scannedAt, corrected: {}, subject, scanJob: undefined, scanError: undefined });
+  // 自动归档：试卷名换成识别出的卷头标题，文件夹名补上学科和考试类型（用户改过的名字不动）
+  const before = (await getFolder(folderId))?.papers.find((p) => p.id === paperId);
+  const title = recognizedTitle(digitized);
+  const name = before && isDefaultPaperName(before.name) && title ? title : undefined;
+  await updatePaper(folderId, paperId, { digitized, scannedAt, corrected: {}, subject, scanJob: undefined, scanError: undefined, ...(name ? { name } : {}) });
   const folder = await getFolder(folderId);
-  if (folder && !folder.subject && subject) await saveFolder({ ...folder, subject });
+  if (!folder) return;
+  const level = digitized.pages.find((s) => s.examLevel)?.examLevel ?? "";
+  const rename = isDefaultFolderName(folder.name) && subject ? `${folder.name.replace(/ 试卷$/, "")} ${SUBJECT_LABEL[subject]}${level ? ` · ${level}` : ""}` : null;
+  if ((!folder.subject && subject) || rename) await saveFolder({ ...folder, subject: folder.subject ?? subject, name: rename ?? folder.name });
 }
 
 /** 压缩、上传、提交任务，任务号存到试卷上。返回时服务器已经在后台跑了。 */

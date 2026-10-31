@@ -7,18 +7,6 @@ import { Icon, type IconName } from "./Icon";
 import { useBanner } from "../store/banner";
 
 /* ---------- 导航栏 ---------- */
-export function LargeNav({ title, eyebrow, actions }: { title: string; eyebrow?: string; actions?: ReactNode }) {
-  return (
-    <header className="nav">
-      <div className="nav__titles">
-        {eyebrow && <span className="nav__eyebrow">{eyebrow}</span>}
-        <h1 className="t-large">{title}</h1>
-      </div>
-      {actions && <div className="nav__actions">{actions}</div>}
-    </header>
-  );
-}
-
 export function InlineNav({
   title,
   subtitle,

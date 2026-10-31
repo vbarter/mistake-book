@@ -1,0 +1,73 @@
+/* 错题榜（分析页）与错题详情：版式参照生活类 App 的榜单页。学科页签下划线、选中的榜单、易错指数都用领带红。 */
+
+.rank-hero { position: relative; overflow: hidden; display: flex; align-items: center; gap: 8px; padding: 18px 18px 16px; border-radius: 22px; background: linear-gradient(160deg, var(--tie-bg) 0%, var(--card) 55%, var(--brand-tint) 100%); }
+.rank-hero__title { display: inline-flex; align-items: center; gap: 6px; font-size: 30px; line-height: 36px; font-weight: 900; letter-spacing: 0.02em; color: var(--brand); }
+.rank-hero__title::before { content: "榜"; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: var(--tie); color: #fff; font-size: 18px; transform: rotate(-6deg); }
+.rank-hero__sub { color: var(--secondary); }
+.rank-hero__summary { font-weight: 600; color: var(--label); }
+
+.rank-panel { overflow: hidden; border-radius: 22px; background: var(--card); }
+.subject-tabs { display: flex; gap: 22px; overflow-x: auto; padding: 14px 16px 0; border-bottom: 1px solid var(--separator-light); scrollbar-width: none; }
+.subject-tabs::-webkit-scrollbar { display: none; }
+.subject-tab { position: relative; z-index: 0; flex-shrink: 0; padding: 4px 0 12px; font-size: 17px; font-weight: 600; color: var(--label); opacity: 0.75; transition: opacity 0.2s ease; }
+.subject-tab.on { opacity: 1; font-weight: 800; }
+.subject-tab.on::after { content: ""; position: absolute; z-index: -1; left: 10%; right: 10%; bottom: 6px; height: 6px; border-radius: 3px; background: var(--tie); opacity: 0.85; animation: grow-x 0.35s var(--spring) both; }
+
+/* 左边切榜单，右边是榜 */
+.rank-body { display: grid; grid-template-columns: 84px minmax(0, 1fr); }
+.rank-side { display: flex; flex-direction: column; gap: 4px; padding: 12px 6px; background: var(--fill-light); }
+.rank-side__head { padding: 2px 0 6px; text-align: center; font-size: 13px; font-weight: 800; color: var(--label); }
+.rank-side__item { display: flex; align-items: center; justify-content: center; gap: 1px; min-height: 56px; padding: 6px 2px; border-radius: 18px; white-space: nowrap; color: var(--secondary); transition: background 0.25s ease, color 0.25s ease, transform 0.25s var(--spring); }
+.rank-side__item .laurel { color: var(--tertiary); opacity: 0.6; }
+.rank-side__label { display: flex; flex-direction: column; align-items: center; font-size: 14px; line-height: 18px; font-weight: 700; color: var(--label); }
+.rank-side__label small { font-size: 10px; line-height: 14px; font-weight: 500; color: var(--tertiary); }
+.rank-side__item.on { background: var(--tie); }
+.rank-side__item.on .laurel, .rank-side__item.on .rank-side__label, .rank-side__item.on .rank-side__label small { color: #fff; opacity: 1; }
+
+.rank-list { min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 10px 14px; background: var(--fill-light); }
+.rank-list__head { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 2px 0; font-size: 17px; font-weight: 900; color: var(--tie); }
+.rank-list__head .laurel { opacity: 0.6; }
+.rank-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 12px; text-align: center; font-size: 14px; color: var(--secondary); }
+
+.rank-card { display: flex; gap: 10px; width: 100%; padding: 14px 10px 12px 12px; border-radius: 16px; background: var(--card); text-align: left; animation: rise-in 0.45s var(--spring) both; animation-delay: calc(var(--i, 0) * 50ms); }
+.rank-card__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.rank-card__title { display: flex; align-items: flex-start; gap: 6px; font-size: 16px; line-height: 22px; font-weight: 700; }
+.rank-card__meta { display: flex; gap: 10px; min-width: 0; font-size: 13px; color: var(--secondary); }
+.rank-card__meta > span:first-child { flex-shrink: 0; max-width: 55%; }
+.rank-card__quote { font-size: 14px; line-height: 20px; color: var(--label); }
+.rank-index { align-self: flex-start; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; color: var(--tie); background: var(--tie-bg); white-space: nowrap; }
+
+/* 名次牌：前三名金银铜，第一名定时闪一下 */
+.rank-badge { flex-shrink: 0; width: 30px; height: 34px; margin-top: -2px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 900; font-style: italic; color: #fff; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%); }
+.rank-badge--1 { background: linear-gradient(160deg, #f4cf6a, #d49a22); animation: badge-shine 2.8s ease-in-out infinite; }
+.rank-badge--2 { background: linear-gradient(160deg, #d5dbe6, #9aa6b8); }
+.rank-badge--3 { background: linear-gradient(160deg, #e9b48a, #b8743f); }
+.rank-badge--n { background: var(--fill); color: var(--secondary); font-size: 14px; }
+
+/* 每周错题柱状图 */
+.trend { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; height: 140px; }
+.trend__col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-width: 0; height: 100%; }
+.trend__val { height: 16px; font-size: 12px; font-weight: 700; color: var(--label); }
+.trend__area { flex: 1; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.trend__bar { flex-shrink: 0; width: 100%; max-width: 22px; border-radius: 4px 4px 0 0; background: var(--brand); opacity: 0.4; transform-origin: bottom; animation: grow-y 0.7s var(--spring) both; animation-delay: calc(var(--d, 0) * 1ms); transition: opacity 0.2s ease; }
+.trend__col.on .trend__bar { opacity: 1; }
+.trend__label { font-size: 10px; line-height: 14px; color: var(--secondary); white-space: nowrap; }
+
+/* 错题详情：整张榜横向排开，左右滑一张一张看 */
+.detail-screen { height: 100dvh; min-height: 0; overflow: hidden; }
+.detail-progress { flex-shrink: 0; height: 3px; margin: 0 16px; border-radius: 2px; background: var(--fill); overflow: hidden; }
+.detail-progress > span { display: block; height: 100%; border-radius: 2px; background: var(--tie); transition: width 0.35s var(--spring); }
+.detail-track { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+.detail-track::-webkit-scrollbar { display: none; }
+.detail-slide { flex: 0 0 100%; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding: 14px 16px 24px; scroll-snap-align: center; scroll-snap-stop: always; }
+.detail-head { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 18px; background: var(--card); opacity: 0.6; transform: scale(0.96); transition: transform 0.4s var(--spring), opacity 0.3s ease; }
+.detail-head.on { opacity: 1; transform: none; }
+.detail-nav { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px calc(var(--safe-bottom) + 10px); background: var(--bg); border-top: 1px solid var(--separator-light); }
+.detail-nav__btn { width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: var(--brand-tint); color: var(--brand); transition: transform 0.25s var(--spring), opacity 0.2s; }
+.detail-nav__btn:active { transform: scale(0.9); }
+.detail-nav__btn:disabled { opacity: 0.35; }
+.detail-dots { display: flex; gap: 6px; }
+.detail-dots span { width: 6px; height: 6px; border-radius: 3px; background: var(--fill); transition: width 0.3s var(--spring), background 0.3s; }
+.detail-dots span.on { width: 18px; background: var(--tie); }
+
+@media (max-width: 360px) { .rank-body { grid-template-columns: 72px minmax(0, 1fr); } .rank-side__label small { display: none; } }

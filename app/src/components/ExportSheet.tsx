@@ -1,7 +1,8 @@
 import { formatDateTime } from "../lib/format";
 import { useState } from "react";
 import { apiBlob } from "../api/client";
-import { toBookItems, type ErrorItem } from "../lib/errors";
+import { groupByKnowledge, toBookItems, type ErrorItem } from "../lib/errors";
+import { setLastExportAt } from "../lib/prefs";
 import { validDigitized, type Paper } from "../lib/folders";
 import { figureAt, figurePayload } from "../lib/figures";
 import { exportPdf, haptic } from "../lib/native";
@@ -24,7 +25,8 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
   const wrongErrors = errors.filter((e) => e.kind !== "未作答");
   const blankErrors = errors.filter((e) => e.kind === "未作答");
   const typed = errors.filter((e) => (e.kind === "未作答" ? withBlank : withWrong));
-  const chosen = typed;
+  // 同一知识点的题排在一起（错得多的在前），导出的错题本按这个顺序分组、生成目录
+  const chosen = groupByKnowledge(typed).flatMap(([, list]) => list);
   const scanned = (papers ?? []).filter((p) => validDigitized(p.digitized));
   const bookPages = Math.max(1, Math.ceil(toBookItems(chosen).length / 3));
 
@@ -39,6 +41,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
         const typeLabel = withWrong && withBlank ? "错题 + 未作答" : withBlank ? "只含未作答" : "只含错题";
         const blob = await apiBlob("/api/digitize/book", { method: "POST", body: { title: `${title} 错题本`, subtitle: [subtitle, `${chosen.length} 题`, typeLabel].filter(Boolean).join(" · "), items }, timeoutMs: 90000 });
         await exportPdf(blob, `${title} 错题本.pdf`);
+        await setLastExportAt();
       } else {
         if (scanned.length === 0) return toast("还没有扫描过的试卷");
         const papersBody = await Promise.all(
@@ -87,7 +90,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
         </svg>
         <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
           <span className="t-headline" style={{ display: "flex", alignItems: "center", gap: 6 }}>错题本 <Tag kind="accent" icon="sparkles">推荐</Tag></span>
-          <span className="t-foot c-sec">横向打印。左边空白重做，右边错题修正，对折就能自测。</span>
+          <span className="t-foot c-sec">自动生成目录，按知识点排好。左边空白重做，右边错题修正，对折就能自测。</span>
           <span className="t-cap c-sec">{chosen.length} 题 · 约 {bookPages} 页</span>
         </span>
         <Icon name={kind === "book" ? "checkcircle" : "chevron-right"} size={22} style={{ color: kind === "book" ? "var(--brand)" : "var(--tertiary)" }} />
