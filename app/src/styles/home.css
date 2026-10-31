@@ -7,6 +7,9 @@
 .chart { display: flex; flex-direction: column; gap: 12px; }
 .chart__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .kbars { display: flex; flex-direction: column; }
+.kgroup { display: flex; flex-direction: column; gap: 2px; }
+.kgroup + .kgroup { padding-top: 10px; border-top: 1px solid var(--separator-light); }
+.kgroup__head { display: flex; align-items: center; gap: 8px; }
 .kbar { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 2px; text-align: left; border-top: 1px solid var(--separator-light); }
 .kbar:first-child { border-top: 0; }
 .kbar__rank { width: 18px; text-align: center; font-size: 13px; font-weight: 700; color: var(--tertiary); }

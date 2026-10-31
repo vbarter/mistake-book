@@ -206,11 +206,17 @@ export function mergeRepeats(items: ErrorItem[]): ErrorItem[] {
   });
 }
 
-/** 按知识点分组，错得多的在前 */
+/** 知识点分组用的键：学科 + 一级知识点（图谱章名或识别时写的第一项）。带学科，免得不同学科同名的章（如「第一章」）被并成一组 */
+export const knowledgeKey = (it: Pick<ErrorItem, "subject" | "knowledge">) => `${it.subject}|${it.knowledge}`;
+
+/** 按知识点分组，错得多的在前；返回的名字是知识点本身（不带学科），同名不同学科的分开成两组 */
 export function groupByKnowledge(items: ErrorItem[]): [string, ErrorItem[]][] {
   const map = new Map<string, ErrorItem[]>();
-  for (const it of items) map.set(it.knowledge, [...(map.get(it.knowledge) ?? []), it]);
-  return [...map.entries()].sort((a, b) => b[1].length - a[1].length);
+  for (const it of items) {
+    const k = knowledgeKey(it);
+    map.set(k, [...(map.get(k) ?? []), it]);
+  }
+  return [...map.values()].map((l): [string, ErrorItem[]] => [l[0].knowledge, l]).sort((a, b) => b[1].length - a[1].length);
 }
 
 /** 按所属大题分组，保持试卷顺序（和「作答」页一致）；没有大题的放在它们出现的位置 */

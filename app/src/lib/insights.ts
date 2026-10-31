@@ -43,12 +43,20 @@ export function weeklyTrend(items: ErrorItem[], weeks = 8, now = new Date()): { 
   return out;
 }
 
+/** 一科的错题和它的知识点（错得多的在前） */
+export interface SubjectKnowledge {
+  subject: Subject;
+  items: ErrorItem[];
+  knowledge: [string, ErrorItem[]][];
+}
+
 export interface Insight {
   total: number;
   wrong: number;
   blank: number;
-  knowledge: [string, ErrorItem[]][]; // 错得多的在前
+  knowledge: [string, ErrorItem[]][]; // 全部学科混排，错得多的在前（同名不同学科分开）
   subjects: [Subject, ErrorItem[]][];
+  bySubject: SubjectKnowledge[]; // 按学科分组的知识点，学科按错题数排
   summary: string; // 一句话总结
 }
 
@@ -56,17 +64,29 @@ export function analyze(items: ErrorItem[]): Insight {
   const blank = items.filter((e) => e.kind === "未作答").length;
   const knowledge = groupByKnowledge(items);
   const subjects = groupBySubject(items);
-  return { total: items.length, wrong: items.length - blank, blank, knowledge, subjects, summary: summarize(items, knowledge, subjects, blank) };
+  const bySubject = subjects.map(([subject, list]) => ({ subject, items: list, knowledge: groupByKnowledge(list) }));
+  return { total: items.length, wrong: items.length - blank, blank, knowledge, subjects, bySubject, summary: summarize(items, bySubject, blank) };
 }
 
-/** 自动写一句话：错题集中在哪、未作答多不多，给出下一步建议 */
-function summarize(items: ErrorItem[], knowledge: [string, ErrorItem[]][], subjects: [Subject, ErrorItem[]][], blank: number): string {
+/** 摘要里最多点名几科，其余合成「等 n 科」 */
+const SUMMARY_SUBJECTS = 3;
+
+/** 自动写一句话：错题集中在哪、未作答多不多，给出下一步建议。
+ *  只有一科时说这一科最该补的知识点；多科时列出各科题数，再说每科最该先补哪个，不只讲错得最多的那一科。 */
+function summarize(items: ErrorItem[], bySubject: SubjectKnowledge[], blank: number): string {
   if (items.length === 0) return "这段时间没有错题，继续保持。";
   const parts: string[] = [];
-  const [topKp, topList] = knowledge[0];
-  const share = Math.round((topList.length / items.length) * 100);
-  if (subjects.length > 1) parts.push(`${SUBJECT_LABEL[subjects[0][0]]}错得最多（${subjects[0][1].length} 题）`);
-  parts.push(knowledge.length > 1 && share >= 25 ? `「${topKp}」占了 ${share}%，是最该先补的知识点` : `错题分散在 ${knowledge.length} 个知识点，最多的是「${topKp}」`);
+  if (bySubject.length === 1) {
+    const { knowledge } = bySubject[0];
+    const [topKp, topList] = knowledge[0];
+    const share = Math.round((topList.length / items.length) * 100);
+    parts.push(knowledge.length > 1 && share >= 25 ? `「${topKp}」占了 ${share}%，是最该先补的知识点` : `错题分散在 ${knowledge.length} 个知识点，最多的是「${topKp}」`);
+  } else {
+    const named = bySubject.slice(0, SUMMARY_SUBJECTS);
+    const rest = bySubject.length - named.length;
+    parts.push(`${bySubject.length} 科都有错题：${named.map((g) => `${SUBJECT_LABEL[g.subject]} ${g.items.length} 题`).join("、")}${rest > 0 ? "等" : ""}`);
+    parts.push(`先补${named.map((g) => `${SUBJECT_LABEL[g.subject]}「${g.knowledge[0][0]}」`).join("、")}`);
+  }
   if (blank / items.length >= 0.3) parts.push(`有 ${blank} 题没作答，可能是时间不够或没思路`);
   return parts.join("；") + "。";
 }

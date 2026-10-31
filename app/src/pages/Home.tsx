@@ -93,7 +93,7 @@ export default function Home() {
               </span>
               <Icon name="chevron-right" size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
             </button>
-            <KnowledgeBars groups={recent.knowledge} limit={3} />
+            <KnowledgeBars groups={recent.bySubject} />
           </section>
         )}
 
