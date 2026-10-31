@@ -11,7 +11,7 @@ import { toast, useDataVersion } from "../../lib/hooks";
 import { listFolders, photosSizeMB } from "../../lib/store";
 
 /** 小程序版本：三位 */
-const VERSION = "1.8.6";
+const VERSION = "1.8.7";
 
 /** 我的：和 App 的「我的」同一套布局——账号卡片、统计、学习设置、数据与隐私、关于 */
 export default function Profile() {
