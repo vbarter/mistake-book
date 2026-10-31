@@ -65,15 +65,15 @@ export function analyze(items: ErrorItem[]): Insight {
   const knowledge = groupByKnowledge(items);
   const subjects = groupBySubject(items);
   const bySubject = subjects.map(([subject, list]) => ({ subject, items: list, knowledge: groupByKnowledge(list) }));
-  return { total: items.length, wrong: items.length - blank, blank, knowledge, subjects, bySubject, summary: summarize(items, bySubject, blank) };
+  return { total: items.length, wrong: items.length - blank, blank, knowledge, subjects, bySubject, summary: summarize(items, bySubject) };
 }
 
 /** 摘要里最多点名几科，其余合成「等 n 科」 */
 const SUMMARY_SUBJECTS = 3;
 
-/** 自动写一句话：错题集中在哪、未作答多不多，给出下一步建议。
+/** 自动写一句话：错题集中在哪，给出下一步先补哪个知识点。
  *  只有一科时说这一科最该补的知识点；多科时列出各科题数，再说每科最该先补哪个，不只讲错得最多的那一科。 */
-function summarize(items: ErrorItem[], bySubject: SubjectKnowledge[], blank: number): string {
+function summarize(items: ErrorItem[], bySubject: SubjectKnowledge[]): string {
   if (items.length === 0) return "这段时间没有错题，继续保持。";
   const parts: string[] = [];
   if (bySubject.length === 1) {
@@ -87,6 +87,5 @@ function summarize(items: ErrorItem[], bySubject: SubjectKnowledge[], blank: num
     parts.push(`${bySubject.length} 科都有错题：${named.map((g) => `${SUBJECT_LABEL[g.subject]} ${g.items.length} 题`).join("、")}${rest > 0 ? "等" : ""}`);
     parts.push(`先补${named.map((g) => `${SUBJECT_LABEL[g.subject]}「${g.knowledge[0][0]}」`).join("、")}`);
   }
-  if (blank / items.length >= 0.3) parts.push(`有 ${blank} 题没作答，可能是时间不够或没思路`);
   return parts.join("；") + "。";
 }
