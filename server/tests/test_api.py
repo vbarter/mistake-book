@@ -1558,3 +1558,24 @@ def test_tag_topics_tolerates_relay_output(monkeypatch, caplog):
     with caplog.at_level(logging.WARNING, logger="app.ai.claude"):
         assert provider.tag_topics(sheets, grade="9") == 0
     assert any("0/2 tagged (null 1, unmatched key 1)" in r.message for r in caplog.records)
+
+
+def test_tag_topics_prefers_paper_grade(monkeypatch):
+    """标注用卷面识别出的年级：个人资料年级是 5，卷面是九年级，候选池得是初中的；上海六年级按七年级。"""
+    from app import taxonomy
+    from app.ai.base import DigitizedBlank, DigitizedBlock, DigitizedPage
+    from app.ai.claude import ClaudeProvider
+
+    assert taxonomy.parse_grade("九年级") == 9 and taxonomy.parse_grade("初三") == 9 and taxonomy.parse_grade("高一") == 10
+    assert taxonomy.parse_grade("7年级") == 7 and taxonomy.parse_grade("预备班") == 7 and taxonomy.parse_grade("") is None and taxonomy.parse_grade("小学") is None
+    assert taxonomy.parse_grade("六年级") == 6 and taxonomy.parse_grade("六年级", "上海") == 7
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = ClaudeProvider(model="claude-sonnet-4-5")
+    seen = []
+    monkeypatch.setattr(provider, "_call", lambda system, content, schema, **k: (seen.append(content[0]["text"]), {"results": []})[1])
+    sheets = [DigitizedPage(page=0, subject="math", examGrade="九年级", blocks=[
+        DigitizedBlock(type="item", number="1", text="[[1]]", subject="math", questionType="solve", blanks=[DigitizedBlank(id="1", number="1", student="", mark="blank", answer="x")]),
+    ])]
+    provider.tag_topics(sheets, grade="5")
+    assert "cnm_231｜" in seen[0] and "cnm_p001｜" not in seen[0] and "九年级" in seen[0]

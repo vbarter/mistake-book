@@ -812,6 +812,10 @@ class ClaudeProvider(AIProvider):
         targets = tag_targets(sheets)
         if not targets:
             return 0
+        # 年级优先用卷面识别出来的（「九年级」「初三」），个人资料里的年级只做兜底：资料没填或填错时候选池就取错学段，整张卷子都标不上
+        paper_grade = next((g for s in sheets if (g := taxonomy.parse_grade(s.examGrade, s.region))), None)
+        if paper_grade:
+            grade = str(paper_grade)
         parents = parent_stems(sheets)
         by_subject: dict[str, list[tuple[int, int]]] = {}
         for si, bi in targets:

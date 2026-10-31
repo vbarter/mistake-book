@@ -86,6 +86,37 @@ def subjects() -> frozenset[str]:
     return frozenset(t["subject"] for t in _load()["topics"].values())
 
 
+_CN_NUM = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+
+
+def parse_grade(text: str | None, region: str = "") -> int | None:
+    """卷面识别出的年级文字 → 1–12：「九年级」「初三」「高一」「预备班」「7年级」；上海（五四制）的六年级和预备班学的是图谱七年级的内容，记成 7。认不出返回 None。"""
+    t = (text or "").strip()
+    if not t:
+        return None
+    g: int | None = None
+    m = re.search(r"(\d{1,2})\s*年级", t)
+    if m:
+        g = int(m.group(1))
+    elif (m := re.search(r"([一二三四五六七八九])\s*年级", t)):
+        g = _CN_NUM[m.group(1)]
+    elif (m := re.search(r"初\s*([一二三1-3])", t)):
+        g = 6 + (_CN_NUM.get(m.group(1)) or int(m.group(1)))
+    elif (m := re.search(r"高\s*([一二三1-3])", t)):
+        g = 9 + (_CN_NUM.get(m.group(1)) or int(m.group(1)))
+    elif "预备" in t:
+        g = 7
+    elif "中考" in t:
+        g = 9
+    elif "高考" in t:
+        g = 12
+    if g is None or not 1 <= g <= 12:
+        return None
+    if g == 6 and "上海" in (region or ""):
+        g = 7
+    return g
+
+
 def stage_of(grade: int | str | None) -> str:
     """小学 primary（1–6）、初中 junior（7–9）、高中 senior（10 以上）；判断不了按初中。"""
     try:
