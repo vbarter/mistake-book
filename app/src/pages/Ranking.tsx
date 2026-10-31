@@ -64,9 +64,12 @@ export default function Ranking() {
         {errors.length > 0 && (
           <>
             <section className="rank-head rise" style={{ ["--i" as string]: 0 }}>
-              <h1 className="t-title1">错题榜</h1>
-              <span className="t-foot c-sec">{RANGE_LABEL[range]} <CountUp value={insight.total} /> 道错题</span>
-              <span className="t-sub rank-head__summary">{insight.summary}</span>
+              <div className="rank-head__text">
+                <h1 className="t-title1">错题榜</h1>
+                <span className="t-foot c-sec">{RANGE_LABEL[range]} <CountUp value={insight.total} /> 道错题</span>
+                <span className="t-sub rank-head__summary">{insight.summary}</span>
+              </div>
+              <Buddy scene="chart" size={100} style={{ flexShrink: 0, margin: "-6px -4px -10px 0" }} />
             </section>
 
             <section className="rank-panel rise" style={{ ["--i" as string]: 2 }}>

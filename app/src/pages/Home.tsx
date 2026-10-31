@@ -5,6 +5,7 @@ import { ExportSheet } from "../components/ExportSheet";
 import { Icon, type IconName } from "../components/Icon";
 import { KnowledgeBars } from "../components/Insights";
 import { CountUp } from "../components/Motion";
+import { Buddy } from "../components/Illustration";
 import { Button } from "../components/ui";
 import { allErrors } from "../lib/errors";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
@@ -53,8 +54,11 @@ export default function Home() {
       </header>
       <div className="screen__content" style={{ gap: 16 }}>
         <section className="greet rise" style={{ ["--i" as string]: 0 }}>
-          <h1 className="t-title1">{hello}{nickname ? `，${nickname}` : ""}</h1>
-          {papers.length === 0 && folders && <p className="t-sub c-sec">点下面的相机，拍下第一张试卷。</p>}
+          <div className="greet__text">
+            <h1 className="t-title1">{hello}{nickname ? `，${nickname}` : ""}</h1>
+            <p className="t-sub c-sec">{papers.length === 0 ? "点下面的相机，拍下第一张试卷。" : scanning.length ? "试卷正在识别，好了会自动归档。" : "拍下新试卷，错题会自动整理。"}</p>
+          </div>
+          <Buddy scene={scanning.length ? "scan" : "hero"} size={112} style={{ flexShrink: 0, margin: "-8px -4px -12px 0" }} />
         </section>
 
         {(scanning.length > 0 || failed.length > 0) && (
