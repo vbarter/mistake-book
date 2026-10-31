@@ -152,18 +152,16 @@ def get(topic_id: str) -> dict | None:
 
 
 def candidates(subject: str, grade: int | str | None) -> list[dict]:
-    """某学科、某学段的候选知识点：学生年级 ±1 的排前面，其余按年级、id 排。没有该学科返回空。"""
+    """某学科的全部候选知识点（小学到高中都给，让模型自己判断，年级只影响顺序）：
+    和学生年级同学段的排前面、离得近的更前，其余按学段、年级、id 排。没有该学科返回空。"""
     stage = stage_of(grade)
     try:
         g = int(grade)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         g = {"primary": 5, "junior": 8, "senior": 10}[stage]
-    pool = [t for t in _load()["topics"].values() if t["subject"] == subject
-            and (stage in t["stages"] if t.get("extra") else stage_of(t["grade"]) == stage)]
-    # 高中 grade 是册次，不按距离排
-    if stage == "senior":
-        return sorted(pool, key=lambda t: (t["grade"], t["id"]))
-    return sorted(pool, key=lambda t: (abs(t["grade"] - g) > 1, t["grade"], t["id"]))
+    order = {"primary": 0, "junior": 1, "senior": 2}
+    pool = [t for t in _load()["topics"].values() if t["subject"] == subject]
+    return sorted(pool, key=lambda t: (stage_of(t["grade"]) != stage, abs(order[stage_of(t["grade"])] - order[stage]), abs(t["grade"] - g) > 1, t["grade"], t["id"]))
 
 
 def resolve_alias(subject: str, name: str) -> str | None:

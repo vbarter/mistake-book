@@ -1433,9 +1433,10 @@ def test_taxonomy_candidates_by_stage():
     """候选池按学段取：初中数学只有 7–9 年级的点，学生年级 ±1 排前面；高中按册；没有的学科为空。"""
     from app import taxonomy
 
-    junior = taxonomy.candidates("math", "8")
-    assert junior and {t["grade"] for t in junior} == {7, 8, 9}
-    assert all(abs(t["grade"] - 8) <= 1 for t in junior[:50])
+    pool = taxonomy.candidates("math", "8")
+    assert len(pool) == 870 and {t["grade"] for t in pool} >= {1, 7, 8, 9, 10}  # 全学段都给，年级只决定顺序
+    assert all(7 <= t["grade"] <= 9 for t in pool[:315]) and all(abs(t["grade"] - 8) <= 1 for t in pool[:50])
+    assert all(t["grade"] >= 10 for t in taxonomy.candidates("math", "11")[:271])
     assert taxonomy.stage_of("6") == "primary" and taxonomy.stage_of("10") == "senior" and taxonomy.stage_of(None) == "junior"
     assert taxonomy.candidates("chemistry", "9") == []
     v = taxonomy.view("cnm_276")
@@ -1470,7 +1471,7 @@ def test_tag_topics_sends_candidates_and_applies_valid_ids(monkeypatch):
     assert provider.tag_topics(sheets, grade="9") == 1
     assert len(calls) == 1
     listing, questions = calls[0][0]["text"], calls[0][1]["text"]
-    assert "cnm_221｜配方法" in listing and "cnm_p001" not in listing and "cnm_h001" not in listing
+    assert "cnm_221｜配方法" in listing and listing.index("cnm_221｜") < listing.index("cnm_h001｜") < listing.index("cnm_p001｜")  # 九年级：初中在前，其次高中，最后小学
     assert 'key="q0"' in questions and 'key="q1"' in questions and "q2" not in questions and "化学题" not in questions
     assert sheets[0].blocks[0].topic == taxonomy.view("cnm_221") and sheets[0].blocks[1].topic is None
     qs = derive_questions(sheets)
@@ -1529,7 +1530,6 @@ def test_taxonomy_extra_topics_join_candidates():
     junior = {t["id"] for t in taxonomy.candidates("english", "9")}
     assert "zcb_e012" in junior and "cne_j243" in junior
     assert "zcb_e012" in {t["id"] for t in taxonomy.candidates("english", "11")}
-    assert "zcb_e012" not in {t["id"] for t in taxonomy.candidates("english", "4")}
     assert "zcb_e012" not in {t["id"] for t in taxonomy.candidates("math", "9")}
     v = taxonomy.view("zcb_e012")
     assert v["chapter"] == "构词法" and v["subject"] == "english"
@@ -1578,4 +1578,4 @@ def test_tag_topics_prefers_paper_grade(monkeypatch):
         DigitizedBlock(type="item", number="1", text="[[1]]", subject="math", questionType="solve", blanks=[DigitizedBlank(id="1", number="1", student="", mark="blank", answer="x")]),
     ])]
     provider.tag_topics(sheets, grade="5")
-    assert "cnm_231｜" in seen[0] and "cnm_p001｜" not in seen[0] and "九年级" in seen[0]
+    assert seen[0].index("cnm_231｜") < seen[0].index("cnm_p001｜") and "九年级" in seen[0]
