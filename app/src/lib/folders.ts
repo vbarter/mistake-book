@@ -29,6 +29,7 @@ export interface Paper {
   scanJob?: { id: string; startedAt: string; parts: { page: number; x0: number; w: number }[]; progress: number; status: "queued" | "running"; startedPages?: number; waiting?: number; queued?: boolean }; // 服务器后台还原中
   scanError?: string; // 上次还原失败的原因
   gradedAt?: string; // 补做过 AI 阅卷的时间（避免反复请求）
+  taggedAt?: string; // 补标过知识图谱知识点的时间（避免反复请求）
 }
 
 export interface Folder {

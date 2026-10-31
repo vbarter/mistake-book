@@ -10,7 +10,7 @@ import { retake } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { formatDateTime, unwrapLines } from "../../lib/format";
 import { useDataVersion } from "../../lib/hooks";
-import { gradeIfNeeded, isGrading, scanStageText } from "../../lib/jobs";
+import { gradeIfNeeded, isGrading, scanStageText, tagIfNeeded } from "../../lib/jobs";
 import { autoMark, paperQuality, paperStats, validDigitized } from "../../lib/logic";
 import { mathPlain } from "../../lib/math";
 import { deletePaper, getFolder, updatePaper } from "../../lib/store";
@@ -61,7 +61,7 @@ export default function PaperPage() {
     if (paper) Taro.setNavigationBarTitle({ title: paper.name });
   }, [paper?.name]);
   useEffect(() => {
-    if (folder && paper) void gradeIfNeeded(folder.id, paper);
+    if (folder && paper) void gradeIfNeeded(folder.id, paper).then(() => tagIfNeeded(folder.id, paper));
   }, [paper?.id, Boolean(folder), Boolean(digitized)]);
 
   const errors = useMemo(() => (folder && paper ? paperErrors(folder, paper) : []), [folder, paper]);

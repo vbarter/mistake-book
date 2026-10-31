@@ -14,8 +14,9 @@ export interface ErrorItem {
   paperName: string;
   scannedAt: string; // ISO
   subject: Subject;
-  knowledge: string; // 考纲一级知识点（knowledgePoints[0]）
-  subKnowledge: string[];
+  knowledge: string; // 归类用的一级知识点：图谱知识点所在的章（topic.chapter），没标上图谱时是 knowledgePoints[0]
+  subKnowledge: string[]; // 细分点：图谱知识点名在前
+  topicId?: string; // 图谱知识点 id（有才有）
   kind: ErrorKind;
   q: DigitizedQuestion;
   parts: ErrorPart[]; // 一题多问（如 18-1、18-2）时逐问的作答 / 判定 / 答案；只有一个空时为空数组
@@ -80,6 +81,18 @@ export function focusSentence(stem: string): string {
   return stem.slice(start, end).trim() || stem;
 }
 
+/** 一级知识点：标上了图谱知识点就用它的章（同一章不管模型怎么写都归到一起），否则用识别时写的第一项 */
+export function knowledgeOf(q: DigitizedQuestion): string {
+  return q.topic?.chapter || q.knowledgePoints[0] || "（未标注知识点）";
+}
+
+/** 细分点：图谱知识点名在前，再接识别时写的细分点（去掉和章、知识点名重复的） */
+export function subKnowledgeOf(q: DigitizedQuestion): string[] {
+  const t = q.topic;
+  if (!t) return q.knowledgePoints.slice(1);
+  return [t.name, ...q.knowledgePoints.filter((k) => k !== t.name && k !== t.chapter)].slice(0, 3);
+}
+
 export function kindOf(q: DigitizedQuestion): ErrorKind {
   if (isBlank(q)) return "未作答";
   return effectiveMark(q) === "partial" ? "半对" : "答错";
@@ -106,8 +119,9 @@ export function paperErrors(folder: Folder, paper: Paper): ErrorItem[] {
     paperName: paper.name,
     scannedAt: paper.scannedAt ?? paper.updatedAt,
     subject: q.subject,
-    knowledge: q.knowledgePoints[0] || "（未标注知识点）",
-    subKnowledge: q.knowledgePoints.slice(1),
+    knowledge: knowledgeOf(q),
+    subKnowledge: subKnowledgeOf(q),
+    topicId: q.topic?.id,
     kind: kindOf(q),
     q,
     parts: partsOf(paper, q),

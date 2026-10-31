@@ -2,7 +2,7 @@
 import Taro from "@tarojs/taro";
 import { api } from "./api";
 import type { DigitizeJob, DigitizedQuestion, DigitizedResult } from "./types";
-import { autoMark, isUnreadable, validDigitized } from "./logic";
+import { autoMark, isProblem, isUnreadable, validDigitized } from "./logic";
 import { getFolder, listFolders, saveFolder, updatePaper, type FolderPage, type Paper } from "./store";
 
 export interface ScanJob {
@@ -47,7 +47,7 @@ function finishJob(folderId: string, paperId: string, job: DigitizeJob, parts: S
   const scannedAt = (job.status === "done" && job.updatedAt) || new Date().toISOString();
   const digitized: DigitizedResult = { ...remapParts(result, parts), provider: result.provider, at: scannedAt };
   const subject = digitized.pages.find((s) => s.subject)?.subject;
-  updatePaper(folderId, paperId, { digitized, scannedAt, subject, scanJob: undefined, scanError: undefined, gradedAt: undefined });
+  updatePaper(folderId, paperId, { digitized, scannedAt, subject, scanJob: undefined, scanError: undefined, gradedAt: undefined, taggedAt: undefined });
   const folder = getFolder(folderId);
   if (folder && !folder.subject && subject) saveFolder({ ...folder, subject });
 }
@@ -217,6 +217,36 @@ export function needsGrading(paper: Paper): boolean {
 }
 
 export const isGrading = (paperId: string) => grading.has(paperId);
+
+const tagging = new Set<string>();
+let taggingDisabled = false; // 服务器说开关没开：这次启动里不再问
+
+/** 有判错 / 没作答、还没标上图谱知识点的题 */
+export function needsTagging(paper: Paper): boolean {
+  const d = validDigitized(paper.digitized);
+  if (!d || paper.scanJob) return false;
+  return d.questions.some((q) => isProblem(q) && !q.topic);
+}
+
+/** 错题还没标图谱知识点的试卷交给服务器补标，标完写回本机；每张只补一次（taggedAt），服务器开关没开时不记 */
+export async function tagIfNeeded(folderId: string, paper: Paper): Promise<void> {
+  if (taggingDisabled || tagging.has(paper.id) || paper.taggedAt || !needsTagging(paper)) return;
+  const d = validDigitized(paper.digitized)!;
+  tagging.add(paper.id);
+  try {
+    const res = await api<{ pages: DigitizedResult["pages"]; questions: DigitizedQuestion[]; tagged: number; enabled: boolean }>("/api/digitize/tag", { method: "POST", body: { pages: d.pages }, timeoutMs: 120000 });
+    if (!res.enabled) {
+      taggingDisabled = true;
+      return;
+    }
+    updatePaper(folderId, paper.id, { digitized: { ...paper.digitized!, pages: res.pages, questions: res.questions }, taggedAt: new Date().toISOString() });
+    bump();
+  } catch {
+    /* 下次打开再试 */
+  } finally {
+    tagging.delete(paper.id);
+  }
+}
 
 export async function gradeIfNeeded(folderId: string, paper: Paper): Promise<void> {
   if (grading.has(paper.id) || paper.gradedAt || !needsGrading(paper)) return;

@@ -13,7 +13,7 @@ import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectCol
 import { formatDateTime, unwrapLines } from "../../lib/format";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperStats, thumbOf, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
-import { gradeIfNeeded, isGrading, scanStageText, useJobs } from "../../lib/jobs";
+import { gradeIfNeeded, isGrading, scanStageText, tagIfNeeded, useJobs } from "../../lib/jobs";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
 
@@ -84,7 +84,7 @@ export default function Paper() {
   const digitized = paper ? validDigitized(paper.digitized) : null;
   const grading = paper ? isGrading(paper.id) : false;
   useEffect(() => {
-    if (folder && paper) void gradeIfNeeded(folder.id, paper);
+    if (folder && paper) void gradeIfNeeded(folder.id, paper).then(() => tagIfNeeded(folder.id, paper));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paper?.id, Boolean(folder)]);
   const errors = useMemo(() => (folder && paper ? paperErrors(folder, paper) : []), [folder, paper]);

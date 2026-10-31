@@ -352,7 +352,7 @@ def digitize_tag():
         d = q.to_dict()
         d["index"] = i
         questions.append(d)
-    return jsonify({"pages": [s.to_dict() for s in sheets], "questions": questions, "tagged": tagged})
+    return jsonify({"pages": [s.to_dict() for s in sheets], "questions": questions, "tagged": tagged, "enabled": taxonomy.enabled()})
 
 
 @bp.get("/taxonomy/topics/<topic_id>")
