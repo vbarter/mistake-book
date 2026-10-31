@@ -267,7 +267,13 @@ export function SwipeSortList<T>({ items, keyOf, render, onReorder, onDelete, ga
             onContextMenu={(e) => e.preventDefault()}
           >
             <div className="swipe-item__actions" aria-hidden={open !== key}>
-              <button className="swipe-item__delete" tabIndex={open === key ? 0 : -1} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setX(key, 0, true); setOpen(null); onDelete(item); }}>
+              <button className="swipe-item__delete" tabIndex={open === key ? 0 : -1} onPointerDown={(e) => {
+                  // 不让外层的按下逻辑处理这一下；同时清掉上一次左滑留下的 moved 标记，
+                  // 否则外层 onClickCapture 会把这次点击当成「滑动后的误触」吞掉，要点第二次才删得掉
+                  e.stopPropagation();
+                  moved.current = false;
+                }}
+                onClick={() => { setX(key, 0, true); setOpen(null); onDelete(item); }}>
                 <Icon name="trash" size={20} stroke={2.2} />
                 <span>{deleteLabel}</span>
               </button>
