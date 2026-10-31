@@ -48,3 +48,4 @@
 .acct__row { min-height: 64px; }
 .acct__logout { width: 100%; min-height: 52px; border-radius: var(--radius-list); background: var(--card); color: var(--wrong); font-size: 17px; font-weight: 600; }
 .acct__logout:active { background: var(--fill-light); }
+.acct__delete { align-self: center; font-size: 13px; color: var(--tertiary); padding: 6px 12px; text-decoration: underline; text-underline-offset: 3px; }

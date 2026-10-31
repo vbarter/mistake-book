@@ -89,6 +89,21 @@ export function Account() {
   const nav = useNavigate();
   const { user, logout } = useAuth();
   const [confirm, setConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const deleteAccount = async () => {
+    setDeleteBusy(true);
+    try {
+      await api("/api/auth/me", { method: "DELETE" });
+      await logout();
+      toast("账号已注销", "success");
+      nav("/welcome", { replace: true });
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
   const [server, setServer] = useState(getApiBase());
   const [serverSheet, setServerSheet] = useState(false);
   const [pwSheet, setPwSheet] = useState(false);
@@ -158,7 +173,7 @@ export function Account() {
           <p className="acct__foot">登录后会一直保持，直到你在这里退出。</p>
         </section>
 
-        {isNative && (
+        {isNative && import.meta.env.DEV && (
           <section className="acct__section">
             <h2 className="acct__label">开发</h2>
             <div className="group">
@@ -170,11 +185,18 @@ export function Account() {
         <section className="acct__section acct__section--end">
           <button className="acct__logout" onClick={() => setConfirm(true)}>退出登录</button>
           <p className="acct__foot acct__foot--center">{user?.loginMethod === "guest" ? "游客账号退出后本机数据无法再访问，建议先绑定。" : "退出后本机的试卷照片不会删除。"}</p>
+          <button className="acct__delete" onClick={() => setDeleting(true)}>注销账号</button>
         </section>
       </div>
       <Sheet open={confirm} onClose={() => setConfirm(false)} title="退出登录？">
         <Button variant="danger" onClick={async () => { await logout(); nav("/welcome", { replace: true }); }}>退出</Button>
         <Button variant="plain" onClick={() => setConfirm(false)}>取消</Button>
+      </Sheet>
+      <Sheet open={deleting} onClose={() => setDeleting(false)} title="注销账号？">
+        <p className="t-sub c-sec">账号会被永久删除，服务器上和这个账号有关的记录也会一起删除，无法恢复。之后可以用同一个{user?.loginMethod === "apple" ? " Apple 账号" : user?.loginMethod === "wechat" ? "微信" : "手机号"}重新注册。</p>
+        <p className="t-sub c-sec">这台设备上的试卷照片和电子版不会被删除，可以在「我的 → 隐私与权限」里清空。</p>
+        <Button variant="danger" onClick={deleteAccount} disabled={deleteBusy}>{deleteBusy ? "正在注销…" : "确认注销"}</Button>
+        <Button variant="plain" onClick={() => setDeleting(false)}>取消</Button>
       </Sheet>
       <Sheet open={pwSheet} onClose={() => setPwSheet(false)} title={user?.hasPassword ? "修改登录密码" : "设置登录密码"}>
         <p className="t-sub c-sec">验证码会发到 {user?.phone ? maskPhone(user.phone) : "绑定的手机号"}，设置后可以用密码登录。</p>
