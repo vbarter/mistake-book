@@ -393,12 +393,13 @@ def is_relay_base_url(url: str | None) -> bool:
 
 TAG_SYSTEM_PROMPT = (
     "你是中小学教研员，负责把学生的错题归到课程知识图谱里的知识点上。"
-    "你会先收到某学科、某学段的知识点清单（每行：id｜名称｜章节），再收到一张试卷上的若干道错题（题干、选项、学生作答、参考答案，以及识别时写的知识点说法）。"
+    "你会先收到某学科从小学到高中的全部知识点清单（每行：id｜名称｜章节，和学生年级相近的排在前面），再收到一张试卷上的若干道错题（题干、选项、学生作答、参考答案，以及识别时写的知识点说法）。"
     "为每道题从清单里挑**一个**最贴切的知识点 id：按题目实际考查的内容判断，不要只看名字是否相同（不同教材版本说法不同，例如上海教材的「锐角三角比」就是清单里的「锐角三角函数」）；"
-    "一题考多个点时选学生答错最直接相关的那个；小学和初中六年级（五四制）的卷子可能对应清单里高一个年级的内容，不要因为年级不符而放弃。"
+    "一题考多个点时选学生答错最直接相关的那个；学生年级只是参考（家长可能扫别的年级的卷子，上海六年级学的是清单里七年级的内容），按题目本身的内容在整个清单里挑，不要因为年级不符而放弃，也不要挑同名但学段明显不对的点（小学「正比例」和初中「正比例函数」要分清）。"
     "清单里 id 以 zcb_ 开头的是考纲大类（如「构词法」「疑问句」），清单里有更具体的点时优先选具体的点，只有大类能对上时选大类。"
     "清单里确实没有对应内容（超纲、别的学科、看不出考什么）时 topicId 给 null，不要硬凑。"
-    "confidence：high 表示很确定，low 表示勉强对应或不确定。只输出 results，key 用题目的 key。"
+    "confidence：high 表示很确定，low 表示勉强对应或不确定。只输出 results，每道题一项，key 原样照抄 question 标签里的 key（如 q0、q1），topicId 原样照抄清单里的 id（如 cnm_231）。"
+    "输出形如：{\"results\": [{\"key\": \"q0\", \"topicId\": \"cnm_231\", \"confidence\": \"high\"}, {\"key\": \"q1\", \"topicId\": null, \"confidence\": \"low\"}]}"
 )
 
 TAG_SCHEMA = {
@@ -424,7 +425,7 @@ TAG_SCHEMA = {
 
 
 def candidate_text(subject: str, grade: str) -> str:
-    """候选知识点清单：一行一个「id｜名称｜章节」。"""
+    """候选知识点清单：该学科全部知识点，一行一个「id｜名称｜章节」，和学生年级相近的在前。"""
     rows = taxonomy.candidates(subject, grade)
     return "\n".join(f"{t['id']}｜{t['name']}｜{taxonomy.chapter_title(t)}" for t in rows)
 
@@ -811,6 +812,10 @@ class ClaudeProvider(AIProvider):
         targets = tag_targets(sheets)
         if not targets:
             return 0
+        # 年级优先用卷面识别出来的（「九年级」「初三」），个人资料里的年级只做兜底；年级只影响清单顺序和提示，不再过滤候选池
+        paper_grade = next((g for s in sheets if (g := taxonomy.parse_grade(s.examGrade, s.region))), None)
+        if paper_grade:
+            grade = str(paper_grade)
         parents = parent_stems(sheets)
         by_subject: dict[str, list[tuple[int, int]]] = {}
         for si, bi in targets:
@@ -846,18 +851,35 @@ class ClaudeProvider(AIProvider):
                 {"type": "text", "text": "要归类的错题（results 的 key 用 question 的 key）：\n\n" + "\n\n".join(parts)},
             ]
             data = self._call(TAG_SYSTEM_PROMPT, content, TAG_SCHEMA, max_tokens=4000)
-            done = 0
-            for r in data.get("results", []):
-                blk = todo.get(str(r.get("key"))) if isinstance(r, dict) else None
-                if blk is None:
+            # 中转模型不一定严格按 schema 来：results 可能被包了一层、key 写成题号、topicId 写成「cnm_231 配方法」
+            results = data.get("results") if isinstance(data, dict) else data
+            if isinstance(results, dict):
+                results = [{"key": k, **(v if isinstance(v, dict) else {"topicId": v})} for k, v in results.items()]
+            if not isinstance(results, list):
+                results = []
+            by_number = {blk.number: blk for blk in todo.values() if blk.number}
+            done, nulls, unmatched = 0, 0, 0
+            for r in results:
+                if not isinstance(r, dict):
                     continue
-                tid = r.get("topicId")
-                if apply_topic(blk, str(tid) if tid else None):
+                key = str(r.get("key") or "").strip()
+                blk = todo.get(key) or by_number.get(key)
+                if blk is None:
+                    unmatched += 1
+                    continue
+                tid = r.get("topicId") or r.get("topic_id") or r.get("id")
+                tid = re.split(r"[\s｜|]", str(tid).strip())[0] if tid else None
+                if apply_topic(blk, tid):
                     done += 1
                     if r.get("confidence") == "low":
                         log.info("topic low confidence: %s -> %s (%s)", blk.number, tid, "、".join(blk.knowledgePoints))
                 elif tid:
                     log.info("topic id not in taxonomy: %s (%s)", tid, "、".join(blk.knowledgePoints))
+                else:
+                    nulls += 1
+            if done == 0 and todo:
+                # 一道都没标上：把模型原文记下来，分得清是全给了 null、key 对不上还是结构不对
+                log.warning("tag topics: 0/%d tagged (null %d, unmatched key %d); raw: %.1500s", len(todo), nulls, unmatched, json.dumps(data, ensure_ascii=False))
             return done
 
         jobs = [(subj, v[i : i + batch]) for subj, v in by_subject.items() for i in range(0, len(v), batch)]
