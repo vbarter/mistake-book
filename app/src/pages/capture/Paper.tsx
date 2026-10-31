@@ -13,7 +13,7 @@ import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectCol
 import { formatDateTime, unwrapLines } from "../../lib/format";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperStats, thumbOf, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
-import { gradeIfNeeded, isGrading, scanStageText, tagIfNeeded, useJobs } from "../../lib/jobs";
+import { gradeIfNeeded, isGrading, notDuplicate, printIfNeeded, scanStageText, tagIfNeeded, useJobs } from "../../lib/jobs";
 import { useCapture } from "../../store/capture";
 import "../../styles/paper.css";
 
@@ -84,7 +84,7 @@ export default function Paper() {
   const digitized = paper ? validDigitized(paper.digitized) : null;
   const grading = paper ? isGrading(paper.id) : false;
   useEffect(() => {
-    if (folder && paper) void gradeIfNeeded(folder.id, paper).then(() => tagIfNeeded(folder.id, paper));
+    if (folder && paper) void printIfNeeded(folder.id, paper).then((done) => (done ? reload() : undefined)).then(() => gradeIfNeeded(folder.id, paper)).then(() => tagIfNeeded(folder.id, paper));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paper?.id, Boolean(folder)]);
   const errors = useMemo(() => (folder && paper ? paperErrors(folder, paper) : []), [folder, paper]);
@@ -320,6 +320,33 @@ export default function Paper() {
             <Button size="xs" variant="tinted" icon="camera" onClick={rescan}>重拍</Button>
           </div>
         )}
+        {paper.duplicateOf && !paper.keepDuplicate && (() => {
+          const m = paper.duplicateOf;
+          const other = `「${m.paperName}」`;
+          const text =
+            m.kind === "retake"
+              ? `这是${other}重做的一遍，有 ${m.shared} 道题相同。两次都错的题会合并显示「错过 2 次」。`
+              : m.kind === "partial"
+                ? `这份是${other}其中几页又扫了一遍，${m.shared} 道题和作答都一样。这份的错题不再重复计入。`
+                : `这份和${other}是同一份，作答也一样，可能扫了两次。这份的错题不再重复计入。`;
+          return (
+            <div className="quality-card">
+              <Icon name="info" size={18} stroke={2.2} />
+              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+                <span>
+                  <b>{m.kind === "retake" ? "重做的试卷" : "扫过的试卷"}</b>
+                  <span className="t-foot" style={{ display: "block" }}>{text}{m.folderId !== folderId ? `（在「${m.folderName}」里）` : ""}</span>
+                </span>
+                <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {m.kind !== "retake" && <Button size="xs" variant="tinted" onClick={async () => { await deletePaper(folderId, paperId); nav(`/papers/${m.folderId}/${m.paperId}`, { replace: true }); }}>删掉这份</Button>}
+                  <Button size="xs" variant="tinted" onClick={async () => { await updatePaper(folderId, paperId, { keepDuplicate: true }); await reload(); }}>{m.kind === "retake" ? "知道了" : "两份都留"}</Button>
+                  <Button size="xs" variant="plain" onClick={() => nav(`/papers/${m.folderId}/${m.paperId}`)}>看{other}</Button>
+                  <Button size="xs" variant="plain" onClick={async () => { await notDuplicate(folderId, paper); await reload(); }}>不是同一份</Button>
+                </span>
+              </span>
+            </div>
+          );
+        })()}
         <IconSegmented value={tab} onChange={setTab} options={[{ value: "paper", label: "试卷", icon: "document" }, { value: "answers", label: "作答", icon: "pencil" }, { value: "errors", label: `错题 ${stats.problems}`, icon: "xcircle" }]} />
 
         {tab === "paper" && paperTab}

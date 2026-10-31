@@ -1,7 +1,8 @@
 /** 拍照 / 相册选图 → 存进本机 → 建试卷 → 提交扫描。相册多选时一张照片一张试卷（和 App 一致）。 */
 import Taro from "@tarojs/taro";
 import { errorText } from "./api";
-import { addPaper, getFolder, savePhoto, updatePaper, type FolderPage } from "./store";
+import { addPaper, deleteFolder, deletePaper, getFolder, listFolders, savePhoto, updatePaper, type FolderPage } from "./store";
+import { findPhotoMatches } from "./dedup";
 import { submitScan } from "./jobs";
 import { removeFigures } from "./figures";
 
@@ -47,8 +48,32 @@ export async function captureInto(folderId: string | null, source: Source): Prom
       fid = folder.id;
       created.push({ paperId: paper.id, pages: [page] });
     }
+    // 之前导入过的照片：问一下要不要再扫一次（再扫要等几十秒，结果也一样）
+    const matches = findPhotoMatches(listFolders(), created.flatMap((c) => c.pages), created.map((c) => c.paperId));
+    const dupPapers = created.filter((c) => c.pages.every((pg) => matches.has(pg.id)));
+    let todo = created;
+    if (dupPapers.length) {
+      const first = [...matches.values()][0];
+      Taro.hideLoading();
+      const r = await Taro.showModal({
+        title: dupPapers.length === created.length && created.length === 1 ? "这张照片之前导入过" : `有 ${dupPapers.length} 张照片之前导入过`,
+        content: `在「${first.folderName}」的「${first.paperName}」里。再扫一次结果也一样。`,
+        confirmText: "跳过",
+        cancelText: "仍然扫描",
+      });
+      if (r.confirm) {
+        for (const c of dupPapers) deletePaper(fid!, c.paperId);
+        todo = created.filter((c) => !dupPapers.includes(c));
+        // 刚为这几张新建的文件夹空了：删掉，带用户去原来那份所在的文件夹
+        if (!folderId && !getFolder(fid!)?.papers.length) {
+          deleteFolder(fid!);
+          fid = first.folderId;
+        }
+      }
+      if (todo.length) Taro.showLoading({ title: "上传中…", mask: true });
+    }
     Taro.eventCenter.trigger("jobs");
-    for (const c of created) await scan(fid!, c.paperId, c.pages);
+    for (const c of todo) await scan(fid!, c.paperId, c.pages);
   } finally {
     Taro.hideLoading();
   }

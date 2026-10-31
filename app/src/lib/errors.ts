@@ -3,6 +3,7 @@ import type { DigitizedQuestion, Mark, Subject } from "../api/types";
 import { autoMark, effectiveMark, isBlank, isProblem, validDigitized, type Folder, type Paper } from "./folders";
 import { unwrapLines } from "./format";
 import { figuresOfQuestion, type FigureRef } from "./figures";
+import { countsInSummary, sameQuestion } from "./dedup";
 
 export type ErrorKind = "未作答" | "答错" | "半对";
 
@@ -23,6 +24,7 @@ export interface ErrorItem {
   stem: string; // 卡片上显示的题干：短文里的空只取当前空所在的那一句（q.stemText 仍是整篇，导出合并用）
   sectionLabel: string; // 所属大题，如「Ⅳ Complete the sentences…」
   figures: FigureRef[]; // 这道题用到的插图（从原照片裁）
+  repeats?: ErrorItem[]; // 汇总时合并进来的、别的试卷里的同一道题（较早的几次）；只有汇总列表里才有
 }
 
 export const UNANSWERED = "未作答";
@@ -131,12 +133,56 @@ export function paperErrors(folder: Folder, paper: Paper): ErrorItem[] {
   }));
 }
 
+/** 文件夹里的错题：重复扫描的试卷不计，不同试卷里的同一道题合成一条 */
 export function folderErrors(folder: Folder): ErrorItem[] {
-  return folder.papers.flatMap((p) => paperErrors(folder, p));
+  return mergeRepeats(folder.papers.filter(countsInSummary).flatMap((p) => paperErrors(folder, p)));
 }
 
+/** 全部错题（错题库、错题榜、首页）：同上，跨文件夹合并 */
 export function allErrors(folders: Folder[]): ErrorItem[] {
-  return folders.flatMap(folderErrors);
+  return mergeRepeats(folders.flatMap((f) => f.papers.filter(countsInSummary).flatMap((p) => paperErrors(f, p))));
+}
+
+/** 同一道题错过几次：这一条加上合并进来的 */
+export const timesWrong = (e: ErrorItem) => 1 + (e.repeats?.length ?? 0);
+
+/** 这道题出现在哪几份试卷（含合并进来的） */
+export const paperIdsOf = (e: ErrorItem) => [e.paperId, ...(e.repeats ?? []).map((r) => r.paperId)];
+
+/** 把不同试卷里的同一道题合成一条：留最近扫的那次，较早的放进 repeats。顺序按留下的那条第一次出现的位置 */
+export function mergeRepeats(items: ErrorItem[]): ErrorItem[] {
+  const groups: ErrorItem[][] = [];
+  const byKey = new Map<string, ErrorItem[]>();
+  const buckets = new Map<string, ErrorItem[][]>(); // 学科 + 数字相同的组，给模糊匹配用
+  for (const it of items) {
+    const q = it.q;
+    if (!q.qKey) {
+      groups.push([it]);
+      continue;
+    }
+    let group = byKey.get(q.qKey);
+    if (!group) {
+      const bucket = `${q.subject}|${q.qNums ?? ""}`;
+      group = (buckets.get(bucket) ?? []).find((g) => g[0].paperId !== it.paperId && sameQuestion(g[0].q, q));
+      if (!group) {
+        group = [];
+        groups.push(group);
+        buckets.set(bucket, [...(buckets.get(bucket) ?? []), group]);
+      }
+      byKey.set(q.qKey, group);
+    }
+    // 同一份试卷里指纹相同的（同一道题印了两遍、或题干太像）不合并
+    if (group.length && group.some((g) => g.paperId === it.paperId)) {
+      groups.push([it]);
+      continue;
+    }
+    group.push(it);
+  }
+  return groups.map((g) => {
+    if (g.length === 1) return g[0];
+    const sorted = [...g].sort((a, b) => b.scannedAt.localeCompare(a.scannedAt));
+    return { ...sorted[0], repeats: sorted.slice(1) };
+  });
 }
 
 /** 按知识点分组，错得多的在前 */
@@ -181,7 +227,7 @@ export function toBookItems(items: ErrorItem[]): BookItem[] {
     const q = it.q;
     const isPassageBlank = q.blankIds.length === 1 && /\(\d+\)____/.test(q.stemText);
     const answer = { number: q.number, student: q.studentAnswer, answer: q.correctAnswer, analysis: q.analysis, kind: it.kind, tip: q.tip, sub: it.subKnowledge.join("、") };
-    const source = `${it.folderName} · ${it.paperName}`;
+    const source = [it, ...(it.repeats ?? [])].map((r) => `${r.folderName} · ${r.paperName}`).filter((v, i, a) => a.indexOf(v) === i).join("；");
     if (isPassageBlank) {
       const key = `${it.paperId}:${q.sheet}:${q.blockIndex}`;
       const existing = byBlock.get(key);

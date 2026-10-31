@@ -6,6 +6,7 @@ import { SubjectTile } from "../components/v2";
 import { addPaper, folderStats, listFolders, thumbOf, toPage, type Folder, type FullPage } from "../lib/folders";
 import { finishFlow } from "../lib/flow";
 import { submitScan } from "../lib/jobs";
+import { warnPhotoDuplicates } from "../lib/dedup";
 import { haptic, pickImage, pickImages } from "../lib/native";
 import { toast, toastError } from "../store/banner";
 import { useImport } from "../store/importer";
@@ -28,6 +29,7 @@ export default function Import() {
   useEffect(() => {
     if (sources.length === 0) nav("/home", { replace: true });
     listFolders().then(setFolders).catch(() => setFolders([]));
+    void warnPhotoDuplicates(sources, null, (f, p) => nav(`/papers/${f}/${p}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -47,6 +49,7 @@ export default function Import() {
       if (list.length > 3) toast(`正在读取 ${list.length} 张照片…`);
       const pages: FullPage[] = [];
       for (const src of list) pages.push(await toPage(src));
+      void warnPhotoDuplicates(pages, null, (f, p) => nav(`/papers/${f}/${p}`));
       append(pages);
       void haptic.light();
     } catch (e) {

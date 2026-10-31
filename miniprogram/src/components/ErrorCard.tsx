@@ -1,7 +1,7 @@
 import { Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import type { ErrorItem, ErrorPart } from "../lib/errors";
-import { QTYPE_LABEL } from "../lib/format";
+import { QTYPE_LABEL, formatDate } from "../lib/format";
 import { mathPlain } from "../lib/math";
 import { Figures } from "./FigureImage";
 import { answerLabels } from "../lib/figures";
@@ -89,6 +89,7 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
         <SubjectTile subject={q.subject} size="xs" />
         <Text className="t-cap c-sec">{QTYPE_LABEL[q.questionType]}</Text>
         <View className="flex1" />
+        {item.repeats && item.repeats.length > 0 && <Tag kind="wrong">错过 {item.repeats.length + 1} 次</Tag>}
         <Tag kind={item.kind === "未作答" ? "pending" : item.kind === "半对" ? "partial" : "wrong"}>{item.kind}</Tag>
       </View>
       {(meta || showKnowledge) && (
@@ -129,6 +130,16 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
         )}
         {item.subKnowledge.length > 0 && <Text className="t-cap">细分：{item.subKnowledge.join("、")}</Text>}
       </View>
+      {item.repeats && item.repeats.length > 0 && (
+        <View className="col gap4 t-cap c-sec">
+          <Text>之前也错过：</Text>
+          {item.repeats.map((r) => (
+            <Text key={r.key}>
+              {formatDate(r.scannedAt)} · {r.folderName} · {r.paperName} 第 {r.q.number} 题 · {r.kind === "未作答" ? "没作答" : `写的：${r.q.studentAnswer || "—"}`}
+            </Text>
+          ))}
+        </View>
+      )}
     </View>
   );
 }

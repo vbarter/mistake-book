@@ -5,6 +5,7 @@ import { Button, Empty, InlineNav, Segmented, Sheet } from "../../components/ui"
 import { addPaper, deletePaper, getFolder, loadPages, thumbOf, toPage, updatePaper, validDigitized } from "../../lib/folders";
 import { finishFlow } from "../../lib/flow";
 import { submitScan } from "../../lib/jobs";
+import { warnPhotoDuplicates } from "../../lib/dedup";
 import { haptic, pickImage, pickImages } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
 import { useCapture, type CapturePage } from "../../store/capture";
@@ -48,6 +49,7 @@ export default function Capture() {
     const current = useCapture.getState().pages;
     const added: CapturePage[] = [];
     for (const src of sources) added.push(await toPage(src));
+    void warnPhotoDuplicates(added, useCapture.getState().paperId, (f, p) => nav(`/papers/${f}/${p}`));
     added.forEach(addPage);
     await persist([...current, ...added]);
     void haptic.light();
