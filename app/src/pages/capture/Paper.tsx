@@ -6,7 +6,7 @@ import { MathText, mathNodes } from "../../components/MathText";
 import { ExportSheet } from "../../components/ExportSheet";
 import { Figures } from "../../components/FigureImage";
 import { StoredPhoto } from "../../components/Photo";
-import { figureAt, type FigureRef } from "../../lib/figures";
+import { figureAt, releaseFigureSources, type FigureRef } from "../../lib/figures";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
@@ -76,6 +76,7 @@ export default function Paper() {
 
   const jobsVersion = useJobs((s) => s.version);
   const reload = useCallback(() => getFolder(folderId).then((f) => setFolder(f ?? null)), [folderId]);
+  useEffect(() => releaseFigureSources, []); // 离开试卷页时把裁插图留着的解码原图放掉
   useEffect(() => {
     void reload();
   }, [reload, jobsVersion]);

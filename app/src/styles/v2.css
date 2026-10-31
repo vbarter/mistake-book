@@ -81,12 +81,14 @@
 
 /* 可拖动排序 + 左滑删除的列表 */
 .swipe-list { display: flex; flex-direction: column; }
-.swipe-item { position: relative; border-radius: var(--radius-card); overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; will-change: transform; }
+.swipe-item { position: relative; border-radius: var(--radius-card); overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .swipe-item__content { position: relative; z-index: 1; background: var(--card); border-radius: var(--radius-card); }
 .swipe-item__content > * { width: 100%; }
 .swipe-item__actions { position: absolute; inset: 0 0 0 auto; width: 88px; display: flex; background: var(--wrong); border-radius: 0 var(--radius-card) var(--radius-card) 0; }
 .swipe-item__delete { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #fff; font-size: 12px; font-weight: 600; border: 0; background: transparent; }
 .swipe-item__delete:active { background: rgba(0, 0, 0, 0.12); }
+/* will-change 只在拖动 / 左滑打开时加：常驻的话每张卡片一个合成层，列表长了在 iOS 上很占内存 */
+.swipe-item--drag, .swipe-item--open { will-change: transform; }
 .swipe-item--drag { z-index: 5; box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18); }
 .swipe-item--drag .swipe-item__content { background: var(--card); }
 
