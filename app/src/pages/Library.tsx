@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Subject } from "../api/types";
-import { ErrorCard } from "../components/ErrorCard";
-import { Icon, type IconName } from "../components/Icon";
+import { Icon } from "../components/Icon";
 import { Buddy } from "../components/Illustration";
 import { TrendBars } from "../components/Insights";
 import { CountUp } from "../components/Motion";
@@ -11,13 +11,13 @@ import { allErrors } from "../lib/errors";
 import { listFolders, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL } from "../lib/format";
 import { RANGE_LABEL, analyze, inRange, type Range } from "../lib/insights";
-import { BOARDS, TYPE_LABEL, rank, type Board, type TypeFilter } from "../lib/ranks";
+import { BOARDS, rank, type Board } from "../lib/ranks";
+import { useRankView } from "../store/rankView";
 import { useJobs } from "../lib/jobs";
 
-const BOARD_ICON: Record<Board, IconName> = { question: "target", knowledge: "brain", repeat: "loop", blank: "alert" };
 
 /**
- * 分析 = 错题榜。版式参照生活类 App 的榜单页：顶部时间范围，四张榜单入口卡，学科页签，左边按题型筛，右边是带名次的榜单。
+ * 分析 = 错题榜。版式参照生活类 App 的榜单页：顶部时间范围，学科页签，左边切四个榜单，右边是带名次的榜单；点卡片进详情页，左右滑切换。
  * 易错指数由错题数量、是否真错、跨几份试卷、离现在多近算出（lib/ranks.ts），扫描完自动更新。
  */
 export default function Library() {
@@ -25,8 +25,8 @@ export default function Library() {
   const [range, setRange] = useState<Range>("30d");
   const [board, setBoard] = useState<Board>("question");
   const [subject, setSubject] = useState<Subject | "all">("all");
-  const [type, setType] = useState<TypeFilter>("all");
-  const [open, setOpen] = useState<string | null>(null);
+  const nav = useNavigate();
+  const setView = useRankView((s) => s.set);
   const jobsVersion = useJobs((s) => s.version);
 
   useEffect(() => {
@@ -37,18 +37,24 @@ export default function Library() {
   const ranged = useMemo(() => inRange(errors, range), [errors, range]);
   const insight = useMemo(() => analyze(ranged), [ranged]);
   const subjects = insight.subjects.map(([s]) => s);
-  const scoped = useMemo(() => ranged.filter((e) => (subject === "all" || e.subject === subject) && (type === "all" || e.q.questionType === type)), [ranged, subject, type]);
+  const scoped = useMemo(() => ranged.filter((e) => subject === "all" || e.subject === subject), [ranged, subject]);
   const rows = useMemo(() => rank(scoped, board), [scoped, board]);
   const boardInfo = BOARDS.find((b) => b.id === board)!;
-  const types = (["all", "choice", "fill", "solve"] as TypeFilter[]).filter((t) => t === "all" || ranged.some((e) => (subject === "all" || e.subject === subject) && e.q.questionType === t));
-  const listTitle = `${subject === "all" ? "" : SUBJECT_LABEL[subject]}${type === "all" ? "" : TYPE_LABEL[type]}${boardInfo.title}`;
-  const reset = () => setOpen(null);
+  const listTitle = `${subject === "all" ? "" : SUBJECT_LABEL[subject]}${boardInfo.title}`;
+
+  /** 点一张卡片：把整张榜按顺序摊平成一串题，进详情页从这道开始，左右滑切换 */
+  const openDetail = (rowIndex: number) => {
+    const entries = rows.flatMap((r, i) => r.items.map((e) => ({ key: e.key, rank: i + 1, score: r.score, group: board === "question" ? "" : r.title })));
+    const start = rows.slice(0, rowIndex).reduce((n, r) => n + r.items.length, 0);
+    setView(listTitle, entries);
+    nav(`/library/q/${start}`);
+  };
 
   return (
     <div className="screen rank-screen">
       <header className="topbar topbar--center">
         <div style={{ width: "min(280px, 100%)" }}>
-          <Segmented value={range} onChange={(r) => { setRange(r); reset(); }} options={(["7d", "30d", "all"] as Range[]).map((r) => ({ value: r, label: RANGE_LABEL[r] }))} />
+          <Segmented value={range} onChange={setRange} options={(["7d", "30d", "all"] as Range[]).map((r) => ({ value: r, label: RANGE_LABEL[r] }))} />
         </div>
       </header>
 
@@ -66,30 +72,20 @@ export default function Library() {
               <Buddy scene="chart" size={100} style={{ flexShrink: 0, margin: "-10px -12px -14px 0" }} />
             </section>
 
-            <div className="board-cards rise" style={{ ["--i" as string]: 1 }}>
-              {BOARDS.map((b) => (
-                <button key={b.id} className={`board-card board-card--${b.id}${board === b.id ? " on" : ""}`} onClick={() => { setBoard(b.id); reset(); }} aria-pressed={board === b.id}>
-                  <span className="board-card__title">{b.title}<Icon name="chevron-right" size={12} stroke={3} /></span>
-                  <span className="board-card__slogan">{b.slogan}</span>
-                  <span className="board-card__icon"><Icon name={BOARD_ICON[b.id]} size={26} stroke={2} /></span>
-                </button>
-              ))}
-            </div>
-
             <section className="rank-panel rise" style={{ ["--i" as string]: 2 }}>
               <div className="subject-tabs" role="tablist">
                 {(["all", ...subjects] as (Subject | "all")[]).map((s) => (
-                  <button key={s} role="tab" aria-selected={subject === s} className={`subject-tab${subject === s ? " on" : ""}`} onClick={() => { setSubject(s); setType("all"); reset(); }}>
+                  <button key={s} role="tab" aria-selected={subject === s} className={`subject-tab${subject === s ? " on" : ""}`} onClick={() => setSubject(s)}>
                     {s === "all" ? "全部" : SUBJECT_LABEL[s]}
                   </button>
                 ))}
               </div>
               <div className="rank-body">
-                <nav className="rank-side" aria-label="按题型">
-                  <span className="rank-side__head">题型</span>
-                  {types.map((t) => (
-                    <button key={t} className={`rank-side__item${type === t ? " on" : ""}`} onClick={() => { setType(t); reset(); }}>
-                      <Laurel />{t === "all" ? "全部" : TYPE_LABEL[t].slice(0, 2)}<Laurel flip />
+                <nav className="rank-side" aria-label="榜单">
+                  <span className="rank-side__head">榜单</span>
+                  {BOARDS.map((b) => (
+                    <button key={b.id} className={`rank-side__item${board === b.id ? " on" : ""}`} onClick={() => setBoard(b.id)} aria-pressed={board === b.id}>
+                      <Laurel /><span className="rank-side__label">{b.title.replace("榜", "")}<small>{b.slogan}</small></span><Laurel flip />
                     </button>
                   ))}
                 </nav>
@@ -97,23 +93,16 @@ export default function Library() {
                   <div className="rank-list__head"><Laurel />{listTitle}<Laurel flip /></div>
                   {rows.length === 0 && <div className="rank-empty"><Icon name="seal" size={28} /><span>这个榜上还没有题{board === "repeat" ? "，同一个知识点在两份以上试卷里都错才会上榜" : ""}</span></div>}
                   {rows.slice(0, 20).map((r, i) => (
-                    <div key={r.key} className="rank-card" style={{ ["--i" as string]: Math.min(i, 8) }}>
-                      <button className="rank-card__main" onClick={() => setOpen(open === r.key ? null : r.key)} aria-expanded={open === r.key}>
-                        <span className={`rank-badge rank-badge--${i < 3 ? i + 1 : "n"}`}>{i + 1}</span>
-                        <span className="rank-card__body">
-                          <span className="rank-card__title">{subject === "all" && <SubjectTile subject={r.subject} size="xs" />}<span className="clamp2">{r.title}</span></span>
-                          <span className="rank-card__meta">{r.meta.map((m) => <span key={m} className="ellipsis">{m}</span>)}</span>
-                          <span className="rank-index">易错指数 {r.score.toFixed(1)}</span>
-                          <span className="rank-card__quote clamp2">“{r.quote}”</span>
-                        </span>
-                      </button>
-                      {open === r.key && (
-                        <div className="rank-card__more">
-                          {r.items.slice(0, 5).map((e) => <ErrorCard key={e.key} item={e} showSource />)}
-                          {r.items.length > 5 && <span className="t-foot c-sec" style={{ textAlign: "center" }}>还有 {r.items.length - 5} 道，在文件夹的错题汇总里看</span>}
-                        </div>
-                      )}
-                    </div>
+                    <button key={r.key} className="rank-card" style={{ ["--i" as string]: Math.min(i, 8) }} onClick={() => openDetail(i)}>
+                      <span className={`rank-badge rank-badge--${i < 3 ? i + 1 : "n"}`}>{i + 1}</span>
+                      <span className="rank-card__body">
+                        <span className="rank-card__title">{subject === "all" && <SubjectTile subject={r.subject} size="xs" />}<span className="clamp2">{r.title}</span></span>
+                        <span className="rank-card__meta">{r.meta.map((m) => <span key={m} className="ellipsis">{m}</span>)}</span>
+                        <span className="rank-index">易错指数 {r.score.toFixed(1)}</span>
+                        <span className="rank-card__quote clamp2">“{r.quote}”</span>
+                      </span>
+                      <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)", alignSelf: "center", flexShrink: 0 }} />
+                    </button>
                   ))}
                 </div>
               </div>

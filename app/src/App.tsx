@@ -16,6 +16,7 @@ import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Import from "./pages/Import";
 import Library from "./pages/Library";
+import RankDetail from "./pages/RankDetail";
 import Papers from "./pages/Papers";
 import FolderDetail from "./pages/FolderDetail";
 import Capture from "./pages/capture/Capture";
@@ -113,6 +114,7 @@ export default function App() {
           <Route path="/papers/:folderId/:paperId" element={<Paper />} />
           <Route path="/capture" element={<Capture />} />
           <Route path="/import" element={<Import />} />
+          <Route path="/library/q/:index" element={<RankDetail />} />
           <Route path="/profile/subjects" element={<Subjects />} />
           <Route path="/profile/account" element={<Account />} />
           <Route path="/profile/privacy" element={<Privacy />} />

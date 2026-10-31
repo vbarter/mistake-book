@@ -1,9 +1,8 @@
 /** 错题榜：把一段时间里的错题排成几张榜单。易错指数 0–100，越高越该先复习，全部在本机算。 */
-import type { QuestionType, Subject } from "../api/types";
+import type { Subject } from "../api/types";
 import type { ErrorItem } from "./errors";
 
 export type Board = "question" | "knowledge" | "repeat" | "blank";
-export type TypeFilter = "all" | QuestionType;
 
 export const BOARDS: { id: Board; title: string; slogan: string }[] = [
   { id: "question", title: "易错题榜", slogan: "最该重做" },
@@ -11,8 +10,6 @@ export const BOARDS: { id: Board; title: string; slogan: string }[] = [
   { id: "repeat", title: "反复错榜", slogan: "一错再错" },
   { id: "blank", title: "空白榜", slogan: "没有思路" },
 ];
-
-export const TYPE_LABEL: Record<TypeFilter, string> = { all: "全部题型", choice: "选择题", fill: "填空题", solve: "解答题" };
 
 export interface RankRow {
   key: string;
