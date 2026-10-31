@@ -76,7 +76,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         root_logger = logging.getLogger()
         root_logger.handlers = gunicorn_logger.handlers
         root_logger.setLevel(gunicorn_logger.level or logging.INFO)
-        app.logger.handlers = gunicorn_logger.handlers
+        # handler 只挂在根 logger 上：app.logger（"app"）和各模块 logger（"app.xxx"）都会向上传播到根，
+        # 再给 app.logger 挂一遍同样的 handler 每条日志就会写两次
+        app.logger.handlers = []
         app.logger.setLevel(gunicorn_logger.level or logging.INFO)
 
     with app.app_context():
