@@ -6,7 +6,7 @@ import { addPaper, deletePaper, getFolder, loadPages, thumbOf, toPage, updatePap
 import { finishFlow } from "../../lib/flow";
 import { submitScan } from "../../lib/jobs";
 import { warnPhotoDuplicates } from "../../lib/dedup";
-import { haptic, pickImage, pickImages } from "../../lib/native";
+import { haptic, pickImages, takePhoto } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
 import { useCapture, type CapturePage } from "../../store/capture";
 
@@ -16,7 +16,7 @@ type EntryState = { folderId?: string | null; paperId?: string | null; source?: 
 
 /**
  * 录入试卷：进入即起相机 / 相册 → 照片存进文件夹里的这张试卷 → 一键扫描还原电子版。
- * 拍照是连拍：拍完一张接着起相机，在相机里点取消才停；每张拍完就存进手机，App 退出也不会丢，回来在文件夹里接着扫。
+ * 拍照是连拍：每张拍完先全屏确认（× 重拍 / ✓ 入队），确认后接着起相机，在相机里点取消才停；每张拍完就存进手机，App 退出也不会丢，回来在文件夹里接着扫。
  */
 export default function Capture() {
   const nav = useNavigate();
@@ -79,13 +79,13 @@ export default function Capture() {
       }
       // 拍照期间 App 被系统回收时，重启后按这个把照片放回同一张试卷（见 lib/cameraRestore）
       const cameraTarget = () => ({ folderId: useCapture.getState().folderId ?? targetFolder, paperId: useCapture.getState().paperId });
-      const src = await pickImage("camera", cameraTarget());
+      const src = await takePhoto(cameraTarget());
       if (!src) return false;
       await addSources([src]);
       // 连拍：接着起相机，直到在相机里点取消。稍等一下让上一个相机界面收起来，iOS 上连着弹太快会弹不出来
       for (;;) {
         await new Promise((r) => setTimeout(r, 400));
-        const next = await pickImage("camera", cameraTarget());
+        const next = await takePhoto(cameraTarget());
         if (!next) break;
         await addSources([next]);
       }
@@ -106,7 +106,8 @@ export default function Capture() {
     reset();
   };
 
-  // 进入：带 paperId 是回来继续一张已有的试卷；带 source 是立刻起相机 / 相册，什么都没选就原路返回
+  // 进入：带 paperId 是回来继续一张已有的试卷；带 source 是立刻起相机 / 相册，什么都没选就原路返回。
+  // 已有照片时只有拍照会接着起相机（找回的照片点了 × 重拍时就是这样进来的）
   useEffect(() => {
     if (autoStarted.current) return;
     autoStarted.current = true;
@@ -116,7 +117,7 @@ export default function Capture() {
         const paper = folder?.papers.find((p) => p.id === entry.paperId);
         if (folder && paper) setPaper(folder.id, paper.id, paper.name, await loadPages(paper), validDigitized(paper.digitized));
       }
-      if (entry?.source && useCapture.getState().pages.length === 0) {
+      if (entry?.source && (entry.source === "camera" || useCapture.getState().pages.length === 0)) {
         const got = await pick(entry.source);
         if (!got && useCapture.getState().pages.length === 0) leave();
       }

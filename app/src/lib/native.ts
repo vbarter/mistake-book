@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 import { forgetCameraTarget, rememberCameraTarget } from "./cameraRestore";
+import { answerPhotoConfirm, confirmPhoto, usePhotoConfirm } from "../store/photoConfirm";
 
 export const isNative = Capacitor.isNativePlatform();
 /** 安卓原生：没有 Apple 登录，相机 / 相册走安卓权限 */
@@ -61,6 +62,25 @@ export async function pickImage(source: "camera" | "photos", target?: { folderId
     };
     input.click();
   });
+}
+
+/**
+ * iOS 的系统相机拍完自带「重拍 / 使用照片」，不用再确认一次；安卓（多数相机拍完直接返回）和网页拍完弹 App 自己的确认界面。
+ */
+export const needsPhotoConfirm = Capacitor.getPlatform() !== "ios";
+
+/**
+ * 拍一张并确认：拍完先全屏预览，点 × 放弃这张、直接再起相机重拍；点 ✓ 返回这张照片。在相机里点取消返回 null。
+ * 只用于拍照；相册多选不走确认。
+ */
+export async function takePhoto(target?: { folderId: string | null; paperId: string | null }): Promise<string | null> {
+  for (;;) {
+    const src = await pickImage("camera", target);
+    if (!src) return null;
+    if (!needsPhotoConfirm || (await confirmPhoto(src))) return src;
+    // 重拍：稍等确认界面收起来再起相机，iOS / 部分安卓连着弹太快会弹不出来
+    await new Promise((r) => setTimeout(r, 300));
+  }
 }
 
 /** 从相册多选，返回 dataURL 列表（JPEG，最长边 PHOTO_MAX_SIDE）。limit 为 0 表示不限张数。网页端退化为多选文件。 */
@@ -219,6 +239,8 @@ export async function setupBackButton(): Promise<() => void> {
   try {
     const { App } = await import("@capacitor/app");
     const handle = await App.addListener("backButton", ({ canGoBack }) => {
+      // 拍照确认界面开着：返回键等于点 ×（放弃这张，重拍），不离开当前页
+      if (answerPhotoConfirm(false)) return;
       if (canGoBack && window.history.length > 1) window.history.back();
       else void App.exitApp();
     });
@@ -242,7 +264,7 @@ export function setupEdgeSwipeBack(onBack: () => void, isRoot: () => boolean): (
   let armed = false;
   const onStart = (e: TouchEvent) => {
     const t = e.touches[0];
-    if (!t || t.clientX > 28 || isRoot()) { tracking = false; return; }
+    if (!t || t.clientX > 28 || isRoot() || usePhotoConfirm.getState().src) { tracking = false; return; }
     tracking = true; armed = false; startX = t.clientX; startY = t.clientY;
   };
   const onMove = (e: TouchEvent) => {

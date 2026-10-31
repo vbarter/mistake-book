@@ -7,7 +7,7 @@ import { addPaper, folderStats, listFolders, thumbOf, toPage, type Folder, type 
 import { finishFlow } from "../lib/flow";
 import { submitScan } from "../lib/jobs";
 import { warnPhotoDuplicates } from "../lib/dedup";
-import { haptic, pickImage, pickImages } from "../lib/native";
+import { haptic, pickImages, takePhoto } from "../lib/native";
 import { toast, toastError } from "../store/banner";
 import { useImport } from "../store/importer";
 
@@ -40,11 +40,11 @@ export default function Import() {
     [mode, sources, base],
   );
 
-  // 继续添加：拍一张或从相册再选几张，接在最后，目录预览跟着变
+  // 继续添加：拍一张（拍完先确认，× 重拍 / ✓ 入队）或从相册再选几张，接在最后，目录预览跟着变
   const addMore = async (source: "camera" | "photos") => {
     setAdding(false);
     try {
-      const list = source === "camera" ? [await pickImage("camera", { folderId, paperId: null })].filter((x): x is string => Boolean(x)) : await pickImages(0);
+      const list = source === "camera" ? [await takePhoto({ folderId, paperId: null })].filter((x): x is string => Boolean(x)) : await pickImages(0);
       if (!list.length) return;
       if (list.length > 3) toast(`正在读取 ${list.length} 张照片…`);
       const pages: FullPage[] = [];
