@@ -130,6 +130,24 @@ CREATE TABLE IF NOT EXISTS digitize_jobs (
   INDEX idx_jobs_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 导出任务（错题本 / 电子试卷 PDF 后台生成，文件在 UPLOAD_DIR/exports/，保留 7 天）
+CREATE TABLE IF NOT EXISTS export_jobs (
+  id VARCHAR(32) PRIMARY KEY,
+  user_id VARCHAR(32) NOT NULL,
+  kind VARCHAR(8) DEFAULT 'book',
+  title VARCHAR(120) DEFAULT '',
+  detail VARCHAR(160) DEFAULT '',
+  status VARCHAR(16) DEFAULT 'queued',
+  error TEXT,
+  pages INT DEFAULT 0,
+  size INT DEFAULT 0,
+  created_at DATETIME,
+  updated_at DATETIME,
+  INDEX idx_exports_user (user_id),
+  INDEX idx_exports_status (status),
+  INDEX idx_exports_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 使用记录（管理后台统计用：打开、注册、登录、扫描、导出），不存试卷内容
 CREATE TABLE IF NOT EXISTS usage_events (
   id         BIGINT      NOT NULL AUTO_INCREMENT,

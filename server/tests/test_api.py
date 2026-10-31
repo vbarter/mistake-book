@@ -1579,3 +1579,45 @@ def test_tag_topics_prefers_paper_grade(monkeypatch):
     ])]
     provider.tag_topics(sheets, grade="5")
     assert seen[0].index("cnm_231｜") < seen[0].index("cnm_p001｜") and "九年级" in seen[0]
+
+
+def test_background_export_book_list_download_delete(client, auth):
+    """后台导出：提交后拿到任务，生成好的 PDF 在「我的导出」里能再下载、能删除；别人看不到。"""
+    items = [{"number": "1", "stem": "床前明月光，疑是地上霜。" * 30 + "____", "knowledge": "古诗文", "source": "语文",
+              "answers": [{"number": "1", "student": "", "answer": "举头望明月", "analysis": "", "kind": "未作答", "tip": "", "sub": ""}], "figures": []}]
+    r = client.post("/api/exports", json={"kind": "book", "title": "全部错题 错题本", "subtitle": "1 题 · 错题 + 未作答", "items": items}, headers=auth)
+    assert r.status_code == 200, r.get_json()
+    job = r.get_json()
+    assert job["status"] == "done" and job["kind"] == "book" and job["size"] > 1000 and job["pages"] >= 1
+    assert job["title"] == "全部错题 错题本" and job["detail"] == "1 题 · 错题 + 未作答"
+
+    listed = client.get("/api/exports", headers=auth).get_json()["items"]
+    assert [j["id"] for j in listed] == [job["id"]]
+    assert client.get(f"/api/exports/{job['id']}", headers=auth).get_json()["status"] == "done"
+    f = client.get(f"/api/exports/{job['id']}/file", headers=auth)
+    assert f.status_code == 200 and f.mimetype == "application/pdf" and f.data.startswith(b"%PDF")
+
+    # 别的账号拿不到
+    c = client.post("/api/auth/code", json={"phone": "13800000001", "purpose": "register"}).get_json()["devCode"]
+    other = {"Authorization": "Bearer " + client.post("/api/auth/register", json={"phone": "13800000001", "code": c}).get_json()["token"]}
+    assert client.get(f"/api/exports/{job['id']}/file", headers=other).status_code == 404
+    assert client.get("/api/exports", headers=other).get_json()["items"] == []
+
+    assert client.delete(f"/api/exports/{job['id']}", headers=auth).status_code == 200
+    assert client.get("/api/exports", headers=auth).get_json()["items"] == []
+    assert client.get(f"/api/exports/{job['id']}/file", headers=auth).status_code == 404
+
+
+def test_background_export_validates_and_reports_failure(client, auth, monkeypatch):
+    assert client.post("/api/exports", json={"kind": "book", "items": []}, headers=auth).status_code == 400
+    assert client.post("/api/exports", json={"kind": "zip"}, headers=auth).status_code == 400
+    from app.routes import exports
+
+    def boom(*_a, **_k):
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(exports, "build_book_pdf", boom)
+    r = client.post("/api/exports", json={"kind": "book", "title": "t", "items": [{"number": "1", "stem": "s", "answers": []}]}, headers=auth)
+    job = r.get_json()
+    assert job["status"] == "failed" and "错题本" in job["error"]
+    assert client.get(f"/api/exports/{job['id']}/file", headers=auth).status_code == 404

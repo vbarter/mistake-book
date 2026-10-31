@@ -35,6 +35,11 @@ export async function setToken(value: string | null) {
   else await Preferences.remove({ key: TOKEN_KEY });
 }
 
+/** 给不走 fetch 的请求（原生下载文件）带上登录态 */
+export function authHeaders(): Record<string, string> {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function getApiBase(): string {
   if (apiBase) return apiBase;
   const env = (import.meta.env.VITE_API_BASE as string | undefined) || "";

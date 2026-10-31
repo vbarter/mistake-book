@@ -249,7 +249,7 @@ export function Privacy() {
         </div>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">扫描时如何处理照片</span>
-          <p className="t-sub c-sec">扫描时把试卷照片发到我们的服务器识别和批改，并要求 AI 忽略姓名、学校、班级等信息。服务器不保存照片；识别结果保留一天，方便切走 App 后取回，之后自动删除。</p>
+          <p className="t-sub c-sec">扫描时把试卷照片发到我们的服务器识别和批改，并要求 AI 忽略姓名、学校、班级等信息。服务器不保存照片；识别结果保留一天，方便切走 App 后取回，之后自动删除。导出的错题本 / 电子试卷 PDF 在服务器上保留 7 天，方便在「我的导出」里再次下载，可以随时删除，到期自动删除。</p>
         </div>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">第三方 SDK</span>

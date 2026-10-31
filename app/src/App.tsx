@@ -23,6 +23,7 @@ import Capture from "./pages/capture/Capture";
 import Paper from "./pages/capture/Paper";
 import Profile from "./pages/Profile";
 import { Account, Privacy, Subjects } from "./pages/ProfilePages";
+import { Exports } from "./pages/Exports";
 
 function RequireAuth() {
   const { ready, token } = useAuth();
@@ -119,6 +120,7 @@ export default function App() {
           <Route path="/profile/subjects" element={<Subjects />} />
           <Route path="/profile/account" element={<Account />} />
           <Route path="/profile/privacy" element={<Privacy />} />
+          <Route path="/profile/exports" element={<Exports />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

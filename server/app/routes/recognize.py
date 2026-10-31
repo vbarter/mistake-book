@@ -289,25 +289,13 @@ def digitize_job(job_id: str):
 @login_required
 def digitize_pdf():
     """电子版试卷 → 可打印 PDF：原题干净还原 + 作答与批改对照表 + 错题汇总。前端把扫描结果原样传回。"""
-    data = request.get_json(silent=True) or {}
-    title = str(data.get("title") or "")[:80]
-    papers = data.get("papers")
-    if papers is None:
-        papers = [{"title": title, "pages": data.get("pages"), "questions": data.get("questions") or []}]
-    if not isinstance(papers, list) or not papers or len(papers) > 20:
-        abort(400, "缺少电子版内容")
-    for paper in papers:
-        sheets = paper.get("pages") if isinstance(paper, dict) else None
-        if not isinstance(sheets, list) or not sheets or not all(isinstance(s, dict) for s in sheets):
-            abort(400, "缺少电子版内容")
-        if not isinstance(paper.get("questions", []), list):
-            abort(400, "题目列表格式不对")
+    title, papers = paper_args(request.get_json(silent=True) or {})
     track(current_user(), "pdf")
     try:
         pdf = build_papers_pdf(title, papers)
     except Exception as e:  # noqa: BLE001
         log.exception("pdf failed")
-        return jsonify({"error": "pdf_failed", "message": _pdf_error_message("电子试卷", e)}), 500
+        return jsonify({"error": "pdf_failed", "message": pdf_error_message("电子试卷", e)}), 500
     return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": "attachment; filename=paper.pdf"})
 
 
@@ -383,29 +371,49 @@ def taxonomy_topic(topic_id: str):
     return jsonify({**v, "prerequisites": taxonomy.prerequisites(v["id"], depth=2)})
 
 
-def _pdf_error_message(what: str, e: Exception) -> str:
+def pdf_error_message(what: str, e: Exception) -> str:
     """给用户看的失败原因：说清楚是哪一步、能怎么办，不说「稍后重试」（这类错误重试也一样）。"""
     if type(e).__name__ == "LayoutError":
         return f"生成{what}失败：有一道题内容太长，一页排不下。可以先按知识点或时间分开导出。"
     return f"生成{what}失败：排版时出错了，已记录下来。可以换个范围导出，或者联系我们处理。"
 
 
-@bp.post("/digitize/book")
-@login_required
-def digitize_book():
-    """错题本 PDF（横向）：左半页空白重做，右半页错题修正。items 由前端按文件夹 / 学科 / 时间范围整理好传来。"""
-    data = request.get_json(silent=True) or {}
+def book_args(data: dict) -> tuple[str, str, list[dict]]:
+    """错题本请求体校验：返回 (标题, 副标题, 题目)。同步导出和后台导出共用。"""
     items = data.get("items")
     if not isinstance(items, list) or not items or not all(isinstance(x, dict) for x in items):
         abort(400, "没有可导出的错题")
     if len(items) > 400:
         abort(400, "一次最多导出 400 题")
-    title = str(data.get("title") or "错题本")[:80]
-    subtitle = str(data.get("subtitle") or "")[:120]
+    return str(data.get("title") or "错题本")[:80], str(data.get("subtitle") or "")[:120], items
+
+
+def paper_args(data: dict) -> tuple[str, list[dict]]:
+    """电子试卷请求体校验：返回 (标题, 试卷列表)。"""
+    title = str(data.get("title") or "")[:80]
+    papers = data.get("papers")
+    if papers is None:
+        papers = [{"title": title, "pages": data.get("pages"), "questions": data.get("questions") or []}]
+    if not isinstance(papers, list) or not papers or len(papers) > 20:
+        abort(400, "缺少电子版内容")
+    for paper in papers:
+        sheets = paper.get("pages") if isinstance(paper, dict) else None
+        if not isinstance(sheets, list) or not sheets or not all(isinstance(s, dict) for s in sheets):
+            abort(400, "缺少电子版内容")
+        if not isinstance(paper.get("questions", []), list):
+            abort(400, "题目列表格式不对")
+    return title, papers
+
+
+@bp.post("/digitize/book")
+@login_required
+def digitize_book():
+    """错题本 PDF（横向）：左半页空白重做，右半页错题修正。items 由前端按文件夹 / 学科 / 时间范围整理好传来。"""
+    title, subtitle, items = book_args(request.get_json(silent=True) or {})
     track(current_user(), "book", questions=len(items))
     try:
         pdf = build_book_pdf(title, subtitle, items)
     except Exception as e:  # noqa: BLE001
         log.exception("book pdf failed")
-        return jsonify({"error": "pdf_failed", "message": _pdf_error_message("错题本", e)}), 500
+        return jsonify({"error": "pdf_failed", "message": pdf_error_message("错题本", e)}), 500
     return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": "attachment; filename=book.pdf"})
