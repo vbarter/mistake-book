@@ -357,6 +357,7 @@ S_BOOK_KP = ParagraphStyle("bookkp", fontName=FONT, fontSize=11.5, leading=16, t
 S_BOOK_STEM = ParagraphStyle("bookstem", fontName=FONT, fontSize=11, leading=19)
 S_BOOK_META = ParagraphStyle("bookmeta", fontName=FONT, fontSize=8.5, leading=11, textColor=colors.HexColor("#8e8e93"))
 S_BOOK_ANS = ParagraphStyle("bookans", fontName=FONT, fontSize=10.5, leading=15)
+S_BOOK_ANS_COMPACT = ParagraphStyle("bookansc", fontName=FONT, fontSize=10, leading=14.5, leftIndent=26, firstLineIndent=-26, spaceAfter=1)
 S_BOOK_NOTE = ParagraphStyle("booknote", fontName=FONT, fontSize=9.5, leading=13.5, textColor=colors.HexColor("#555555"))
 S_TOC_H = ParagraphStyle("toch", fontName=FONT, fontSize=13, leading=18, spaceBefore=4, spaceAfter=6)
 S_TOC_HEAD = ParagraphStyle("tochead", fontName=FONT, fontSize=9.5, leading=13, textColor=colors.HexColor("#555555"))
@@ -365,6 +366,10 @@ S_TOC_NUM = ParagraphStyle("tocnum", fontName=FONT, fontSize=10.5, leading=15, a
 S_TOC_NOTE = ParagraphStyle("tocnote", fontName=FONT, fontSize=9, leading=13, textColor=colors.HexColor("#555555"))
 
 KIND_COLOR = {"未作答": "#b42323", "答错": "#b35300", "半对": "#b35300"}
+
+# 错题本按中文规则断行：句号、逗号不会落到行首，「(34)」这样的空号不会被拆到两行；英文单词仍整词换行
+for _style in (S_BOOK_H, S_BOOK_KP, S_BOOK_STEM, S_BOOK_META, S_BOOK_ANS, S_BOOK_ANS_COMPACT, S_BOOK_NOTE):
+    _style.wordWrap = "CJK"
 
 
 def _blank_lines(text: str) -> str:
@@ -425,6 +430,117 @@ def _toc_part(story: list, groups: list[tuple[str, list[dict]]], pages: dict, wi
     story.append(PageBreak())
 
 
+_TIP_PREFIX = re.compile(r"^\s*下次(要)?注意\s*[：:，,]?\s*")
+_PASSAGE_BLANK = re.compile(r"\((\d+)\)____")
+
+
+def _tip_text(tip: str) -> str:
+    """模型写的提示常常自己就以「下次注意」开头，去掉免得印成「下次注意：下次注意…」。"""
+    return _TIP_PREFIX.sub("", tip or "").strip()
+
+
+def _answer_flows(answers: list[dict], compact: bool, tips: list[str] | None = None, show_tips: bool = True) -> list:
+    """右栏：每个空的原答案 / 正确答案 / 解析。
+
+    compact（整篇默写这类一道题十几个空）：一空一行「(8) 正确答案　解析」，未作答不再逐条写「原答案：未作答」；
+    同一道题里重复的知识点、重复的「下次注意」只印一次（模型常给每个空写同一句提示），放在这段最后。
+    """
+    out: list = []
+    last_sub = None
+    tips = [] if tips is None else tips
+    for a in answers:
+        kind = str(a.get("kind") or "答错")
+        student = str(a.get("student") or "").strip()
+        color = KIND_COLOR.get(kind, "#b35300")
+        number = _esc(str(a.get("number") or ""))
+        answer = _esc(str(a.get("answer") or "—"))
+        sub = str(a.get("sub") or "")
+        if compact:
+            line = f"({number})　<font color='#1e7a47'>{answer}</font>"
+            if student:
+                line += f"　<font color='{color}' size='9'>原答案：{_esc(student)}</font>"
+            if a.get("analysis"):
+                line += f"　<font color='#555555' size='9'>{_esc(str(a['analysis']))}</font>"
+            out.append(Paragraph(line, S_BOOK_ANS_COMPACT))
+        else:
+            line = f"{number}.　原答案：<font color='{color}'>{_esc(student or UNANSWERED)}</font>　正确：<font color='#1e7a47'>{answer}</font>"
+            if sub and sub != last_sub:
+                line += f"　<font color='#8e8e93' size='8.5'>{_esc(sub)}</font>"
+            out.append(Paragraph(line, S_BOOK_ANS))
+            if a.get("analysis"):
+                out.append(Paragraph(_esc(str(a["analysis"])), S_BOOK_NOTE))
+        last_sub = sub
+        tip = _tip_text(str(a.get("tip") or ""))
+        if tip and tip not in tips:
+            tips.append(tip)
+    if show_tips:
+        for tip in tips:
+            out.append(Paragraph(f"下次注意：{_esc(tip)}", S_BOOK_NOTE))
+    return out
+
+
+def _passage_chunks(stem: str, answers: list[dict], per_chunk: int = 4) -> list[tuple[str, list[dict]]] | None:
+    """整篇默写 / 短文（题干里有一串「(8)____」）按句子切成几段，每段配上这段里那几个空的答案。
+
+    整篇放一格、所有答案放旁边一格时，右栏比左栏长好几倍：左栏一页就写完了，右栏要排三四页，
+    分页后左边整页空白、右边的答案对不上左边的空。切段后每一行左边是一小段原文，右边正好是这段里的空，翻页也对得齐。
+    """
+    numbers = _PASSAGE_BLANK.findall(stem)
+    if len(answers) <= per_chunk or len(numbers) < 2 or len(set(numbers)) != len(numbers):
+        return None
+    by_number = {str(a.get("number") or "").strip(): a for a in answers}
+    if not any(n in by_number for n in numbers):
+        return None
+    sentences = [x for x in re.split(r"(?<=[。！？；?!;\n])", stem) if x]
+    chunks: list[tuple[str, list[dict]]] = []
+    text, got = "", []
+    for sentence in sentences:
+        text += sentence
+        got += [by_number[n] for n in _PASSAGE_BLANK.findall(sentence) if n in by_number]
+        if len(got) >= per_chunk:
+            chunks.append((text, got))
+            text, got = "", []
+    if text:
+        if got or not chunks:
+            chunks.append((text, got))
+        else:
+            chunks[-1] = (chunks[-1][0] + text, chunks[-1][1])  # 结尾没有错空的几句并到上一段
+    placed = {id(a) for _, got in chunks for a in got}
+    rest = [a for a in answers if id(a) not in placed]  # 题干里找不到编号的空，放在最后一段
+    if rest:
+        chunks[-1] = (chunks[-1][0], chunks[-1][1] + rest)
+    return chunks
+
+
+def _book_item_rows(it: dict) -> list[tuple[list, list]]:
+    """一道题在表格里的行：一般是一行；整篇默写按句子切成几行，左右一一对应。"""
+    number = _esc(str(it.get("number") or ""))
+    stem = str(it.get("stem") or "")
+    answers = [a for a in it.get("answers") or [] if isinstance(a, dict)]
+    chunks = _passage_chunks(stem, answers)
+    if chunks is None:
+        chunks = [(stem, answers)]
+    rows: list[tuple[list, list]] = []
+    tips: list[str] = []  # 整道题去重后的「下次注意」，只在最后一段印一次
+    for i, (text, got) in enumerate(chunks):
+        head = f"{number}. " if i == 0 else ""
+        left: list = [Paragraph(f"{head}{_blank_lines(text.strip())}", S_BOOK_STEM)]
+        last = i == len(chunks) - 1
+        if last:
+            opts = it.get("options") or []
+            if opts:
+                labeled = [o if re.match(r"^[A-H][.、．]", str(o)) else f"{chr(65 + k)}. {o}" for k, o in enumerate(opts)]
+                left.append(Paragraph("　".join(_esc(str(o)) for o in labeled), S_BOOK_NOTE))
+            figs = [f for f in it.get("figures") or [] if isinstance(f, dict)]
+            if figs:
+                left.extend(_figures_flow(figs, 110 * mm, 60 * mm, 30 * mm, keep=False))
+            if it.get("source"):
+                left.append(Paragraph(_esc(str(it["source"])), S_BOOK_META))
+            left.append(Spacer(1, 18))  # 书写留白
+        rows.append((left, _answer_flows(got, compact=len(chunks) > 1 or len(answers) > 4, tips=tips, show_tips=last)))
+    return rows
+
+
 def _book_rows(items: list[dict], marks: dict | None = None):
     rows = [[Paragraph("空白重做", S_BOOK_H), Paragraph("错题修正", S_BOOK_H)]]
     styles = [
@@ -452,32 +568,14 @@ def _book_rows(items: list[dict], marks: dict | None = None):
             styles.append(("SPAN", (0, r), (1, r)))
             styles.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#f2f5fc")))
             styles.append(("LINEBELOW", (0, r), (-1, r), 0, colors.white))
-        number = _esc(str(it.get("number") or ""))
-        left = [Paragraph(f"{number}. {_blank_lines(str(it.get('stem') or ''))}", S_BOOK_STEM)]
-        opts = it.get("options") or []
-        if opts:
-            labeled = [o if re.match(r"^[A-H][.、．]", str(o)) else f"{chr(65 + i)}. {o}" for i, o in enumerate(opts)]
-            left.append(Paragraph("　".join(_esc(str(o)) for o in labeled), S_BOOK_NOTE))
-        figs = [f for f in it.get("figures") or [] if isinstance(f, dict)]
-        if figs:
-            left.extend(_figures_flow(figs, 110 * mm, 60 * mm, 30 * mm, keep=False))
-        if it.get("source"):
-            left.append(Paragraph(_esc(str(it["source"])), S_BOOK_META))
-        left.append(Spacer(1, 18))  # 书写留白
-        right = []
-        for a in it.get("answers") or []:
-            kind = str(a.get("kind") or "答错")
-            student = str(a.get("student") or "").strip() or UNANSWERED
-            color = KIND_COLOR.get(kind, "#b35300")
-            line = f"{_esc(str(a.get('number') or ''))}.　原答案：<font color='{color}'>{_esc(student)}</font>　正确：<font color='#1e7a47'>{_esc(str(a.get('answer') or '—'))}</font>"
-            if a.get("sub"):
-                line += f"　<font color='#8e8e93' size='8.5'>{_esc(str(a['sub']))}</font>"
-            right.append(Paragraph(line, S_BOOK_ANS))
-            if a.get("analysis"):
-                right.append(Paragraph(_esc(str(a["analysis"])), S_BOOK_NOTE))
-            if a.get("tip"):
-                right.append(Paragraph(f"下次注意：{_esc(str(a['tip']))}", S_BOOK_NOTE))
-        rows.append([left, right or [Paragraph("", S_BOOK_ANS)]])
+        item_rows = _book_item_rows(it)
+        first = len(rows)
+        for left, right in item_rows:
+            rows.append([left, right or [Paragraph("", S_BOOK_ANS)]])
+        if len(item_rows) > 1:
+            # 一篇默写拆成的几段之间只画浅虚线，看得出是同一道题
+            styles.append(("LINEBELOW", (0, first), (-1, len(rows) - 2), 0.6, colors.white))
+            styles.append(("LINEBELOW", (0, first), (-1, len(rows) - 2), 0.4, colors.HexColor("#dddddd"), None, (2, 2)))
     return rows, styles
 
 

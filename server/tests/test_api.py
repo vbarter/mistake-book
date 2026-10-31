@@ -1641,3 +1641,25 @@ def test_background_export_validates_and_reports_failure(client, auth, monkeypat
     job = r.get_json()
     assert job["status"] == "failed" and "错题本" in job["error"]
     assert client.get(f"/api/exports/{job['id']}/file", headers=auth).status_code == 404
+
+
+def test_book_passage_rows_pair_blanks_with_answers():
+    """整篇默写合成一道：按句子切成几行，每行右边正好是左边那几个空；重复的「下次注意」只印一次。"""
+    from app.pdf import _book_item_rows, _passage_chunks, _tip_text, build_book_pdf
+
+    stem = "".join(f"第{n}句({n})____。" for n in range(1, 13))
+    answers = [{"number": str(n), "student": "", "answer": f"答{n}", "analysis": "", "kind": "未作答", "tip": "下次注意按段背诵。", "sub": "文言文默写"} for n in range(1, 13)]
+    chunks = _passage_chunks(stem, answers)
+    assert [[a["number"] for a in got] for _, got in chunks] == [["1", "2", "3", "4"], ["5", "6", "7", "8"], ["9", "10", "11", "12"]]
+    assert all(f"({a['number']})____" in text for text, got in chunks for a in got)
+
+    rows = _book_item_rows({"number": "1–12", "stem": stem, "knowledge": "古诗文", "answers": answers})
+    assert len(rows) == 3
+    tips = [p.text for _, right in rows for p in right if "下次注意" in getattr(p, "text", "")]
+    assert tips == ["下次注意：按段背诵。"]
+    assert _tip_text("下次注意：先审题") == "先审题" and _tip_text("注意力要集中") == "注意力要集中"
+
+    # 空号重复、或空不多时不拆
+    assert _passage_chunks("(2)____，(2)____。(2)____。(2)____。(2)____。", answers[:5]) is None
+    assert _passage_chunks(stem, answers[:3]) is None
+    assert build_book_pdf("t", "s", [{"number": "1–12", "stem": stem, "knowledge": "古诗文", "answers": answers}]).startswith(b"%PDF")

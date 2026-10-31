@@ -56,10 +56,18 @@ function partsOf(paper: Paper, q: DigitizedQuestion): ErrorPart[] {
 
 /** 短文里各空的编号是模型自己编的（没印题号的古诗文默写，模型会把空记成「zw-1」「zw-2」…，题号就成了「zw」）：
  *  题干里的「(zw)____」按出现顺序改成「(1)____」「(2)____」，题号换成当前空是第几个，
- *  这样卡片不再显示「第 zw 题」，focusSentence 也能只取当前空那一句。真题号（带数字的）不动。 */
+ *  这样卡片不再显示「第 zw 题」，focusSentence 也能只取当前空那一句。真题号（带数字、各空不重复的）不动。 */
 const LOOSE_LABEL = /\(([^()\s\d]{1,8})\)____/;
+/** 题干里其他空的编号（「(8)____」里的 8） */
+const blankLabels = (stem: string) => [...stem.matchAll(/\(([^()\s]{1,8})\)____/g)].map((m) => m[1]);
 export function relabelLooseBlanks(q: DigitizedQuestion): DigitizedQuestion {
-  if (q.blankIds.length !== 1 || /\d/.test(q.number) || !LOOSE_LABEL.test(q.stemText)) return q;
+  if (q.blankIds.length !== 1) return q;
+  const loose = !/\d/.test(q.number) && LOOSE_LABEL.test(q.stemText);
+  // 另一种情况：整篇默写的空都记成了大题号（《愚公移山》每个空都是「(2)____」，题号也是 2），
+  // 错题本合成一篇后左边分不清是哪个空、右边也全是「2.」；同样按出现顺序重新编号
+  const labels = blankLabels(q.stemText);
+  const repeated = labels.length >= 2 && new Set(labels).size < labels.length;
+  if (!loose && !repeated) return q;
   let k = 0;
   let focus = 0;
   const stemText = q.stemText.replace(/(\([^()\s]{1,8}\))?____/g, (_m, label?: string) => {
