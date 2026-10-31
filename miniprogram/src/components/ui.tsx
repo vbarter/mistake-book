@@ -1,5 +1,6 @@
 /** 通用小组件：学科方块、标签、公式文字、空状态、底部面板、分段切换 */
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import Taro from "@tarojs/taro";
 import { Icon, type IconName } from "./Icon";
 import { ScrollView, Text, View } from "@tarojs/components";
 import type { Mark, Subject } from "../lib/types";
@@ -93,12 +94,24 @@ export function Hint({ children }: { children: ReactNode }) {
 
 /** 底部弹出面板 */
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: string; children: ReactNode }) {
+  // 输入框在 fixed 面板 + ScrollView 里时，微信自带的「上推页面」(adjust-position) 不可靠，面板会被键盘盖住。
+  // 面板里的 Input 一律 adjustPosition={false}，由这里按键盘高度把面板整块抬到键盘上方。
+  const [kb, setKb] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const onChange = (res: { height: number }) => setKb(Math.max(0, res.height || 0));
+    Taro.onKeyboardHeightChange(onChange);
+    return () => {
+      Taro.offKeyboardHeightChange?.(onChange);
+      setKb(0);
+    };
+  }, [open]);
   if (!open) return null;
   return (
     // catchMove 挡住背后页面跟着滚；面板里的内容放进 ScrollView，内容多时自己滚（catchMove 会拦掉普通 View 的滚动）
     <View className="sheet" catchMove>
       <View className="sheet__mask" onClick={onClose} />
-      <View className="sheet__panel">
+      <View className={`sheet__panel${kb ? " sheet__panel--kb" : ""}`} style={kb ? { bottom: `${kb}px` } : undefined}>
         {title && <Text className="sheet__title">{title}</Text>}
         <ScrollView scrollY className="sheet__body" enhanced showScrollbar={false}>
           <View className="sheet__content">{children}</View>

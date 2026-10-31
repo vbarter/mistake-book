@@ -30,6 +30,8 @@
   .sheet-backdrop { align-items: flex-start; justify-content: center; padding: max(56px, 9vh) 32px 32px; }
   .sheet { width: min(560px, 100%); border-radius: 22px; padding: 20px 24px 24px; max-height: 82vh; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22); animation: dialog-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .sheet__grabber { display: none; }
+  .sheet-backdrop--kb { padding-top: 24px; padding-bottom: 16px; }
+  .sheet-backdrop--kb .sheet { padding-bottom: 24px; }
   @keyframes dialog-in { from { transform: scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
 
   /* 横幅提示居中，不再横跨整屏 */

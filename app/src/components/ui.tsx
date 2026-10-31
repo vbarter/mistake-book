@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Mastery, Subject } from "../api/types";
 import { MASTERY_LABEL, SUBJECT_LABEL, masteryStyle, subjectStyle } from "../lib/format";
@@ -162,6 +162,43 @@ export function Empty({ icon, title, text, action }: { icon: IconName; title: st
 }
 
 /* ---------- Sheet ---------- */
+/**
+ * iOS WKWebView 弹出键盘时不缩小网页（布局视口不变），只缩小「可见视口」。
+ * position: fixed 的底部面板仍贴着布局视口底部 → 整块被键盘盖住。
+ * 这里跟着 visualViewport 算出键盘上方真正看得见的区域，交给 Sheet 去贴齐。
+ */
+function useVisibleViewport(active: boolean) {
+  const [vp, setVp] = useState({ top: 0, height: 0, keyboard: 0 });
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!active || !vv) return;
+    let raf = 0;
+    const update = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        // 用布局视口高度（clientHeight）做基准：iOS 上 window.innerHeight 会跟着可见视口一起变小，拿它算会得 0
+        const layoutH = document.documentElement.clientHeight || window.innerHeight;
+        const keyboard = Math.max(0, Math.round(layoutH - vv.height - vv.offsetTop));
+        // 小于 80px 视为没有键盘（地址栏/工具条抖动之类）
+        setVp(keyboard > 80 ? { top: Math.round(vv.offsetTop), height: Math.round(vv.height), keyboard } : { top: 0, height: 0, keyboard: 0 });
+        // 面板贴好后，确保正在输入的框在面板里也是可见的
+        const el = document.activeElement as HTMLElement | null;
+        if (keyboard > 80 && el && el.closest(".sheet")) el.scrollIntoView({ block: "nearest" });
+      });
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      cancelAnimationFrame(raf);
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      setVp({ top: 0, height: 0, keyboard: 0 });
+    };
+  }, [active]);
+  return vp;
+}
+
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: string; children: ReactNode }) {
   useEffect(() => {
     if (!open) return;
@@ -169,9 +206,16 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+  const viewport = useVisibleViewport(open);
   if (!open) return null;
+  const kb = viewport.keyboard > 0;
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div
+      className={`sheet-backdrop${kb ? " sheet-backdrop--kb" : ""}`}
+      // 键盘弹出时把整块遮罩缩到「键盘上方的可见区域」，面板贴着键盘顶部，不再被盖住
+      style={kb ? { top: viewport.top, height: viewport.height, bottom: "auto" } : undefined}
+      onClick={onClose}
+    >
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="sheet__grabber" />
         {title && <h2 className="t-title3">{title}</h2>}
