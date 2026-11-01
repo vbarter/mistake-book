@@ -49,3 +49,16 @@
 .home-dock .btn { pointer-events: auto; box-shadow: 0 6px 16px var(--brand-glow, rgba(0, 0, 0, 0.12)); }
 /* 给固定按钮让位：按钮 50 + 上下内边距 50，最后一张卡片能完整滚出来 */
 .screen__content--dock { padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 24px + 100px); }
+
+/* 导出面板：学科 / 知识点筛选 */
+.export-filter { display: flex; flex-direction: column; gap: 8px; padding: 0 2px; }
+.export-filter__head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--secondary); }
+.export-filter__hint { margin-left: auto; font-weight: 500; color: var(--tertiary); }
+.export-filter__hint button { color: var(--brand); font-weight: 600; font-size: 13px; }
+.export-filter__group { display: flex; flex-direction: column; gap: 6px; }
+.export-filter__sub { font-size: 12px; font-weight: 600; color: var(--tertiary); }
+.export-filter__chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.export-filter__kp { max-width: 100%; gap: 6px; font-size: 14px; }
+.export-filter__kp .ellipsis { min-width: 0; }
+.export-filter__n { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--secondary); }
+.export-filter__kp.on .export-filter__n { color: inherit; }

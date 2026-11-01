@@ -1,7 +1,8 @@
-import { formatDateTime } from "../lib/format";
-import { useState } from "react";
+import { formatDateTime, SUBJECT_LABEL } from "../lib/format";
+import { useEffect, useMemo, useState } from "react";
+import type { Subject } from "../api/types";
 import { apiBlob } from "../api/client";
-import { groupByKnowledge, toBookItems, type ErrorItem } from "../lib/errors";
+import { groupByKnowledge, groupBySubject, knowledgeKey, toBookItems, type ErrorItem } from "../lib/errors";
 import { setLastExportAt } from "../lib/prefs";
 import { validDigitized, type Paper } from "../lib/folders";
 import { figureAt, figurePayload } from "../lib/figures";
@@ -16,6 +17,7 @@ import { Tag } from "./v2";
 /**
  * 导出面板：两种文件。
  * 错题本 = 横向打印，左半页空白重做、右半页错题修正；原始电子试卷 = 干净原卷 + 作答对照表。
+ * 错题本可以再按学科、知识点筛一遍（都不选 = 全部）。
  * errors 是本次范围内的错题；papers 是本次范围内已扫描的试卷（错题库导出时不传，只出错题本）。
  */
 export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: { open: boolean; onClose: () => void; title: string; subtitle?: string; errors: ErrorItem[]; papers?: Paper[] }) {
@@ -24,9 +26,34 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
   const [withBlank, setWithBlank] = useState(true);
   const [busy, setBusy] = useState(false);
   const submitExport = useExports((s) => s.submit);
-  const wrongErrors = errors.filter((e) => e.kind !== "未作答");
-  const blankErrors = errors.filter((e) => e.kind === "未作答");
-  const typed = errors.filter((e) => (e.kind === "未作答" ? withBlank : withWrong));
+  // 学科 / 知识点筛选：空集合表示不筛。每次打开面板重置，免得上次的选择把这次的题筛没了
+  const [subjects, setSubjects] = useState<Set<Subject>>(new Set());
+  const [kps, setKps] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (open) { setSubjects(new Set()); setKps(new Set()); }
+  }, [open]);
+  const bySubject = useMemo(() => groupBySubject(errors), [errors]);
+  const inSubjects = useMemo(() => (subjects.size ? errors.filter((e) => subjects.has(e.subject)) : errors), [errors, subjects]);
+  // 知识点按学科分组列出（只列已选学科的），组内错得多的在前
+  const kpGroups = useMemo(
+    () => groupBySubject(inSubjects).map(([sub, list]) => [sub, groupByKnowledge(list).map(([name, l]) => ({ key: knowledgeKey(l[0]), name, count: l.length }))] as const),
+    [inSubjects],
+  );
+  const kpCount = kpGroups.reduce((n, [, l]) => n + l.length, 0);
+  const scoped = kps.size ? inSubjects.filter((e) => kps.has(knowledgeKey(e))) : inSubjects;
+  const toggleSubject = (sub: Subject) => {
+    const next = new Set(subjects);
+    if (next.has(sub)) next.delete(sub); else next.add(sub);
+    setSubjects(next);
+    // 取消某个学科时，顺带去掉它下面已选的知识点
+    if (next.size) setKps((prev) => new Set([...prev].filter((k) => next.has(k.split("|")[0] as Subject))));
+  };
+  const toggleKp = (key: string) => setKps((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const filterLabel = [subjects.size ? [...subjects].map((x) => SUBJECT_LABEL[x]).join("、") : "", kps.size ? `${kps.size} 个知识点` : ""].filter(Boolean).join(" · ");
+
+  const wrongErrors = scoped.filter((e) => e.kind !== "未作答");
+  const blankErrors = scoped.filter((e) => e.kind === "未作答");
+  const typed = scoped.filter((e) => (e.kind === "未作答" ? withBlank : withWrong));
   // 同一知识点的题排在一起（错得多的在前），导出的错题本按这个顺序分组、生成目录
   const chosen = groupByKnowledge(typed).flatMap(([, list]) => list);
   const scanned = (papers ?? []).filter((p) => validDigitized(p.digitized));
@@ -38,7 +65,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
     // 插图从原照片裁好一起发给服务器排版（同时最多解码两张原照片，见 figures.ts）
     const items = await Promise.all(books.map(async (b) => ({ ...b, figures: await Promise.all(b.figures.map(figurePayload)) })));
     const typeLabel = withWrong && withBlank ? "错题 + 未作答" : withBlank ? "只含未作答" : "只含错题";
-    return { title: `${title} 错题本`, subtitle: [subtitle, `${chosen.length} 题`, typeLabel].filter(Boolean).join(" · "), items };
+    return { title: `${title} 错题本`, subtitle: [subtitle, filterLabel, `${chosen.length} 题`, typeLabel].filter(Boolean).join(" · "), items };
   };
   const paperBody = async () => {
     const papersBody = await Promise.all(
@@ -57,7 +84,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
   };
 
   const run = async () => {
-    if (kind === "book" && chosen.length === 0) return toast("这个范围里没有错题");
+    if (kind === "book" && chosen.length === 0) return toast(subjects.size || kps.size ? "筛选后没有错题，换个学科或知识点试试" : "这个范围里没有错题");
     if (kind === "paper" && scanned.length === 0) return toast("还没有扫描过的试卷");
     setBusy(true);
     try {
@@ -125,6 +152,37 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
           </span>
           <Icon name={kind === "paper" ? "checkcircle" : "chevron-right"} size={22} style={{ color: kind === "paper" ? "var(--brand)" : "var(--tertiary)" }} />
         </button>
+      )}
+
+      {kind === "book" && bySubject.length > 1 && (
+        <div className="export-filter">
+          <span className="export-filter__head"><Icon name="folder" size={14} stroke={2.2} />按学科<span className="export-filter__hint">{subjects.size ? <button onClick={() => { setSubjects(new Set()); setKps(new Set()); }}>全部学科</button> : "不选即全部"}</span></span>
+          <div className="export-filter__chips">
+            {bySubject.map(([sub, list]) => (
+              <button key={sub} className={`chip chip--select${subjects.has(sub) ? " on" : ""}`} aria-pressed={subjects.has(sub)} onClick={() => toggleSubject(sub)}>
+                {SUBJECT_LABEL[sub]} {list.length}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {kind === "book" && kpCount > 1 && (
+        <div className="export-filter">
+          <span className="export-filter__head"><Icon name="chart" size={14} stroke={2.2} />按知识点<span className="export-filter__hint">{kps.size ? <button onClick={() => setKps(new Set())}>全部知识点</button> : "不选即全部"}</span></span>
+          {kpGroups.map(([sub, list]) => (
+            <div key={sub} className="export-filter__group">
+              {kpGroups.length > 1 && <span className="export-filter__sub">{SUBJECT_LABEL[sub]}</span>}
+              <div className="export-filter__chips">
+                {list.map((k) => (
+                  <button key={k.key} className={`chip chip--select export-filter__kp${kps.has(k.key) ? " on" : ""}`} aria-pressed={kps.has(k.key)} onClick={() => toggleKp(k.key)} title={k.name}>
+                    <span className="ellipsis">{k.name}</span><span className="export-filter__n">{k.count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {kind === "book" && (
