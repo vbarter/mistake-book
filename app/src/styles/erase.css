@@ -9,8 +9,6 @@
 .erase__dot.done { background: color-mix(in srgb, var(--brand) 45%, transparent); }
 .erase__dot.on { background: var(--brand); transform: scale(1.25); }
 .erase__warn { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; background: var(--accent-bg, #fff0e3); color: var(--accent-on, #b35300); }
-.erase__actions { display: flex; gap: 10px; }
-.erase__actions .btn { flex: 1; }
 
 /* 拖动对比 */
 .compare { position: relative; width: 100%; touch-action: none; user-select: none; -webkit-user-select: none; cursor: ew-resize; }
@@ -21,16 +19,6 @@
 .compare__tag { position: absolute; top: 8px; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 700; background: rgba(0, 0, 0, 0.55); color: #fff; pointer-events: none; }
 .compare__tag--l { left: 8px; }
 .compare__tag--r { right: 8px; }
-
-/* 手动补擦 */
-.brush__bar { display: flex; align-items: center; gap: 10px; }
-.brush__bar .seg { flex: 1; }
-.brush__sizes { display: flex; gap: 4px; }
-.brush__size { width: 36px; height: 36px; border-radius: 18px; border: 0; background: var(--fill); display: inline-flex; align-items: center; justify-content: center; }
-.brush__size span { border-radius: 50%; background: var(--secondary, #8e8e93); }
-.brush__size.on { background: var(--brand-tint); }
-.brush__size.on span { background: var(--brand); }
-.brush__canvas { display: block; width: 100%; height: auto; touch-action: none; }
 
 /* 试卷卡片右侧的擦除按钮 */
 .erase-btn { flex-shrink: 0; width: 38px; height: 38px; border-radius: 19px; border: 0; background: var(--brand-tint); color: var(--brand); display: inline-flex; align-items: center; justify-content: center; position: relative; }
