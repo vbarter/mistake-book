@@ -103,14 +103,15 @@ export default function App() {
         const folder = target?.folderId ? await getFolder(target.folderId) : undefined;
         const paper = target?.paperId ? folder?.papers.find((p) => p.id === target.paperId) : undefined;
         // 找回的照片也先全屏确认：× 不要这张，回到录入页直接再起相机重拍
-        if (needsPhotoConfirm && !(await confirmPhoto(dataUrl))) {
+        const confirmed = needsPhotoConfirm ? await confirmPhoto(dataUrl) : dataUrl;
+        if (!confirmed) {
           const capture = useCapture.getState();
           capture.reset();
           capture.setReturnTo(folder ? `/papers/${folder.id}` : "/home");
           nav("/capture", { state: { folderId: folder?.id ?? null, paperId: paper?.id ?? null, source: "camera" } });
           return;
         }
-        const page = await toPage(dataUrl);
+        const page = await toPage(confirmed);
         let folderId: string | null = null;
         let paperId: string | null = null;
         if (folder && paper) {

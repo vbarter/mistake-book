@@ -70,14 +70,16 @@ export async function pickImage(source: "camera" | "photos", target?: { folderId
 export const needsPhotoConfirm = Capacitor.getPlatform() !== "ios";
 
 /**
- * 拍一张并确认：拍完先全屏预览，点 × 放弃这张、直接再起相机重拍；点 ✓ 返回这张照片。在相机里点取消返回 null。
+ * 拍一张并确认：拍完先全屏预览，可以左转 / 右转摆正；点 × 放弃这张、直接再起相机重拍；点 ✓ 返回这张照片（转过就是转正的）。在相机里点取消返回 null。
  * 只用于拍照；相册多选不走确认。
  */
 export async function takePhoto(target?: { folderId: string | null; paperId: string | null }): Promise<string | null> {
   for (;;) {
     const src = await pickImage("camera", target);
     if (!src) return null;
-    if (!needsPhotoConfirm || (await confirmPhoto(src))) return src;
+    if (!needsPhotoConfirm) return src;
+    const confirmed = await confirmPhoto(src); // 转过方向就是转正后的那张
+    if (confirmed) return confirmed;
     // 重拍：稍等确认界面收起来再起相机，iOS / 部分安卓连着弹太快会弹不出来
     await new Promise((r) => setTimeout(r, 300));
   }
@@ -166,6 +168,28 @@ export async function prepareUpload(src: string, page: number, quality = 0.85): 
   return out;
 }
 
+/**
+ * 把照片顺时针转 turns 个 90°（负数逆时针），返回 JPEG dataURL。试卷横着拍、竖着拍都有，转正了识别才准，
+ * 而且横着拍的单页宽高比像左右两页，不转会被当成两页切开上传。转 0 / 360° 原样返回，不重新压缩。
+ */
+export async function rotateImage(src: string, turns: number, quality = 0.92): Promise<string> {
+  const t = ((turns % 4) + 4) % 4;
+  if (t === 0) return src;
+  const img = await loadImage(src);
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = t % 2 ? h : w;
+  canvas.height = t % 2 ? w : h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((t * Math.PI) / 2);
+  ctx.drawImage(img, -w / 2, -h / 2);
+  const out = canvas.toDataURL("image/jpeg", quality);
+  releaseCanvas(canvas);
+  return out;
+}
+
 /** 用完的画布立刻缩成 0×0：iOS 对所有画布的总内存有上限，等垃圾回收太慢，连着处理多张照片会超限 */
 export function releaseCanvas(canvas: HTMLCanvasElement) {
   canvas.width = 0;
@@ -240,7 +264,7 @@ export async function setupBackButton(): Promise<() => void> {
     const { App } = await import("@capacitor/app");
     const handle = await App.addListener("backButton", ({ canGoBack }) => {
       // 拍照确认界面开着：返回键等于点 ×（放弃这张，重拍），不离开当前页
-      if (answerPhotoConfirm(false)) return;
+      if (answerPhotoConfirm(null)) return;
       if (canGoBack && window.history.length > 1) window.history.back();
       else void App.exitApp();
     });

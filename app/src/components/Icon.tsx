@@ -6,7 +6,7 @@ export type IconName =
   | "lock" | "export" | "search" | "refresh" | "warning" | "seal" | "target" | "chart" | "book" | "sun" | "info"
   | "viewfinder" | "loop" | "family" | "shield" | "brain"
   | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation"
-  | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "eye" | "eye-off";
+  | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "eye" | "eye-off" | "rotate";
 
 const paths: Record<IconName, string> = {
   eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
@@ -56,6 +56,7 @@ const paths: Record<IconName, string> = {
   lock: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4",
   export: "M12 3v12M7 8l5-5 5 5M5 13v7h14v-7",
   search: "M11 17a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM20 20l-4.5-4.5",
+  rotate: "M20.5 12a8.5 8.5 0 1 1-2.5-6M20.5 3.5V8H16M9 9.5h6v6H9z",
   refresh: "M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3M18 3v4h-4M6 21v-4h4",
   warning: "M12 8v5M12 16h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",
   seal: "M12 2.5l2.2 2 3-.3.9 2.8 2.6 1.5-1 2.8 1 2.8-2.6 1.5-.9 2.8-3-.3-2.2 2-2.2-2-3 .3-.9-2.8-2.6-1.5 1-2.8-1-2.8 2.6-1.5.9-2.8 3 .3zM8.5 12l2.5 2.5 4.5-5",

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet } from "../../components/ui";
-import { addPaper, deletePaper, getFolder, loadPages, thumbOf, toPage, updatePaper, validDigitized } from "../../lib/folders";
+import { addPaper, deletePaper, getFolder, loadPages, rotatePage, thumbOf, toPage, updatePaper, validDigitized } from "../../lib/folders";
 import { finishFlow } from "../../lib/flow";
 import { submitScan } from "../../lib/jobs";
 import { warnPhotoDuplicates } from "../../lib/dedup";
@@ -21,13 +21,14 @@ type EntryState = { folderId?: string | null; paperId?: string | null; source?: 
 export default function Capture() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { folderId, paperId, paperName, pages, digitized, setPaper, setPaperName, setDigitized, addPage, removePage, reset, returnTo } = useCapture();
+  const { folderId, paperId, paperName, pages, digitized, setPaper, setPaperName, setDigitized, addPage, removePage, replacePage, reset, returnTo } = useCapture();
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState(false);
   const [rename, setRename] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [progress, setProgress] = useState<Progress | null>(null);
   const [mode, setMode] = useState<Mode>("one");
+  const [rotating, setRotating] = useState<string | null>(null);
   const autoStarted = useRef(false);
   const autoScanRef = useRef(false);
   const entry = (loc.state as EntryState) ?? null;
@@ -146,6 +147,25 @@ export default function Capture() {
     await updatePaper(folderId, paperId, { pages: next, digitized: undefined, scannedAt: undefined, corrected: {} });
   };
 
+  /** 把一张照片向右转 90°：横着、倒着拍的试卷转正再扫描。照片换了，旧的电子版作废 */
+  const rotateCurrentPage = async (id: string) => {
+    const page = useCapture.getState().pages.find((p) => p.id === id);
+    if (!page || rotating) return;
+    setRotating(id);
+    try {
+      const turned = await rotatePage(page, 1);
+      replacePage(id, turned);
+      const next = useCapture.getState().pages;
+      const { folderId: fid, paperId: pid } = useCapture.getState();
+      if (fid && pid) await updatePaper(fid, pid, { pages: next, digitized: undefined, scannedAt: undefined, corrected: {} });
+      void haptic.light();
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setRotating(null);
+    }
+  };
+
   const saveName = async () => {
     const name = nameDraft.trim() || paperName;
     setPaperName(name);
@@ -252,8 +272,11 @@ export default function Capture() {
             <div className="thumb-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
               {pages.map((p, i) => (
                 <div key={p.id} style={{ position: "relative" }}>
-                  <img src={thumbOf(p)} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 10, border: "1px solid var(--separator-light)" }} />
+                  <img src={thumbOf(p)} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "contain", background: "var(--fill-light)", borderRadius: 10, border: "1px solid var(--separator-light)", opacity: rotating === p.id ? 0.5 : 1 }} />
                   <span className="chip chip--sm" style={{ position: "absolute", left: 6, top: 6, background: "rgba(0,0,0,.55)", color: "#fff" }}>第 {i + 1} 张</span>
+                  <button className="icon-btn" style={{ position: "absolute", left: 0, bottom: 0, width: 36, height: 36, color: "#fff", background: "rgba(0,0,0,.45)", borderRadius: "0 10px 0 10px" }} aria-label={`第 ${i + 1} 张向右转 90 度`} disabled={Boolean(rotating) || busy} onClick={() => rotateCurrentPage(p.id)}>
+                    <Icon name="rotate" size={17} />
+                  </button>
                   <button className="icon-btn" style={{ position: "absolute", right: 0, bottom: 0, width: 36, height: 36, color: "#fff", background: "rgba(0,0,0,.45)", borderRadius: "10px 0 10px 0" }} aria-label="删除这张照片" onClick={() => removeCurrentPage(p.id)}>
                     <Icon name="trash" size={16} />
                   </button>
@@ -264,7 +287,7 @@ export default function Capture() {
                 <span className="t-foot">加照片</span>
               </button>
             </div>
-            <span className="t-foot c-sec">每张都已存在手机上 · 拍完所有页再扫描</span>
+            <span className="t-foot c-sec">都已存在手机上 · 拍横了点左下角转正 · 拍完再扫描</span>
           </div>
         )}
 

@@ -19,6 +19,7 @@ interface CaptureState {
   setDigitized: (result: DigitizedResult | null) => void;
   addPage: (page: CapturePage) => void;
   removePage: (id: string) => void;
+  replacePage: (id: string, page: CapturePage) => void;
   reset: () => void;
 }
 
@@ -35,6 +36,7 @@ export const useCapture = create<CaptureState>((set) => ({
   setDigitized: (result) => set({ digitized: result }),
   addPage: (page) => set((s) => ({ pages: [...s.pages, page], digitized: null })),
   removePage: (id) => set((s) => ({ pages: s.pages.filter((p) => p.id !== id), digitized: null })),
+  replacePage: (id, page) => set((s) => ({ pages: s.pages.map((p) => (p.id === id ? page : p)), digitized: null })),
   reset: () => set({ folderId: null, paperId: null, paperName: "", pages: [], digitized: null }),
 }));
 

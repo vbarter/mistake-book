@@ -6,7 +6,7 @@ import { ExportSheet } from "../../components/ExportSheet";
 import { Figures } from "../../components/FigureImage";
 import { figureAt, type FigureRef } from "../../lib/figures";
 import { Empty, ErrorFilterTags, Hint, MathText, Segmented, Tag, Verdict, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/ui";
-import { retake } from "../../lib/capture";
+import { retake, rotateAndRescan } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { formatDateTime, stripLeadingNumber, unwrapLines } from "../../lib/format";
 import { useDataVersion } from "../../lib/hooks";
@@ -82,6 +82,20 @@ export default function PaperPage() {
     refresh();
   };
 
+  /** 照片横着 / 倒着拍的：选个方向，把这张试卷的照片都转正，再扫一次 */
+  const doRotate = async () => {
+    let r: { tapIndex: number };
+    try {
+      r = await Taro.showActionSheet({ itemList: ["向右转 90°", "向左转 90°", "转 180°"] });
+    } catch {
+      return;
+    }
+    const turns = [1, 3, 2][r.tapIndex];
+    if (!turns) return;
+    await rotateAndRescan(folderId, paperId, turns);
+    refresh();
+  };
+
   if (!digitized) {
     return (
       <View className="page center-page">
@@ -100,6 +114,11 @@ export default function PaperPage() {
             <View className="btn" onClick={doRetake}>
               重新拍 / 选照片扫描
             </View>
+            {paper.pages.length > 0 && (
+              <View className="btn btn--tinted" onClick={doRotate}>
+                照片拍横了？转正再扫
+              </View>
+            )}
           </>
         )}
         <View className="btn btn--tinted" onClick={() => Taro.navigateBack()}>
@@ -117,18 +136,19 @@ export default function PaperPage() {
   const menu = async () => {
     let r: { tapIndex: number };
     try {
-      r = await Taro.showActionSheet({ itemList: ["重新扫描 / 改照片", "查看原图", "重命名", "删除这张试卷"] });
+      r = await Taro.showActionSheet({ itemList: ["重新扫描 / 改照片", "旋转照片并重新扫描", "查看原图", "重命名", "删除这张试卷"] });
     } catch {
       return;
     }
     if (r.tapIndex === 0) await doRetake();
-    if (r.tapIndex === 1) void Taro.previewImage({ urls: paper.pages.map((p) => p.src), current: paper.pages[0]?.src });
-    if (r.tapIndex === 2) {
+    if (r.tapIndex === 1) await doRotate();
+    if (r.tapIndex === 2) void Taro.previewImage({ urls: paper.pages.map((p) => p.src), current: paper.pages[0]?.src });
+    if (r.tapIndex === 3) {
       const m = await Taro.showModal({ title: "试卷名称", editable: true, content: paper.name });
       if (m.confirm && m.content?.trim()) updatePaper(folderId, paperId, { name: m.content.trim().slice(0, 30) });
       refresh();
     }
-    if (r.tapIndex === 3) {
+    if (r.tapIndex === 4) {
       const m = await Taro.showModal({ title: "删除这张试卷？", content: "照片和电子版会一起删掉。", confirmText: "删除", confirmColor: "#d92d20" });
       if (m.confirm) {
         deletePaper(folderId, paperId);

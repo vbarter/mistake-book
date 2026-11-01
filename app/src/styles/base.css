@@ -204,4 +204,30 @@ textarea.input { resize: none; }
   border-radius: 28px;
 }
 .photo-confirm__btn:active { background: rgba(255, 255, 255, .16); }
+.photo-confirm__tools {
+  position: absolute;
+  bottom: var(--safe-bottom);
+  left: 0;
+  right: 0;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+.photo-confirm__tool {
+  min-width: 88px;
+  height: 48px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 15px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, .12);
+}
+.photo-confirm__tool:active { background: rgba(255, 255, 255, .24); }
+.photo-confirm__tool:disabled, .photo-confirm__btn:disabled { opacity: .5; }
 @keyframes photo-confirm-in { from { opacity: 0; } to { opacity: 1; } }
