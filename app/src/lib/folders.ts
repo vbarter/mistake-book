@@ -4,6 +4,7 @@
  * 错题不再单独"收录"：扫描完的试卷里判错的题（含未作答）自动算进文件夹和错题库。
  */
 import { dhashOf, shaOf } from "./photoPrint";
+import { rotateImage } from "./native";
 import type { EraseJobRef } from "./erase";
 import type { DigitizedQuestion, DigitizedResult, Mark, PhotoIssue, QuestionType, Subject } from "../api/types";
 
@@ -454,6 +455,11 @@ export async function toPage(src: string): Promise<FullPage> {
   });
   const sha = await shaOf(src);
   return sha ? { ...page, sha } : page;
+}
+
+/** 把一张照片顺时针转 turns 个 90°：换一个新 id（照片表按 id 存，旧 id 的原图在 updatePaper 时一起删掉），小图、尺寸、指纹都重做 */
+export async function rotatePage(page: FullPage, turns: number): Promise<FullPage> {
+  return toPage(await rotateImage(page.src, turns));
 }
 
 /** 列表里显示的小图：没有小图（极少数做小图失败的旧数据）时才用原图 */

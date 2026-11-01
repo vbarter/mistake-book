@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { Button, InlineNav, Segmented, Sheet } from "../components/ui";
 import { SubjectTile } from "../components/v2";
-import { addPaper, folderStats, listFolders, thumbOf, toPage, type Folder, type FullPage } from "../lib/folders";
+import { addPaper, folderStats, listFolders, rotatePage, thumbOf, toPage, type Folder, type FullPage } from "../lib/folders";
 import { finishFlow } from "../lib/flow";
 import { submitScan } from "../lib/jobs";
 import { warnPhotoDuplicates } from "../lib/dedup";
@@ -19,7 +19,8 @@ type Mode = "one" | "each";
  */
 export default function Import() {
   const nav = useNavigate();
-  const { sources, folderId, from, append, remove, setFolder, clear } = useImport();
+  const { sources, folderId, from, append, remove, replace, setFolder, clear } = useImport();
+  const [rotating, setRotating] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("one");
   const [folders, setFolders] = useState<Folder[]>([]);
   const [picking, setPicking] = useState(false);
@@ -54,6 +55,21 @@ export default function Import() {
       void haptic.light();
     } catch (e) {
       toastError((e as Error).message === "permission_denied" ? new Error(source === "camera" ? "需要相机权限，可以在系统设置里打开" : "需要相册权限，可以在系统设置里打开") : e);
+    }
+  };
+
+  /** 向右转 90°：横着、倒着拍的转正再识别 */
+  const rotate = async (index: number) => {
+    const page = useImport.getState().sources[index];
+    if (!page || rotating) return;
+    setRotating(page.id);
+    try {
+      replace(index, await rotatePage(page, 1));
+      void haptic.light();
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setRotating(null);
     }
   };
 
@@ -98,7 +114,10 @@ export default function Import() {
         <div className="thumb-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
           {sources.map((page, i) => (
             <div key={page.id} style={{ position: "relative" }}>
-              <img src={thumbOf(page)} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 10, border: "1px solid var(--separator-light)" }} />
+              <img src={thumbOf(page)} alt={`第 ${i + 1} 张`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "contain", background: "var(--fill-light)", borderRadius: 10, border: "1px solid var(--separator-light)", opacity: rotating === page.id ? 0.5 : 1 }} />
+              <button className="icon-btn" style={{ position: "absolute", right: 2, bottom: 2, width: 26, height: 26, color: "#fff", background: "rgba(0,0,0,.45)" }} aria-label={`第 ${i + 1} 张向右转 90 度`} disabled={Boolean(rotating) || Boolean(progress)} onClick={() => rotate(i)}>
+                <Icon name="rotate" size={15} stroke={2.2} />
+              </button>
               <span className="chip chip--sm" style={{ position: "absolute", left: 4, top: 4, background: "rgba(0,0,0,.55)", color: "#fff" }}>{i + 1}</span>
               {sources.length > 1 && (
                 <button className="icon-btn" style={{ position: "absolute", right: 2, top: 2, width: 26, height: 26, color: "#fff", background: "rgba(0,0,0,.45)" }} aria-label={`去掉第 ${i + 1} 张`} onClick={() => remove(i)}>

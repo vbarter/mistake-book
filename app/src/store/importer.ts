@@ -9,6 +9,7 @@ interface ImportState {
   set: (sources: FullPage[], folderId: string | null, from: string) => void;
   append: (pages: FullPage[]) => void;
   remove: (index: number) => void;
+  replace: (index: number, page: FullPage) => void;
   setFolder: (folderId: string | null) => void;
   clear: () => void;
 }
@@ -20,6 +21,7 @@ export const useImport = create<ImportState>((set) => ({
   set: (sources, folderId, from) => set({ sources, folderId, from }),
   append: (pages) => set((s) => ({ sources: [...s.sources, ...pages] })),
   remove: (index) => set((s) => ({ sources: s.sources.filter((_, i) => i !== index) })),
+  replace: (index, page) => set((s) => ({ sources: s.sources.map((p, i) => (i === index ? page : p)) })),
   setFolder: (folderId) => set({ folderId }),
   clear: () => set({ sources: [], folderId: null }),
 }));

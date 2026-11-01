@@ -105,3 +105,80 @@ export async function retake(folderId: string, paperId: string, source: Source):
   }
   return true;
 }
+
+/** 照片转向后存的最长边：和 App 一致，离屏画布太大有的手机画不出来 */
+const ROTATE_MAX_SIDE = 2400;
+
+type RotateCanvas = {
+  getContext: (t: "2d") => { fillStyle: string; fillRect: (...a: number[]) => void; translate: (x: number, y: number) => void; rotate: (r: number) => void; drawImage: (...a: unknown[]) => void };
+  createImage: () => { src: string; onload: () => void; onerror: (e: unknown) => void };
+  toDataURL: (type: string, q: number) => string;
+};
+
+/** 把一张照片顺时针转 turns 个 90°，存成新文件，返回新的照片记录 */
+async function rotatePhoto(page: FolderPage, turns: number): Promise<FolderPage> {
+  const t = ((turns % 4) + 4) % 4;
+  const info = await Taro.getImageInfo({ src: page.src });
+  const scale = Math.min(1, ROTATE_MAX_SIDE / Math.max(info.width, info.height));
+  const w = Math.round(info.width * scale);
+  const h = Math.round(info.height * scale);
+  const cw = t % 2 ? h : w;
+  const ch = t % 2 ? w : h;
+  const canvas = Taro.createOffscreenCanvas({ type: "2d", width: cw, height: ch }) as unknown as RotateCanvas;
+  const img = canvas.createImage();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = reject;
+    img.src = page.src;
+  });
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.translate(cw / 2, ch / 2);
+  ctx.rotate((t * Math.PI) / 2);
+  ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  const b64 = canvas.toDataURL("image/jpeg", 0.9).split(",")[1];
+  if (!b64) throw new Error("这台手机转不了照片，可以点「重新扫描 / 改照片」重拍一张");
+  const tmp = `${Taro.env.USER_DATA_PATH}/rotate_${Date.now()}.jpg`;
+  const fs = Taro.getFileSystemManager();
+  fs.writeFileSync(tmp, b64, "base64");
+  try {
+    return await savePhoto(tmp);
+  } finally {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** 试卷照片横着 / 倒着拍的：每张都转 turns 个 90°（顺时针为正），替换原照片后重新扫描 */
+export async function rotateAndRescan(folderId: string, paperId: string, turns: number): Promise<boolean> {
+  const old = getFolder(folderId)?.papers.find((p) => p.id === paperId);
+  if (!old?.pages.length) return false;
+  Taro.showLoading({ title: "转正中…", mask: true });
+  try {
+    const pages: FolderPage[] = [];
+    for (const pg of old.pages) pages.push(await rotatePhoto(pg, turns));
+    const fs = Taro.getFileSystemManager();
+    old.pages.forEach((pg) => {
+      try {
+        fs.unlinkSync(pg.src);
+      } catch {
+        /* ignore */
+      }
+    });
+    removeFigures(paperId);
+    updatePaper(folderId, paperId, { pages, digitized: undefined, scannedAt: undefined, gradedAt: undefined, scanError: undefined });
+    Taro.showLoading({ title: "上传中…", mask: true });
+    await scan(folderId, paperId, pages);
+    return true;
+  } catch (e) {
+    Taro.hideLoading();
+    void Taro.showModal({ title: "没转成", content: errorText(e), showCancel: false });
+    return false;
+  } finally {
+    Taro.hideLoading();
+  }
+}
