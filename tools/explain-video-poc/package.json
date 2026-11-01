@@ -1,0 +1,11 @@
+{
+  "name": "explain-video-poc",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fontsource/noto-sans-sc": "5.1.0",
+    "mathjax": "3.2.2",
+    "playwright": "^1.48.0",
+    "three": "0.170.0"
+  }
+}

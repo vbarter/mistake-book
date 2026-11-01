@@ -1,0 +1,1 @@
+{"kind":"question","subject":"math","grade":"9","stemText":"抛物线 $y=x^2-4x+3$ 的顶点坐标是（　　）","options":["A. $(2,-1)$","B. $(-2,-1)$","C. $(2,1)$","D. $(-2,1)$"],"studentAnswer":"C","correctAnswer":"A","analysis":"配方：$y=(x-2)^2-1$，顶点 $(2,-1)$","knowledgePoints":["二次函数的顶点式","配方法"]}

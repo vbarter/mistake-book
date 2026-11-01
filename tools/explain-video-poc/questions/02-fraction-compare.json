@@ -1,0 +1,1 @@
+{"kind":"question","subject":"math","grade":"5","stemText":"比较大小：$\\frac{3}{4}$ ○ $\\frac{5}{8}$","studentAnswer":"<","correctAnswer":">","analysis":"通分：$\\frac{3}{4}=\\frac{6}{8}$，$\\frac{6}{8}>\\frac{5}{8}$","knowledgePoints":["分数的大小比较","通分"]}
