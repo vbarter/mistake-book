@@ -88,3 +88,41 @@ def test_blank_export(client, auth):
     pdf = client.get(f"/api/exports/{job['id']}/file", headers=auth)
     assert pdf.data.startswith(b"%PDF")
     assert client.post("/api/exports", json={"kind": "blank", "images": []}, headers=auth).status_code == 400
+
+
+def test_erase_job_runs_in_background(client, auth, app):
+    pages = [_jpeg_url(_sheet()), _jpeg_url(_sheet())]
+    r = client.post("/api/erase/jobs", json={"pages": pages}, headers=auth)
+    assert r.status_code == 200, r.get_json()  # 测试里同步跑完
+    job = r.get_json()
+    assert job["status"] == "done" and job["totalPages"] == 2 and job["donePages"] == 2
+    assert [p["status"] for p in job["pages"]] == ["done", "done"]
+    assert job["warning"] == ""
+    again = client.get(f"/api/erase/jobs/{job['id']}", headers=auth).get_json()
+    assert again["status"] == "done"
+    img = client.get(f"/api/erase/jobs/{job['id']}/pages/1", headers=auth)
+    assert img.status_code == 200 and img.mimetype == "image/jpeg"
+    out = cv2.imdecode(np.frombuffer(img.data, np.uint8), cv2.IMREAD_COLOR)
+    assert out.shape == (400, 600, 3)
+    assert client.get(f"/api/erase/jobs/{job['id']}/pages/5", headers=auth).status_code == 404
+
+
+def test_erase_job_is_private_and_validated(client, auth):
+    job = client.post("/api/erase/jobs", json={"pages": [_jpeg_url(_sheet())]}, headers=auth).get_json()
+    r = client.post("/api/auth/code", json={"phone": "13800000001", "purpose": "register"})
+    code = r.get_json()["devCode"]
+    other = client.post("/api/auth/register", json={"phone": "13800000001", "code": code, "profile": {"nickname": "小林", "grade": "5"}}).get_json()["token"]
+    h2 = {"Authorization": f"Bearer {other}"}
+    assert client.get(f"/api/erase/jobs/{job['id']}", headers=h2).status_code == 404
+    assert client.get(f"/api/erase/jobs/{job['id']}/pages/0", headers=h2).status_code == 404
+    assert client.post("/api/erase/jobs", json={"pages": []}, headers=auth).status_code == 400
+    assert client.post("/api/erase/jobs", json={"pages": ["not-an-image"]}, headers=auth).status_code == 400
+
+
+def test_erase_job_page_failure_is_reported(client, auth):
+    bad = "data:image/jpeg;base64," + base64.b64encode(b"not a jpeg").decode()
+    job = client.post("/api/erase/jobs", json={"pages": [_jpeg_url(_sheet()), bad]}, headers=auth).get_json()
+    assert job["status"] == "done"  # 有一张成功就算完成
+    assert [p["status"] for p in job["pages"]] == ["done", "failed"]
+    all_bad = client.post("/api/erase/jobs", json={"pages": [bad]}, headers=auth).get_json()
+    assert all_bad["status"] == "failed" and all_bad["error"]

@@ -148,6 +148,22 @@ CREATE TABLE IF NOT EXISTS export_jobs (
   INDEX idx_exports_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 擦除手写任务（后台逐张擦，擦好的照片在 UPLOAD_DIR/erase/<id>/，保留一天）
+CREATE TABLE IF NOT EXISTS erase_jobs (
+  id VARCHAR(32) PRIMARY KEY,
+  user_id VARCHAR(32) NOT NULL,
+  status VARCHAR(16) DEFAULT 'queued',
+  total_pages INT DEFAULT 0,
+  done_pages INT DEFAULT 0,
+  pages_state JSON NULL,
+  error TEXT,
+  created_at DATETIME,
+  updated_at DATETIME,
+  INDEX idx_erase_user (user_id),
+  INDEX idx_erase_status (status),
+  INDEX idx_erase_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 使用记录（管理后台统计用：打开、注册、登录、扫描、导出），不存试卷内容
 CREATE TABLE IF NOT EXISTS usage_events (
   id         BIGINT      NOT NULL AUTO_INCREMENT,

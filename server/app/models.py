@@ -265,6 +265,37 @@ class ExportJob(db.Model):
         }
 
 
+class EraseJob(db.Model):
+    """擦除手写任务：一份试卷的照片一起提交，服务器后台逐张擦，App 切走、杀掉都不影响；
+    擦好的照片放在 UPLOAD_DIR/erase/<任务号>/<序号>.jpg，客户端取回存到手机上，服务器保留一天。"""
+
+    __tablename__ = "erase_jobs"
+    id = db.Column(db.String(32), primary_key=True, default=_uuid)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    status = db.Column(db.String(16), default="queued", index=True)  # queued | running | done | failed
+    total_pages = db.Column(db.Integer, default=0)
+    done_pages = db.Column(db.Integer, default=0)
+    pages_state = db.Column(JSON, nullable=True)  # 每张照片：{"status": "pending" | "done" | "failed", "warning": ""}
+    error = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self) -> dict:
+        pages = self.pages_state or []
+        warnings = sorted({p.get("warning") for p in pages if p.get("warning")})
+        return {
+            "id": self.id,
+            "status": self.status,
+            "totalPages": self.total_pages or 0,
+            "donePages": self.done_pages or 0,
+            "pages": [{"index": i, "status": p.get("status") or "pending"} for i, p in enumerate(pages)],
+            "warning": warnings[0] if warnings else "",
+            "error": self.error or "",
+            "createdAt": _iso(self.created_at),
+            "updatedAt": _iso(self.updated_at),
+        }
+
+
 class UsageEvent(db.Model):
     """使用记录：打开、注册、登录、扫描、导出等，只给管理后台统计用，不存试卷内容。"""
 

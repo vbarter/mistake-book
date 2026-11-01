@@ -4,6 +4,7 @@ import { Icon } from "../components/Icon";
 import { Button, InlineNav, Sheet } from "../components/ui";
 import { clearErased, getFolder, loadErased, loadPhoto, type Folder, type FolderPage } from "../lib/folders";
 import { erasePaper, isErased, useErasing } from "../lib/erase";
+import { useJobs } from "../lib/jobs";
 import { toast, toastError } from "../store/banner";
 import { useExports } from "../store/exports";
 import "../styles/erase.css";
@@ -49,10 +50,11 @@ export function ErasePaper() {
     });
   }, [reload, folderId, paperId]);
 
-  // 擦除进度变了（可能是从卡片上开始的）：重新读记录和当前这张
+  // 轮询取回了擦好的照片、进度变了（可能是从卡片上开始的）：重新读记录和当前这张
+  const jobsVersion = useJobs((s) => s.version);
   useEffect(() => {
     void reload();
-  }, [progress?.done, progress === undefined, reload]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [jobsVersion, progress?.done, progress === undefined, reload]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (page) void loadSrcs(page);
@@ -68,8 +70,12 @@ export function ErasePaper() {
 
   const cur = srcs[page.id] ?? {};
   const total = paper.pages.length;
-  const erasingThis = progress?.current === page.id;
-  const pending = !!progress && !page.erased;
+  // 后台在擦（重开 App 后第一次轮询前 progress 还没有，看试卷上记的任务）
+  const busy = !!progress || !!paper.eraseJob;
+  const startedAt = progress?.startedAt ?? paper.eraseJob?.startedAt ?? "";
+  const done = progress?.done ?? paper.eraseJob?.done ?? 0;
+  const jobTotal = progress?.total ?? paper.eraseJob?.total ?? total;
+  const pageFresh = !!page.erased && page.erased >= startedAt; // 这张在这次任务里已经擦好、取回来了
 
   const eraseAll = () => {
     erasePaper(folderId, paper).catch(toastError);
@@ -121,11 +127,11 @@ export function ErasePaper() {
 
         <div className="erase__stage">
           {cur.original ? <Compare original={cur.original} erased={cur.erased ?? null} /> : <div className="erase__placeholder"><span className="spinner-ring" /></div>}
-          {(erasingThis || (pending && !cur.erased)) && (
+          {busy && !pageFresh && (
             <div className="erase__busy">
               <span className="spinner-ring" />
-              <span className="t-headline">{erasingThis ? "正在擦除这一张…" : "排队等着擦…"}</span>
-              <span className="t-foot c-sec">每张大约 10–30 秒，离开这页也会继续</span>
+              <span className="t-headline">{progress?.uploading ? "正在上传照片…" : `正在擦除 · 已完成 ${done}/${jobTotal} 张`}</span>
+              <span className="t-foot c-sec">在服务器后台擦，可以离开这页或切出 App，擦好了会提醒你</span>
             </div>
           )}
         </div>
@@ -141,13 +147,13 @@ export function ErasePaper() {
           </div>
         )}
         {warning && <p className="t-foot erase__warn"><Icon name="alert" size={14} stroke={2.4} /> {warning}</p>}
-        {page.erased && !progress && (
+        {page.erased && !busy && (
           <p className="t-foot c-sec" style={{ padding: "0 4px" }}>左右拖动中间的竖线对比擦除前后。</p>
         )}
-        <Button variant="tinted" icon="brush" disabled={!!progress} onClick={eraseAll}>{progress ? `擦除中 ${progress.done + 1}/${progress.total}…` : isErased(paper) ? "重新擦除" : "擦除"}</Button>
+        <Button variant="tinted" icon="brush" disabled={busy} onClick={eraseAll}>{busy ? (progress?.uploading ? "上传中…" : `擦除中 ${done}/${jobTotal}…`) : isErased(paper) ? "重新擦除" : "擦除"}</Button>
         <div className="bottom-bar">
-          <Button variant="outline" disabled={!isErased(paper) || !!progress} onClick={() => setConfirmRestore(true)} style={{ flex: "0 0 auto", width: "auto", whiteSpace: "nowrap" }}>恢复原图</Button>
-          <Button icon="export" disabled={!isErased(paper) || !!progress || exporting} onClick={exportBlank} style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>{exporting ? "提交中…" : "导出空白卷 PDF"}</Button>
+          <Button variant="outline" disabled={!isErased(paper) || busy} onClick={() => setConfirmRestore(true)} style={{ flex: "0 0 auto", width: "auto", whiteSpace: "nowrap" }}>恢复原图</Button>
+          <Button icon="export" disabled={!isErased(paper) || busy || exporting} onClick={exportBlank} style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>{exporting ? "提交中…" : "导出空白卷 PDF"}</Button>
         </div>
       </div>
       <Sheet open={confirmRestore} onClose={() => setConfirmRestore(false)} title="恢复原图？">
