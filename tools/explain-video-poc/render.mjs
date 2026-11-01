@@ -2,7 +2,7 @@
 // 用法：node render.mjs <scene.js> [--out out.mp4] [--check] [--w 1080] [--fps 30]
 // 检查模式输出 JSON：{ ok, errors[], issues[], meta }，生成脚本据此让模型修代码。
 import { createServer } from "node:http";
-import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { extname, join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -64,15 +64,22 @@ try {
 
   if (!CHECK) {
     const frames = Math.round(result.meta.duration * FPS);
+    mkdirSync(dirname(resolve(OUT)), { recursive: true });
     const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(FPS), "-c:v", "mjpeg", "-i", "-",
       "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-profile:v", "main", "-pix_fmt", "yuv420p", "-movflags", "+faststart", OUT], { stdio: ["pipe", "inherit", "inherit"] });
+    // ffmpeg 提前退出（打不开输出文件等）时立刻报错，不要一直等写入
+    const ffDone = new Promise((r, j) => ff.on("close", (c) => (c === 0 ? r() : j(new Error("ffmpeg exit " + c)))));
+    let ffFailed = null;
+    ffDone.catch((e) => { ffFailed = e; });
+    ff.stdin.on("error", () => {});
     const tr = Date.now();
     for (let i = 0; i < frames; i++) {
+      if (ffFailed) throw ffFailed;
       const b64 = await page.evaluate((t) => window.__frame(t), i / FPS);
-      if (!ff.stdin.write(Buffer.from(b64, "base64"))) await new Promise((r) => ff.stdin.once("drain", r));
+      if (!ff.stdin.write(Buffer.from(b64, "base64"))) await Promise.race([new Promise((r) => ff.stdin.once("drain", r)), ffDone]);
     }
     ff.stdin.end();
-    await new Promise((r, j) => ff.on("close", (c) => (c === 0 ? r() : j(new Error("ffmpeg exit " + c)))));
+    await ffDone;
     result.timing.frames = frames;
     result.timing.renderMs = Date.now() - tr;
     result.timing.msPerFrame = Math.round((Date.now() - tr) / frames);
