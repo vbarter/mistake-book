@@ -20,12 +20,16 @@ fi
 if [ ! -f .env ]; then
   echo "!! /opt/zhicuoben/server/.env 不存在，请参照 .env.example 创建"; exit 1
 fi
-if [ ! -f /etc/systemd/system/zhicuoben.service ]; then
+if systemctl is-active --quiet supervisord && [ -f /etc/supervisord.d/zhicuoben.ini ]; then
+  /opt/zhicuoben/supervisor-venv/bin/supervisorctl -c /etc/supervisord.conf restart zhicuoben
+  /opt/zhicuoben/supervisor-venv/bin/supervisorctl -c /etc/supervisord.conf status zhicuoben
+elif [ -f /etc/systemd/system/zhicuoben.service ]; then
+  systemctl restart zhicuoben.service
+  sleep 2
+  systemctl is-active zhicuoben.service
+else
   echo "!! 缺少 systemd 单元，请先复制 deploy/zhicuoben.service 到 /etc/systemd/system/ 并 enable"; exit 1
 fi
-systemctl restart zhicuoben.service
-sleep 2
-systemctl is-active zhicuoben.service
-curl -s -m 5 http://127.0.0.1:5001/api/health; echo
+curl -fsS -m 20 http://127.0.0.1:5001/api/health; echo
 EOF
 echo "✓ 部署完成"

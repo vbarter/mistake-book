@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 export const CONSENT_VERSION = "2026-11-01";
 
 export const OPERATOR = "【运营者名称】";
-export const CONTACT = "【联系邮箱】";
+export const CONTACT = "yzcaijunjie@gmail.com";
 
 type Section = { title: string; body: ReactNode };
 

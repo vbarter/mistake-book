@@ -1,0 +1,16 @@
+/opt/zhicuoben/data/access.log /opt/zhicuoben/data/error.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        pid=$(/opt/zhicuoben/supervisor-venv/bin/supervisorctl -c /etc/supervisord.conf pid zhicuoben 2>/dev/null) || true
+        case "$pid" in
+            ''|*[!0-9]*|0) ;;
+            *) kill -USR1 "$pid" 2>/dev/null || true ;;
+        esac
+    endscript
+}
