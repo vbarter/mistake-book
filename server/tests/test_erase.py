@@ -126,3 +126,36 @@ def test_erase_job_page_failure_is_reported(client, auth):
     assert [p["status"] for p in job["pages"]] == ["done", "failed"]
     all_bad = client.post("/api/erase/jobs", json={"pages": [bad]}, headers=auth).get_json()
     assert all_bad["status"] == "failed" and all_bad["error"]
+
+
+def _clean_sheet() -> dict:
+    return {
+        "page": 0, "title": "嘉定区中考英语二模卷", "label": "第1页", "score": "92",
+        "blocks": [
+            {"type": "section", "label": "Ⅳ", "title": "Grammar", "instruction": "选择最恰当的答案"},
+            {"type": "item", "number": "21", "text": "She [[21]] to school every day.", "options": ["go", "goes", "went", "going"],
+             "blanks": [{"id": "21", "number": "21", "student": "STUDENTWROTE", "mark": "wrong", "answer": "goes", "note": "扣2分"}]},
+            {"type": "figure", "bbox": [0.1, 0.5, 0.6, 0.8], "title": "图1", "text": "一个三角形"},
+        ],
+    }
+
+
+def test_clean_export_prints_only_the_original_questions(client, auth):
+    import io
+
+    from pypdf import PdfReader
+
+    tall = np.full((300, 400, 3), 240, np.uint8)
+    sheet = _clean_sheet()
+    sheet["blocks"][2]["image"] = _jpeg_url(tall)
+    body = {"kind": "clean", "title": "嘉定二模 空白卷", "papers": [{"title": "嘉定二模", "pages": [sheet]}]}
+    r = client.post("/api/exports", json=body, headers=auth)
+    assert r.status_code == 200, r.get_json()
+    job = r.get_json()
+    assert job["status"] == "done" and job["kind"] == "clean"
+    pdf = client.get(f"/api/exports/{job['id']}/file", headers=auth).data
+    text = "".join(p.extract_text() for p in PdfReader(io.BytesIO(pdf)).pages)
+    assert "to school every day" in text and "goes" in text  # 题干和选项都在
+    assert "STUDENTWROTE" not in text and "92" not in text and "扣2分" not in text  # 作答、得分、批改都不印
+    # 没有题目的请求照旧拒绝
+    assert client.post("/api/exports", json={"kind": "clean", "papers": []}, headers=auth).status_code == 400

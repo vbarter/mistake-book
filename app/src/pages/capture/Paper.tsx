@@ -1,16 +1,16 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { DigitizedBlank, DigitizedBlock, DigitizedPage, Mark } from "../../api/types";
+import type { DigitizedPage, Mark } from "../../api/types";
 import { ErrorCard } from "../../components/ErrorCard";
-import { MathText, mathNodes } from "../../components/MathText";
+import { MathText } from "../../components/MathText";
 import { ExportSheet } from "../../components/ExportSheet";
-import { Figures } from "../../components/FigureImage";
+import { PrintSheets } from "../../components/PrintPaper";
 import { StoredPhoto } from "../../components/Photo";
-import { figureAt, releaseFigureSources, type FigureRef } from "../../lib/figures";
+import { releaseFigureSources } from "../../lib/figures";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
-import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/v2";
-import { formatDateTime, stripLeadingNumber, unwrapLines } from "../../lib/format";
+import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, type ErrorFilter } from "../../components/v2";
+import { formatDateTime } from "../../lib/format";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperStats, thumbOf, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { gradeIfNeeded, isGrading, notDuplicate, printIfNeeded, scanStageText, tagIfNeeded, useJobs } from "../../lib/jobs";
@@ -20,33 +20,9 @@ import "../../styles/paper.css";
 type Tab = "paper" | "answers" | "errors";
 
 const MARK_LABEL: Record<Mark, string> = { correct: "正确", wrong: "错误", partial: "半对", blank: "未作答", unmarked: "未批改" };
-const BLANK_RE = /\[\[([^[\]]{1,24})\]\]/g;
 const UNANSWERED = "未作答";
 const isProblemMark = (m: Mark, student: string) => m === "blank" || (m === "wrong" && unanswered(student));
 const unanswered = (s: string) => !s.trim();
-const stripParen = (s: string) => s.replace(/^[（(]|[）)]$/g, "");
-
-/** 打印版：把 [[id]] 占位换成只带空号的空格，不带任何手写内容 */
-function renderPrint(text: string, blanks: DigitizedBlank[]): ReactNode[] {
-  const byId = new Map(blanks.map((b) => [b.id, b]));
-  const out: ReactNode[] = [];
-  let last = 0;
-  let i = 0;
-  for (const m of text.matchAll(BLANK_RE)) {
-    const start = m.index ?? 0;
-    if (start > last) out.push(<Fragment key={`t${i}`}>{mathNodes(text.slice(last, start), `t${i++}`)}</Fragment>);
-    const id = m[1];
-    const num = byId.get(id)?.number || id.split("-")[0];
-    out.push(
-      <span className="blank blank--print" key={`b${i++}`}>
-        <span className="blank__num">{num}</span>
-      </span>,
-    );
-    last = start + m[0].length;
-  }
-  if (last < text.length) out.push(<Fragment key={`t${i}`}>{mathNodes(text.slice(last), `t${i++}`)}</Fragment>);
-  return out;
-}
 
 /** 作答表格的判定列：对 ✅、错 ❌（老师批的和 AI 判的一样显示） */
 function MarkChip({ mark, student, grading }: { mark: Mark; student: string; grading?: boolean }) {
@@ -122,8 +98,6 @@ export default function Paper() {
   if (!digitized) return null;
 
   const sheets: DigitizedPage[] = digitized.pages;
-  const subject = digitized.questions[0]?.subject;
-  const colors = subjectColors(subject);
 
   const rescan = () => {
     setMenu(false);
@@ -132,97 +106,10 @@ export default function Paper() {
     nav("/capture", { state: { folderId, paperId } });
   };
 
-  // ---------------------------------------------------------------- 试卷（打印版）
-  const renderPrintBlock = (block: DigitizedBlock, bi: number, si: number) => {
-    switch (block.type) {
-      case "figure": {
-        // 连着的几个 figure 一起排（选项图排成一行）：只在一串的第一个块上渲染
-        const prev = sheets[si].blocks[bi - 1];
-        if (prev?.type === "figure") return null;
-        const run: FigureRef[] = [];
-        for (let j = bi; j < sheets[si].blocks.length && sheets[si].blocks[j].type === "figure"; j++) {
-          const f = figureAt(paper, si, j);
-          if (f) run.push(f);
-        }
-        return run.length ? <Figures key={bi} figs={run} /> : null;
-      }
-      case "section":
-        return (
-          <div className="blk-section" key={bi}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="sec-bar" style={{ background: colors.color }} />
-              <span className="blk-section__title" style={{ flex: 1 }}>
-                {block.label && `${block.label.replace(/[.．、\s]+$/, "")}. `}
-                {block.title}
-              </span>
-              {block.points && <span className="t-cap c-sec">{stripParen(block.points)}</span>}
-            </div>
-            {block.instruction && <div className="blk-section__instruction" style={{ marginLeft: 12 }}>{block.instruction}</div>}
-          </div>
-        );
-      case "wordbank":
-        return (
-          <div className="blk-wordbank" key={bi}>
-            {block.options.map((o, i) => (
-              <span key={i}><MathText text={o} /></span>
-            ))}
-          </div>
-        );
-      case "text":
-        return (
-          <p className="blk-plain" key={bi}>
-            <MathText text={block.text} />
-          </p>
-        );
-      case "passage":
-        return (
-          <div className="blk-passage" key={bi}>
-            {block.label && <span className="blk-passage__label">{block.label}</span>}
-            <p className="blk-text">{renderPrint(unwrapLines(block.text), block.blanks)}</p>
-          </div>
-        );
-      case "item":
-        return (
-          <div className="blk-item" key={bi}>
-            <span className="blk-item__num">{block.number}.</span>
-            <div className="blk-item__body">
-              <p className="blk-text">
-                {renderPrint(stripLeadingNumber(unwrapLines(block.text), block.number), block.blanks)}
-                {block.hint && <span className="blk-hint"><MathText text={block.hint} /></span>}
-                {block.instruction && <span className="blk-instruction">（{stripParen(block.instruction)}）</span>}
-              </p>
-              {block.options.length > 0 && (
-                <div className="blk-options">
-                  {block.options.map((o, i) => (
-                    <span key={i}><MathText text={/^[A-H][.、．]/.test(o) ? o : `${String.fromCharCode(65 + i)}. ${o}`} /></span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
   const paperTab = (
     <>
       <Hint icon="printer">这是打印版，空格留白。你的作答和老师批改在「作答」页。</Hint>
-      {sheets.map((sheet, si) => (
-        <div className="paper" key={si}>
-          <div className="paper__head">
-            {sheet.title && <div className="paper__title">{sheet.title}</div>}
-            <div className="paper__meta">
-              {sheet.label && <span>{sheet.label}</span>}
-              {[sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).length > 0 && <span>{[sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).join(" · ")}</span>}
-              {sheet.score && <span className="paper__score">{sheet.score}</span>}
-            </div>
-          </div>
-          {sheet.blocks.map((b, bi) => renderPrintBlock(b, bi, si))}
-          {sheet.note && <p className="paper__note">{sheet.note}</p>}
-        </div>
-      ))}
+      <PrintSheets paper={paper} sheets={sheets} />
       {showOriginal && paper.pages.map((p, i) => <StoredPhoto key={p.id} page={p} alt={`原图 ${i + 1}`} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--separator-light)" }} />)}
     </>
   );

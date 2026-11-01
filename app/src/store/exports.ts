@@ -12,7 +12,7 @@ import { useBanner } from "./banner";
 
 export interface ExportJob {
   id: string;
-  kind: "book" | "paper" | "blank";
+  kind: "book" | "paper" | "clean" | "blank";
   title: string;
   detail: string;
   status: "queued" | "running" | "done" | "failed";
@@ -26,7 +26,7 @@ export const isPending = (j: ExportJob) => j.status === "queued" || j.status ===
 
 /** 下载后的文件名：标题里的斜杠等不能做文件名的字符换掉 */
 export function exportFilename(job: ExportJob): string {
-  const name = (job.title || { book: "错题本", paper: "电子试卷", blank: "空白卷" }[job.kind]).replace(/[\\/:*?"<>|\n\r]+/g, " ").trim().slice(0, 60);
+  const name = (job.title || { book: "错题本", paper: "电子试卷", clean: "空白卷", blank: "空白卷" }[job.kind]).replace(/[\\/:*?"<>|\n\r]+/g, " ").trim().slice(0, 60);
   return `${name}${job.kind === "paper" && !name.includes("试卷") ? " 电子试卷" : ""}.pdf`;
 }
 

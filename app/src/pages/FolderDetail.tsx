@@ -13,7 +13,7 @@ import { deleteFolder, deletePaper, folderStats, getFolder, paperQuality, paperS
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../lib/format";
 import { gradeIfNeeded, needsScan, scanPending, scanStageText, tagIfNeeded, useJobs } from "../lib/jobs";
 import { toast, toastError } from "../store/banner";
-import { erasePaper, isErased, useErasing } from "../lib/erase";
+import { useErasing } from "../lib/erase";
 import "../styles/erase.css";
 
 type Tab = "papers" | "errors";
@@ -42,11 +42,8 @@ export default function FolderDetail() {
   const erasingKey = Object.entries(erasing).map(([id, p]) => `${id}:${p.done}`).join(",");
   useEffect(() => { void reload(); }, [erasingKey, reload]); // 擦完一张就刷新卡片上的「已擦」标记
   const openPaper = (p: Folder["papers"][number]) => (p.scanJob ? toast(`${scanStageText(p.scanJob)}，好了会自动更新`) : nav(`/papers/${folder?.id}/${p.id}`));
-  const openErase = (p: Folder["papers"][number]) => {
-    if (p.scanJob) return toast("扫描完再擦，效果更好");
-    if (!isErased(p) && !erasing[p.id] && !p.eraseJob) erasePaper(folderId, p).catch(toastError); // 先开始擦，预览页里看进度
-    nav(`/papers/${folderId}/${p.id}/erase`);
-  };
+  // 原题空白卷页：没扫描的那边会引导去扫描；有插图的照片进去后在后台擦手写
+  const openErase = (p: Folder["papers"][number]) => (p.scanJob ? toast(`${scanStageText(p.scanJob)}，扫好后就能导出空白卷`) : nav(`/papers/${folderId}/${p.id}/erase`));
   useEffect(() => {
     void reload();
   }, [reload, jobsVersion]);
@@ -146,7 +143,7 @@ export default function FolderDetail() {
             </span>
             {p.scanJob && <Icon name="sparkles" size={20} style={{ color: "var(--brand)" }} />}
             {!p.scanJob && paperQuality(p).warn && <span className="quality-tag"><Icon name="alert" size={13} stroke={2.4} />{paperQuality(p).label}</span>}
-            <EraseButton erased={isErased(p)} busy={!!erasing[p.id] || !!p.eraseJob} disabled={!!p.scanJob} onClick={() => openErase(p)} />
+            <EraseButton busy={!!erasing[p.id] || !!p.eraseJob} disabled={!!p.scanJob} onClick={() => openErase(p)} />
             {st.scanned && <Outline sections={outlineOf(folder, p)} />}
             </div>
         );
@@ -301,18 +298,17 @@ function outlineOf(folder: Folder, paper: Folder["papers"][number]): { label: st
   return out.filter((o) => o.label);
 }
 
-/** 试卷卡片右侧的「擦除手写」按钮：擦过的带小对勾，擦除中转圈 */
-function EraseButton({ erased, busy, disabled, onClick }: { erased: boolean; busy: boolean; disabled: boolean; onClick: () => void }) {
+/** 试卷卡片右侧的「擦除手写」按钮：打开原题空白卷；插图在后台擦手写时转圈 */
+function EraseButton({ busy, disabled, onClick }: { busy: boolean; disabled: boolean; onClick: () => void }) {
   return (
     <button
       className="erase-btn"
-      aria-label={erased ? "查看擦除手写的结果" : "擦除手写"}
+      aria-label="擦除手写，导出原题空白卷"
       disabled={disabled}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       onKeyDown={(e) => e.stopPropagation()}
     >
       {busy ? <span className="spinner-ring" /> : <Icon name="brush" size={19} stroke={2.2} />}
-      {erased && !busy && <span className="erase-btn__done"><Icon name="check" size={9} stroke={3.4} /></span>}
     </button>
   );
 }

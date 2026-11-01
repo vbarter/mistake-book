@@ -1,12 +1,13 @@
 /** 插图：识别结果里的 figure 块只有位置（bbox，相对原照片 0–1），图本身从本机保存的原照片里裁出来。
  *  照片拍倒了时（rotation：内容逆时针转了几个 90°）裁完再转正。裁好的图在内存里留最近用过的一批。 */
 import type { DigitizedBlock, DigitizedQuestion } from "../api/types";
-import { loadPhoto, validDigitized, type FolderPage, type Paper } from "./folders";
+import { loadErased, loadPhoto, validDigitized, type FolderPage, type Paper } from "./folders";
 import { loadImage, releaseCanvas } from "./native";
 
 export interface FigureRef {
   key: string;
-  photo: Pick<FolderPage, "id" | "src">; // 原照片（原图按需从本机读）
+  photo: Pick<FolderPage, "id" | "src" | "erased">; // 原照片（原图按需从本机读）
+  clean?: boolean; // 从擦过手写的那份照片里裁（原题空白卷用）；这张照片还没擦过就用原图
   bbox: number[];
   rotation: number;
   title: string;
@@ -23,19 +24,32 @@ export function answerLabels(s: string): string[] {
 
 const baseNumber = (n: string) => (n || "").replace(/[（(].*$/, "").split("-")[0].trim();
 
-function refOf(paper: Paper, sheetIndex: number, blockIndex: number, block: DigitizedBlock): FigureRef | null {
+function refOf(paper: Paper, sheetIndex: number, blockIndex: number, block: DigitizedBlock, clean = false): FigureRef | null {
   const d = validDigitized(paper.digitized);
   const sheet = d?.pages[sheetIndex];
   const photo = sheet ? paper.pages[sheet.page] : undefined;
   if (!sheet || !photo || block.type !== "figure" || block.bbox.length !== 4) return null;
   // 照片 id 也进 key：重拍后同样位置的图不会用到旧照片的裁图
-  return { key: `${paper.id}:${photo.id}:${sheetIndex}:${blockIndex}:${block.bbox.map((v) => v.toFixed(3)).join(",")}`, photo: { id: photo.id, src: photo.src }, bbox: block.bbox, rotation: sheet.rotation ?? 0, title: block.title, label: (block.label || "").trim(), text: block.text };
+  const erased = clean && photo.erased ? photo.erased : "";
+  return { key: `${paper.id}:${photo.id}${erased ? `~${erased}` : ""}:${sheetIndex}:${blockIndex}:${block.bbox.map((v) => v.toFixed(3)).join(",")}`, photo: { id: photo.id, src: photo.src, ...(erased ? { erased } : {}) }, clean: Boolean(erased), bbox: block.bbox, rotation: sheet.rotation ?? 0, title: block.title, label: (block.label || "").trim(), text: block.text };
 }
 
-/** 试卷页上某个 figure 块 */
-export function figureAt(paper: Paper, sheetIndex: number, blockIndex: number): FigureRef | null {
+/** 试卷页上某个 figure 块；clean：从擦过手写的照片里裁 */
+export function figureAt(paper: Paper, sheetIndex: number, blockIndex: number, clean = false): FigureRef | null {
   const block = validDigitized(paper.digitized)?.pages[sheetIndex]?.blocks[blockIndex];
-  return block ? refOf(paper, sheetIndex, blockIndex, block) : null;
+  return block ? refOf(paper, sheetIndex, blockIndex, block, clean) : null;
+}
+
+/** 有插图的照片（原题空白卷只需要把这些照片擦掉手写，插图从擦过的照片里裁） */
+export function figurePhotoIds(paper: Paper): string[] {
+  const d = validDigitized(paper.digitized);
+  if (!d) return [];
+  const ids = new Set<string>();
+  for (const sheet of d.pages) {
+    const photo = paper.pages[sheet.page];
+    if (photo && sheet.blocks.some((b) => b.type === "figure" && b.bbox.length === 4)) ids.add(photo.id);
+  }
+  return [...ids];
 }
 
 /** 一道题用到的插图：先找标了本题题号的图；没有标题号、题干又提到图表时，取紧挨着这道题（中间只隔说明文字）的图 */
@@ -108,19 +122,20 @@ function dropSource(id: string) {
   void s.img.then((img) => { img.src = ""; }).catch(() => undefined);
 }
 
-async function withSource<T>(photo: FigureRef["photo"], fn: (img: HTMLImageElement) => T): Promise<T> {
-  let s = sources.get(photo.id);
+async function withSource<T>(photo: FigureRef["photo"], fn: (img: HTMLImageElement) => T, clean = false): Promise<T> {
+  const id = clean ? `${photo.id}~${photo.erased}` : photo.id;
+  let s = sources.get(id);
   if (s) {
-    sources.delete(photo.id);
-    sources.set(photo.id, s);
+    sources.delete(id);
+    sources.set(id, s);
   } else {
-    const img = loadPhoto(photo).then((src) => {
+    const img = (clean ? loadErased(photo).then((e) => e ?? loadPhoto(photo)) : loadPhoto(photo)).then((src) => {
       if (!src) throw new Error("照片不见了");
       return loadImage(src);
     });
     s = { img, users: 0 };
-    sources.set(photo.id, s);
-    img.catch(() => sources.get(photo.id) === s && sources.delete(photo.id));
+    sources.set(id, s);
+    img.catch(() => sources.get(id) === s && sources.delete(id));
   }
   s.users += 1;
   try {
@@ -186,7 +201,7 @@ export function cropFigure(f: FigureRef, maxSide = SCREEN_FIGURE_SIDE, quality =
       const out = canvas.toDataURL("image/jpeg", quality);
       releaseCanvas(canvas);
       return out;
-    });
+    }, f.clean);
   });
   cache.set(key, job);
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);

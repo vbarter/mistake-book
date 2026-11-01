@@ -46,7 +46,7 @@ export function Exports() {
           return (
             <div key={job.id} className="card card--row" style={{ alignItems: "center", gap: 12 }}>
               <button onClick={() => open(job)} disabled={job.status !== "done" || busy} style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, minWidth: 0, background: "none", border: 0, padding: 0, textAlign: "left", color: "inherit" }}>
-                <span className="tile tile--sm" style={{ background: "var(--brand-tint)", color: "var(--brand)", flexShrink: 0 }}><Icon name={job.kind === "book" ? "book" : job.kind === "blank" ? "brush" : "document"} size={20} stroke={2.2} /></span>
+                <span className="tile tile--sm" style={{ background: "var(--brand-tint)", color: "var(--brand)", flexShrink: 0 }}><Icon name={job.kind === "book" ? "book" : job.kind === "blank" || job.kind === "clean" ? "brush" : "document"} size={20} stroke={2.2} /></span>
                 <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
                   <span className="t-headline ellipsis">{job.title}</span>
                   {job.detail && <span className="t-foot c-sec ellipsis">{job.detail}</span>}
