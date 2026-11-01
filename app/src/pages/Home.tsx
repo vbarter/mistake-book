@@ -18,6 +18,7 @@ const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
  * 首页：问候、识别进度、近 30 天错题摘要、导出错题本。
+ * 导出按钮固定在 Tab 栏上方，知识点再多也不用滚到底才看得到。
  * 添加试卷走底栏相机，识别、归类、命名、分析都自动完成。
  */
 export default function Home() {
@@ -52,7 +53,7 @@ export default function Home() {
       <header className="topbar">
         <span className="t-foot c-sec" style={{ fontWeight: 600 }}>{eyebrow}</span>
       </header>
-      <div className="screen__content" style={{ gap: 16 }}>
+      <div className={`screen__content${errors.length > 0 ? " screen__content--dock" : ""}`} style={{ gap: 16 }}>
         <section className="greet rise" style={{ ["--i" as string]: 0 }}>
           <div className="greet__text">
             <h1 className="t-title1">{hello}{nickname ? `，${nickname}` : ""}</h1>
@@ -114,12 +115,14 @@ export default function Home() {
           </div>
         )}
 
-        {errors.length > 0 && (
-          <div className="rise" style={{ marginTop: "auto", ["--i" as string]: 4 }}>
+      </div>
+      {errors.length > 0 && (
+        <div className="home-dock">
+          <div className="rise" style={{ ["--i" as string]: 4 }}>
             <Button icon="printer" onClick={() => setExporting(true)}>{fresh.length > 0 && lastExport ? `导出新增的 ${fresh.length} 道错题` : `导出错题本（${errors.length} 题）`}</Button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
       {add.sheet}
       <ExportSheet open={exporting} onClose={() => setExporting(false)} title={fresh.length > 0 && lastExport ? "新增错题" : "全部错题"} errors={exportSet} />
     </div>
