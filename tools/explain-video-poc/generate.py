@@ -39,7 +39,7 @@ def load_server_env() -> None:
 
 
 load_server_env()
-SYSTEM = (ROOT / "prompt.md").read_text(encoding="utf-8")
+SYSTEM = (ROOT / os.getenv("PROMPT_FILE", "prompt.md")).read_text(encoding="utf-8")  # PROMPT_FILE=prompt-v3.md 切换提示词
 GRADE = {str(i): f"{i} 年级" for i in range(1, 13)}
 
 
@@ -92,7 +92,7 @@ def call(client: anthropic.Anthropic, model: str, messages: list[dict], max_toke
 
 def run(qfile: Path, args) -> dict:
     q = json.loads(qfile.read_text(encoding="utf-8"))
-    outdir = ROOT / "out" / qfile.stem
+    outdir = ROOT / "out" / (qfile.stem + os.getenv("OUT_SUFFIX", ""))
     outdir.mkdir(parents=True, exist_ok=True)
     client = anthropic.Anthropic(max_retries=2, timeout=900)
     messages: list[dict] = [{"role": "user", "content": user_content(q)}]

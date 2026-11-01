@@ -40,6 +40,9 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDraw
 renderer.setPixelRatio(1);
 renderer.setSize(PX_W, PX_H, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+// 实物感场景要用：阴影、色调映射（模型可以改 renderer.toneMapping）
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.autoClear = false;
 
 const scene = new THREE.Scene();
@@ -47,6 +50,8 @@ const ortho = (near = -100, far = 100) => new THREE.OrthographicCamera(-W / 2, W
 let camera = ortho();
 camera.position.z = 10;
 const ui = new THREE.Scene();
+// hud：文字 / 公式 / 计数器这类平面信息层，永远用 9×16 正交坐标，叠在 3D 场景之上（3D 场景可以用透视相机）
+const hud = new THREE.Scene();
 const uiCam = ortho();
 uiCam.position.z = 10;
 
@@ -161,6 +166,7 @@ const kit = {
   THREE, scene, W, H, STAGE, COLORS, FONT,
   get camera() { return camera; },
   useCamera(c) { camera = c; },
+  hud, renderer,
   text, tex, fade, clamp, seg, lerp, ease,
   color: (c) => new THREE.Color(c),
 };
@@ -210,6 +216,8 @@ function draw(t) {
   renderer.clear();
   renderer.render(scene, camera);
   renderer.clearDepth();
+  renderer.render(hud, uiCam);
+  renderer.clearDepth();
   renderer.render(ui, uiCam);
 }
 
@@ -250,7 +258,10 @@ window.__check = (t) => {
   const shown = (o) => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; };
   const alpha = (o) => (o.material && o.material.transparent ? o.material.opacity : 1);
   scene.updateMatrixWorld(true);
-  scene.traverse((o) => {
+  hud.updateMatrixWorld(true);
+  // 正交相机下 3D 场景里的文字也按世界坐标检查；透视相机下只检查 hud 层
+  const layers = camera.isOrthographicCamera ? [scene, hud] : [hud];
+  for (const layer of layers) layer.traverse((o) => {
     if (!o.isMesh || !o.userData.kind || !shown(o) || alpha(o) < 0.3) return;
     const b = new THREE.Box3().setFromObject(o);
     const sz = b.getSize(new THREE.Vector3());
