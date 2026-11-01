@@ -7,6 +7,7 @@ import { SUBJECT_LABEL } from "./format";
 import { isNative, prepareUpload, type UploadPart } from "./native";
 import { getCity } from "./prefs";
 import { findPaperMatch } from "./dedup";
+import { pollEraseJob } from "./erase";
 
 export interface ScanJob {
   id: string;
@@ -123,6 +124,14 @@ export async function pollPendingJobs(): Promise<number> {
     const folders = await listFolders();
     for (const folder of folders) {
       for (const paper of folder.papers) {
+        if (paper.eraseJob) {
+          try {
+            if (await pollEraseJob(folder, paper)) pending += 1;
+          } catch {
+            pending += 1;
+          }
+          useJobs.getState().bump();
+        }
         if (!paper.scanJob) continue;
         try {
           const job = await api<DigitizeJob>(`/api/digitize/jobs/${paper.scanJob.id}`, { timeoutMs: 15000 });

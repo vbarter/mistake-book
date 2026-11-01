@@ -4,6 +4,7 @@
  * 错题不再单独"收录"：扫描完的试卷里判错的题（含未作答）自动算进文件夹和错题库。
  */
 import { dhashOf, shaOf } from "./photoPrint";
+import type { EraseJobRef } from "./erase";
 import type { DigitizedQuestion, DigitizedResult, Mark, PhotoIssue, QuestionType, Subject } from "../api/types";
 
 export interface FolderPage {
@@ -32,6 +33,7 @@ export interface Paper {
   corrected?: Record<string, string>; // 已停用（订正功能已去掉），老数据里可能还有，读时忽略
   scanJob?: { id: string; startedAt: string; parts: { page: number; x0: number; w: number }[]; progress: number; status: "queued" | "running"; startedPages?: number; waiting?: number; queued?: boolean }; // 服务器后台还原中
   scanError?: string; // 上次还原失败的原因
+  eraseJob?: EraseJobRef; // 服务器后台擦除手写中（lib/erase.ts）
   gradedAt?: string; // 补做过 AI 阅卷的时间（避免反复请求）
   taggedAt?: string; // 补标过知识图谱知识点的时间（避免反复请求）
   printedAt?: string; // 补算过题目指纹的时间（升级前扫的试卷没有 qKey）

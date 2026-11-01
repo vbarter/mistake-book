@@ -44,7 +44,7 @@ export default function FolderDetail() {
   const openPaper = (p: Folder["papers"][number]) => (p.scanJob ? toast(`${scanStageText(p.scanJob)}，好了会自动更新`) : nav(`/papers/${folder?.id}/${p.id}`));
   const openErase = (p: Folder["papers"][number]) => {
     if (p.scanJob) return toast("扫描完再擦，效果更好");
-    if (!isErased(p) && !erasing[p.id]) erasePaper(folderId, p).catch(toastError); // 先开始擦，预览页里看进度
+    if (!isErased(p) && !erasing[p.id] && !p.eraseJob) erasePaper(folderId, p).catch(toastError); // 先开始擦，预览页里看进度
     nav(`/papers/${folderId}/${p.id}/erase`);
   };
   useEffect(() => {
@@ -146,7 +146,7 @@ export default function FolderDetail() {
             </span>
             {p.scanJob && <Icon name="sparkles" size={20} style={{ color: "var(--brand)" }} />}
             {!p.scanJob && paperQuality(p).warn && <span className="quality-tag"><Icon name="alert" size={13} stroke={2.4} />{paperQuality(p).label}</span>}
-            <EraseButton erased={isErased(p)} busy={!!erasing[p.id]} disabled={!!p.scanJob} onClick={() => openErase(p)} />
+            <EraseButton erased={isErased(p)} busy={!!erasing[p.id] || !!p.eraseJob} disabled={!!p.scanJob} onClick={() => openErase(p)} />
             {st.scanned && <Outline sections={outlineOf(folder, p)} />}
             </div>
         );
