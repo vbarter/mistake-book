@@ -17,7 +17,7 @@ import { Tag } from "./v2";
 /**
  * 导出面板：两种文件。
  * 错题本 = 横向打印，左半页空白重做、右半页错题修正；原始电子试卷 = 干净原卷 + 作答对照表。
- * 错题本可以再按学科、知识点筛一遍（都不选 = 全部）。
+ * 错题本可以按「学科 → 知识点」勾选导出范围，默认全选。
  * errors 是本次范围内的错题；papers 是本次范围内已扫描的试卷（错题库导出时不传，只出错题本）。
  */
 export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: { open: boolean; onClose: () => void; title: string; subtitle?: string; errors: ErrorItem[]; papers?: Paper[] }) {
@@ -26,30 +26,30 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
   const [withBlank, setWithBlank] = useState(true);
   const [busy, setBusy] = useState(false);
   const submitExport = useExports((s) => s.submit);
-  // 学科 / 知识点筛选：空集合表示不筛。每次打开面板重置，免得上次的选择把这次的题筛没了
-  const [subjects, setSubjects] = useState<Set<Subject>>(new Set());
-  const [kps, setKps] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (open) { setSubjects(new Set()); setKps(new Set()); }
-  }, [open]);
-  const bySubject = useMemo(() => groupBySubject(errors), [errors]);
-  const inSubjects = useMemo(() => (subjects.size ? errors.filter((e) => subjects.has(e.subject)) : errors), [errors, subjects]);
-  // 知识点按学科分组列出（只列已选学科的），组内错得多的在前
-  const kpGroups = useMemo(
-    () => groupBySubject(inSubjects).map(([sub, list]) => [sub, groupByKnowledge(list).map(([name, l]) => ({ key: knowledgeKey(l[0]), name, count: l.length }))] as const),
-    [inSubjects],
+  // 导出范围：学科 → 知识点两级勾选，默认全选。记的是「去掉了哪些知识点」，题目变了新知识点也默认选上。
+  // 每次打开面板重置，免得上次的选择把这次的题筛没了
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<Subject>>(new Set());
+  const tree = useMemo(
+    () => groupBySubject(errors).map(([sub, list]) => ({ sub, count: list.length, kps: groupByKnowledge(list).map(([name, l]) => ({ key: knowledgeKey(l[0]), name, count: l.length })) })),
+    [errors],
   );
-  const kpCount = kpGroups.reduce((n, [, l]) => n + l.length, 0);
-  const scoped = kps.size ? inSubjects.filter((e) => kps.has(knowledgeKey(e))) : inSubjects;
-  const toggleSubject = (sub: Subject) => {
-    const next = new Set(subjects);
-    if (next.has(sub)) next.delete(sub); else next.add(sub);
-    setSubjects(next);
-    // 取消某个学科时，顺带去掉它下面已选的知识点
-    if (next.size) setKps((prev) => new Set([...prev].filter((k) => next.has(k.split("|")[0] as Subject))));
-  };
-  const toggleKp = (key: string) => setKps((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
-  const filterLabel = [subjects.size ? [...subjects].map((x) => SUBJECT_LABEL[x]).join("、") : "", kps.size ? `${kps.size} 个知识点` : ""].filter(Boolean).join(" · ");
+  useEffect(() => {
+    if (!open) return;
+    setExcluded(new Set());
+    setExpanded(new Set(tree.length === 1 ? [tree[0].sub] : []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  const kpTotal = tree.reduce((n, g) => n + g.kps.length, 0);
+  const scoped = excluded.size ? errors.filter((e) => !excluded.has(knowledgeKey(e))) : errors;
+  const picked = (g: (typeof tree)[number]) => g.kps.filter((k) => !excluded.has(k.key));
+  const setKeys = (keys: string[], on: boolean) => setExcluded((prev) => { const next = new Set(prev); for (const k of keys) { if (on) next.delete(k); else next.add(k); } return next; });
+  const toggleSubject = (g: (typeof tree)[number]) => setKeys(g.kps.map((k) => k.key), picked(g).length < g.kps.length);
+  const toggleKp = (key: string) => setKeys([key], excluded.has(key));
+  const toggleOpen = (sub: Subject) => setExpanded((prev) => { const next = new Set(prev); if (next.has(sub)) next.delete(sub); else next.add(sub); return next; });
+  const allOn = excluded.size === 0;
+  // PDF 副标题：整科选上写学科名，只选了部分写「化学 2 个知识点」
+  const filterLabel = allOn ? "" : tree.map((g) => { const n = picked(g).length; return n === 0 ? "" : n === g.kps.length ? SUBJECT_LABEL[g.sub] : `${SUBJECT_LABEL[g.sub]} ${n} 个知识点`; }).filter(Boolean).join("、");
 
   const wrongErrors = scoped.filter((e) => e.kind !== "未作答");
   const blankErrors = scoped.filter((e) => e.kind === "未作答");
@@ -84,7 +84,7 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
   };
 
   const run = async () => {
-    if (kind === "book" && chosen.length === 0) return toast(subjects.size || kps.size ? "筛选后没有错题，换个学科或知识点试试" : "这个范围里没有错题");
+    if (kind === "book" && chosen.length === 0) return toast(allOn ? "这个范围里没有错题" : "还没选要导出的知识点");
     if (kind === "paper" && scanned.length === 0) return toast("还没有扫描过的试卷");
     setBusy(true);
     try {
@@ -154,34 +154,42 @@ export function ExportSheet({ open, onClose, title, subtitle, errors, papers }: 
         </button>
       )}
 
-      {kind === "book" && bySubject.length > 1 && (
+      {kind === "book" && kpTotal > 1 && (
         <div className="export-filter">
-          <span className="export-filter__head"><Icon name="folder" size={14} stroke={2.2} />按学科<span className="export-filter__hint">{subjects.size ? <button onClick={() => { setSubjects(new Set()); setKps(new Set()); }}>全部学科</button> : "不选即全部"}</span></span>
-          <div className="export-filter__chips">
-            {bySubject.map(([sub, list]) => (
-              <button key={sub} className={`chip chip--select${subjects.has(sub) ? " on" : ""}`} aria-pressed={subjects.has(sub)} onClick={() => toggleSubject(sub)}>
-                {SUBJECT_LABEL[sub]} {list.length}
-              </button>
-            ))}
+          <span className="export-filter__head">
+            <Icon name="list" size={14} stroke={2.2} />导出范围
+            <button className="export-filter__all" onClick={() => setExcluded(allOn ? new Set(tree.flatMap((g) => g.kps.map((k) => k.key))) : new Set())}>{allOn ? "全不选" : "全选"}</button>
+          </span>
+          <div className="export-tree">
+            {tree.map((g) => {
+              const n = picked(g).length;
+              const state = n === 0 ? "none" : n === g.kps.length ? "all" : "some";
+              const isOpen = expanded.has(g.sub);
+              return (
+                <div key={g.sub} className={`export-tree__group${isOpen ? " open" : ""}`}>
+                  <div className="export-tree__row">
+                    <button className={`export-check export-check--${state}`} role="checkbox" aria-checked={state === "all" ? true : state === "some" ? "mixed" : false} aria-label={`导出${SUBJECT_LABEL[g.sub]}全部知识点`} onClick={() => toggleSubject(g)}>
+                      {state !== "none" && <Icon name={state === "all" ? "check" : "minus"} size={14} stroke={3} />}
+                    </button>
+                    <button className="export-tree__title" aria-expanded={isOpen} onClick={() => toggleOpen(g.sub)}>
+                      <span className="export-tree__name">{SUBJECT_LABEL[g.sub]}</span>
+                      <span className="export-tree__meta">{g.count} 题 · {state === "all" ? `全部 ${g.kps.length} 个知识点` : `已选 ${n}/${g.kps.length} 个知识点`}</span>
+                      <Icon name="chevron-down" size={16} stroke={2.4} className="export-tree__chev" />
+                    </button>
+                  </div>
+                  {isOpen && (
+                    <div className="export-filter__chips export-tree__kps">
+                      {g.kps.map((k) => (
+                        <button key={k.key} className={`chip chip--select export-filter__kp${excluded.has(k.key) ? "" : " on"}`} aria-pressed={!excluded.has(k.key)} onClick={() => toggleKp(k.key)} title={k.name}>
+                          <span className="ellipsis">{k.name}</span><span className="export-filter__n">{k.count}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </div>
-      )}
-
-      {kind === "book" && kpCount > 1 && (
-        <div className="export-filter">
-          <span className="export-filter__head"><Icon name="chart" size={14} stroke={2.2} />按知识点<span className="export-filter__hint">{kps.size ? <button onClick={() => setKps(new Set())}>全部知识点</button> : "不选即全部"}</span></span>
-          {kpGroups.map(([sub, list]) => (
-            <div key={sub} className="export-filter__group">
-              {kpGroups.length > 1 && <span className="export-filter__sub">{SUBJECT_LABEL[sub]}</span>}
-              <div className="export-filter__chips">
-                {list.map((k) => (
-                  <button key={k.key} className={`chip chip--select export-filter__kp${kps.has(k.key) ? " on" : ""}`} aria-pressed={kps.has(k.key)} onClick={() => toggleKp(k.key)} title={k.name}>
-                    <span className="ellipsis">{k.name}</span><span className="export-filter__n">{k.count}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
       )}
 
