@@ -1,5 +1,6 @@
 /**
- * 试卷一键擦除手写：整份试卷的照片一次交给服务器（POST /api/erase/jobs），擦除在服务器后台跑，
+ * 照片擦除手写（原题空白卷里给插图用：题目本身用扫描出的文字重排，只有插图要从照片里裁，裁之前把这些照片的手写擦掉）。
+ * 要擦的照片一次交给服务器（POST /api/erase/jobs），擦除在服务器后台跑，
  * 任务号记在本机试卷记录上（paper.eraseJob），切走、杀掉 App 都不影响；扫描任务的全局轮询（lib/jobs.ts）
  * 顺带问擦除任务的进度，擦好一张就取回来另存一份（folders.saveErased），原图不动，全部好了弹提醒。
  */
@@ -54,17 +55,18 @@ export const useErasing = create<EraseState>((set) => ({
 
 const submitting = new Set<string>();
 
-/** 提交擦除：读出整份试卷的原图一起上传，拿到任务号记在试卷上，之后交给轮询。已经在擦的不重复提交。 */
-export async function erasePaper(folderId: string, paper: Paper): Promise<void> {
-  if (paper.eraseJob || submitting.has(paper.id) || !paper.pages.length) return;
+/** 提交擦除：读出要擦的原图（onlyIds 给了就只擦这几张）一起上传，拿到任务号记在试卷上，之后交给轮询。已经在擦的不重复提交。 */
+export async function erasePaper(folderId: string, paper: Paper, onlyIds?: string[]): Promise<void> {
+  const todo = onlyIds ? paper.pages.filter((pg) => onlyIds.includes(pg.id)) : paper.pages;
+  if (paper.eraseJob || submitting.has(paper.id) || !todo.length) return;
   submitting.add(paper.id);
   const startedAt = new Date().toISOString();
   const store = useErasing.getState();
-  store.set(paper.id, { done: 0, total: paper.pages.length, startedAt, uploading: true });
+  store.set(paper.id, { done: 0, total: todo.length, startedAt, uploading: true });
   try {
     const images: string[] = [];
     const pageIds: string[] = [];
-    for (const pg of paper.pages) {
+    for (const pg of todo) {
       const src = await loadPhoto(pg);
       if (src) {
         images.push(src);
@@ -133,9 +135,9 @@ export async function pollEraseJob(folder: Folder, paper: Paper): Promise<boolea
   const warning = job.status === "failed" ? job.error || "擦除没有成功，请稍后再试" : failedPages ? `有 ${failedPages} 张没擦成功，可以重新擦除` : job.warning;
   useErasing.setState((s) => ({ warnings: { ...s.warnings, [paper.id]: warning } }));
   if (job.status === "failed") useBanner.getState().show(`「${paper.name}」${warning}`, { kind: "error", duration: 5000 });
-  else useBanner.getState().show(`「${paper.name}」的手写擦好了`, { kind: "success", duration: 5000 });
+  else useBanner.getState().show(`「${paper.name}」的插图擦好了，可以导出原题空白卷`, { kind: "success", duration: 5000 });
   return false;
 }
 
-/** 这张试卷有没有擦过（至少一张照片） */
-export const isErased = (paper: Paper) => paper.pages.some((pg) => pg.erased);
+/** 这些照片是不是都擦过了 */
+export const allErased = (paper: Paper, ids: string[]) => ids.every((id) => paper.pages.find((pg) => pg.id === id)?.erased);

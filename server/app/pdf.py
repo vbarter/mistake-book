@@ -177,12 +177,14 @@ def _figures_flow(figs: list[dict], total_w: float, max_h: float, row_h: float, 
     return out
 
 
-def _paper_part(story: list, sheets: list[dict], title: str, scanned_at: str = "") -> None:
+def _paper_part(story: list, sheets: list[dict], title: str, scanned_at: str = "", clean: bool = False) -> None:
+    """试卷打印版。clean：原题空白卷，不印得分、扫描时间这些和作答有关的信息。"""
     for si, sheet in enumerate(sheets):
         if si > 0:
             story.append(PageBreak())
         story.append(Paragraph(_esc(sheet.get("title") or title or "电子版试卷"), S_TITLE))
-        sub = " · ".join(x for x in [sheet.get("label") or "", f"得分 {sheet['score']}" if sheet.get("score") else "", f"扫描于 {scanned_at}" if scanned_at else ""] if x)
+        score = "" if clean or not sheet.get("score") else f"得分 {sheet['score']}"
+        sub = " · ".join(x for x in [sheet.get("label") or "", score, f"扫描于 {scanned_at}" if scanned_at and not clean else ""] if x)
         story.append(Paragraph(_esc(sub) if sub else "&nbsp;", S_SUB))
         pending_figs: list[dict] = []
         for block in (sheet.get("blocks") or []) + [{"type": "__end__"}]:
@@ -346,6 +348,19 @@ def build_papers_pdf(title: str, papers: list[dict]) -> bytes:
         _paper_part(story, sheets, str(paper.get("title") or title), str(paper.get("scannedAt") or "")[:40])
         _answer_part(story, sheets)
         _summary_part(story, sheets, paper.get("questions") or [])
+    doc.build(story)
+    return buf.getvalue()
+
+
+def build_clean_pdf(title: str, papers: list[dict]) -> bytes:
+    """原题空白卷（文字版）：只排扫描识别出的原题，空位留白，不带作答、批改和照片；插图是客户端从擦过手写的照片里裁的。"""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=16 * mm, title=title or "空白卷")
+    story: list = []
+    for i, paper in enumerate(papers):
+        if i > 0:
+            story.append(PageBreak())
+        _paper_part(story, paper.get("pages") or [], str(paper.get("title") or title), clean=True)
     doc.build(story)
     return buf.getvalue()
 

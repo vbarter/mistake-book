@@ -16,7 +16,7 @@ from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from ..auth_utils import current_user, login_required
 from ..extensions import db
 from ..models import ExportJob
-from ..pdf import build_blank_pdf, build_book_pdf, build_papers_pdf
+from ..pdf import build_blank_pdf, build_book_pdf, build_clean_pdf, build_papers_pdf
 from ..usage import track
 from .recognize import _decode, book_args, paper_args, pdf_error_message
 
@@ -72,7 +72,7 @@ def _run(app, job_id: str, kind: str, args: tuple) -> None:
             job.status = "running"
             db.session.commit()
             try:
-                pdf = {"book": build_book_pdf, "paper": build_papers_pdf, "blank": build_blank_pdf}[kind](*args)
+                pdf = {"book": build_book_pdf, "paper": build_papers_pdf, "clean": build_clean_pdf, "blank": build_blank_pdf}[kind](*args)
                 with open(_file(job), "wb") as f:
                     f.write(pdf)
                 job = db.session.get(ExportJob, job_id)
@@ -83,7 +83,7 @@ def _run(app, job_id: str, kind: str, args: tuple) -> None:
                 db.session.rollback()
                 job = db.session.get(ExportJob, job_id)
                 if job:
-                    job.status, job.error = "failed", pdf_error_message({"book": "错题本", "paper": "电子试卷", "blank": "空白卷"}[kind], e)
+                    job.status, job.error = "failed", pdf_error_message({"book": "错题本", "paper": "电子试卷", "clean": "空白卷", "blank": "空白卷"}[kind], e)
                     db.session.commit()
             finally:
                 db.session.remove()
@@ -109,7 +109,7 @@ def blank_args(data: dict) -> tuple[str, list[bytes]]:
 @bp.post("/exports")
 @login_required
 def create_export():
-    """提交导出：kind = book（错题本，请求体同 /digitize/book）| paper（电子试卷，同 /digitize/pdf）| blank（擦掉手写的空白卷，{title, images}）。立刻返回任务，后台排版。"""
+    """提交导出：kind = book（错题本，请求体同 /digitize/book）| paper（电子试卷，同 /digitize/pdf）| clean（原题空白卷，文字版：只排扫描出的原题，请求体同 paper，不用 questions）| blank（照片版空白卷，{title, images}，1.9 之前的测试版用）。立刻返回任务，后台排版。"""
     user = current_user()
     data = request.get_json(silent=True) or {}
     kind = str(data.get("kind") or "book")
@@ -123,6 +123,11 @@ def create_export():
         args = (title, papers)
         detail = f"{len(papers)} 张试卷"
         track(user, "pdf")
+    elif kind == "clean":
+        title, papers = paper_args(data)
+        args = (title, papers)
+        detail = f"原题空白卷 · {len(papers)} 张试卷"
+        track(user, "blank", pages=sum(len(p.get("pages") or []) for p in papers))
     elif kind == "blank":
         title, images = blank_args(data)
         args = (title, images)

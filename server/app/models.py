@@ -240,7 +240,7 @@ class ExportJob(db.Model):
     __tablename__ = "export_jobs"
     id = db.Column(db.String(32), primary_key=True, default=_uuid)
     user_id = db.Column(db.String(32), index=True, nullable=False)
-    kind = db.Column(db.String(8), default="book")  # book | paper | blank（擦掉手写的空白卷）
+    kind = db.Column(db.String(8), default="book")  # book | paper | clean（原题空白卷，文字版）| blank（照片版空白卷）
     title = db.Column(db.String(120), default="")
     detail = db.Column(db.String(160), default="")  # 「141 题 · 错题 + 未作答」，列表里显示
     status = db.Column(db.String(16), default="queued", index=True)  # queued | running | done | failed
