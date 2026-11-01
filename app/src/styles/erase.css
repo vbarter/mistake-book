@@ -1,0 +1,27 @@
+/* 擦除手写预览页 */
+.erase__head { display: flex; align-items: center; gap: 8px; padding: 4px 4px 0; }
+.erase__stage { position: relative; border-radius: 14px; overflow: hidden; background: var(--fill); min-height: 200px; display: flex; align-items: center; justify-content: center; }
+.erase__placeholder { padding: 80px 0; }
+.erase__busy { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: color-mix(in srgb, var(--bg) 78%, transparent); text-align: center; padding: 16px; }
+.erase__pager { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.erase__dots { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.erase__dot { width: 10px; height: 10px; border-radius: 5px; background: var(--separator); border: 0; padding: 0; }
+.erase__dot.done { background: color-mix(in srgb, var(--brand) 45%, transparent); }
+.erase__dot.on { background: var(--brand); transform: scale(1.25); }
+.erase__warn { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; background: var(--accent-bg, #fff0e3); color: var(--accent-on, #b35300); }
+
+/* 拖动对比 */
+.compare { position: relative; width: 100%; touch-action: none; user-select: none; -webkit-user-select: none; cursor: ew-resize; }
+.compare img { display: block; width: 100%; height: auto; pointer-events: none; }
+.compare__top { position: absolute; inset: 0; }
+.compare__line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18); pointer-events: none; }
+.compare__knob { position: absolute; top: 50%; left: 50%; width: 32px; height: 32px; margin: -16px 0 0 -16px; border-radius: 16px; background: #fff; color: var(--brand); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); }
+.compare__tag { position: absolute; top: 8px; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 700; background: rgba(0, 0, 0, 0.55); color: #fff; pointer-events: none; }
+.compare__tag--l { left: 8px; }
+.compare__tag--r { right: 8px; }
+
+/* 试卷卡片右侧的擦除按钮 */
+.erase-btn { flex-shrink: 0; width: 38px; height: 38px; border-radius: 19px; border: 0; background: var(--brand-tint); color: var(--brand); display: inline-flex; align-items: center; justify-content: center; position: relative; }
+.erase-btn:disabled { opacity: 0.4; }
+.erase-btn__done { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; border-radius: 8px; background: var(--mastered); color: #fff; display: flex; align-items: center; justify-content: center; border: 2px solid var(--card); }
+.erase-btn .spinner-ring { width: 18px; height: 18px; border-width: 2px; }

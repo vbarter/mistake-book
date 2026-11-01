@@ -13,6 +13,7 @@ export interface FolderPage {
   thumb?: string; // 小图 dataURL（最长边 THUMB_SIDE），列表和录入页显示用
   sha?: string; // 原图内容的 SHA-256（前 16 位），同一张图再导入时认出来；旧照片没有
   dhash?: string; // 小图的差值哈希（16 位十六进制），重新压缩过的同一张图也能认出来；旧照片没有
+  erased?: string; // 擦过手写的时间：擦后的照片另存在照片表 erasedKey(id) 下，原图不动；「恢复原图」就是删掉那一份
   src?: string; // 原图 dataURL：只在内存里带着（刚拍的、loadPages 读出来的）；存库时拆进照片表，文件夹记录里没有
 }
 
@@ -124,8 +125,12 @@ function locked<T>(fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
-const strip = (pages: FolderPage[]): FolderPage[] => pages.map(({ id, width, height, thumb, sha, dhash }) => ({ id, width, height, thumb, ...(sha ? { sha } : {}), ...(dhash ? { dhash } : {}) }));
-const pageIds = (folder: Folder) => new Set(folder.papers.flatMap((p) => p.pages.map((pg) => pg.id)));
+const strip = (pages: FolderPage[]): FolderPage[] => pages.map(({ id, width, height, thumb, sha, dhash, erased }) => ({ id, width, height, thumb, ...(sha ? { sha } : {}), ...(dhash ? { dhash } : {}), ...(erased ? { erased } : {}) }));
+/** 擦过手写的照片在照片表里的 id */
+export const erasedKey = (pageId: string) => `${pageId}~erased`;
+/** 一张照片在照片表里占的 id：原图，擦过的再加一份擦后的 */
+const photoIds = (pg: FolderPage) => (pg.erased ? [pg.id, erasedKey(pg.id)] : [pg.id]);
+const pageIds = (folder: Folder) => new Set(folder.papers.flatMap((p) => p.pages.flatMap(photoIds)));
 
 /** 存一个文件夹：带原图的照片写进照片表（已存过的 id 跳过），文件夹记录只留尺寸和小图；dropped 里不再被引用的照片删掉 */
 function putFolder(folder: Folder, opts: { stored?: Set<string>; dropped?: Iterable<string> } = {}): Promise<undefined> {
@@ -191,6 +196,43 @@ export async function loadPhoto(page: Pick<FolderPage, "id" | "src">): Promise<s
   await ready();
   const row = await run<{ id: string; src: string } | undefined>(PHOTOS, "readonly", (t) => t.objectStore(PHOTOS).get(page.id));
   return row?.src ?? null;
+}
+
+/** 擦过手写的那一份照片；没擦过或找不到返回 null */
+export async function loadErased(page: Pick<FolderPage, "id" | "erased">): Promise<string | null> {
+  if (!page.erased) return null;
+  await ready();
+  const row = await run<{ id: string; src: string } | undefined>(PHOTOS, "readonly", (t) => t.objectStore(PHOTOS).get(erasedKey(page.id)));
+  return row?.src ?? null;
+}
+
+/** 存一张照片擦过手写的结果（覆盖上一次的），原图不动 */
+export function saveErased(folderId: string, paperId: string, pageId: string, src: string): Promise<Folder | undefined> {
+  return locked(async () => {
+    const folder = await getFolder(folderId);
+    if (!folder) return undefined;
+    const now = new Date().toISOString();
+    await run(PHOTOS, "readwrite", (t) => t.objectStore(PHOTOS).put({ id: erasedKey(pageId), src }));
+    const next = { ...folder, papers: folder.papers.map((p) => (p.id === paperId ? { ...p, pages: p.pages.map((pg) => (pg.id === pageId ? { ...pg, erased: now } : pg)) } : p)) };
+    await putFolder(next, { stored: pageIds(next) }); // 不动文件夹的更新时间：擦除不算改了试卷，列表顺序不变
+    return next;
+  });
+}
+
+/** 恢复原图：删掉擦过的那一份。pageIds 不传就是整张试卷 */
+export function clearErased(folderId: string, paperId: string, pageIds?: string[]): Promise<Folder | undefined> {
+  return locked(async () => {
+    const folder = await getFolder(folderId);
+    if (!folder) return undefined;
+    const hit = (id: string) => !pageIds || pageIds.includes(id);
+    const paper = folder.papers.find((p) => p.id === paperId);
+    const gone = (paper?.pages ?? []).filter((pg) => pg.erased && hit(pg.id)).map((pg) => erasedKey(pg.id));
+    if (!gone.length) return folder;
+    await run(PHOTOS, "readwrite", (t) => { for (const id of gone) t.objectStore(PHOTOS).delete(id); });
+    const next = { ...folder, papers: folder.papers.map((p) => (p.id === paperId ? { ...p, pages: p.pages.map((pg) => (pg.erased && hit(pg.id) ? { ...pg, erased: undefined } : pg)) } : p)) };
+    await putFolder(next, { stored: new Set(next.papers.flatMap((p) => p.pages.flatMap((pg) => [pg.id, erasedKey(pg.id)]))) });
+    return next;
+  });
 }
 
 /** 一张试卷带原图的全部照片（找不到原图的跳过） */
@@ -385,7 +427,7 @@ export function updatePaper(folderId: string, paperId: string, patch: Partial<Pa
     const now = new Date().toISOString();
     const before = folder.papers.find((p) => p.id === paperId);
     const next = { ...folder, papers: folder.papers.map((p) => (p.id === paperId ? { ...p, ...patch, updatedAt: now } : p)) };
-    return saveFolder(next, { stored: pageIds(folder), dropped: patch.pages ? before?.pages.map((pg) => pg.id) : undefined });
+    return saveFolder(next, { stored: pageIds(folder), dropped: patch.pages ? before?.pages.flatMap(photoIds) : undefined });
   });
 }
 
@@ -393,7 +435,7 @@ export function deletePaper(folderId: string, paperId: string): Promise<Folder |
   return locked(async () => {
     const folder = await getFolder(folderId);
     if (!folder) return undefined;
-    const gone = folder.papers.find((p) => p.id === paperId)?.pages.map((pg) => pg.id);
+    const gone = folder.papers.find((p) => p.id === paperId)?.pages.flatMap(photoIds);
     const saved = await saveFolder({ ...folder, papers: folder.papers.filter((p) => p.id !== paperId) }, { stored: pageIds(folder), dropped: gone });
     await unlinkDuplicates(new Set([paperId]));
     return (await getFolder(folderId)) ?? saved;

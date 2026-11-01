@@ -350,6 +350,28 @@ def build_papers_pdf(title: str, papers: list[dict]) -> bytes:
     return buf.getvalue()
 
 
+def build_blank_pdf(title: str, images: list[bytes]) -> bytes:
+    """空白卷（照片版）：擦掉手写后的照片一页一张，按比例铺满 A4，横拍的用横向页。"""
+    from reportlab.pdfgen import canvas as pdf_canvas
+
+    buf = io.BytesIO()
+    c = pdf_canvas.Canvas(buf, pagesize=A4)
+    c.setTitle(title or "空白卷")
+    margin = 8 * mm
+    for data in images:
+        reader = ImageReader(io.BytesIO(data))
+        iw, ih = reader.getSize()
+        size = landscape(A4) if iw > ih else A4
+        c.setPageSize(size)
+        pw, ph = size[0] - 2 * margin, size[1] - 2 * margin
+        scale = min(pw / iw, ph / ih)
+        w, h = iw * scale, ih * scale
+        c.drawImage(reader, (size[0] - w) / 2, (size[1] - h) / 2, w, h)
+        c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
 # ---------------------------------------------------------------- 错题本（横向：空白重做 | 错题修正）
 
 S_BOOK_H = ParagraphStyle("bookh", fontName=FONT, fontSize=11, leading=15, textColor=colors.HexColor("#333333"))
