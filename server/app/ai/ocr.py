@@ -336,3 +336,31 @@ def ocr_page(data: bytes, media_type: str = "image/jpeg", prompt: str = "OCR:", 
             log.warning("ocr(%s) attempt %s failed: %s", name, attempt + 1, e)
             time.sleep(1)
     raise OCRError(str(last))
+
+
+# ---------- 手写擦除用：逐行框 ----------
+
+
+def baidu_line_boxes(r: dict, size: tuple[int, int] | None) -> dict:
+    """doc_analysis 结果里每一行的框，按印刷 / 手写分开，坐标换成相对整张图的 0–1：{"print": [[x0,y0,x1,y1]...], "hand": [...]}"""
+    out: dict = {"print": [], "hand": []}
+    if not size:
+        return out
+    w, h = size
+    for item in r.get("results") or []:
+        loc = (item.get("words") or {}).get("words_location") or {}
+        try:
+            x, y, ww, hh = float(loc["left"]), float(loc["top"]), float(loc["width"]), float(loc["height"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        box = [round(max(0.0, x / w), 4), round(max(0.0, y / h), 4), round(min(1.0, (x + ww) / w), 4), round(min(1.0, (y + hh) / h), 4)]
+        out["hand" if item.get("words_type") == "handwriting" else "print"].append(box)
+    return out
+
+
+def line_boxes(data: bytes, timeout: float = 60.0) -> dict | None:
+    """擦除手写时用：百度配置齐了就调一次 doc_analysis 拿逐行框（不管 OCR_PROVIDER 选的哪套，只有百度给手写 / 印刷之分）；
+    没配置返回 None，调用失败抛 OCRError。"""
+    if not configured("baidu"):
+        return None
+    return baidu_line_boxes(_baidu_doc_analysis(data, timeout), image_size(data))

@@ -430,6 +430,34 @@ def candidate_text(subject: str, grade: str) -> str:
     return "\n".join(f"{t['id']}｜{t['name']}｜{taxonomy.chapter_title(t)}" for t in rows)
 
 
+MARKS_SYSTEM = "你是试卷图像标注员，只负责找出照片上手写和批改的位置，不做别的。"
+MARKS_PROMPT = (
+    "这是一张学生做过的试卷照片。找出照片上所有「不是印刷出来的」痕迹：学生手写的答案、括号里写的字母、演算、涂改、"
+    "圈画、手画的下划线和斜线，老师的勾叉、分数和批注。\n"
+    "每一处给一个尽量贴紧的矩形框，坐标按整张照片归一化到 0–1000：[x0, y0, x1, y1]。连在一起的一串笔迹可以合成一个框，"
+    "但框里不要包进大段印刷文字。印刷的题目、选项、页码、表格线不要框。"
+)
+MARKS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "marks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "box": {"type": "array", "items": {"type": "number"}},
+                    "kind": {"type": "string", "enum": ["answer", "scribble", "circle", "line", "teacher"]},
+                },
+                "required": ["box", "kind"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["marks"],
+    "additionalProperties": False,
+}
+
+
 class ClaudeProvider(AIProvider):
     def __init__(self, model: str = "claude-opus-5-5", relay: bool | None = None):
         # 凭据与地址从环境解析：ANTHROPIC_API_KEY、ANTHROPIC_BASE_URL（中转）或 `ant auth login` 的配置
@@ -805,6 +833,26 @@ class ClaudeProvider(AIProvider):
                     log.warning("explain batch failed: %s", e)
         log.info("explained %d/%d blank(s)", done, sum(len(v) for v in by_pages.values()))
         return done
+
+    def locate_marks(self, page: Crop) -> list[list[float]]:
+        """手写擦除：让模型框出照片上所有不是印刷的痕迹，返回 0–1 坐标的框。"""
+        content = [
+            {"type": "image", "source": {"type": "base64", "media_type": page.media_type, "data": base64.standard_b64encode(page.data).decode("utf-8")}},
+            {"type": "text", "text": MARKS_PROMPT},
+        ]
+        data = self._call(MARKS_SYSTEM, content, MARKS_SCHEMA, max_tokens=8000)
+        boxes: list[list[float]] = []
+        for m in data.get("marks") or []:
+            b = m.get("box") if isinstance(m, dict) else None
+            if not isinstance(b, list) or len(b) != 4:
+                continue
+            try:
+                x0, y0, x1, y1 = (max(0.0, min(1000.0, float(v))) / 1000 for v in b)
+            except (TypeError, ValueError):
+                continue
+            if x1 > x0 and y1 > y0:
+                boxes.append([round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4)])
+        return boxes
 
     def tag_topics(self, sheets: list[DigitizedPage], grade: str, batch: int = 30) -> int:
         """识别后的第四步：做错 / 半对 / 没作答的题块按学科分组，连同该学科学段的知识点清单交给大模型挑一个知识点 id（纯文本，不传照片）。

@@ -183,6 +183,10 @@ class AIProvider:
     def generate_variants(self, mistake: dict, count: int = 2) -> list[Variant]:
         raise NotImplementedError
 
+    def locate_marks(self, page: Crop) -> list[list[float]]:
+        """手写擦除用：照片上所有手写 / 批改痕迹的框（相对整张照片的 0–1：[x0, y0, x1, y1]）。默认找不到。"""
+        return []
+
     def tag_topics(self, sheets: list[DigitizedPage], grade: str) -> int:
         """给做错 / 半对 / 没作答的题块挑图谱知识点（写进 block.topic）。返回标上的题块数；默认什么都不做。"""
         return 0

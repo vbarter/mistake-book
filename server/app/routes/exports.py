@@ -16,9 +16,9 @@ from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from ..auth_utils import current_user, login_required
 from ..extensions import db
 from ..models import ExportJob
-from ..pdf import build_book_pdf, build_papers_pdf
+from ..pdf import build_blank_pdf, build_book_pdf, build_papers_pdf
 from ..usage import track
-from .recognize import book_args, paper_args, pdf_error_message
+from .recognize import _decode, book_args, paper_args, pdf_error_message
 
 bp = Blueprint("exports", __name__)
 log = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def _run(app, job_id: str, kind: str, args: tuple) -> None:
             job.status = "running"
             db.session.commit()
             try:
-                pdf = build_book_pdf(*args) if kind == "book" else build_papers_pdf(*args)
+                pdf = {"book": build_book_pdf, "paper": build_papers_pdf, "blank": build_blank_pdf}[kind](*args)
                 with open(_file(job), "wb") as f:
                     f.write(pdf)
                 job = db.session.get(ExportJob, job_id)
@@ -83,7 +83,7 @@ def _run(app, job_id: str, kind: str, args: tuple) -> None:
                 db.session.rollback()
                 job = db.session.get(ExportJob, job_id)
                 if job:
-                    job.status, job.error = "failed", pdf_error_message("错题本" if kind == "book" else "电子试卷", e)
+                    job.status, job.error = "failed", pdf_error_message({"book": "错题本", "paper": "电子试卷", "blank": "空白卷"}[kind], e)
                     db.session.commit()
             finally:
                 db.session.remove()
@@ -96,10 +96,20 @@ def _view(job: ExportJob) -> dict:
     return job.to_dict()
 
 
+def blank_args(data: dict) -> tuple[str, list[bytes]]:
+    """空白卷请求体：{title, images: [擦过手写的照片 dataURL]}"""
+    images = data.get("images")
+    if not isinstance(images, list) or not images or not all(isinstance(x, str) and x.startswith("data:image") for x in images):
+        abort(400, "没有可导出的照片")
+    if len(images) > 60:
+        abort(400, "一次最多导出 60 页")
+    return str(data.get("title") or "空白卷")[:80], [_decode(x)[0] for x in images]
+
+
 @bp.post("/exports")
 @login_required
 def create_export():
-    """提交导出：kind = book（错题本，请求体同 /digitize/book）| paper（电子试卷，同 /digitize/pdf）。立刻返回任务，后台排版。"""
+    """提交导出：kind = book（错题本，请求体同 /digitize/book）| paper（电子试卷，同 /digitize/pdf）| blank（擦掉手写的空白卷，{title, images}）。立刻返回任务，后台排版。"""
     user = current_user()
     data = request.get_json(silent=True) or {}
     kind = str(data.get("kind") or "book")
@@ -113,6 +123,11 @@ def create_export():
         args = (title, papers)
         detail = f"{len(papers)} 张试卷"
         track(user, "pdf")
+    elif kind == "blank":
+        title, images = blank_args(data)
+        args = (title, images)
+        detail = f"空白卷 · {len(images)} 页"
+        track(user, "blank", pages=len(images))
     else:
         abort(400, "不支持的导出类型")
     _cleanup(user.id)
