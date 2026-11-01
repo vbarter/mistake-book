@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 
 export type IconName =
   | "house" | "books" | "pencil" | "person" | "camera" | "photo" | "sparkles" | "clock" | "check" | "xmark"
-  | "chevron-right" | "chevron-left" | "chevron-down" | "chevron-up" | "plus" | "trash" | "ellipsis" | "bell"
+  | "chevron-right" | "chevron-left" | "chevron-down" | "chevron-up" | "plus" | "minus" | "trash" | "ellipsis" | "bell"
   | "lock" | "export" | "search" | "refresh" | "warning" | "seal" | "target" | "chart" | "book" | "sun" | "info"
   | "viewfinder" | "loop" | "family" | "shield" | "brain"
   | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation"
@@ -49,6 +49,7 @@ const paths: Record<IconName, string> = {
   "chevron-down": "M6 9l6 6 6-6",
   "chevron-up": "M6 15l6-6 6 6",
   plus: "M12 5v14M5 12h14",
+  minus: "M5 12h14",
   trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
   ellipsis: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12h.01M12 12h.01M16 12h.01",
   bell: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0",
