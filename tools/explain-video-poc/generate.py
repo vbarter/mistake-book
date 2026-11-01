@@ -148,7 +148,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("questions", nargs="+", type=Path)
     ap.add_argument("--model", default=os.getenv("VIDEO_MODEL", "claude-opus-5-5"))
-    ap.add_argument("--max-tokens", type=int, default=32000)  # tu-zi 按 max_tokens 预扣额度，不要拍满
+    ap.add_argument("--max-tokens", type=int, default=64000)  # tu-zi 按 max_tokens 预扣额度，不要拍满
     ap.add_argument("--effort", default=None, help="low|medium|high|xhigh|max；中转不一定透传，默认不发")
     ap.add_argument("--repairs", type=int, default=2)
     ap.add_argument("--render-anyway", action="store_true", help="检查没通过也渲染最后一版")
