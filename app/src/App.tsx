@@ -29,6 +29,7 @@ import Papers from "./pages/Papers";
 import FolderDetail from "./pages/FolderDetail";
 import Capture from "./pages/capture/Capture";
 import Paper from "./pages/capture/Paper";
+import { ErasePaper } from "./pages/Erase";
 import Profile from "./pages/Profile";
 import { Account, Privacy, Subjects } from "./pages/ProfilePages";
 import { Exports } from "./pages/Exports";
@@ -184,6 +185,7 @@ export default function App() {
           <Route path="/today" element={<Navigate to="/home" replace />} />
           <Route path="/papers/:folderId" element={<FolderDetail />} />
           <Route path="/papers/:folderId/:paperId" element={<Paper />} />
+          <Route path="/papers/:folderId/:paperId/erase" element={<ErasePaper />} />
           <Route path="/capture" element={<Capture />} />
           <Route path="/import" element={<Import />} />
           <Route path="/rank/q/:index" element={<RankDetail />} />
