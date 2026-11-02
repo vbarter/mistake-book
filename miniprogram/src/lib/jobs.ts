@@ -5,6 +5,7 @@ import type { DigitizeJob, DigitizedQuestion, DigitizedResult } from "./types";
 import { autoMark, isProblem, isUnreadable, validDigitized } from "./logic";
 import { getFolder, listFolders, saveFolder, updatePaper, type Folder, type FolderPage, type Paper } from "./store";
 import { findPaperMatch } from "./dedup";
+import { pollEraseJob } from "./erase";
 
 export interface ScanJob {
   id: string;
@@ -155,6 +156,11 @@ export async function pollPendingJobs(): Promise<number> {
   try {
     for (const folder of listFolders()) {
       for (const paper of folder.papers) {
+        // 原题空白卷的插图擦除任务（lib/erase.ts）
+        if (paper.eraseJob) {
+          if (await pollEraseJob(folder, paper)) pending += 1;
+          else bump(); // 擦完了：卡片上的转圈换回刷子
+        }
         const sj = paper.scanJob;
         if (!sj) continue;
         try {

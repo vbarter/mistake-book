@@ -26,7 +26,7 @@ export default function Login() {
     try {
       await login({ grade, subjects, nickname: nickname.trim() || undefined });
       startJobPoller();
-      Taro.switchTab({ url: "/pages/papers/index" });
+      Taro.switchTab({ url: "/pages/home/index" });
     } catch (e) {
       void Taro.showModal({ title: "登录失败", content: errorText(e), showCancel: false });
     } finally {

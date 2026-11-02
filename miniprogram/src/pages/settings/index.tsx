@@ -73,14 +73,14 @@ export default function Settings() {
                 <View key={s} className="prow" hoverClass="prow--pressed" onClick={() => toggle(s)}>
                   <SubjectTile subject={s} size="sm" />
                   <Text className="prow__title">{SUBJECT_LABEL[s]}</Text>
-                  <Icon name={on ? "checkcircle" : "target"} size={24} color={on ? "#2f6fed" : "#d1d1d6"} stroke={on ? 2.2 : 1.6} />
+                  <Icon name={on ? "checkcircle" : "target"} size={24} color={on ? "#1f3b73" : "#d1d1d6"} stroke={on ? 2.2 : 1.6} />
                 </View>
               );
             })}
           </View>
         </View>
       ))}
-      <Text className="group-note">这里勾选的学科只影响错题库的排序，扫描时会自动识别卷子是哪一科。</Text>
+      <Text className="group-note">这里勾选的学科只影响错题榜的排序，扫描时会自动识别卷子是哪一科。</Text>
 
       <View className="bottom-bar">
         <View className={`btn flex1${busy ? " btn--disabled" : ""}`} onClick={save}>

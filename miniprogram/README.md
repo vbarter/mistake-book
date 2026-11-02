@@ -47,22 +47,30 @@ TARO_APP_API_BASE=http://localhost:5001 npm run dev
 | 公式 | KaTeX 排版 | 换成可读文字（x²、√3、1/2、∠、≤…），看不清的字仍是红色「未识别」 |
 | 排序 / 删除 | 按住拖动、左滑删除 | 长按卡片 → 上移 / 下移 / 重命名 / 删除 |
 | 导出 | 系统分享面板 | 打开 PDF 预览，右上角转发给好友、打印或保存 |
+| 底部导航 | 原生 TabBar + 中间拍照按钮 | 自定义 tabBar（`src/custom-tab-bar`），外观和 App 一样，中间相机按钮弹出拍照 / 相册 |
+
+界面（配色、卡片、首页、错题榜、导出范围、原题空白卷、拍照确认旋转、我的导出）和 App 对齐，配色在 `lib/theme.ts` 和 `app.scss`。
 
 ## 目录
 
 ```
 src/
-  app.ts / app.config.ts / app.scss   入口、页面与 tabBar、全局样式
+  app.ts / app.config.ts / app.scss   入口、页面与 tabBar、全局样式（App 的配色和组件样式）
+  custom-tab-bar/   自定义底部导航（首页 / 试卷 / 错题榜 / 我的 + 拍照按钮）
   lib/
     store.ts    文件夹 / 试卷 / 照片的本机存储
     jobs.ts     压缩切图、提交扫描、轮询任务、AI 补判
     capture.ts  拍照 / 相册 → 建试卷 → 扫描；重拍
-    export.ts   错题本 / 电子试卷 PDF
+    export.ts   错题本 / 电子试卷 / 空白卷 PDF（服务器后台生成，我的导出）
+    erase.ts    擦除手写（原题空白卷的插图）
+    confirm.ts  拍照后确认、旋转
+    insights.ts ranks.ts   首页统计、错题榜排名（从 app/src 移植）
     logic.ts errors.ts format.ts types.ts   与 App 相同的判分、错题汇总规则（从 app/src 移植）
     math.ts     LaTeX → 文字
     api.ts auth.ts hooks.ts
-  components/   ui.tsx（学科方块、标签、面板…）、ErrorCard、ExportSheet
-  pages/        papers（试卷）、library（错题库）、profile（我的）、login、folder、paper
+  components/   ui.tsx（学科方块、标签、面板…）、ErrorCard、ExportSheet、Buddy、Insights、AddSheet、PrintSheets
+  pages/        home（首页）、papers（试卷）、rank（错题榜）、profile（我的）、login、folder、paper、
+                erase（原题空白卷）、rank-detail、confirm（拍照确认）、exports（我的导出）、settings、privacy、account
 ```
 
-`logic.ts`、`errors.ts`、`format.ts` 来自 App 的同名逻辑。改判分或错题规则时，两边一起改。
+`logic.ts`、`errors.ts`、`format.ts`、`insights.ts`、`ranks.ts` 来自 App 的同名逻辑。改判分或错题规则时，两边一起改。

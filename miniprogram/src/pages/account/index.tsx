@@ -8,7 +8,7 @@ import { currentUser, loginLabel, logout } from "../../lib/auth";
 export default function Account() {
   const user = useMemo(() => currentUser(), []);
   const doLogout = async () => {
-    const m = await Taro.showModal({ title: "退出登录？", content: "本机的试卷和错题不会删除。", confirmText: "退出", confirmColor: "#d92d20" });
+    const m = await Taro.showModal({ title: "退出登录？", content: "本机的试卷和错题不会删除。", confirmText: "退出", confirmColor: "#b42323" });
     if (m.confirm) logout();
   };
   return (

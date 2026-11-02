@@ -16,7 +16,7 @@ export default function Privacy() {
       title: "清空本应用数据？",
       content: `会删掉错误本在这台手机上保存的 ${folders.length} 个文件夹、${papers} 张试卷，以及它们的照片、电子版和错题，不能恢复。账号和学习设置不受影响。`,
       confirmText: "清空",
-      confirmColor: "#d92d20",
+      confirmColor: "#b42323",
     });
     if (!m.confirm) return;
     clearAllFolders();

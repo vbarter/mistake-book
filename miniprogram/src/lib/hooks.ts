@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { JOBS_EVENT } from "./jobs";
 import { isLoggedIn } from "./auth";
@@ -27,3 +27,12 @@ export function useDataVersion(): [number, () => void] {
 }
 
 export const toast = (title: string, icon: "none" | "success" = "none") => Taro.showToast({ title, icon, duration: 2000 });
+
+/** Tab 页显示时告诉自定义 Tab 栏高亮哪个（每个 Tab 页各有一个 Tab 栏实例）。index 和 app.config 的 tabBar.list 顺序一致 */
+export function useTabBar(index: number) {
+  const page = useMemo(() => Taro.getCurrentInstance().page, []);
+  useDidShow(() => {
+    const bar = Taro.getTabBar<{ setSelected?: (i: number) => void }>(page);
+    bar?.setSelected?.(index);
+  });
+}

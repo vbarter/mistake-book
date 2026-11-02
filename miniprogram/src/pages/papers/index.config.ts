@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "我的试卷", enablePullDownRefresh: true });
+export default definePageConfig({ navigationStyle: "custom", navigationBarTitleText: "试卷", enablePullDownRefresh: true });
