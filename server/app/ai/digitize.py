@@ -251,6 +251,17 @@ def _wordbank_from_figure(blocks: list[DigitizedBlock]) -> list[DigitizedBlock]:
     return blocks
 
 
+def _guessed_grade(value) -> str:
+    """模型判断的大致年级：只留 1–12 的数字（「五年级」「5」都认）。"""
+    m = re.search(r"\d{1,2}", _str(value))
+    if m and 1 <= int(m.group()) <= 12:
+        return m.group()
+    from ..taxonomy import parse_grade
+
+    g = parse_grade(_str(value))
+    return str(g) if g else ""
+
+
 def clean_sheet(raw: dict, page: int) -> DigitizedPage:
     subject = raw.get("subject") if raw.get("subject") in SUBJECTS else ""
     blocks = _wordbank_from_figure(merge_figures(_merge_labels([b for b in (clean_block(x, subject or "math") for x in (raw.get("blocks") or [])) if b])))
@@ -270,6 +281,7 @@ def clean_sheet(raw: dict, page: int) -> DigitizedPage:
         note=_str(raw.get("note")).strip(),
         examLevel=_str(raw.get("examLevel")).strip(),
         examGrade=_str(raw.get("examGrade")).strip(),
+        guessedGrade=_guessed_grade(raw.get("guessedGrade")),
         region=_str(raw.get("region")).strip(),
         syllabus=_str(raw.get("syllabus")).strip(),
         photoIssues=[x for x in (raw.get("photoIssues") or []) if x in PHOTO_ISSUES][:4] if isinstance(raw.get("photoIssues"), list) else [],

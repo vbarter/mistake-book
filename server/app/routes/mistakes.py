@@ -301,7 +301,7 @@ def generate_variants(mid: str):
     m = _own(mid)
     count = int((request.get_json(silent=True) or {}).get("count", 2))
     try:
-        variants = get_provider().generate_variants(m.to_dict(), count=max(1, min(count, 5)))
+        variants = get_provider().generate_variants({**m.to_dict(), "grade": m.user.grade}, count=max(1, min(count, 5)))
     except AIError as e:
         return jsonify({"error": "ai_unavailable", "message": str(e)}), 502
     m.variants = [v.to_dict() for v in variants]

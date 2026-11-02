@@ -72,7 +72,7 @@ def _build_items(mistakes: list[Mistake], count: int) -> list[dict]:
         variants = m.variants or []
         if not variants:
             try:
-                variants = [v.to_dict() for v in provider.generate_variants(m.to_dict(), count=2)]
+                variants = [v.to_dict() for v in provider.generate_variants({**m.to_dict(), "grade": m.user.grade}, count=2)]
                 m.variants = variants
             except AIError:
                 variants = []

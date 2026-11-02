@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   apple_name        VARCHAR(64)  NULL     COMMENT 'Apple 首次授权给的姓名',
   apple_email       VARCHAR(128) NULL     COMMENT 'Apple identityToken 里的邮箱',
   nickname          VARCHAR(32)  NOT NULL DEFAULT '小同学',
-  grade             VARCHAR(4)   NOT NULL DEFAULT '5' COMMENT '年级 3-6',
+  grade             VARCHAR(4)   NOT NULL DEFAULT '' COMMENT '年级 1-12；空 = 用户没设过',
   subjects          JSON         NULL     COMMENT '开启的学科数组，如 ["math","chinese"]',
   weekly_goal       INT          NOT NULL DEFAULT 5  COMMENT '每周复习目标 5/10/20',
   reminder_enabled  TINYINT(1)   NOT NULL DEFAULT 0,

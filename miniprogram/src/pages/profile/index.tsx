@@ -37,9 +37,10 @@ export default function Profile() {
   }, [folders]);
 
   if (!user) return null;
-  const grade = GRADE_LABEL[user.grade] ?? `${user.grade} 年级`;
+  // 年级为空 = 没设过（服务端按卷面年级或题目内容判断）
+  const grade = user.grade ? GRADE_LABEL[user.grade] ?? `${user.grade} 年级` : "";
   const g = Number(user.grade);
-  const gradeShort = g >= 10 ? grade : g >= 7 ? `初${"一二三"[g - 7]}` : grade.replace("年级", "");
+  const gradeShort = !grade ? "" : g >= 10 ? grade : g >= 7 ? `初${"一二三"[g - 7]}` : grade.replace("年级", "");
   const guest = user.loginMethod === "guest";
   const go = (url: string) => Taro.navigateTo({ url });
 
@@ -61,7 +62,7 @@ export default function Profile() {
       <View className="card card--row profile-card" hoverClass="card--pressed" onClick={editName}>
         <View className="avatar-wrap">
           <View className="avatar">{user.nickname.slice(-1)}</View>
-          <Text className="avatar__badge">{gradeShort}</Text>
+          {gradeShort && <Text className="avatar__badge">{gradeShort}</Text>}
         </View>
         <View className="flex1 col gap4 minw0">
           <Text className="t-title3 b ellipsis">{user.nickname}</Text>
@@ -86,7 +87,7 @@ export default function Profile() {
       <View className="col">
         <Text className="group-title">学习设置</Text>
         <View className="group">
-          <Row icon="graduation" iconBg={C.brand} title="年级与城市" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => go("/pages/settings/index")} />
+          <Row icon="graduation" iconBg={C.brand} title="年级与城市" value={[grade || "未设置年级", city].filter(Boolean).join(" · ")} onClick={() => go("/pages/settings/index")} />
           <Row
             icon="books"
             iconBg={C.brand}
