@@ -1,0 +1,79 @@
+/* 底部导航（自定义 tabBar）：颜色和 App 的 nav.css 一致。组件样式和页面隔离，这里自带一份。 */
+$brand: #1f3b73;
+$brand-glow: rgba(31, 59, 115, 0.32);
+$secondary: #5b5b63;
+$sep: #d1d1d6;
+$bg: #f3f4f8;
+$spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+.ctb-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  height: calc(56px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(249, 249, 249, 0.97);
+  border-top: 1px solid $sep;
+  box-sizing: border-box;
+}
+.ctb-tab {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: $secondary;
+}
+.ctb-tab__icon { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
+.ctb-tab--on .ctb-tab__icon { animation: ctb-pop 0.45s $spring; }
+.ctb-tab__label { font-size: 10px; line-height: 12px; font-weight: 500; white-space: nowrap; }
+.ctb-tab--on .ctb-tab__label { color: $brand; }
+.ctb-tab--fab { position: relative; }
+.ctb-fab {
+  position: absolute;
+  left: 50%;
+  top: -22px;
+  width: 62px;
+  height: 62px;
+  margin-left: -31px;
+  border-radius: 31px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $brand;
+  box-shadow: 0 4px 12px $brand-glow, 0 0 0 5px $bg;
+  transition: transform 0.35s $spring;
+}
+.ctb-fab--open { transform: rotate(135deg); }
+
+.ctb-scrim { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 29; background: rgba(10, 16, 32, 0.28); animation: ctb-fade 0.2s ease; }
+.ctb-menu { position: fixed; left: 50%; bottom: calc(56px + env(safe-area-inset-bottom) + 34px); z-index: 31; width: 0; height: 0; }
+.ctb-bubble {
+  position: absolute;
+  bottom: 0;
+  left: -48px;
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(0, 40px) scale(0.3);
+  transition: transform 0.45s $spring, opacity 0.2s ease;
+}
+.ctb-bubble__icon { width: 58px; height: 58px; border-radius: 29px; background: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18); }
+.ctb-menu--open .ctb-bubble { opacity: 1; pointer-events: auto; }
+.ctb-menu--open .ctb-bubble--left { transform: translate(-62px, 0) scale(1); }
+.ctb-menu--open .ctb-bubble--right { transform: translate(62px, 0) scale(1); transition-delay: 0.05s; }
+
+@keyframes ctb-pop { 40% { transform: scale(1.22) translateY(-2px); } }
+@keyframes ctb-fade { from { opacity: 0; } to { opacity: 1; } }

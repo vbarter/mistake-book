@@ -4,11 +4,11 @@ import type { CSSProperties } from "react";
 
 export type IconName =
   | "house" | "books" | "pencil" | "person" | "camera" | "photo" | "sparkles" | "clock" | "check" | "xmark"
-  | "chevron-right" | "chevron-left" | "chevron-down" | "chevron-up" | "plus" | "trash" | "ellipsis" | "bell"
+  | "chevron-right" | "chevron-left" | "chevron-down" | "chevron-up" | "plus" | "minus" | "trash" | "ellipsis" | "bell"
   | "lock" | "export" | "search" | "refresh" | "warning" | "seal" | "target" | "chart" | "book" | "sun" | "info"
   | "viewfinder" | "loop" | "family" | "shield" | "brain"
   | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation"
-  | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales";
+  | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "rotate";
 
 const paths: Record<IconName, string> = {
   // 学科图标
@@ -49,6 +49,8 @@ const paths: Record<IconName, string> = {
   "chevron-down": "M6 9l6 6 6-6",
   "chevron-up": "M6 15l6-6 6 6",
   plus: "M12 5v14M5 12h14",
+  minus: "M5 12h14",
+  rotate: "M20.5 12a8.5 8.5 0 1 1-2.5-6M20.5 3.5V8H16M9 9.5h6v6H9z",
   trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
   ellipsis: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12h.01M12 12h.01M16 12h.01",
   bell: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0",
@@ -72,7 +74,7 @@ const paths: Record<IconName, string> = {
 
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 /** SVG 文本都是 ASCII，用最简单的 base64 编码（小程序里没有 btoa） */
-function base64(s: string): string {
+export function base64(s: string): string {
   let out = "";
   for (let i = 0; i < s.length; i += 3) {
     const a = s.charCodeAt(i);
@@ -84,17 +86,24 @@ function base64(s: string): string {
   return out;
 }
 
+/** 只有线条、没有封闭区域的图标：填充后会整个看不见，选中态改成加粗描边（和 App 一致） */
+const LINE_ONLY = new Set<IconName>(["chart"]);
+
 const cache = new Map<string, string>();
-export function iconUri(name: IconName, color: string, stroke = 1.8): string {
-  const key = `${name}|${color}|${stroke}`;
+/** fill：实心（Tab 栏选中态），和 App 的 Icon fill 一样 */
+export function iconUri(name: IconName, color: string, stroke = 1.8, fill = false): string {
+  const key = `${name}|${color}|${stroke}|${fill ? 1 : 0}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name]}"/></svg>`;
+  const lineOnly = fill && LINE_ONLY.has(name);
+  const solid = fill && !lineOnly;
+  const paint = solid ? `fill="${color}" stroke="none"` : `fill="none" stroke="${color}" stroke-width="${lineOnly ? stroke + 0.8 : stroke}"`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" ${paint} stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name]}"/></svg>`;
   const uri = `data:image/svg+xml;base64,${base64(svg)}`;
   cache.set(key, uri);
   return uri;
 }
 
-export function Icon({ name, size = 22, color = "#1c1c1e", stroke = 1.8, style }: { name: IconName; size?: number; color?: string; stroke?: number; style?: CSSProperties }) {
-  return <Image src={iconUri(name, color, stroke)} style={{ width: `${size}px`, height: `${size}px`, flexShrink: 0, ...style }} mode="aspectFit" />;
+export function Icon({ name, size = 22, color = "#1c1c1e", stroke = 1.8, fill = false, style, className }: { name: IconName; size?: number; color?: string; stroke?: number; fill?: boolean; style?: CSSProperties; className?: string }) {
+  return <Image className={className} src={iconUri(name, color, stroke, fill)} style={{ width: `${size}px`, height: `${size}px`, flexShrink: 0, ...style }} mode="aspectFit" />;
 }

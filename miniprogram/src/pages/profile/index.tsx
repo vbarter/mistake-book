@@ -2,12 +2,13 @@ import { useEffect, useMemo } from "react";
 import { Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
-import { Row, SubjectTile } from "../../components/ui";
+import { Row, Stat, SubjectTile, TopBar } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { currentUser, loginLabel, refreshUser, updateProfile } from "../../lib/auth";
 import { allErrors } from "../../lib/errors";
 import { GRADE_LABEL } from "../../lib/format";
-import { toast, useDataVersion } from "../../lib/hooks";
+import { toast, useDataVersion, useTabBar } from "../../lib/hooks";
+import { C } from "../../lib/theme";
 import { listFolders, photosSizeMB } from "../../lib/store";
 
 /** 小程序版本：三位 */
@@ -15,6 +16,7 @@ const VERSION = "1.8.9";
 
 /** 我的：和 App 的「我的」同一套布局——账号卡片、统计、学习设置、数据与隐私、关于 */
 export default function Profile() {
+  useTabBar(3);
   const [version, refresh] = useDataVersion();
   const user = useMemo(() => currentUser(), [version]);
   const folders = useMemo(() => listFolders(), [version]);
@@ -54,7 +56,8 @@ export default function Profile() {
   };
 
   return (
-    <View className="page page--tab">
+    <View className="page page--tab" style={{ gap: "14px", paddingTop: 0 }}>
+      <TopBar />
       <View className="card card--row profile-card" hoverClass="card--pressed" onClick={editName}>
         <View className="avatar-wrap">
           <View className="avatar">{user.nickname.slice(-1)}</View>
@@ -63,39 +66,30 @@ export default function Profile() {
         <View className="flex1 col gap4 minw0">
           <Text className="t-title3 b ellipsis">{user.nickname}</Text>
           <View className="row-center gap4">
-            <Icon name="pin" size={13} color="#5b5b63" stroke={2.2} />
+            <Icon name="pin" size={13} color={C.secondary} stroke={2.2} />
             <Text className="t-foot c-sec">{[city, grade].filter(Boolean).join(" · ")}</Text>
           </View>
           <View className="row-center gap4">
-            <Icon name={guest ? "info" : "checkcircle"} size={12} color={guest ? "#5b5b63" : "#1e7a47"} stroke={2.6} />
-            <Text className={`t-cap ${guest ? "c-sec" : "c-ok"}`}>{guest ? "游客账号" : `${loginLabel(user.loginMethod)}账号已登录`}</Text>
+            <Icon name={guest ? "info" : "checkcircle"} size={12} color={guest ? C.secondary : C.ok} stroke={2.6} />
+            <Text className={`t-cap ${guest ? "c-sec" : "c-ok"}`}>{guest ? "游客，建议用微信登录" : `${loginLabel(user.loginMethod)}账号已登录`}</Text>
           </View>
         </View>
-        <Icon name="chevron-right" size={16} color="#8e8e93" stroke={2.4} />
+        <Icon name="chevron-right" size={16} color={C.tertiary} stroke={2.4} />
       </View>
 
-      <View className="stats stats--3">
-        <View className="stat">
-          <Text className="stat__value c-brand">{stats.papers}</Text>
-          <Text className="stat__label">张试卷</Text>
-        </View>
-        <View className="stat">
-          <Text className="stat__value c-wrong">{stats.wrong}</Text>
-          <Text className="stat__label">道答错</Text>
-        </View>
-        <View className="stat">
-          <Text className="stat__value c-accent">{stats.blank}</Text>
-          <Text className="stat__label">道未作答</Text>
-        </View>
+      <View className="stats">
+        <Stat center label="张试卷" value={stats.papers} />
+        <Stat center label="道答错" value={stats.wrong} color={C.wrong} />
+        <Stat center label="道未作答" value={stats.blank} />
       </View>
 
       <View className="col">
         <Text className="group-title">学习设置</Text>
         <View className="group">
-          <Row icon="graduation" iconBg="#2f6fed" title="年级与城市" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => go("/pages/settings/index")} />
+          <Row icon="graduation" iconBg={C.brand} title="年级与城市" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => go("/pages/settings/index")} />
           <Row
-            icon="letters"
-            iconBg="#5b37a8"
+            icon="books"
+            iconBg={C.brand}
             title="学科"
             value={
               // 最多露 3 个学科图标，其余用「+N」收起
@@ -116,17 +110,17 @@ export default function Profile() {
       <View className="col">
         <Text className="group-title">数据与隐私</Text>
         <View className="group">
-          <Row icon="photo" iconBg="#b35300" title="本机试卷照片" value={`${stats.papers} 张 · ${stats.mb} MB`} chevron={false} />
-          <Row icon="shield" iconBg="#1e7a47" title="隐私与权限" onClick={() => go("/pages/privacy/index")} />
-          <Row icon="person" iconBg="#1c1c1e" title="账号与登录" value={loginLabel(user.loginMethod)} onClick={() => go("/pages/account/index")} />
+          <Row icon="export" iconBg={C.brand} title="我的导出" value="最近 7 天" onClick={() => go("/pages/exports/index")} />
+          <Row icon="photo" iconBg={C.accentOn} title="本机试卷照片" value={`${stats.papers} 张 · ${stats.mb} MB`} chevron={false} />
+          <Row icon="shield" iconBg={C.ok} title="隐私与权限" onClick={() => go("/pages/privacy/index")} />
+          <Row icon="person" iconBg={C.label} title="账号与登录" value={loginLabel(user.loginMethod)} onClick={() => go("/pages/account/index")} />
         </View>
-        <Text className="group-note">试卷照片和电子版只保存在这台手机上，不上传。</Text>
+        <Text className="group-note">试卷照片和电子版只保存在这台手机上，不上传；导出的 PDF 在服务器上保留 7 天。</Text>
       </View>
 
       <View className="group">
-        <Row icon="info" iconBg="#5b5b63" title="关于错误本" value={VERSION} chevron={false} />
+        <Row icon="info" iconBg={C.secondary} title="关于错误本" value={VERSION} chevron={false} />
       </View>
-      <Text className="t-cap c-sec center">英语、数学、语文、科学 · 小学到高中</Text>
     </View>
   );
 }

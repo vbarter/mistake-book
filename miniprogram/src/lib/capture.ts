@@ -1,7 +1,8 @@
 /** 拍照 / 相册选图 → 存进本机 → 建试卷 → 提交扫描。相册多选时一张照片一张试卷（和 App 一致）。 */
 import Taro from "@tarojs/taro";
 import { errorText } from "./api";
-import { addPaper, deleteFolder, deletePaper, getFolder, listFolders, savePhoto, updatePaper, type FolderPage } from "./store";
+import { addPaper, autoTargetFolderId, deleteFolder, deletePaper, getFolder, listFolders, savePhoto, updatePaper, type FolderPage } from "./store";
+import { confirmPhoto } from "./confirm";
 import { findPhotoMatches } from "./dedup";
 import { submitScan } from "./jobs";
 import { removeFigures } from "./figures";
@@ -34,19 +35,53 @@ async function scan(folderId: string, paperId: string, pages: FolderPage[]) {
   }
 }
 
-/** 往文件夹里加试卷并开始扫描；返回文件夹 id（没有文件夹时会新建） */
+/** 拍照是连拍（和 App 一样）：每张拍完先全屏确认（× 重拍 / ✓ 用这张，可以左右转），确认后接着起相机，在相机里点取消才停。返回转正后的临时文件 */
+async function shootSeries(): Promise<string[]> {
+  const shots: string[] = [];
+  for (;;) {
+    const [path] = await choose("camera", 1);
+    if (!path) break;
+    const r = await confirmPhoto(path);
+    if (!r) continue; // × 不要这张：再拍一张
+    shots.push(r.turns % 4 ? await rotateToTemp(path, r.turns) : path);
+  }
+  return shots;
+}
+
+/**
+ * 加试卷（唯一的录入入口）：拍照（连拍）或从相册一次选多张 → 存进本机 → 建试卷 → 提交扫描。
+ * 不先问放哪个文件夹：传了 folderId 就放进去，没传就放进今天的文件夹（今天还没有就自动新建），和 App 一致。
+ * 连拍了几张时问一句是同一份试卷的几页、还是每张一份；相册多选一张照片一张试卷。返回文件夹 id。
+ */
 export async function captureInto(folderId: string | null, source: Source): Promise<string | null> {
-  const paths = await choose(source, source === "camera" ? 1 : 9);
+  const paths = source === "camera" ? await shootSeries() : await choose("album", 9);
   if (paths.length === 0) return null;
+  let together = false;
+  if (source === "camera" && paths.length > 1) {
+    const r = await Taro.showModal({ title: `拍了 ${paths.length} 张`, content: "是同一份试卷的几页，还是每张各是一份？", confirmText: "同一份", cancelText: "每张一份" });
+    together = r.confirm;
+  }
   Taro.showLoading({ title: paths.length > 1 ? `上传 ${paths.length} 张…` : "上传中…", mask: true });
-  let fid = folderId;
+  let fid = folderId ?? autoTargetFolderId();
+  const autoFolder = !folderId;
   try {
+    const saved: FolderPage[] = [];
+    for (const p of paths) saved.push(await savePhoto(p));
+    // 转正时写的临时文件：已经存进用户目录了，删掉
+    const fs = Taro.getFileSystemManager();
+    for (const p of paths.filter((x) => x.includes("/rotate_"))) {
+      try {
+        fs.unlinkSync(p);
+      } catch {
+        /* ignore */
+      }
+    }
+    const groups = together ? [saved] : saved.map((pg) => [pg]);
     const created: { paperId: string; pages: FolderPage[] }[] = [];
-    for (const p of paths) {
-      const page = await savePhoto(p);
-      const { folder, paper } = addPaper(fid, [page]);
+    for (const pages of groups) {
+      const { folder, paper } = addPaper(fid, pages);
       fid = folder.id;
-      created.push({ paperId: paper.id, pages: [page] });
+      created.push({ paperId: paper.id, pages });
     }
     // 之前导入过的照片：问一下要不要再扫一次（再扫要等几十秒，结果也一样）
     const matches = findPhotoMatches(listFolders(), created.flatMap((c) => c.pages), created.map((c) => c.paperId));
@@ -65,7 +100,7 @@ export async function captureInto(folderId: string | null, source: Source): Prom
         for (const c of dupPapers) deletePaper(fid!, c.paperId);
         todo = created.filter((c) => !dupPapers.includes(c));
         // 刚为这几张新建的文件夹空了：删掉，带用户去原来那份所在的文件夹
-        if (!folderId && !getFolder(fid!)?.papers.length) {
+        if (autoFolder && !getFolder(fid!)?.papers.length) {
           deleteFolder(fid!);
           fid = first.folderId;
         }
@@ -115,10 +150,10 @@ type RotateCanvas = {
   toDataURL: (type: string, q: number) => string;
 };
 
-/** 把一张照片顺时针转 turns 个 90°，存成新文件，返回新的照片记录 */
-async function rotatePhoto(page: FolderPage, turns: number): Promise<FolderPage> {
+/** 把一张照片顺时针转 turns 个 90°，写成临时文件，返回路径（调用方存好后自己删） */
+export async function rotateToTemp(src: string, turns: number): Promise<string> {
   const t = ((turns % 4) + 4) % 4;
-  const info = await Taro.getImageInfo({ src: page.src });
+  const info = await Taro.getImageInfo({ src });
   const scale = Math.min(1, ROTATE_MAX_SIDE / Math.max(info.width, info.height));
   const w = Math.round(info.width * scale);
   const h = Math.round(info.height * scale);
@@ -129,7 +164,7 @@ async function rotatePhoto(page: FolderPage, turns: number): Promise<FolderPage>
   await new Promise<void>((resolve, reject) => {
     img.onload = () => resolve();
     img.onerror = reject;
-    img.src = page.src;
+    img.src = src;
   });
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#fff";
@@ -139,14 +174,19 @@ async function rotatePhoto(page: FolderPage, turns: number): Promise<FolderPage>
   ctx.drawImage(img, -w / 2, -h / 2, w, h);
   const b64 = canvas.toDataURL("image/jpeg", 0.9).split(",")[1];
   if (!b64) throw new Error("这台手机转不了照片，可以点「重新扫描 / 改照片」重拍一张");
-  const tmp = `${Taro.env.USER_DATA_PATH}/rotate_${Date.now()}.jpg`;
-  const fs = Taro.getFileSystemManager();
-  fs.writeFileSync(tmp, b64, "base64");
+  const tmp = `${Taro.env.USER_DATA_PATH}/rotate_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
+  Taro.getFileSystemManager().writeFileSync(tmp, b64, "base64");
+  return tmp;
+}
+
+/** 把一张照片顺时针转 turns 个 90°，存成新文件，返回新的照片记录 */
+async function rotatePhoto(page: FolderPage, turns: number): Promise<FolderPage> {
+  const tmp = await rotateToTemp(page.src, turns);
   try {
     return await savePhoto(tmp);
   } finally {
     try {
-      fs.unlinkSync(tmp);
+      Taro.getFileSystemManager().unlinkSync(tmp);
     } catch {
       /* ignore */
     }

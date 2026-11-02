@@ -5,7 +5,9 @@ import { QTYPE_LABEL, formatDate } from "../lib/format";
 import { mathPlain } from "../lib/math";
 import { Figures } from "./FigureImage";
 import { answerLabels } from "../lib/figures";
-import { MathText, SubjectTile, Tag, Verdict, subjectColors } from "./ui";
+import { MathText, SubjectTag, Tag, Verdict, subjectColors } from "./ui";
+import { Icon } from "./Icon";
+import { C } from "../lib/theme";
 
 export const errorAnchor = (key: string) => `err-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 
@@ -83,14 +85,20 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
   const c = subjectColors(q.subject);
   const meta = [showSource ? `${item.folderName} · ${item.paperName}` : "", mathPlain(item.sectionLabel)].filter(Boolean).join(" · ");
   return (
-    <View className="card ecard" id={errorAnchor(item.key)}>
+    <View className="card ecard" id={errorAnchor(item.key)} style={{ gap: "8px" }}>
       <View className="ecard__head">
         <Text className="t-headline">第 {q.number} 题</Text>
-        <SubjectTile subject={q.subject} size="xs" />
+        <SubjectTag subject={q.subject} />
         <Text className="t-cap c-sec">{QTYPE_LABEL[q.questionType]}</Text>
         <View className="flex1" />
-        {item.repeats && item.repeats.length > 0 && <Tag kind="wrong">错过 {item.repeats.length + 1} 次</Tag>}
-        <Tag kind={item.kind === "未作答" ? "pending" : item.kind === "半对" ? "partial" : "wrong"}>{item.kind}</Tag>
+        {item.repeats && item.repeats.length > 0 && (
+          <Tag kind="wrong" icon="refresh">
+            错过 {item.repeats.length + 1} 次
+          </Tag>
+        )}
+        <Tag kind={item.kind === "未作答" ? "pending" : item.kind === "半对" ? "partial" : "wrong"} icon={item.kind === "未作答" ? "alert" : item.kind === "半对" ? "warning" : "xmark"}>
+          {item.kind}
+        </Tag>
       </View>
       {(meta || showKnowledge) && (
         <View className="row-wrap t-cap c-sec">
@@ -105,7 +113,12 @@ export function ErrorCard({ item, showSource, showKnowledge }: { item: ErrorItem
       <MathText className="t-sub stem" text={item.stem} />
       {item.figures.length > 0 && <Figures figs={item.figures} right={answerLabels(q.correctAnswer)} chosen={answerLabels(q.studentAnswer)} />}
       {q.options.length > 0 && <MathText className="t-foot c-sec" text={q.options.join("　")} />}
-      {q.stemText.includes("□") && <Text className="t-cap c-wrong">题目里有内容没识别出来，建议把这一张重拍清楚</Text>}
+      {q.stemText.includes("□") && (
+        <View className="row-center gap4 t-cap c-wrong">
+          <Icon name="alert" size={13} color={C.wrong} stroke={2.2} />
+          <Text>题目里有内容没识别出来，建议把这一张重拍清楚</Text>
+        </View>
+      )}
       <View className="feedback">
         {item.parts.length > 1 ? (
           item.parts.map((p, i) => <PartRow key={i} p={p} />)

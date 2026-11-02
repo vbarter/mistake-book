@@ -3,46 +3,20 @@ import { Image, Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
 import { ErrorCard } from "../../components/ErrorCard";
 import { ExportSheet } from "../../components/ExportSheet";
-import { Figures } from "../../components/FigureImage";
-import { figureAt, type FigureRef } from "../../lib/figures";
-import { Empty, ErrorFilterTags, Hint, MathText, Segmented, Tag, Verdict, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/ui";
+import { PrintSheets } from "../../components/PrintSheets";
+import { Icon } from "../../components/Icon";
+import { Button, Empty, ErrorFilterTags, Hint, IconSegmented, MathText, Progress, Tag, Verdict, applyErrorFilter, type ErrorFilter } from "../../components/ui";
+import { C } from "../../lib/theme";
 import { retake, rotateAndRescan } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
-import { formatDateTime, stripLeadingNumber, unwrapLines } from "../../lib/format";
+import { formatDateTime } from "../../lib/format";
 import { useDataVersion } from "../../lib/hooks";
 import { gradeIfNeeded, isGrading, notDuplicate, printIfNeeded, scanStageText, tagIfNeeded } from "../../lib/jobs";
 import { autoMark, paperQuality, paperStats, validDigitized } from "../../lib/logic";
 import { mathPlain } from "../../lib/math";
 import { deletePaper, getFolder, updatePaper } from "../../lib/store";
-import type { DigitizedBlank, DigitizedBlock } from "../../lib/types";
 
 type Tab = "paper" | "answers" | "errors";
-
-const BLANK_RE = /\[\[([^[\]]{1,24})\]\]/g;
-const stripParen = (s: string) => s.replace(/^[（(]|[）)]$/g, "");
-
-/** 打印版正文：[[id]] 占位换成只带空号的下划线 */
-function PrintText({ text, blanks }: { text: string; blanks: DigitizedBlank[] }) {
-  const byId = new Map(blanks.map((b) => [b.id, b]));
-  const out: JSX.Element[] = [];
-  let last = 0;
-  let i = 0;
-  const re = new RegExp(BLANK_RE.source, "g");
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
-    const start = m.index;
-    if (start > last) out.push(<MathText key={`t${i++}`} text={text.slice(last, start)} />);
-    const num = byId.get(m[1])?.number || m[1].split("-")[0];
-    out.push(
-      <Text key={`b${i++}`} className="pblank">
-        {`  ${num}  `}
-      </Text>,
-    );
-    last = start + m[0].length;
-  }
-  if (last < text.length) out.push(<MathText key={`t${i++}`} text={text.slice(last)} />);
-  return <Text className="blk-text">{out}</Text>;
-}
 
 /** 一张试卷的电子版：「试卷」干净原题，「作答」逐空对照，「错题」按试卷顺序 */
 export default function PaperPage() {
@@ -101,29 +75,29 @@ export default function PaperPage() {
       <View className="page center-page">
         {paper.scanJob ? (
           <>
-            <Text className="t-title3 b">正在扫描「{paper.name}」</Text>
-            <View className="progress wide">
-              <View className="progress__bar" style={{ width: `${Math.max(6, paper.scanJob.progress)}%` }} />
-            </View>
+            <Icon name="sparkles" size={44} color={C.brand} />
+            <Text className="t-title3">正在扫描「{paper.name}」</Text>
+            <Progress value={paper.scanJob.progress} className="wide" />
             <Text className="t-sub c-sec center">{scanStageText(paper.scanJob)} · 在服务器上进行，切走也不影响，好了会自动显示</Text>
           </>
         ) : (
           <>
-            <Text className="t-title3 b">{paper.scanError ? "扫描失败" : "还没扫描"}</Text>
+            <Icon name={paper.scanError ? "warning" : "viewfinder"} size={44} color={paper.scanError ? C.wrong : C.brand} />
+            <Text className="t-title3">{paper.scanError ? "扫描失败" : "还没扫描"}</Text>
             {paper.scanError && <Text className="t-sub c-sec center">{paper.scanError}</Text>}
-            <View className="btn" onClick={doRetake}>
+            <Button icon="camera" onClick={doRetake}>
               重新拍 / 选照片扫描
-            </View>
+            </Button>
             {paper.pages.length > 0 && (
-              <View className="btn btn--tinted" onClick={doRotate}>
+              <Button variant="tinted" icon="rotate" onClick={doRotate}>
                 照片拍横了？转正再扫
-              </View>
+              </Button>
             )}
           </>
         )}
-        <View className="btn btn--tinted" onClick={() => Taro.navigateBack()}>
+        <Button variant="tinted" size="sm" onClick={() => Taro.navigateBack()}>
           先回文件夹
-        </View>
+        </Button>
       </View>
     );
   }
@@ -131,7 +105,6 @@ export default function PaperPage() {
   const stats = paperStats(paper);
   const quality = paperQuality(paper);
   const sheets = digitized.pages;
-  const colors = subjectColors(digitized.questions[0]?.subject);
 
   const menu = async () => {
     let r: { tapIndex: number };
@@ -149,7 +122,7 @@ export default function PaperPage() {
       refresh();
     }
     if (r.tapIndex === 4) {
-      const m = await Taro.showModal({ title: "删除这张试卷？", content: "照片和电子版会一起删掉。", confirmText: "删除", confirmColor: "#d92d20" });
+      const m = await Taro.showModal({ title: "删除这张试卷？", content: "照片和电子版会一起删掉。", confirmText: "删除", confirmColor: "#b42323" });
       if (m.confirm) {
         deletePaper(folderId, paperId);
         Taro.navigateBack();
@@ -157,98 +130,16 @@ export default function PaperPage() {
     }
   };
 
-  const printBlock = (block: DigitizedBlock, bi: number, si: number) => {
-    switch (block.type) {
-      case "figure": {
-        // 连着的几个 figure 一起排（选项图排成一行）：只在一串的第一个块上渲染
-        const blocks = sheets[si].blocks;
-        if (blocks[bi - 1]?.type === "figure") return null;
-        const run: FigureRef[] = [];
-        for (let j = bi; j < blocks.length && blocks[j].type === "figure"; j++) {
-          const f = figureAt(paper, si, j);
-          if (f) run.push(f);
-        }
-        return run.length ? <Figures key={bi} figs={run} /> : null;
-      }
-      case "section":
-        return (
-          <View className="blk-section" key={bi}>
-            <View className="row-center gap6">
-              <View className="sec-bar" style={{ background: colors.color }} />
-              <Text className="blk-section__title flex1">
-                {block.label && `${block.label.replace(/[.．、\s]+$/, "")}. `}
-                {mathPlain(block.title)}
-              </Text>
-              {block.points && <Text className="t-cap c-sec">{mathPlain(stripParen(block.points))}</Text>}
-            </View>
-            {block.instruction && <MathText className="blk-section__instruction" text={block.instruction} />}
-          </View>
-        );
-      case "wordbank":
-        return (
-          <View className="blk-wordbank" key={bi}>
-            {block.options.map((o, i) => (
-              <MathText key={i} className="wb" text={o} />
-            ))}
-          </View>
-        );
-      case "text":
-        return <MathText key={bi} className="blk-plain" text={block.text} />;
-      case "passage":
-        return (
-          <View className="blk-passage" key={bi}>
-            {block.label && <Text className="b">{block.label}</Text>}
-            <PrintText text={unwrapLines(block.text)} blanks={block.blanks} />
-          </View>
-        );
-      case "item":
-        return (
-          <View className="blk-item" key={bi}>
-            <Text className="blk-item__num">{block.number}.</Text>
-            <View className="flex1 col gap4 minw0">
-              <View>
-                <PrintText text={stripLeadingNumber(unwrapLines(block.text), block.number)} blanks={block.blanks} />
-                {block.hint && <MathText className="c-sec" text={` ${block.hint}`} />}
-                {block.instruction && <Text className="c-sec">（{stripParen(block.instruction)}）</Text>}
-              </View>
-              {block.options.length > 0 && (
-                <View className="blk-options">
-                  {block.options.map((o, i) => (
-                    <MathText key={i} text={/^[A-H][.、．]/.test(o) ? o : `${String.fromCharCode(65 + i)}. ${o}`} />
-                  ))}
-                </View>
-              )}
-            </View>
-          </View>
-        );
-      default:
-        return null;
-    }
-  };
-
   const paperTab = (
     <>
-      <Hint>打印版只有原题，空格留白。手写和批改在「作答」里。</Hint>
-      {sheets.map((sheet, si) => (
-        <View className="sheet-paper" key={si}>
-          <View className="sheet-paper__head">
-            {sheet.title && <Text className="sheet-paper__title">{mathPlain(sheet.title)}</Text>}
-            <View className="row-wrap t-cap c-sec">
-              {sheet.label && <Text>{sheet.label}</Text>}
-              {[sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).length > 0 && <Text>{[sheet.region, sheet.examGrade, sheet.examLevel].filter(Boolean).join(" · ")}</Text>}
-              {sheet.score && <Text className="c-wrong b">{sheet.score}</Text>}
-            </View>
-          </View>
-          {sheet.blocks.map((b, bi) => printBlock(b, bi, si))}
-          {sheet.note && <MathText className="t-cap c-sec" text={sheet.note} />}
-        </View>
-      ))}
+      <Hint icon="printer">这是打印版，空格留白。你的作答和老师批改在「作答」页。</Hint>
+      <PrintSheets paper={paper} sheets={sheets} />
     </>
   );
 
   const answersTab = (
     <>
-      <Hint>学生手写内容的转写，与老师批改、正确答案逐空对照。空题按未作答计入错题。</Hint>
+      <Hint icon="pencil">学生手写内容的转写，与老师批改、正确答案逐空对照。空题按未作答计入错题。</Hint>
       {sheets.map((sheet, si) => {
         const rows = sheet.blocks.flatMap((b, bi) =>
           b.type === "passage" || b.type === "item" ? b.blanks.map((x) => ({ ...x, rowKey: `${bi}:${x.id}`, mark: autoMark(x.mark, x.student, x.answer, b.questionType) })) : [],
@@ -302,9 +193,13 @@ export default function PaperPage() {
     <>
       <ErrorFilterTags value={filter} onChange={setFilter} counts={{ wrong: errors.filter((e) => e.kind !== "未作答").length, blank: errors.filter((e) => e.kind === "未作答").length }} />
       {errors.length === 0 ? (
-        <Empty title="这张试卷没有错题，也没有空题" text="真棒。" />
+        <Empty icon="seal" title="这张试卷没有错题，也没有空题" />
       ) : shown.length === 0 ? (
-        <Empty title="这一类没有题" />
+        <Empty icon="seal" title="这一类没有题">
+          <Button size="xs" variant="plain" onClick={() => setFilter("all")}>
+            看全部
+          </Button>
+        </Empty>
       ) : (
         groups.map(([k, items]) => (
           <View key={k || "_"} className="col gap10">
@@ -327,26 +222,38 @@ export default function PaperPage() {
       <View className="row-center gap12">
         <Image className="thumb" src={paper.pages[0]?.src} mode="aspectFill" onClick={() => Taro.previewImage({ urls: paper.pages.map((p) => p.src) })} />
         <View className="flex1 col gap4 minw0">
-          <Text className="t-title3 ellipsis b">{paper.name}</Text>
-          {paper.scannedAt && <Text className="t-foot c-sec">扫描于 {formatDateTime(paper.scannedAt)}</Text>}
+          <Text className="t-title3 ellipsis xb">{paper.name}</Text>
+          {paper.scannedAt && (
+            <View className="row-center gap4">
+              <Icon name="clock" size={13} color={C.secondary} stroke={2} />
+              <Text className="t-foot c-sec">扫描于 {formatDateTime(paper.scannedAt)}</Text>
+            </View>
+          )}
           <View className="row-wrap">
             <Tag kind="wrong">{stats.wrong} 错</Tag>
-            {stats.blank > 0 && <Tag kind="pending">{stats.blank} 空</Tag>}
+            {stats.blank > 0 && (
+              <Tag kind="pending" icon="alert">
+                {stats.blank} 空
+              </Tag>
+            )}
             <Tag kind="correct">{stats.correct} 对</Tag>
-            <Tag>{sheets.length} 个卷面</Tag>
+            <Tag kind="neutral" icon="document">
+              {sheets.length} 个卷面
+            </Tag>
           </View>
         </View>
         <View className="icon-btn" onClick={menu}>
-          ···
+          <Icon name="ellipsis" size={24} color={C.brand} />
         </View>
       </View>
       {quality.warn && (
         <View className="quality-card">
+          <Icon name="alert" size={18} color={C.accentOn} stroke={2.2} />
           <View className="flex1 col gap4">
             <Text className="b">这张{quality.label}</Text>
             <Text className="t-foot">{quality.detail}。重拍一张清楚、完整的，识别和批改会更准。</Text>
           </View>
-          <View className="btn btn--sm btn--tinted" onClick={doRetake}>
+          <View className="btn btn--xs btn--tinted" onClick={doRetake}>
             重拍
           </View>
         </View>
@@ -363,33 +270,34 @@ export default function PaperPage() {
         const openOther = () => Taro.redirectTo({ url: `/pages/paper/index?folderId=${m.folderId}&paperId=${m.paperId}` });
         return (
           <View className="quality-card">
+            <Icon name="info" size={18} color={C.accentOn} stroke={2.2} />
             <View className="flex1 col gap4">
               <Text className="b">{m.kind === "retake" ? "重做的试卷" : "扫过的试卷"}</Text>
               <Text className="t-foot">{text}{m.folderId !== folderId ? `（在「${m.folderName}」里）` : ""}</Text>
               <View className="row-wrap">
                 {m.kind !== "retake" && (
-                  <View className="btn btn--sm btn--tinted" onClick={() => { deletePaper(folderId, paperId); void openOther(); }}>删掉这份</View>
+                  <View className="btn btn--xs btn--tinted" onClick={() => { deletePaper(folderId, paperId); void openOther(); }}>删掉这份</View>
                 )}
-                <View className="btn btn--sm btn--tinted" onClick={() => { updatePaper(folderId, paperId, { keepDuplicate: true }); refresh(); }}>{m.kind === "retake" ? "知道了" : "两份都留"}</View>
-                <View className="btn btn--sm btn--plain" onClick={() => { notDuplicate(folderId, paper); refresh(); }}>不是同一份</View>
+                <View className="btn btn--xs btn--tinted" onClick={() => { updatePaper(folderId, paperId, { keepDuplicate: true }); refresh(); }}>{m.kind === "retake" ? "知道了" : "两份都留"}</View>
+                <View className="btn btn--xs btn--plain" onClick={() => { notDuplicate(folderId, paper); refresh(); }}>不是同一份</View>
               </View>
             </View>
           </View>
         );
       })()}
-      <Segmented value={tab} onChange={setTab} options={[{ value: "paper", label: "试卷" }, { value: "answers", label: "作答" }, { value: "errors", label: `错题 ${stats.problems}` }]} />
+      <IconSegmented value={tab} onChange={setTab} options={[{ value: "paper", label: "试卷", icon: "document" }, { value: "answers", label: "作答", icon: "pencil" }, { value: "errors", label: `错题 ${stats.problems}`, icon: "xcircle" }]} />
 
       {tab === "paper" && paperTab}
       {tab === "answers" && answersTab}
       {tab === "errors" && errorsTab}
 
       <View className="bottom-bar">
-        <View className="btn btn--outline flex1" onClick={() => setExporting(true)}>
+        <Button variant="outline" icon="export" style={{ flex: 1 }} onClick={() => setExporting(true)}>
           导出这张
-        </View>
-        <View className={`btn flex13${stats.problems === 0 ? " btn--disabled" : ""}`} onClick={() => stats.problems > 0 && setTab("errors")}>
+        </Button>
+        <Button icon="xcircle" style={{ flex: 1.3 }} disabled={stats.problems === 0} onClick={() => setTab("errors")}>
           看错题 · {stats.problems}
-        </View>
+        </Button>
       </View>
 
       <ExportSheet open={exporting} onClose={() => setExporting(false)} title={`${folder.name} · ${paper.name}`} subtitle={sheets.find((s) => s.syllabus)?.syllabus ? `按${sheets.find((s) => s.syllabus)!.syllabus}归类` : undefined} errors={errors} papers={[paper]} />

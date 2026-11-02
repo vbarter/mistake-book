@@ -26,14 +26,16 @@ export function answerLabels(s: string): string[] {
 
 const baseNumber = (n: string) => (n || "").replace(/[（(].*$/, "").split("-")[0].trim();
 
-function refOf(paper: Paper, sheetIndex: number, blockIndex: number, block: DigitizedBlock): FigureRef | null {
+/** clean：从擦过手写的那份照片里裁（原题空白卷用）；这张照片还没擦过就用原图 */
+function refOf(paper: Paper, sheetIndex: number, blockIndex: number, block: DigitizedBlock, clean = false): FigureRef | null {
   const sheet = validDigitized(paper.digitized)?.pages[sheetIndex];
   const photo = sheet ? paper.pages[sheet.page] : undefined;
   if (!sheet || !photo?.src || block.type !== "figure" || block.bbox.length !== 4) return null;
+  const erased = clean && photo.erased && photo.erasedSrc ? photo.erased : "";
   return {
-    key: `${paper.id}:${photo.id}:${sheetIndex}:${blockIndex}:${block.bbox.map((v) => v.toFixed(3)).join(",")}`,
+    key: `${paper.id}:${photo.id}${erased ? `~${erased}` : ""}:${sheetIndex}:${blockIndex}:${block.bbox.map((v) => v.toFixed(3)).join(",")}`,
     paperId: paper.id,
-    src: photo.src,
+    src: erased ? photo.erasedSrc! : photo.src,
     bbox: block.bbox,
     rotation: sheet.rotation ?? 0,
     title: block.title,
@@ -42,9 +44,21 @@ function refOf(paper: Paper, sheetIndex: number, blockIndex: number, block: Digi
   };
 }
 
-export function figureAt(paper: Paper, sheetIndex: number, blockIndex: number): FigureRef | null {
+export function figureAt(paper: Paper, sheetIndex: number, blockIndex: number, clean = false): FigureRef | null {
   const block = validDigitized(paper.digitized)?.pages[sheetIndex]?.blocks[blockIndex];
-  return block ? refOf(paper, sheetIndex, blockIndex, block) : null;
+  return block ? refOf(paper, sheetIndex, blockIndex, block, clean) : null;
+}
+
+/** 有插图的照片（原题空白卷要擦手写的就是这几张） */
+export function figurePhotoIds(paper: Paper): string[] {
+  const d = validDigitized(paper.digitized);
+  if (!d) return [];
+  const ids = new Set<string>();
+  for (const sheet of d.pages) {
+    const photo = paper.pages[sheet.page];
+    if (photo && sheet.blocks.some((b) => b.type === "figure" && b.bbox.length === 4)) ids.add(photo.id);
+  }
+  return [...ids];
 }
 
 /** 一道题用到的插图：先找标了本题题号的图；没有标题号、题干又提到图表时，取紧挨着这道题（中间只隔说明文字）的图 */

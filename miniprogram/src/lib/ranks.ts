@@ -1,0 +1,109 @@
+/** 错题榜：把一段时间里的错题排成几张榜单。易错指数 0–100，越高越该先复习，全部在本机算。从 App 的 lib/ranks.ts 原样移植，改规则时两边一起改。 */
+import type { Subject } from "./types";
+import { knowledgeKey, paperIdsOf, timesWrong, type ErrorItem } from "./errors";
+
+export type Board = "question" | "knowledge" | "repeat" | "blank";
+
+export const BOARDS: { id: Board; title: string; short: string; hint: string }[] = [
+  { id: "question", title: "易错题榜", short: "易错题", hint: "同一知识点错得越多、越近，排得越前" },
+  { id: "knowledge", title: "知识点榜", short: "知识点", hint: "错题最多的知识点" },
+  { id: "repeat", title: "反复错榜", short: "反复错", hint: "在两份以上试卷里都错过的知识点" },
+  { id: "blank", title: "空白榜", short: "空白", hint: "没有作答的题" },
+];
+
+export interface RankRow {
+  key: string;
+  title: string; // 题干摘要 / 知识点名
+  subject: Subject;
+  score: number; // 易错指数
+  meta: string[]; // 灰色小字
+  quote: string; // 引号里的一句
+  items: ErrorItem[]; // 点开看的题
+}
+
+const DAY = 86400000;
+const round1 = (n: number) => Math.round(n * 10) / 10;
+const kindWeight = (e: ErrorItem) => (e.kind === "答错" ? 1 : e.kind === "未作答" ? 0.8 : 0.6);
+const recency = (e: ErrorItem, now: number) => Math.max(0, 1 - (now - new Date(e.scannedAt).getTime()) / (30 * DAY));
+/** 题干摘要（列表里用 MathText 排公式）：按「看上去的字数」截，$...$ 公式整段保留或整段舍去，绝不从公式中间截断——
+ *  截在公式里会留下半截 LaTeX（「$\angle C=90^\ci…」），KaTeX 认不出，只能原样显示源码。 */
+export const snippet = (t: string, n = 40) => {
+  const s = t.replace(/\[\[[^\]]*\]\]/g, "____").replace(/\s+/g, " ").trim();
+  if (!s) return "（无题干）";
+  let out = "";
+  let shown = 0;
+  for (const part of s.split(/(\$[^$]{1,600}\$)/)) {
+    if (!part) continue;
+    const isMath = part.length > 2 && part.startsWith("$") && part.endsWith("$");
+    // 公式按排出来大约几个字算：去掉命令名、花括号和上下标符号
+    const width = isMath ? Math.max(1, part.slice(1, -1).replace(/\\[a-zA-Z]+/g, "x").replace(/[{}^_\s]/g, "").length) : part.length;
+    if (shown + width <= n - 1) {
+      out += part;
+      shown += width;
+      continue;
+    }
+    if (!isMath) out += part.replace(/\$/g, "").slice(0, Math.max(0, n - 1 - shown));
+    return `${out.trimEnd()}…`;
+  }
+  return out;
+};
+
+function byKnowledge(items: ErrorItem[]): Map<string, ErrorItem[]> {
+  const m = new Map<string, ErrorItem[]>();
+  for (const e of items) m.set(knowledgeKey(e), [...(m.get(knowledgeKey(e)) ?? []), e]);
+  return m;
+}
+
+/** 一道题的易错指数：同知识点错得越多、越是真错（不是半对）、越近，分越高 */
+function questionScore(e: ErrorItem, kpCount: number, maxKp: number, now: number): number {
+  return round1(Math.min(99.9, 52 + 24 * (kpCount / maxKp) + 12 * kindWeight(e) + 9 * recency(e, now) + 6 * Math.min(2, timesWrong(e) - 1) - (e.q.tip ? 0 : 0.5)));
+}
+
+function kpRow(k: string, list: ErrorItem[], maxCount: number, now: number, extra?: string): RankRow {
+  const papers = new Set(list.flatMap(paperIdsOf)).size;
+  const latest = [...list].sort((a, b) => b.scannedAt.localeCompare(a.scannedAt))[0];
+  const score = round1(52 + 30 * (list.length / maxCount) + 8 * Math.min(1, (papers - 1) / 2) + 7 * Math.max(...list.map((e) => recency(e, now))));
+  const tip = list.find((e) => e.q.tip)?.q.tip;
+  return {
+    key: k,
+    title: list[0].knowledge,
+    subject: list[0].subject,
+    score,
+    meta: [extra ?? `${list.length} 道题`, `来自 ${papers} 份试卷`],
+    quote: tip ? `下次注意：${tip}` : `最近一道：${snippet(latest.stem, 28)}`,
+    items: list,
+  };
+}
+
+export function rank(items: ErrorItem[], board: Board, now = Date.now()): RankRow[] {
+  const kps = byKnowledge(items);
+  const maxKp = Math.max(1, ...[...kps.values()].map((l) => l.length));
+  if (board === "question") {
+    return items
+      .map((e) => {
+        const answer = e.kind === "未作答" ? `没作答 · 正确：${e.q.correctAnswer || "—"}` : `你写：${e.q.studentAnswer || "—"} · 正确：${e.q.correctAnswer || "—"}`;
+        return {
+          key: e.key,
+          title: snippet(e.stem),
+          subject: e.subject,
+          score: questionScore(e, kps.get(knowledgeKey(e))?.length ?? 1, maxKp, now),
+          meta: [e.knowledge, `${e.paperName} 第 ${e.q.number} 题`, ...(timesWrong(e) > 1 ? [`错过 ${timesWrong(e)} 次`] : [])],
+          quote: e.q.tip ? `下次注意：${e.q.tip}` : answer,
+          items: [e],
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+  if (board === "knowledge") {
+    return [...kps.entries()].map(([k, l]) => kpRow(k, l, maxKp, now)).sort((a, b) => b.score - a.score);
+  }
+  if (board === "repeat") {
+    return [...kps.entries()]
+      .filter(([, l]) => new Set(l.flatMap(paperIdsOf)).size >= 2)
+      .map(([k, l]) => kpRow(k, l, maxKp, now, `${new Set(l.flatMap(paperIdsOf)).size} 份试卷都错`))
+      .sort((a, b) => b.score - a.score);
+  }
+  const blanks = byKnowledge(items.filter((e) => e.kind === "未作答"));
+  const maxB = Math.max(1, ...[...blanks.values()].map((l) => l.length));
+  return [...blanks.entries()].map(([k, l]) => kpRow(k, l, maxB, now, `${l.length} 道没作答`)).sort((a, b) => b.score - a.score);
+}

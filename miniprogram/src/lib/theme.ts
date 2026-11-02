@@ -1,0 +1,21 @@
+/** 颜色令牌（JS 里用：图标、插画、内联样式）。和 app.scss 顶部的变量、App 的 tokens.css 同一套值。 */
+export const C = {
+  brand: "#1f3b73",
+  brandTint: "#e6ebf5",
+  tie: "#a3303f",
+  tieBg: "#f8e6e8",
+  label: "#1c1c1e",
+  secondary: "#5b5b63",
+  tertiary: "#8e8e93",
+  separator: "#d1d1d6",
+  fillLight: "#f2f2f7",
+  bg: "#f3f4f8",
+  card: "#ffffff",
+  wrong: "#b42323",
+  wrongBg: "#fbe9e9",
+  ok: "#1e7a47",
+  okBg: "#e3f5ea",
+  accent: "#ff8a3d",
+  accentBg: "#fff0e3",
+  accentOn: "#b35300",
+} as const;

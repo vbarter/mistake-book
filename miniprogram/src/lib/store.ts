@@ -14,6 +14,8 @@ export interface FolderPage {
   sha?: string; // 照片文件的 SHA-1（前 16 位），同一张图再导入时认出来；旧照片没有
   width: number;
   height: number;
+  erased?: string; // 擦过手写的时间：擦后的照片另存一份（erasedSrc），原图不动
+  erasedSrc?: string;
 }
 
 export interface Paper {
@@ -33,6 +35,16 @@ export interface Paper {
   duplicateOf?: PaperMatch; // 扫完发现和本机另一份试卷是同一份（lib/dedup.ts）；用户点「不是同一份」后清掉
   notDuplicateOf?: string[]; // 用户说过「不是同一份」的试卷 id，不再提示
   keepDuplicate?: boolean; // 用户看过提示、选了两份都留 / 知道了：不再提示
+  eraseJob?: EraseJobRef; // 服务器后台在擦插图照片上的手写（lib/erase.ts）
+}
+
+/** 擦除任务（原题空白卷的插图用）：任务号记在试卷上，切走、杀掉小程序都不影响，回来接着问 */
+export interface EraseJobRef {
+  id: string;
+  startedAt: string; // 提交时间：照片的 erased 晚于它就是这次擦好的
+  pageIds: string[]; // 提交的照片，下标对应服务器上的序号
+  done: number;
+  total: number;
 }
 
 /** 这份试卷和本机哪份试卷是同一份：same 重复扫描（作答也一样）、retake 重做（作答不同）、partial 只拍了其中几页 */
@@ -66,6 +78,16 @@ export const newId = () => `${Date.now().toString(36)}${Math.random().toString(3
 export function defaultFolderName(): string {
   const d = new Date();
   return `${d.getMonth() + 1}月${d.getDate()}日 试卷`;
+}
+
+/** 自动放进哪个文件夹：今天建的文件夹里最近更新的那个；今天还没有就返回 null（加卷时新建）。和 App 的 autoTargetFolder 一致 */
+export function autoTargetFolderId(): string | null {
+  const today = new Date().toDateString();
+  return (
+    listFolders()
+      .filter((f) => new Date(f.createdAt).toDateString() === today)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.id ?? null
+  );
 }
 
 export function defaultPaperName(folder: Folder | null | undefined, offset = 0): string {
@@ -154,10 +176,13 @@ export function createFolder(name: string, subject?: Subject): Folder {
 function removePhotos(paper: Paper) {
   const fs = Taro.getFileSystemManager();
   for (const pg of paper.pages) {
-    try {
-      fs.unlinkSync(pg.src);
-    } catch {
-      /* 已经不在了 */
+    for (const src of [pg.src, pg.erasedSrc]) {
+      if (!src) continue;
+      try {
+        fs.unlinkSync(src);
+      } catch {
+        /* 已经不在了 */
+      }
     }
   }
   Taro.removeStorageSync(digKey(paper.id));
@@ -243,6 +268,31 @@ export function deletePaper(folderId: string, paperId: string): Folder | undefin
   const saved = saveFolder({ ...folder, papers: folder.papers.filter((p) => p.id !== paperId) });
   unlinkDuplicates(new Set([paperId]));
   return readFolder(folderId) ?? saved;
+}
+
+/** 擦好手写的照片另存一份（原图不动），记下擦除时间；原题空白卷的插图从这份里裁 */
+export function saveErased(folderId: string, paperId: string, pageId: string, jpeg: ArrayBuffer): Folder | undefined {
+  const fs = Taro.getFileSystemManager();
+  try {
+    fs.accessSync(PHOTO_DIR);
+  } catch {
+    fs.mkdirSync(PHOTO_DIR, true);
+  }
+  // 文件名带时间：重擦后插图缓存按新文件重新裁
+  const now = new Date().toISOString();
+  const dest = `${PHOTO_DIR}/${pageId}~erased~${Date.now().toString(36)}.jpg`;
+  fs.writeFileSync(dest, jpeg, "binary");
+  const folder = readFolder(folderId);
+  const paper = folder?.papers.find((p) => p.id === paperId);
+  const old = paper?.pages.find((pg) => pg.id === pageId)?.erasedSrc;
+  if (old) {
+    try {
+      fs.unlinkSync(old);
+    } catch {
+      /* ignore */
+    }
+  }
+  return updatePaper(folderId, paperId, { pages: (paper?.pages ?? []).map((pg) => (pg.id === pageId ? { ...pg, erased: now, erasedSrc: dest } : pg)) });
 }
 
 /** 把选好的临时图片存进用户目录（临时文件随时会被清掉），读出尺寸 */
