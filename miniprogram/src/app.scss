@@ -16,7 +16,7 @@ $fill: #e5e5ea;
 $fill-light: #f2f2f7;
 $bg: #f3f4f8;
 $card: #ffffff;
-$bar: rgba(249, 249, 249, 0.96);
+$bar: rgba(249, 249, 249, 0.94);
 $wrong: #b42323;
 $wrong-bg: #fbe9e9;
 $ok: #1e7a47;
@@ -30,7 +30,7 @@ $spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 $radius-card: 20px;
 $radius-btn: 18px;
 $radius-list: 12px;
-$tabbar-h: 56px;
+$tabbar-h: 49px;
 
 page {
   background: $bg;
@@ -39,6 +39,8 @@ page {
   font-size: 17px;
   line-height: 1.4;
 }
+/* 和 App 的 base.css 一样全局 border-box：小程序默认 content-box，min-height 会再叠上内边距，列表行被撑高 */
+view, text, image, button, input, textarea, scroll-view, swiper, picker, navigator { box-sizing: border-box; }
 
 /* ---------- 页面骨架 ---------- */
 .page {
@@ -568,7 +570,7 @@ page {
 .confirm__btn--hover { background: rgba(255, 255, 255, 0.16); }
 .confirm__stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .confirm__img { transition: transform 0.25s ease; }
-.confirm__tools { flex-shrink: 0; height: 72px; padding-bottom: env(safe-area-inset-bottom); display: flex; align-items: center; justify-content: center; gap: 28px; }
+.confirm__tools { flex-shrink: 0; height: calc(72px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); display: flex; align-items: center; justify-content: center; gap: 28px; }
 .confirm__tool { min-width: 88px; height: 48px; padding: 0 14px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #fff; font-size: 15px; border-radius: 24px; background: rgba(255, 255, 255, 0.12); box-sizing: border-box; }
 .confirm__tool--hover { background: rgba(255, 255, 255, 0.24); }
 

@@ -13,11 +13,13 @@ $spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   bottom: 0;
   z-index: 30;
   display: flex;
-  height: calc(56px + env(safe-area-inset-bottom));
+  height: calc(49px + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
-  background: rgba(249, 249, 249, 0.97);
+  background: rgba(249, 249, 249, 0.94);
   border-top: 1px solid $sep;
   box-sizing: border-box;
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
 }
 .ctb-tab {
   flex: 1;
@@ -52,7 +54,7 @@ $spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 .ctb-fab--open { transform: rotate(135deg); }
 
 .ctb-scrim { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 29; background: rgba(10, 16, 32, 0.28); animation: ctb-fade 0.2s ease; }
-.ctb-menu { position: fixed; left: 50%; bottom: calc(56px + env(safe-area-inset-bottom) + 34px); z-index: 31; width: 0; height: 0; }
+.ctb-menu { position: fixed; left: 50%; bottom: calc(49px + env(safe-area-inset-bottom) + 34px); z-index: 31; width: 0; height: 0; }
 .ctb-bubble {
   position: absolute;
   bottom: 0;
