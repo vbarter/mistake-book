@@ -37,8 +37,9 @@ export default function Profile() {
   }, [folders, bytes]);
 
   if (!user) return null;
-  const grade = GRADE_LABEL[user.grade] ?? `${user.grade} 年级`;
-  const gradeShort = Number(user.grade) >= 10 ? grade : Number(user.grade) >= 7 ? `初${"一二三"[Number(user.grade) - 7]}` : grade.replace("年级", "");
+  // 年级为空 = 注册后没设过（服务端按卷面年级或题目内容判断）
+  const grade = user.grade ? GRADE_LABEL[user.grade] ?? `${user.grade} 年级` : "";
+  const gradeShort = !grade ? "" : Number(user.grade) >= 10 ? grade : Number(user.grade) >= 7 ? `初${"一二三"[Number(user.grade) - 7]}` : grade.replace("年级", "");
 
   const saveName = async () => {
     try {
@@ -56,7 +57,7 @@ export default function Profile() {
         <button className="card card--row" style={{ padding: 16 }} onClick={() => { setName(user.nickname); setEditName(true); }}>
           <span style={{ position: "relative", flexShrink: 0 }}>
             <span aria-hidden="true" style={{ width: 60, height: 60, borderRadius: 30, background: "var(--avatar-bg)", color: "var(--avatar-fg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800 }}>{user.nickname.slice(-1)}</span>
-            <span style={{ position: "absolute", right: -4, bottom: -2, fontSize: 10, fontWeight: 800, color: "#fff", background: "var(--brand)", border: "2px solid var(--card)", borderRadius: 9, padding: "1px 6px" }}>{gradeShort}</span>
+            {gradeShort && <span style={{ position: "absolute", right: -4, bottom: -2, fontSize: 10, fontWeight: 800, color: "#fff", background: "var(--brand)", border: "2px solid var(--card)", borderRadius: 9, padding: "1px 6px" }}>{gradeShort}</span>}
           </span>
           <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
             <span className="t-title3 ellipsis" style={{ fontWeight: 800 }}>{user.nickname}</span>
@@ -77,7 +78,7 @@ export default function Profile() {
         <div>
           <div className="group__header" style={{ padding: "0 12px 6px" }}><span>学习设置</span></div>
           <div className="group">
-            <Row icon="graduation" iconColor="var(--brand)" title="年级与城市" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => nav("/profile/subjects")} />
+            <Row icon="graduation" iconColor="var(--brand)" title="年级与城市" value={[grade || "未设置年级", city].filter(Boolean).join(" · ")} onClick={() => nav("/profile/subjects")} />
             <Row icon="books" iconColor="var(--brand)" title="学科" value={
               // 最多露 3 个学科图标，其余用「+N」收起，免得学科多时把一行挤满
               <span style={{ display: "flex", alignItems: "center", gap: 4 }}>

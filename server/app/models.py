@@ -28,7 +28,7 @@ class User(db.Model):
     apple_name = db.Column(db.String(64), nullable=True)  # Apple 首次授权时给的姓名（之后 Apple 不再给），管理后台显示
     apple_email = db.Column(db.String(128), nullable=True)  # Apple identityToken 里的邮箱（可能是隐藏邮箱），管理后台显示
     nickname = db.Column(db.String(32), default="小同学")
-    grade = db.Column(db.String(4), default="5")
+    grade = db.Column(db.String(4), default="")  # "1"–"12"；空 = 用户没设过（注册时不选年级），按卷面年级或模型判断
     subjects = db.Column(JSON, default=lambda: ["math", "chinese", "english", "science"])
     weekly_goal = db.Column(db.Integer, default=5)
     reminder_enabled = db.Column(db.Boolean, default=False)

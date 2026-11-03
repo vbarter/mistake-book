@@ -20,6 +20,7 @@ import anthropic
 from .. import taxonomy
 from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
+from . import grades
 from . import ocr
 from . import queue as page_queue
 from .digitize import (
@@ -30,10 +31,10 @@ from .digitize import (
 log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
-    "你是一位小学教师助手，帮助学生整理错题。你会收到试卷上框选出的错题截图。"
+    "你是一位中小学教师助手，帮助学生整理错题。你会收到试卷上框选出的错题截图。"
     "请逐张截图提取题目原文（保留分数、公式与选项的原始写法），识别学生写的作答，"
     "判断学科，标注 1 到 3 个知识点（用课本常见说法，按年级分层），给出正确答案、"
-    "面向小学生的简短解析（不超过 120 字），以及一句「下次注意」提示。"
+    "面向学生的简短解析（不超过 120 字，解法符合学生年级），以及一句「下次注意」提示。"
     "题干中你看不清或不确定的词，原样写入 uncertainSpans。"
     "截图中若有学生姓名、学校、班级等信息，一律忽略，不要写入任何字段。"
 )
@@ -80,11 +81,11 @@ RECOGNIZE_SCHEMA = {
 }
 
 SCAN_SYSTEM_PROMPT = (
-    "你是一位小学教师助手。你会收到整页试卷的照片（可能有多页）。请找出页面上所有被判为错误的题目："
+    "你是一位中小学教师助手。你会收到整页试卷的照片（可能有多页）。请找出页面上所有被判为错误的题目："
     "依据包括红叉、半对半错的勾叉、扣分标记、老师的红笔订正、学生作答与正确答案不符等。"
     "答对的题（打勾且作答正确）不要输出。对每道错题：提取题目原文（保留分数、公式与选项原样），"
     "识别学生写的作答，判断学科，标注 1 到 3 个知识点（课本常见说法），给出正确答案、"
-    "面向小学生的简短解析（不超过 120 字）和一句「下次注意」提示，并说明判错依据。"
+    "面向学生的简短解析（不超过 120 字，解法符合学生年级）和一句「下次注意」提示，并说明判错依据。"
     "bbox 为该题在所在页面上的位置，格式 [x0, y0, x1, y1]，均为 0 到 1 的比例（相对页面宽高），"
     "要完整包住题干、选项和学生作答。看不清的词写入 uncertainSpans。"
     "页面上的学生姓名、学校、班级一律忽略。"
@@ -127,8 +128,9 @@ DIGITIZE_SYSTEM_PROMPT = (
     "每个 sheet 还要评估这页照片的拍摄质量：photoIssues 列出影响识别的问题（blurry 模糊失焦、cropped 卷面有题被拍到照片外或被裁掉、dark 太暗、glare 反光、tilted 严重倾斜变形、covered 被手指物品遮挡或折痕），拍得好就给空数组；photoNote 用一句话（不超过 30 字）说明哪里受影响，如「右下角反光，第 38–40 题看不清」「底部被裁掉，第 21 题以后不完整」，没有问题留空。只报告真正影响识别的问题，轻微的不报。"
     "照片边缘只拍到一部分的相邻页（文字被照片边缘截断、句子不完整）不要还原，不要为它单独建 sheet，也不要把它的题号记到别的空上；同一题号在整张照片里只能出现一次。"
     "每个 sheet 给出页码文字 label（如「第5页」）、卷头标题 title、卷面总分或得分 score（原样文字）、不属于任何块的零散文字 note，"
-    "并根据卷头、页眉页脚、题型判断整张卷子的学科 subject（学科枚举，如「九年级化学」就是 chemistry；题块的 subject 默认和它一致，只有卷子里夹了别科内容才单独标）和考试信息：examLevel（单元测 / 期中 / 期末 / 中考模拟 / 中考 / 高考模拟 / 高考 / 竞赛 / 日常练习）、examGrade（年级或学段，如「九年级」）、"
-    "region（地区，如「上海」；嘉定区、浦东新区等区名要写成所属城市）、syllabus（知识点归类依据的考纲或课标名称，如「上海中考英语考纲」「人教版五年级数学课标」）；判断不了的用学生资料里的年级，region 留空。\n"
+    "并根据卷头、页眉页脚、题型判断整张卷子的学科 subject（学科枚举，如「九年级化学」就是 chemistry；题块的 subject 默认和它一致，只有卷子里夹了别科内容才单独标）和考试信息：examLevel（单元测 / 期中 / 期末 / 中考模拟 / 中考 / 高考模拟 / 高考 / 竞赛 / 日常练习）、examGrade（只写卷头、标题、页眉页脚上印着的年级或学段，如「九年级」「初三」「五年级下册」；卷面上没印就留空，不要拿学生资料里的年级填）、"
+    "guessedGrade（按题目内容判断这张卷子大致是几年级的，写 1 到 12 的数字，高一写 10，一定要给）、"
+    "region（地区，如「上海」；嘉定区、浦东新区等区名要写成所属城市）、syllabus（知识点归类依据的考纲或课标名称，如「上海中考英语考纲」「人教版五年级数学课标」）；region 判断不了留空。\n"
     "以及 blocks：按原卷阅读顺序（先左栏后右栏、自上而下）排列的版面块，块的类型有：\n"
     "- section：大题标题。label 是大题编号（如「Ⅳ」「三」），title 是标题原文（英文题保留英文），instruction 是作答说明（如「用括号中所给单词的适当形式完成下列句子。每空格限填一词」），points 是分值（如「共8分」）。大题说明只放在 section 里，绝不要并进小题。\n"
     "- passage：短文、阅读材料、对话等整段文字。篇号（如「(A)」「(B)」）放 label，不要单独成块；原文逐字转写进 text；文中每个作答空格用 [[空号]] 占位（如 ...more fun than [[38]] classes），并在 blanks 里逐空记录。短文从第一个字开始完整转写，不要从中间开始，不要省略。短文下方供作答的横线行（如「40.____ 41.____」）不要写进 text，那里的手写字母记入对应空的 student；短文里的空一律记在该 passage 的 blanks 里，不要另拆成 item。\n"
@@ -148,7 +150,7 @@ DIGITIZE_SYSTEM_PROMPT = (
     "每个空（blank）：id 与占位一致；number 是所属题号；student 只写学生手写内容的逐字转写（涂改后以最终答案为准；选择题、填空题只写填在答题处（横线、括号、答题框）里的最终答案，写在旁边或空白处的草稿、演算不要抄进来；解答题的解题过程按原来的步骤分行，每步一行；看不清的字用「□」，没写就留空，不要写「无法辨认」之类的描述）；"
     "mark 按老师的批改符号判定：打勾「✓」「√」「☑」或写了对号 = correct；打叉「✗」「×」、斜杠「/」、划掉、圈出 = wrong；半勾、打分低于满分、部分扣分 = partial；完全没有批改符号 = unmarked。"
     "没有写作答的空 mark = blank（未作答，单独一类，不是答错；student 留空，绝不要把正确答案填进 student）。note 只记录老师的红笔批注或扣分，不写任何说明或推测；"
-    "answer 只写正确答案本身（mark 为 wrong、partial、blank 或 unmarked 时都必须给出，correct 时留空；词库、原文、已知条件或选项在别的页上时，按上下文和常识给出最可能的答案，绝不留空，不要写任何说明文字，并在 analysis 开头写「缺前页内容：」或「缺后页内容：」）。老师没批改（unmarked）的空，由你当阅卷老师：给出 answer，并在 analysis 里写清对错依据（判对时 analysis 可留空）；analysis 是判错时面向学生的简短解析（不超过 80 字，correct 时留空）。解答题（questionType 为 solve）特殊处理：answer 只写最终结果；analysis 写 2 到 4 步标准解法，每步一行，判错时最后一行用「错在：」指出学生哪一步出错。学生作答和正确答案数学上等价（因式分解式与展开式、分数与小数、化简前后、换了一种正确解法）算对。\n"
+    "answer 只写正确答案本身（mark 为 wrong、partial、blank 或 unmarked 时都必须给出，correct 时留空；词库、原文、已知条件或选项在别的页上时，按上下文和常识给出最可能的答案，绝不留空，不要写任何说明文字，并在 analysis 开头写「缺前页内容：」或「缺后页内容：」）。老师没批改（unmarked）的空，由你当阅卷老师：给出 answer，并在 analysis 里写清对错依据（判对时 analysis 可留空）；analysis 是判错时面向学生的简短解析（不超过 80 字，correct 时留空）。解答题（questionType 为 solve）特殊处理：answer 只写最终结果；analysis 写 2 到 4 步标准解法，每步一行，判错时最后一行用「错在：」指出学生哪一步出错。所有解析的解法都不能超出这张卷子的年级（卷头印的年级优先，其次是学生年级，都没有就按题目判断）：小学用算术方法（列算式、线段图、假设法），不设未知数列方程（五六年级只在算术方法明显绕时才用简易方程），不用「∵」「∴」；初中不用高中方法。学生作答和正确答案数学上等价（因式分解式与展开式、分数与小数、化简前后、换了一种正确解法）算对。\n"
     "passage 与 item 块还要给出：subject（学科枚举）、questionType（choice/fill/solve）、知识点 knowledgePoints（所有题都给，1 到 3 项）、判错或未作答时一句「下次注意」tip、看不清的词 uncertainSpans，"
     "以及 bbox。知识点的要求：第一项必须是 syllabus 对应考纲 / 课标里的一级知识点名称，整张卷子用统一的规范名称，便于按知识点归类记忆；后面的项才是细分点。"
     "例如英语按考纲语法与题型：名词、代词、冠词、数词、介词、连词、形容词和副词、动词时态、被动语态、非谓语动词、情态动词、构词法、简单句句型、并列句、宾语从句、定语从句、状语从句、词汇辨析、完形填空、阅读理解、选词填空、句型转换、书面表达；"
@@ -197,6 +199,7 @@ _SHEET_PROPS = {
     "subject": {"type": "string", "enum": _SUBJECT_ENUM},
     "examLevel": {"type": "string"},
     "examGrade": {"type": "string"},
+    "guessedGrade": {"type": "string"},
     "region": {"type": "string"},
     "syllabus": {"type": "string"},
     "photoIssues": {"type": "array", "items": {"type": "string", "enum": ["blurry", "cropped", "dark", "glare", "tilted", "covered"]}},
@@ -210,7 +213,7 @@ GRADE_SYSTEM_PROMPT = (
     "答案由几部分组成时，顺序不同或图形顶点顺序不同（矩形 CDHG 与 DHGC）不算错。"
     "对每个空：answer 写正确答案本身（选择题写选项字母，填空写词或短语，不要写说明）；"
     "verdict 是你对学生作答的判定：correct（对）、wrong（错）、partial（部分对，只用于多空或解答题）；学生答案和正确答案数学上等价（因式分解式与展开式、分数与小数、化简前后、不同但正确的解法）一律算对；"
-    "analysis 判错或部分对时写一句面向学生的解析（不超过 60 字），判对时留空；解答题改为 2 到 4 步标准解法，每步一行，最后一行用「错在：」指出学生哪一步出错。公式用 LaTeX 写在 $ 里（如 $\\frac{3}{4}$）。拿不准时也必须给出最可能的结论。"
+    "analysis 判错或部分对时写一句面向学生的解析（不超过 60 字），判对时留空；解答题改为 2 到 4 步标准解法，每步一行，最后一行用「错在：」指出学生哪一步出错。解法要符合后面给出的学生年级和解法要求。公式用 LaTeX 写在 $ 里（如 $\\frac{3}{4}$）。拿不准时也必须给出最可能的结论。"
 )
 
 SPLIT_CHOICE_SYSTEM_PROMPT = (
@@ -224,24 +227,27 @@ CONTEXT_SYSTEM_PROMPT = (
     "现在附上相关几页的照片和 OCR 文字（照片按页码顺序），请找到每道题在卷面上的完整内容（包括前一页的题干、材料和后一页的选项、图），重新作答。"
     "每个【空】都要作答：answer 只写正确答案本身——选择题只写选项字母（多选如「BD」），填空写词、短语或式子，解答题写最终结果，主观题写答题要点；"
     "不要写说明，不要写「无法确定」「条件不足」：条件都在附上的页里，必须给出确定的答案。"
-    "analysis 写面向学生的简短解析（不超过 80 字；解答题写 2 到 4 步标准解法，每步一行），不要提到「本页」「前页」「下一页」。"
+    "analysis 写面向学生的简短解析（不超过 80 字；解答题写 2 到 4 步标准解法，每步一行；解法要符合后面给出的学生年级和解法要求），不要提到「本页」「前页」「下一页」。"
     "公式用 LaTeX 写在 $ 里（如 $\\frac{3}{4}$）。"
 )
 
 EXPLAIN_SYSTEM_PROMPT = (
-    "你是经验丰富的初高中数学、物理、化学老师，给学生的错题本写详细讲解，要让学生看完就会做同类题。"
+    "你是经验丰富的中小学数学、物理、化学老师，给学生的错题本写详细讲解，要让学生看完就会做同类题。"
+    "最重要的一条：解法必须和学生的年级匹配。题目前面会给出学生年级和这个学段的解法要求，思路、解答步骤、技巧都严格按它来，用这个年级课本和老师上课的讲法，不要用更高年级的方法；"
+    "思路、解答、技巧用的是同一种方法，不要解答用一种、技巧又换另一种。\n"
     "下面是试卷上学生做错、没做完或没作答的题，附了所在页的照片和 OCR 文字（图形、表格、已知条件以照片为准）。每个【空】写一份讲解，按字段填：\n"
-    "- thinking 破题思路：1 到 2 句，先说这题考什么，再说从哪里下手（如「先按 总利润 = 单件利润 × 销量 列出函数，再看顶点是否在自变量取值范围内」）。\n"
-    "- knowledge 涉及知识点：2 到 4 项，写具体的公式、定理、性质、概念（如「二次函数顶点式 $y=a(x-h)^2+k$」「勾股定理」「欧姆定律 $I=\\frac{U}{R}$」），每项是一个短语或一个式子，末尾不加句号，不要只写章节名。\n"
-    "- steps 标准完整解答：按考试规范书写，一步一项，每步只做一件事（设未知数、列式、代入、化简、判断、结论）；"
-    "推理写成「∵ …，∴ …」，计算写出代入的数和中间结果，不要跳步，不要写「易得」「显然」；"
+    "- thinking 破题思路：1 到 2 句，先说这题考什么，再说从哪里下手（如小学「先求出增加的部分是原数的几倍，再用 增加量 ÷ 倍数 求原数」，初中「先按 总利润 = 单件利润 × 销量 列出函数，再看顶点是否在自变量取值范围内」）。\n"
+    "- knowledge 涉及知识点：2 到 4 项，写具体的公式、定理、性质、概念（如「小数点向右移动两位，数扩大到原来的 100 倍」「二次函数顶点式 $y=a(x-h)^2+k$」「欧姆定律 $I=\\frac{U}{R}$」），每项是一个短语或一个式子，末尾不加句号，不要只写章节名，也不要写学生年级还没学的知识。\n"
+    "- steps 标准完整解答：按这个年级考试的规范书写，一步一项，每步只做一件事（列式计算、代入、化简、判断、结论）；"
+    "小学每步先用文字说清算的是什么量，再写算式（如「新数比原数多的部分是原数的 100 − 1 = 99 倍」），推理用「因为……所以……」；初中以上推理可以写成「∵ …，∴ …」；"
+    "计算写出代入的数和中间结果，不要跳步，不要写「易得」「显然」；"
     "选择题写出选它的依据，必要时逐项排除（「A 错：…」）；填空题写出得到答案的计算或推理；一题多问时只写这个空对应的那一问，用到前一问的结果直接引用；"
-    "最后一步写结论（「答：…」或「∴ 选 B」）。一般 3 到 8 步，每步不超过 60 字。\n"
-    "- technique 解题技巧：1 到 2 句，能迁移到同类题的方法、口诀或简便做法（如「两定点一动点在直线上求最短：作一个定点的对称点再连线」），没有就留空。\n"
+    "最后一步写结论（「答：…」「所以选 B」）。一般 3 到 8 步，每步不超过 60 字。\n"
+    "- technique 解题技巧：1 到 2 句，能迁移到同类题的方法、口诀或简便做法（如「两定点一动点在直线上求最短：作一个定点的对称点再连线」），同样不超出学生年级，没有就留空。\n"
     "- pitfall 易错点：1 句，这类题最容易错在哪里（如「忘了先求自变量取值范围，直接取顶点」）。\n"
     "- wrongAt：学生写了作答且答错或部分对时，1 句指出学生具体错在哪一步、为什么错；没作答或看不出时留空。\n"
     "- answer：最终正确答案本身（选择题只写选项字母，不写说明）。附的参考答案是识别时给的，你认真算出来不同时以你算出的为准。\n"
-    "式子、方程、坐标、带上下标的量一律写成 LaTeX 并用 $ 包起来（如 $y=-10(x-5)^2+2250$、$A(-3,0)$），「∵」「∴」和中文写在 $ 外面。"
+    "式子、方程、坐标、带上下标的量一律写成 LaTeX 并用 $ 包起来（如 $401.94 \\div 99=4.06$、$A(-3,0)$），「∵」「∴」和中文写在 $ 外面。"
     "同一题几个空的思路、知识点可以写得简短些。不要提到「照片」「OCR」「本页」。"
 )
 
@@ -563,7 +569,7 @@ class ClaudeProvider(AIProvider):
             {
                 "type": "text",
                 "text": (
-                    f"学生年级：小学{grade}年级。可选学科：{subject_names}（subject 字段用英文枚举）。"
+                    f"{grades.grade_note(grade, 'profile')}可选学科：{subject_names}（subject 字段用英文枚举）。"
                     f"共 {len(crops)} 张截图，请按截图顺序在 items 中返回 {len(crops)} 项，每张截图一项。"
                 ),
             }
@@ -594,7 +600,7 @@ class ClaudeProvider(AIProvider):
             {
                 "type": "text",
                 "text": (
-                    f"学生年级：小学{grade}年级。可选学科：{subject_names}（subject 字段用英文枚举）。"
+                    f"{grades.grade_note(grade, 'profile')}可选学科：{subject_names}（subject 字段用英文枚举）。"
                     f"共 {len(pages)} 页，请把所有页面上的错题都列出来，page 从 0 开始计数；没有错题则 items 为空数组。"
                 ),
             }
@@ -642,7 +648,7 @@ class ClaudeProvider(AIProvider):
                 {
                     "type": "text",
                     "text": (
-                        f"学生年级：{grade_label(grade)}。" + (f"学生所在城市：{region}（卷面看不出地区时按此地考纲归类）。" if region else "")
+                        (f"学生年级：{grade_label(grade)}（家长在 App 里设置的）。" if grades.to_int(grade) else "学生年级：App 里没有设置。") + (f"学生所在城市：{region}（卷面看不出地区时按此地考纲归类）。" if region else "")
                         + f"可选学科：{subject_names}（subject 字段用英文枚举）。"
                         "请按原卷版面把这张照片完整还原为 sheets，保持阅读顺序与格式。"
                     ),
@@ -692,17 +698,17 @@ class ClaudeProvider(AIProvider):
             except Exception as e:  # noqa: BLE001  失败就保留短文页给的词
                 log.warning("resolve split choices failed: %s", e)
         try:
-            self._resolve_with_context(sheets, pages, needs_context(sheets, touched))
+            self._resolve_with_context(sheets, pages, needs_context(sheets, touched), grade=grade)
         except Exception as e:  # noqa: BLE001  失败就保留逐页识别时的答案
             log.warning("resolve with context failed: %s", e)
         # 第二步：老师没批改、按答案也对不上的空，交给大模型统一阅卷（能看到全卷 OCR，词库在别页也能判）
         try:
-            self.grade_unmarked(sheets)
+            self.grade_unmarked(sheets, grade=grade)
         except Exception as e:  # noqa: BLE001  阅卷失败不影响还原结果
             log.warning("grade_unmarked failed: %s", e)
         # 第三步：数理化做错 / 没作答的题写详解（思路、知识点、完整步骤、技巧、易错点），替换识别时的简短解析
         try:
-            self.explain(sheets, pages)
+            self.explain(sheets, pages, grade=grade)
         except Exception as e:  # noqa: BLE001  失败就保留简短解析
             log.warning("explain failed: %s", e)
         # 第四步：错题挑知识图谱里的知识点 id（开关 TAXONOMY_TAGGING）；失败就只留自由文本知识点
@@ -713,7 +719,7 @@ class ClaudeProvider(AIProvider):
                 log.warning("tag topics failed: %s", e)
         return sheets, derive_questions(sheets)
 
-    def _resolve_with_context(self, sheets: list[DigitizedPage], pages: list[Crop], positions: list[tuple[int, int]], batch: int = 10) -> int:
+    def _resolve_with_context(self, sheets: list[DigitizedPage], pages: list[Crop], positions: list[tuple[int, int]], batch: int = 10, grade: str = "") -> int:
         """逐页识别时缺了别页内容的题：带上这一页和前后页的照片、OCR，让大模型看着完整题目重新作答。按用到的页分组，几组并发。"""
         if not positions:
             return 0
@@ -727,6 +733,7 @@ class ClaudeProvider(AIProvider):
             key = tuple(sorted(x for x in want if 0 <= x < len(pages)))[-3:]
             by_pages.setdefault(key, []).append((si, bi))
         ocr_of = {s.page: s.ocrText for s in sheets if s.ocrText}
+        note = grades.grade_note(*grades.resolve(sheets, grade))
 
         def solve(page_ids: tuple[int, ...], chunk: list[tuple[int, int]]) -> int:
             content: list[dict] = []
@@ -752,7 +759,7 @@ class ClaudeProvider(AIProvider):
                 ] if x))
                 for b in blk.blanks:
                     todo[keys[b.id]] = (blk, b)
-            content.append({"type": "text", "text": ("OCR 文字：\n" + ocr_text + "\n\n" if ocr_text else "") + "要重新作答的题（【qXbY】是空的编号，results 的 key 用它）：\n\n" + "\n\n".join(parts)})
+            content.append({"type": "text", "text": ("OCR 文字：\n" + ocr_text + "\n\n" if ocr_text else "") + note + "\n\n要重新作答的题（【qXbY】是空的编号，results 的 key 用它）：\n\n" + "\n\n".join(parts)})
             data = self._call(CONTEXT_SYSTEM_PROMPT, content, CONTEXT_SCHEMA, max_tokens=12000)
             done = 0
             for r in data.get("results", []):
@@ -773,11 +780,14 @@ class ClaudeProvider(AIProvider):
         log.info("re-solved %d blank(s) in %d question block(s) with neighbouring pages", done, len(positions))
         return done
 
-    def explain(self, sheets: list[DigitizedPage], pages: list[Crop], batch: int = 5) -> int:
-        """数学、物理、化学做错 / 没作答的空写详解：带上所在页（和大题题干所在页）的照片、OCR，几组并发。"""
+    def explain(self, sheets: list[DigitizedPage], pages: list[Crop], batch: int = 5, grade: str = "") -> int:
+        """数学、物理、化学做错 / 没作答的空写详解：带上所在页（和大题题干所在页）的照片、OCR，几组并发。
+        讲解按学生年级的方法写（grades.resolve：卷面年级 > App 设置 > 模型判断）；写完做规则检查，用了超年级方法的题重写一次。"""
         targets = explain_targets(sheets)
         if not targets:
             return 0
+        level, source = grades.resolve(sheets, grade)
+        note = grades.grade_note(level, source)
         parents = parent_stems(sheets)
         by_pages: dict[tuple[int, ...], list[tuple[int, int, DigitizedBlank]]] = {}
         for si, bi, blanks in targets:
@@ -814,12 +824,14 @@ class ClaudeProvider(AIProvider):
                     "</question>",
                 ] if x))
                 todo[key] = (blk, b)
-            content.append({"type": "text", "text": ("OCR 文字：\n" + ocr_text + "\n\n" if ocr_text else "") + "要写讲解的题（【空】标出这一题要答的位置，results 的 key 用 question 的 key）：\n\n" + "\n\n".join(parts)})
+            content.append({"type": "text", "text": ("OCR 文字：\n" + ocr_text + "\n\n" if ocr_text else "") + note + "\n\n要写讲解的题（【空】标出这一题要答的位置，results 的 key 用 question 的 key）：\n\n" + "\n\n".join(parts)})
             data = self._call(EXPLAIN_SYSTEM_PROMPT, content, EXPLAIN_SCHEMA, max_tokens=16000)
+            results = {str(r.get("key")): r for r in data.get("results", []) if isinstance(r, dict) and str(r.get("key")) in todo}
+            results = self._regrade_methods(level, content, results)
             done = 0
-            for r in data.get("results", []):
-                hit = todo.get(str(r.get("key"))) if isinstance(r, dict) else None
-                if hit and apply_explanation(hit[0], hit[1], r):
+            for key, r in results.items():
+                hit = todo[key]
+                if apply_explanation(hit[0], hit[1], r):
                     done += 1
             return done
 
@@ -833,6 +845,33 @@ class ClaudeProvider(AIProvider):
                     log.warning("explain batch failed: %s", e)
         log.info("explained %d/%d blank(s)", done, sum(len(v) for v in by_pages.values()))
         return done
+
+    def _regrade_methods(self, level: int | None, content: list[dict], results: dict[str, dict]) -> dict[str, dict]:
+        """讲解里用了超出年级的方法（小学设未知数列方程、∵∴，初中用导数……）的题，告诉模型错在哪、只重写这些题；
+        重写后越界项更少才换上，否则保留原来的。"""
+        bad = {k: v for k, r in results.items() if (v := grades.check_methods(level, grades.explanation_text(r)))}
+        if not bad:
+            return results
+        log.info("explain over grade %s: %s", level, bad)
+        retry = (
+            "下面这些题刚才的讲解用了超出学生年级的方法，请只重写这几题（results 只返回它们，key 不变），"
+            "思路、解答步骤、技巧全部换成符合上面解法要求的方法：\n" + "\n".join(f"{k}：{'、'.join(v)}" for k, v in bad.items())
+        )
+        try:
+            data = self._call(EXPLAIN_SYSTEM_PROMPT, content + [{"type": "text", "text": retry}], EXPLAIN_SCHEMA, max_tokens=16000)
+        except Exception as e:  # noqa: BLE001  重写失败就用第一次的
+            log.warning("explain rewrite failed: %s", e)
+            return results
+        out = dict(results)
+        for r in data.get("results", []):
+            key = str(r.get("key")) if isinstance(r, dict) else ""
+            if key in bad and r.get("steps"):
+                left = grades.check_methods(level, grades.explanation_text(r))
+                if len(left) < len(bad[key]):
+                    out[key] = r
+                if left:
+                    log.warning("explain still over grade %s after rewrite (%s): %s", level, key, left)
+        return out
 
     def locate_marks(self, page: Crop) -> list[list[float]]:
         """手写擦除：让模型框出照片上所有不是印刷的痕迹，返回 0–1 坐标的框。"""
@@ -860,10 +899,9 @@ class ClaudeProvider(AIProvider):
         targets = tag_targets(sheets)
         if not targets:
             return 0
-        # 年级优先用卷面识别出来的（「九年级」「初三」），个人资料里的年级只做兜底；年级只影响清单顺序和提示，不再过滤候选池
-        paper_grade = next((g for s in sheets if (g := taxonomy.parse_grade(s.examGrade, s.region))), None)
-        if paper_grade:
-            grade = str(paper_grade)
+        # 年级：卷面印的 > 用户在 App 里设的 > 模型按题目判断的（grades.resolve）；年级只影响清单顺序和提示，不再过滤候选池
+        resolved, _ = grades.resolve(sheets, grade)
+        grade = str(resolved or "")
         parents = parent_stems(sheets)
         by_subject: dict[str, list[tuple[int, int]]] = {}
         for si, bi in targets:
@@ -895,7 +933,7 @@ class ClaudeProvider(AIProvider):
                 ] if x))
                 todo[key] = blk
             content = [
-                {"type": "text", "text": f"学科：{SUBJECT_LABELS.get(subject, subject)}；学生年级：{grade_label(grade)}。\n知识点清单（id｜名称｜章节）：\n{listing}"},
+                {"type": "text", "text": f"学科：{SUBJECT_LABELS.get(subject, subject)}；学生年级：{grades.label(grade) or '不确定'}。\n知识点清单（id｜名称｜章节）：\n{listing}"},
                 {"type": "text", "text": "要归类的错题（results 的 key 用 question 的 key）：\n\n" + "\n\n".join(parts)},
             ]
             data = self._call(TAG_SYSTEM_PROMPT, content, TAG_SCHEMA, max_tokens=4000)
@@ -964,13 +1002,13 @@ class ClaudeProvider(AIProvider):
         log.info("resolved %d/%d split choice(s)", done, len(todo))
         return done
 
-    def grade_unmarked(self, sheets: list[DigitizedPage], batch: int = 40, rounds: int = 2) -> int:
+    def grade_unmarked(self, sheets: list[DigitizedPage], batch: int = 40, rounds: int = 2, grade: str = "") -> int:
         """把仍是 unmarked（老师没批改、自动对答案也判不了）且学生写了作答的空交给大模型判对错；
         第一轮漏判或调用失败的再送一轮。返回判了多少个。"""
         total = 0
         for r in range(rounds):
             try:
-                n = self._grade_round(sheets, batch)
+                n = self._grade_round(sheets, batch, grade)
             except Exception as e:  # noqa: BLE001
                 log.warning("grade round %d failed: %s", r + 1, e)
                 continue
@@ -984,7 +1022,7 @@ class ClaudeProvider(AIProvider):
         listening = listening_blocks(sheets)
         return sum(1 for si, s in enumerate(sheets) for bi, blk in enumerate(s.blocks) if blk.type in ("item", "passage") and (si, bi) not in listening for b in blk.blanks if b.mark == "unmarked" and b.student.strip() and not unreadable(b.student))
 
-    def _grade_round(self, sheets: list[DigitizedPage], batch: int) -> int:
+    def _grade_round(self, sheets: list[DigitizedPage], batch: int, grade: str = "") -> int:
         todo: list[tuple[str, DigitizedBlank, str]] = []
         listening = listening_blocks(sheets)  # 听力没有录音，判不了，不送
         for si, sheet in enumerate(sheets):
@@ -1015,9 +1053,10 @@ class ClaudeProvider(AIProvider):
             return 0
         ocr = "\n\n".join(dict.fromkeys(s.ocrText for s in sheets if s.ocrText))[:12000]
         graded = 0
+        note = grades.grade_note(*grades.resolve(sheets, grade))
         for i in range(0, len(todo), batch):
             chunk = todo[i : i + batch]
-            text = "\n\n".join(f"<blank key=\"{k}\">\n{ctx}\n</blank>" for k, _, ctx in chunk)
+            text = note + "\n\n" + "\n\n".join(f"<blank key=\"{k}\">\n{ctx}\n</blank>" for k, _, ctx in chunk)
             if ocr:
                 text += "\n\n整张卷子的 OCR 文字（供查找词库和上下文）：\n<ocr>\n" + ocr + "\n</ocr>"
             data = self._call(GRADE_SYSTEM_PROMPT, [{"type": "text", "text": text}], GRADE_SCHEMA, max_tokens=8000)
@@ -1041,14 +1080,15 @@ class ClaudeProvider(AIProvider):
         subject = SUBJECT_LABELS.get(mistake.get("subject", ""), mistake.get("subject", ""))
         prompt = (
             f"学科：{subject}；知识点：{'、'.join(mistake.get('knowledgePoints', []))}。\n"
+            f"{grades.grade_note(mistake.get('grade'), 'profile')}\n"
             f"原题：{mistake.get('stemText', '')}\n"
             f"学生当时的错误：{mistake.get('studentAnswer', '')}（错因：{'、'.join(mistake.get('reasons', []))}）\n"
             f"请出 {count} 道考查同一知识点、难度相当、数字或情境不同的同类变式题。"
             "优先出单选题（3 个选项，answer 写选项字母 A/B/C）或填空题（answer 写答案本身），"
-            "每题附不超过 80 字的解析。"
+            "每题附不超过 80 字的解析。题目难度、用到的知识和解析里的解法都符合学生年级。"
         )
         data = self._call(
-            "你是一位小学教师，擅长为学生出同类变式题，题目表述简洁、面向小学生。",
+            "你是一位中小学教师，擅长为学生出同类变式题，题目表述简洁、符合学生年级。",
             [{"type": "text", "text": prompt}],
             VARIANT_SCHEMA,
             max_tokens=4000,

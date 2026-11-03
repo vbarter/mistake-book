@@ -59,7 +59,7 @@ def recognize():
     subjects = [s for s in (user.subjects or SUBJECTS) if s in SUBJECTS] or SUBJECTS
     provider = get_provider()
     try:
-        items = provider.recognize(crops, subjects=subjects, grade=user.grade or "5")
+        items = provider.recognize(crops, subjects=subjects, grade=user.grade or "")
     except AIError as e:
         return jsonify({"error": "ai_unavailable", "message": str(e)}), 502
     except Exception:  # noqa: BLE001  未知异常也给出可读提示，不返回 500 页面
@@ -99,7 +99,7 @@ def scan():
     subjects = [s for s in (user.subjects or SUBJECTS) if s in SUBJECTS] or SUBJECTS
     provider = get_provider()
     try:
-        items = provider.scan_pages(pages, subjects=subjects, grade=user.grade or "5")
+        items = provider.scan_pages(pages, subjects=subjects, grade=user.grade or "")
     except AIError as e:
         return jsonify({"error": "ai_unavailable", "message": str(e)}), 502
     except Exception:  # noqa: BLE001
@@ -231,7 +231,7 @@ def digitize():
         pages.append(Crop(data=blob, media_type=media))
 
     subjects = list(SUBJECTS)  # 识别卷子是什么学科，不受个人资料勾选限制
-    grade = user.grade or "5"
+    grade = user.grade or ""  # 空 = 用户没设过年级，按卷面或模型判断（ai/grades.py）
     region = str(data.get("region") or "")[:20]
 
     _cleanup_jobs()
@@ -310,7 +310,7 @@ def digitize_grade():
     sheets = sheets_from_dicts(pages)
     provider = get_provider()
     track(current_user(), "grade")
-    graded = provider.grade_unmarked(sheets) if hasattr(provider, "grade_unmarked") else 0
+    graded = provider.grade_unmarked(sheets, grade=current_user().grade or "") if hasattr(provider, "grade_unmarked") else 0
     questions = []
     for i, q in enumerate(derive_questions(sheets)):
         d = q.to_dict()
@@ -330,7 +330,7 @@ def digitize_tag():
     if not isinstance(pages, list) or not pages:
         abort(400, "缺少电子版内容")
     sheets = sheets_from_dicts(pages)
-    grade = str(data.get("grade") or user.grade or "5")
+    grade = str(data.get("grade") or user.grade or "")
     tagged = 0
     if taxonomy.enabled():
         track(user, "tag")

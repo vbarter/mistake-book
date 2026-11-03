@@ -139,7 +139,8 @@ class DigitizedPage:
     note: str = ""  # 卷面上的其他文字（订正提醒等）
     subject: str = ""  # 整张卷子的学科（从卷头判断），题块的 subject 默认继承它
     examLevel: str = ""  # 考试类型：单元测 / 期中 / 期末 / 中考模拟 / 中考 / 高考 …
-    examGrade: str = ""  # 年级 / 学段，如 "九年级"
+    examGrade: str = ""  # 卷面上印的年级 / 学段，如 "九年级"；卷面没印就是空
+    guessedGrade: str = ""  # 模型按题目内容判断的大致年级 "1"–"12"，卷面和 App 都没有年级时用（见 ai/grades.py）
     region: str = ""  # 地区，如 "上海"
     syllabus: str = ""  # 知识点归类依据的考纲 / 课标名称，如 "上海中考英语考纲"
     ocrText: str = ""  # OCR 模型逐行识别出的原文（印刷文字，公式为 LaTeX），同一张照片的几个 sheet 相同
