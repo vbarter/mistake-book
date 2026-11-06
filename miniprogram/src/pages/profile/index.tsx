@@ -12,7 +12,7 @@ import { C } from "../../lib/theme";
 import { listFolders, photosSizeMB } from "../../lib/store";
 
 /** 小程序版本：三位 */
-const VERSION = "1.8.12";
+const VERSION = "1.8.13";
 
 /** 我的：和 App 的「我的」同一套布局——账号卡片、统计、学习设置、数据与隐私、关于。没登录也能看，账号卡片换成「点这里登录」 */
 export default function Profile() {
