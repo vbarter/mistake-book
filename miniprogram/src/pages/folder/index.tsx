@@ -6,6 +6,7 @@ import { ExportSheet } from "../../components/ExportSheet";
 import { AddSheet } from "../../components/AddSheet";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Progress, Sheet, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../../components/ui";
+import { ensureLogin } from "../../lib/auth";
 import { captureInto, type Source } from "../../lib/capture";
 import { folderErrors, groupByKnowledge, groupBySection, knowledgeKey, paperErrors } from "../../lib/errors";
 import { C } from "../../lib/theme";
@@ -66,8 +67,9 @@ export default function FolderPage() {
     Taro.navigateTo({ url: `/pages/paper/index?folderId=${folder.id}&paperId=${p.id}` });
   };
   // 原题空白卷：没扫描的那边会引导去扫描；有插图的照片进去后在后台擦手写
-  const openErase = (p: Paper) => {
+  const openErase = async (p: Paper) => {
     if (p.scanJob) return toast(`${scanStageText(p.scanJob)}，扫好后就能导出空白卷`);
+    if (!(await ensureLogin("擦除手写"))) return;
     Taro.navigateTo({ url: `/pages/erase/index?folderId=${folder.id}&paperId=${p.id}` });
   };
 

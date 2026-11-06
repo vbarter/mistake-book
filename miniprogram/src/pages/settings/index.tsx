@@ -4,7 +4,7 @@ import Taro from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
 import { SubjectTile } from "../../components/ui";
 import { errorText } from "../../lib/api";
-import { currentUser, updateProfile } from "../../lib/auth";
+import { currentUser, ensureLogin, updateProfile } from "../../lib/auth";
 import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_GROUPS, SUBJECT_LABEL } from "../../lib/format";
 import { toast } from "../../lib/hooks";
 import type { Subject } from "../../lib/types";
@@ -20,7 +20,7 @@ export default function Settings() {
   const toggle = (s: Subject) => setSubjects((cur) => (cur.includes(s) ? (cur.length > 1 ? cur.filter((x) => x !== s) : cur) : [...cur, s]));
 
   const save = async () => {
-    if (busy) return;
+    if (busy || !(await ensureLogin("保存设置"))) return;
     setBusy(true);
     try {
       await updateProfile({ subjects, grade });

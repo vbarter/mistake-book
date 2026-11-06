@@ -1,26 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { JOBS_EVENT } from "./jobs";
-import { isLoggedIn } from "./auth";
 
-/** 没登录就去登录页（onLaunch 里跳转太早会被丢掉，所以放在页面显示时做） */
-function requireLogin(): boolean {
-  if (isLoggedIn()) return true;
-  void Taro.reLaunch({ url: "/pages/login/index" });
-  return false;
-}
-
-/** 本机数据版本：回到页面、扫描任务有变化时 +1，页面据此重新读 */
+/**
+ * 本机数据版本：回到页面、扫描任务有变化时 +1，页面据此重新读。
+ * 不检查登录：浏览本机数据不需要账号，扫描、导出等要服务器的操作在触发时再走 ensureLogin（微信审核要求先体验后登录）。
+ */
 export function useDataVersion(): [number, () => void] {
   const [v, setV] = useState(0);
   const bumpLocal = () => setV((x) => x + 1);
-  useDidShow(() => {
-    if (requireLogin()) bumpLocal();
-  });
+  useDidShow(bumpLocal);
   useEffect(() => {
     Taro.eventCenter.on(JOBS_EVENT, bumpLocal);
+    Taro.eventCenter.on("auth", bumpLocal);
     return () => {
       Taro.eventCenter.off(JOBS_EVENT, bumpLocal);
+      Taro.eventCenter.off("auth", bumpLocal);
     };
   }, []);
   return [v, bumpLocal];
