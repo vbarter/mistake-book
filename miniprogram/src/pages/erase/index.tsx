@@ -6,6 +6,7 @@ import { PrintSheets } from "../../components/PrintSheets";
 import { Button, Empty, Hint } from "../../components/ui";
 import { ERASE_EVENT, allErased, erasePaper, eraseProgress, eraseWarning } from "../../lib/erase";
 import { errorText } from "../../lib/api";
+import { ensureLogin, isLoggedIn } from "../../lib/auth";
 import { submitExport } from "../../lib/export";
 import { figureAt, figurePayload, figurePhotoIds } from "../../lib/figures";
 import { useDataVersion } from "../../lib/hooks";
@@ -46,7 +47,7 @@ export default function ErasePage() {
 
   // 有插图的照片还没擦过：进来就开始擦（只擦这几张）
   useEffect(() => {
-    if (!paper || !digitized || started.current || paper.eraseJob || allErased(paper, figIds)) return;
+    if (!paper || !digitized || started.current || paper.eraseJob || allErased(paper, figIds) || !isLoggedIn()) return;
     started.current = true;
     erasePaper(folderId, paper, figIds.filter((id) => !paper.pages.find((pg) => pg.id === id)?.erased)).catch((e) => Taro.showModal({ title: "擦除没开始", content: errorText(e), showCancel: false }));
   }, [paper?.id, Boolean(digitized)]);
@@ -81,6 +82,7 @@ export default function ErasePage() {
 
   const exportClean = async () => {
     if (exporting || busy) return;
+    if (!(await ensureLogin("导出空白卷"))) return;
     setExporting(true);
     Taro.showLoading({ title: "正在提交…", mask: true });
     try {
@@ -131,7 +133,7 @@ export default function ErasePage() {
       <PrintSheets paper={paper} sheets={digitized.pages} clean />
       <View className="bottom-bar">
         {figIds.length > 0 && (
-          <Button variant="outline" disabled={busy} onClick={() => erasePaper(folderId, paper, figIds).then(refresh).catch((e) => Taro.showModal({ title: "擦除没开始", content: errorText(e), showCancel: false }))}>
+          <Button variant="outline" disabled={busy} onClick={async () => (await ensureLogin("擦除手写")) && erasePaper(folderId, paper, figIds).then(refresh).catch((e) => Taro.showModal({ title: "擦除没开始", content: errorText(e), showCancel: false }))}>
             重擦插图
           </Button>
         )}

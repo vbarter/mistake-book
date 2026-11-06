@@ -1,4 +1,7 @@
-/** 登录：微信一键登录（wx.login 的 code 换账号）；服务器还没配小程序 AppID 时退回游客账号。 */
+/**
+ * 登录：微信一键登录（wx.login 的 code 换账号）；服务器还没配小程序 AppID 时退回游客账号。
+ * 先浏览后登录（微信审核要求）：不登录也能打开各页面看本机数据，扫描、导出这类要服务器的操作触发时走 ensureLogin。
+ */
 import Taro from "@tarojs/taro";
 import { ApiError, api, loadToken, setToken, setUnauthorizedHandler } from "./api";
 import type { User } from "./types";
@@ -29,17 +32,45 @@ export function isLoggedIn(): boolean {
   return Boolean(loadToken());
 }
 
+/** 退出后回首页，照样能浏览本机数据 */
 export function logout() {
   setToken(null);
   setUser(null);
-  Taro.reLaunch({ url: "/pages/login/index" });
+  Taro.reLaunch({ url: "/pages/home/index" });
 }
 
+export const LOGIN_PAGE = "/pages/login/index";
+/** 登录页关闭（登录成功返回，或用户点了「暂不登录」/ 左上角返回）时发出 */
+export const LOGIN_CLOSED_EVENT = "login:closed";
+
+function loginPageOpen(): boolean {
+  return Taro.getCurrentPages().some((p) => `/${p.route}` === LOGIN_PAGE);
+}
+
+/** 登录过期：清掉本机 token，打开登录页（能返回，不打断浏览） */
 setUnauthorizedHandler(() => {
   setToken(null);
   setUser(null);
-  Taro.reLaunch({ url: "/pages/login/index" });
+  if (!loginPageOpen()) void Taro.navigateTo({ url: LOGIN_PAGE });
 });
+
+/**
+ * 要账号的操作之前调：已登录直接 true；没登录先说明为什么要登录，用户选「去登录」就打开登录页，
+ * 登录页关掉后按是否登录成功返回，调用方可以接着做刚才的操作。选「先看看」返回 false，留在原页。
+ */
+export async function ensureLogin(what = "使用这个功能"): Promise<boolean> {
+  if (isLoggedIn()) return true;
+  const m = await Taro.showModal({ title: "登录后才能" + what, content: "试卷要发到服务器识别、生成 PDF，需要一个账号。用微信一键登录即可，不用填手机号。", confirmText: "去登录", cancelText: "先看看" });
+  if (!m.confirm) return false;
+  return new Promise<boolean>((resolve) => {
+    const done = () => {
+      Taro.eventCenter.off(LOGIN_CLOSED_EVENT, done);
+      resolve(isLoggedIn());
+    };
+    Taro.eventCenter.on(LOGIN_CLOSED_EVENT, done);
+    Taro.navigateTo({ url: LOGIN_PAGE }).catch(done);
+  });
+}
 
 export interface Profile {
   nickname?: string;

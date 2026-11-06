@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Input, Picker, Text, View } from "@tarojs/components";
-import Taro from "@tarojs/taro";
+import Taro, { useUnload } from "@tarojs/taro";
 import { errorText } from "../../lib/api";
-import { login } from "../../lib/auth";
+import { LOGIN_CLOSED_EVENT, login } from "../../lib/auth";
 import { startJobPoller } from "../../lib/jobs";
 import { GRADE_LABEL, SUBJECTS, SUBJECT_LABEL } from "../../lib/format";
 import type { Subject } from "../../lib/types";
@@ -11,12 +11,23 @@ import "./index.scss";
 
 const GRADES = Object.keys(GRADE_LABEL);
 
-/** 欢迎 + 登录：选年级和学科（决定知识点按哪套考纲归类），微信一键登录 */
+/** 回到打开登录页之前的页面；直接打开登录页（没有上一页）时去首页 */
+function leave() {
+  if (Taro.getCurrentPages().length > 1) void Taro.navigateBack();
+  else void Taro.switchTab({ url: "/pages/home/index" });
+}
+
+/**
+ * 登录：选年级和学科（决定知识点按哪套考纲归类），微信一键登录。
+ * 只在用户要扫描、导出等操作时打开（lib/auth 的 ensureLogin），随时可以「暂不登录」回去接着看。
+ */
 export default function Login() {
   const [grade, setGrade] = useState("7");
   const [subjects, setSubjects] = useState<Subject[]>(["math", "chinese", "english"]);
   const [nickname, setNickname] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useUnload(() => Taro.eventCenter.trigger(LOGIN_CLOSED_EVENT));
 
   const toggle = (s: Subject) => setSubjects((v) => (v.includes(s) ? v.filter((x) => x !== s) : [...v, s]));
 
@@ -26,7 +37,7 @@ export default function Login() {
     try {
       await login({ grade, subjects, nickname: nickname.trim() || undefined });
       startJobPoller();
-      Taro.switchTab({ url: "/pages/home/index" });
+      leave();
     } catch (e) {
       void Taro.showModal({ title: "登录失败", content: errorText(e), showCancel: false });
     } finally {
@@ -66,6 +77,9 @@ export default function Login() {
       <View className={`btn btn--wx${busy ? " btn--disabled" : ""}`} onClick={go}>
         {busy ? "登录中…" : "微信一键登录"}
       </View>
+      <Text className="t-sub c-brand center" onClick={leave}>
+        暂不登录，先看看
+      </Text>
       <Text className="t-cap c-sec center">试卷照片和电子版只保存在你的手机上。扫描时照片会发到服务器识别，识别完不保留。</Text>
     </View>
   );

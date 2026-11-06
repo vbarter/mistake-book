@@ -55,6 +55,11 @@ function netError(e: unknown): ApiError {
   return new ApiError(0, "offline", "现在没有网络，请检查连接");
 }
 
+/** 没登录（游客浏览中）：要账号的请求不发出去，免得后台任务回 401 把人拉去登录页。用户操作的入口先走 auth.ensureLogin */
+function requireToken() {
+  if (!token && !loadToken()) throw new ApiError(401, "login_required", "请先登录");
+}
+
 function fail(status: number, data: unknown): never {
   if (status === 401) {
     onUnauthorized?.();
@@ -66,6 +71,7 @@ function fail(status: number, data: unknown): never {
 
 export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   const { method = "GET", body, auth = true, timeoutMs = 60000 } = opts;
+  if (auth) requireToken();
   let res: Taro.request.SuccessCallbackResult;
   try {
     res = await Taro.request({ url: `${API_BASE}${path}`, method: method as "GET", data: body as Record<string, unknown> | undefined, header: headers(auth, body !== undefined), timeout: timeoutMs, dataType: "json" });
@@ -79,6 +85,7 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
 /** 二进制（PDF）：出错时服务端回 JSON，解出来当错误信息 */
 export async function apiBinary(path: string, opts: Options = {}): Promise<ArrayBuffer> {
   const { method = "POST", body, auth = true, timeoutMs = 90000 } = opts;
+  if (auth) requireToken();
   let res: Taro.request.SuccessCallbackResult<ArrayBuffer>;
   try {
     res = await Taro.request<ArrayBuffer>({ url: `${API_BASE}${path}`, method: method as "POST", data: body as Record<string, unknown> | undefined, header: { ...headers(auth, body !== undefined), Accept: "application/pdf" }, timeout: timeoutMs, responseType: "arraybuffer" });

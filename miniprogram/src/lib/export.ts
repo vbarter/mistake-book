@@ -6,6 +6,7 @@
  */
 import Taro from "@tarojs/taro";
 import { ApiError, api, apiBinary, errorText } from "./api";
+import { ensureLogin } from "./auth";
 import { toBookItems, type ErrorItem } from "./errors";
 import { formatDateTime } from "./format";
 import { figureAt, figurePayload } from "./figures";
@@ -155,6 +156,7 @@ export async function paperBody(title: string, papers: Paper[]) {
  * 成功提交返回 true（调用方关面板）。
  */
 export async function runExport(kind: "book" | "paper", build: () => Promise<Record<string, unknown>>, filename: string): Promise<boolean> {
+  if (!(await ensureLogin("导出 PDF"))) return false;
   Taro.showLoading({ title: "正在提交…", mask: true });
   try {
     const body = await build();

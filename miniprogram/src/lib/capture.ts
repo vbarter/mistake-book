@@ -1,6 +1,7 @@
 /** 拍照 / 相册选图 → 存进本机 → 建试卷 → 提交扫描。相册多选时一张照片一张试卷（和 App 一致）。 */
 import Taro from "@tarojs/taro";
 import { errorText } from "./api";
+import { ensureLogin } from "./auth";
 import { addPaper, autoTargetFolderId, deleteFolder, deletePaper, getFolder, listFolders, savePhoto, updatePaper, type FolderPage } from "./store";
 import { confirmPhoto } from "./confirm";
 import { findPhotoMatches } from "./dedup";
@@ -54,6 +55,7 @@ async function shootSeries(): Promise<string[]> {
  * 连拍了几张时问一句是同一份试卷的几页、还是每张一份；相册多选一张照片一张试卷。返回文件夹 id。
  */
 export async function captureInto(folderId: string | null, source: Source): Promise<string | null> {
+  if (!(await ensureLogin("扫描试卷"))) return null;
   const paths = source === "camera" ? await shootSeries() : await choose("album", 9);
   if (paths.length === 0) return null;
   let together = false;
@@ -117,6 +119,7 @@ export async function captureInto(folderId: string | null, source: Source): Prom
 
 /** 重拍：用新选的照片（可多张，作为同一张试卷的几页）替换原照片并重新扫描 */
 export async function retake(folderId: string, paperId: string, source: Source): Promise<boolean> {
+  if (!(await ensureLogin("重新扫描"))) return false;
   const paths = await choose(source, source === "camera" ? 1 : 9);
   if (paths.length === 0) return false;
   Taro.showLoading({ title: "上传中…", mask: true });
@@ -195,6 +198,7 @@ async function rotatePhoto(page: FolderPage, turns: number): Promise<FolderPage>
 
 /** 试卷照片横着 / 倒着拍的：每张都转 turns 个 90°（顺时针为正），替换原照片后重新扫描 */
 export async function rotateAndRescan(folderId: string, paperId: string, turns: number): Promise<boolean> {
+  if (!(await ensureLogin("重新扫描"))) return false;
   const old = getFolder(folderId)?.papers.find((p) => p.id === paperId);
   if (!old?.pages.length) return false;
   Taro.showLoading({ title: "转正中…", mask: true });
