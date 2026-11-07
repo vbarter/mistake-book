@@ -30,7 +30,8 @@ export interface Paper {
   pages: FolderPage[];
   scannedAt?: string;
   digitized?: DigitizedResult;
-  subject?: Subject; // 扫描时从卷头判断
+  subject?: Subject; // 扫描时从卷头判断；决定这张试卷归进文件夹里的哪个学科子目录
+  subjectManual?: boolean; // 学科是用户手动选的：重新扫描不再用识别结果覆盖
   corrected?: Record<string, string>; // 已停用（订正功能已去掉），老数据里可能还有，读时忽略
   scanJob?: { id: string; startedAt: string; parts: { page: number; x0: number; w: number }[]; progress: number; status: "queued" | "running"; startedPages?: number; waiting?: number; queued?: boolean }; // 服务器后台还原中
   scanError?: string; // 上次还原失败的原因
@@ -636,6 +637,33 @@ export function paperSubject(paper: Paper): Subject | null {
   const counts = new Map<Subject, number>();
   for (const q of d.questions) counts.set(q.subject, (counts.get(q.subject) ?? 0) + 1);
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+/** 学科子目录：文件夹里的试卷按学科自动归档。
+ * 子目录不单独存，按每张试卷的学科（扫描时从卷头识别，或用户手动改的）现算，顺序跟着试卷在文件夹里的顺序。
+ * 还没扫描、扫描中、扫描失败或认不出学科的放在 pending（「待归类」），扫完自动进对应的子目录。 */
+export function subjectFolders(folder: Folder): { subjects: { subject: Subject; papers: Paper[] }[]; pending: Paper[] } {
+  const bySubject = new Map<Subject, Paper[]>();
+  const pending: Paper[] = [];
+  for (const p of folder.papers) {
+    const s = paperSubject(p);
+    if (!s) pending.push(p);
+    else bySubject.set(s, [...(bySubject.get(s) ?? []), p]);
+  }
+  return { subjects: [...bySubject.entries()].map(([subject, papers]) => ({ subject, papers })), pending };
+}
+
+/** 只看文件夹里某个学科子目录（加上还没归类的）时的文件夹视图：统计、目录、错题汇总、导出都按这个范围算 */
+export function scopeFolder(folder: Folder, subject: Subject | null): Folder {
+  if (!subject) return folder;
+  return { ...folder, subject, papers: folder.papers.filter((p) => paperSubject(p) === subject) };
+}
+
+/** 在子目录里拖动排序：只换这几张试卷占的位置，别的学科的试卷位置不动 */
+export function mergeOrder(all: string[], subset: string[]): string[] {
+  const inSubset = new Set(subset);
+  let i = 0;
+  return all.map((id) => (inSubset.has(id) ? subset[i++] : id));
 }
 
 export function folderStats(folder: Folder): { papers: number; unscanned: number; wrong: number; blank: number; problems: number; subject: Subject | null; subjects: Subject[]; exam: string; syllabus: string } {

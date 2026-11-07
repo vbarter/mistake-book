@@ -3,14 +3,15 @@ import { Image, Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
 import { ErrorCard } from "../../components/ErrorCard";
 import { ExportSheet } from "../../components/ExportSheet";
+import { SubjectPicker } from "../../components/SubjectPicker";
 import { PrintSheets } from "../../components/PrintSheets";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, ErrorFilterTags, Hint, IconSegmented, MathText, Progress, Tag, Verdict, applyErrorFilter, type ErrorFilter } from "../../components/ui";
 import { C } from "../../lib/theme";
 import { retake, rotateAndRescan } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
-import { formatDateTime } from "../../lib/format";
-import { useDataVersion } from "../../lib/hooks";
+import { SUBJECT_LABEL, formatDateTime } from "../../lib/format";
+import { toast, useDataVersion } from "../../lib/hooks";
 import { gradeIfNeeded, isGrading, notDuplicate, printIfNeeded, scanStageText, tagIfNeeded } from "../../lib/jobs";
 import { autoMark, paperQuality, paperStats, validDigitized } from "../../lib/logic";
 import { mathPlain } from "../../lib/math";
@@ -32,6 +33,7 @@ export default function PaperPage() {
   const [tab, setTab] = useState<Tab>("paper");
   const [filter, setFilter] = useState<ErrorFilter>("all");
   const [exporting, setExporting] = useState(false);
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => {
     if (paper) Taro.setNavigationBarTitle({ title: paper.name });
@@ -111,7 +113,7 @@ export default function PaperPage() {
   const menu = async () => {
     let r: { tapIndex: number };
     try {
-      r = await Taro.showActionSheet({ itemList: ["重新扫描 / 改照片", "旋转照片并重新扫描", "查看原图", "重命名", "删除这张试卷"] });
+      r = await Taro.showActionSheet({ itemList: ["重新扫描 / 改照片", "旋转照片并重新扫描", "查看原图", "重命名", "改学科", "删除这张试卷"] });
     } catch {
       return;
     }
@@ -123,7 +125,8 @@ export default function PaperPage() {
       if (m.confirm && m.content?.trim()) updatePaper(folderId, paperId, { name: m.content.trim().slice(0, 30) });
       refresh();
     }
-    if (r.tapIndex === 4) {
+    if (r.tapIndex === 4) setPicking(true);
+    if (r.tapIndex === 5) {
       const m = await Taro.showModal({ title: "删除这张试卷？", content: "照片和电子版会一起删掉。", confirmText: "删除", confirmColor: "#b42323" });
       if (m.confirm) {
         deletePaper(folderId, paperId);
@@ -302,7 +305,17 @@ export default function PaperPage() {
         </Button>
       </View>
 
-      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={`${folder.name} · ${paper.name}`} subtitle={sheets.find((s) => s.syllabus)?.syllabus ? `按${sheets.find((s) => s.syllabus)!.syllabus}归类` : undefined} errors={errors} papers={[paper]} />
+      <SubjectPicker
+        paper={picking ? paper : null}
+        onClose={() => setPicking(false)}
+        onPick={(sub) => {
+          setPicking(false);
+          updatePaper(folderId, paperId, { subject: sub, subjectManual: true });
+          toast(`已归到「${SUBJECT_LABEL[sub]}」`);
+          refresh();
+        }}
+      />
+            <ExportSheet open={exporting} onClose={() => setExporting(false)} title={`${folder.name} · ${paper.name}`} subtitle={sheets.find((s) => s.syllabus)?.syllabus ? `按${sheets.find((s) => s.syllabus)!.syllabus}归类` : undefined} errors={errors} papers={[paper]} />
     </View>
   );
 }

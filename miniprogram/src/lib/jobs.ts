@@ -3,7 +3,7 @@ import Taro from "@tarojs/taro";
 import { api } from "./api";
 import type { DigitizeJob, DigitizedQuestion, DigitizedResult } from "./types";
 import { autoMark, isProblem, isUnreadable, validDigitized } from "./logic";
-import { getFolder, listFolders, saveFolder, updatePaper, type Folder, type FolderPage, type Paper } from "./store";
+import { getFolder, listFolders, updatePaper, type Folder, type FolderPage, type Paper } from "./store";
 import { findPaperMatch } from "./dedup";
 import { pollEraseJob } from "./erase";
 
@@ -48,11 +48,11 @@ function finishJob(folderId: string, paperId: string, job: DigitizeJob, parts: S
   if (!result) return;
   const scannedAt = (job.status === "done" && job.updatedAt) || new Date().toISOString();
   const digitized: DigitizedResult = { ...remapParts(result, parts), provider: result.provider, at: scannedAt };
-  const subject = digitized.pages.find((s) => s.subject)?.subject;
+  // 自动归档：试卷按识别出的学科进文件夹里的学科子目录；用户手动选过学科的不动。外层文件夹名保持扫描日期
+  const before = getFolder(folderId)?.papers.find((p) => p.id === paperId);
+  const subject = before?.subjectManual && before.subject ? before.subject : digitized.pages.find((s) => s.subject)?.subject;
   updatePaper(folderId, paperId, { digitized, scannedAt, subject, scanJob: undefined, scanError: undefined, gradedAt: undefined, taggedAt: undefined, printedAt: scannedAt, duplicateOf: undefined, keepDuplicate: undefined });
   markDuplicate(folderId, paperId);
-  const folder = getFolder(folderId);
-  if (folder && !folder.subject && subject) saveFolder({ ...folder, subject });
 }
 
 // ---------------------------------------------------------------- 压缩与切图

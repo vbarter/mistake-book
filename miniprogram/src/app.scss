@@ -173,6 +173,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .thumb--sm { width: 34px; height: 44px; border-radius: 6px; }
 .thumb-wrap { position: relative; flex-shrink: 0; }
 .thumb-badge { position: absolute; right: -6px; bottom: -6px; box-shadow: 0 0 0 2px $card; }
+.subject-folder { position: relative; flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
 
 /* ---------- 学科方块 ---------- */
 .tile {

@@ -175,6 +175,26 @@ export function paperSubject(paper: Paper): Subject | null {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
+/** 学科子目录：文件夹里的试卷按学科自动归档（和 App 一致）。
+ * 子目录不单独存，按每张试卷的学科（扫描时从卷头识别，或用户手动改的）现算，顺序跟着试卷在文件夹里的顺序。
+ * 还没扫描、扫描中、扫描失败或认不出学科的放在 pending（「待归类」），扫完自动进对应的子目录。 */
+export function subjectFolders(folder: Folder): { subjects: { subject: Subject; papers: Paper[] }[]; pending: Paper[] } {
+  const bySubject = new Map<Subject, Paper[]>();
+  const pending: Paper[] = [];
+  for (const p of folder.papers) {
+    const s = paperSubject(p);
+    if (!s) pending.push(p);
+    else bySubject.set(s, [...(bySubject.get(s) ?? []), p]);
+  }
+  return { subjects: [...bySubject.entries()].map(([subject, papers]) => ({ subject, papers })), pending };
+}
+
+/** 只看某个学科子目录时的文件夹视图：统计、目录、错题汇总、导出都按这个范围算 */
+export function scopeFolder(folder: Folder, subject: Subject | null): Folder {
+  if (!subject) return folder;
+  return { ...folder, subject, papers: folder.papers.filter((p) => paperSubject(p) === subject) };
+}
+
 export function folderStats(folder: Folder): { papers: number; unscanned: number; wrong: number; blank: number; problems: number; subject: Subject | null; subjects: Subject[]; exam: string; syllabus: string } {
   let wrong = 0;
   let blank = 0;
