@@ -257,12 +257,25 @@ export async function exportPdf(blob: Blob, filename: string): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+const backHandlers: (() => boolean)[] = [];
+
+/** 安卓返回键先交给页面上的浮层处理：fn 返回 true 表示已经处理（关掉了浮层），不再后退。返回取消注册的函数 */
+export function pushBackHandler(fn: () => boolean): () => void {
+  backHandlers.push(fn);
+  return () => {
+    const i = backHandlers.lastIndexOf(fn);
+    if (i >= 0) backHandlers.splice(i, 1);
+  };
+}
+
 /** Android 返回键 / 返回手势：有历史就后退，在首页就退出 App。iOS 用 WKWebView 的原生边缘滑动返回（原生壳里打开）。 */
 export async function setupBackButton(): Promise<() => void> {
   if (!isNative) return () => {};
   try {
     const { App } = await import("@capacitor/app");
     const handle = await App.addListener("backButton", ({ canGoBack }) => {
+      // 页面上开着的浮层（逐张查看、调四角…）先关
+      for (let i = backHandlers.length - 1; i >= 0; i--) if (backHandlers[i]()) return;
       // 拍照确认界面开着：返回键等于点 ×（放弃这张，重拍），不离开当前页
       if (answerPhotoConfirm(null)) return;
       if (canGoBack && window.history.length > 1) window.history.back();

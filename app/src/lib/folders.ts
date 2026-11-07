@@ -664,3 +664,32 @@ export function folderStats(folder: Folder): { papers: number; unscanned: number
   const subjects = folder.subject ? [folder.subject, ...ranked.filter((s) => s !== folder.subject)] : ranked;
   return { papers: folder.papers.length, unscanned, wrong, blank, problems: wrong + blank, subject: subjects[0] ?? null, subjects, exam, syllabus };
 }
+
+// ---------------------------------------------------------------- 连拍扫描的草稿
+// 拍了还没提交识别的照片存在照片表里（id 带 scan~ 前缀，不属于任何试卷），App 被杀、中途退出都不丢，下次进相机接着来。
+
+const DRAFT_PREFIX = "scan~";
+
+export async function putDraftRow(key: string, src: string): Promise<void> {
+  await run(PHOTOS, "readwrite", (t) => { t.objectStore(PHOTOS).put({ id: DRAFT_PREFIX + key, src }); });
+}
+
+export async function getDraftRow(key: string): Promise<string | null> {
+  const row = await run<{ id: string; src: string } | undefined>(PHOTOS, "readonly", (t) => t.objectStore(PHOTOS).get(DRAFT_PREFIX + key));
+  return row?.src ?? null;
+}
+
+export async function deleteDraftRows(keys: string[]): Promise<void> {
+  if (!keys.length) return;
+  await run(PHOTOS, "readwrite", (t) => {
+    const s = t.objectStore(PHOTOS);
+    for (const k of keys) s.delete(DRAFT_PREFIX + k);
+  });
+}
+
+/** 删掉所有草稿行（提交识别以后、放弃这一批时） */
+export async function clearDraftRows(): Promise<void> {
+  await run(PHOTOS, "readwrite", (t) => {
+    t.objectStore(PHOTOS).delete(IDBKeyRange.bound(DRAFT_PREFIX, `${DRAFT_PREFIX}￿`));
+  });
+}

@@ -22,7 +22,8 @@ import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
-import Import from "./pages/Import";
+import ScanCamera from "./pages/scan/ScanCamera";
+import ScanArrange from "./pages/scan/ScanArrange";
 import Ranking from "./pages/Ranking";
 import RankDetail from "./pages/RankDetail";
 import Papers from "./pages/Papers";
@@ -188,7 +189,9 @@ export default function App() {
           <Route path="/papers/:folderId/:paperId" element={<Paper />} />
           <Route path="/papers/:folderId/:paperId/erase" element={<ErasePaper />} />
           <Route path="/capture" element={<Capture />} />
-          <Route path="/import" element={<Import />} />
+          <Route path="/scan" element={<ScanCamera />} />
+          <Route path="/scan/arrange" element={<ScanArrange />} />
+          <Route path="/import" element={<Navigate to="/scan/arrange" replace />} />
           <Route path="/rank/q/:index" element={<RankDetail />} />
           <Route path="/profile/subjects" element={<Subjects />} />
           <Route path="/profile/account" element={<Account />} />

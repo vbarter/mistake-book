@@ -1,22 +1,22 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { autoTargetFolder, toPage, type FullPage } from "../lib/folders";
+import { autoTargetFolder } from "../lib/folders";
 import { pickImages } from "../lib/native";
+import { canUseLiveCamera } from "../lib/scanCamera";
 import { toast, toastError } from "../store/banner";
 import { useCapture } from "../store/capture";
-import { useImport } from "../store/importer";
+import { addAlbumPages, startScan } from "../store/scan";
 import { Icon, type IconName } from "./Icon";
 import { Sheet } from "./ui";
 
 /**
- * 唯一的录入入口：拍照（一页一页拍）或从相册一次选多张（进批量导入页）。
+ * 唯一的录入入口：拍照（连拍扫描，见 pages/scan）或从相册一次选多张（进整理页）。
  * 不先问放哪个文件夹：传了 folderId 就放进去，没传就放进今天的文件夹（今天还没有就自动新建）。
  */
 export function useAddPaper(folderId?: string) {
   const nav = useNavigate();
   const { pathname } = useLocation();
   const { reset, setReturnTo } = useCapture();
-  const setImport = useImport((s) => s.set);
   const [open, setOpen] = useState(false);
 
   const target = async () => folderId ?? (await autoTargetFolder())?.id ?? null;
@@ -24,6 +24,11 @@ export function useAddPaper(folderId?: string) {
   const camera = async () => {
     setOpen(false);
     const f = await target();
+    // 连拍扫描：页面里开相机，实时框出试卷；用不了（老系统、个别 WebView）就走系统相机 + 确认页
+    if (canUseLiveCamera()) {
+      nav("/scan", { state: { folderId: f, from: pathname } });
+      return;
+    }
     reset();
     setReturnTo(pathname);
     nav("/capture", { state: { folderId: f, source: "camera" } });
@@ -35,11 +40,10 @@ export function useAddPaper(folderId?: string) {
       const list = await pickImages(0);
       if (!list.length) return;
       if (list.length > 3) toast(`正在读取 ${list.length} 张照片…`);
-      // 先做好小图：导入页的预览只显示小图，不同时解码一排原图
-      const pages: FullPage[] = [];
-      for (const src of list) pages.push(await toPage(src));
-      setImport(pages, await target(), pathname);
-      nav("/import");
+      // 和拍照一样进整理页：去掉不要的、分好哪几张是一份，再开始识别
+      startScan(await target(), pathname);
+      await addAlbumPages(list);
+      nav("/scan/arrange");
     } catch (e) {
       toastError((e as Error).message === "permission_denied" ? new Error("需要相册权限，可以在系统设置里打开") : e);
     }
