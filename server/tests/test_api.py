@@ -1663,3 +1663,59 @@ def test_book_passage_rows_pair_blanks_with_answers():
     assert _passage_chunks("(2)____，(2)____。(2)____。(2)____。(2)____。", answers[:5]) is None
     assert _passage_chunks(stem, answers[:3]) is None
     assert build_book_pdf("t", "s", [{"number": "1–12", "stem": stem, "knowledge": "古诗文", "answers": answers}]).startswith(b"%PDF")
+
+
+def test_baidu_chinese_paper_vertical_red_and_doubt():
+    """五年级语文卷（tests/fixtures）：竖格抄写的古诗被百度认成「床」「鑫」之类单字，略去并在末尾提示看照片；
+    老师红笔写的分数标 [红笔]；置信度低的印刷行标 [存疑]；竖格抄写区不当插图"""
+    import json
+    from pathlib import Path
+
+    from app.ai import ocr
+
+    here = Path(__file__).parent / "fixtures"
+    r = json.loads((here / "baidu_yuwen_doc.json").read_text(encoding="utf-8"))
+    data = (here / "yuwen.jpg").read_bytes()
+    page = ocr.baidu_page(r, ocr.image_size(data), data)
+    lines = page.text.splitlines()
+    for garbage in ("床", "鑫", "入", "王", "+今"):
+        assert garbage not in lines and f"[手写] {garbage}" not in lines and f"[存疑] {garbage}" not in lines
+    assert "【竖排文字】" in lines[-1] and "[0.49, 0.38, 0.83, 0.53]" in lines[-1]
+    assert "[红笔] 伴" in lines and "[红笔] 1" in lines
+    assert "[手写] 精巧" in lines and "[手写] 不可" in lines  # 学生黑笔照旧，红勾穿过也不算红笔
+    assert "[存疑] 平衡 千将发删(磨刀石)" in lines and "七夕今宵看碧霄," in lines
+    assert page.regions == [] and not any(line.startswith(ocr.FIGURE_TAG + "[") for line in lines)
+
+
+def test_baidu_boxed_poem_not_tagged_as_figure():
+    """版面分析把方框里的古诗标成 figure：三行以上成句的印刷字不加 [图中文字]，也不列成插图区域"""
+    from app.ai import ocr
+
+    def line(word, top):
+        return {"words_type": "print", "words": {"word": word, "words_location": {"left": 100, "top": top, "width": 200, "height": 30}}}
+
+    r = {
+        "results": [line("乞巧", 0), line("七夕今宵看碧霄，", 40), line("牵牛织女渡河桥。", 80), line("家家乞巧望秋月，", 120)],
+        "layouts": [{"layout": "figure", "layout_idx": [0, 1, 2, 3], "layout_location": [{"x": 90, "y": 0}, {"x": 320, "y": 160}]}],
+    }
+    page = ocr.baidu_page(r, (1000, 1000))
+    assert page.text.splitlines()[1] == "七夕今宵看碧霄，" and page.regions == []
+
+
+def test_upscale_for_ocr_small_photos_only():
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.ai import ocr
+
+    def jpg(w, h):
+        buf = BytesIO()
+        Image.new("RGB", (w, h), "white").save(buf, "JPEG")
+        return buf.getvalue()
+
+    small = ocr.upscale_for_ocr(jpg(700, 1568))
+    assert ocr.image_size(small) == (1200, 2688)
+    big = jpg(1300, 2000)
+    assert ocr.upscale_for_ocr(big) is big
+    assert ocr.upscale_for_ocr(b"not an image") == b"not an image"
