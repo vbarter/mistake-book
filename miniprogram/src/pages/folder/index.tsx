@@ -5,7 +5,7 @@ import { ErrorCard, jumpToError } from "../../components/ErrorCard";
 import { ExportSheet } from "../../components/ExportSheet";
 import { AddSheet } from "../../components/AddSheet";
 import { Icon } from "../../components/Icon";
-import { Button, Empty, ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Progress, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/ui";
+import { Button, Empty, ErrorFilterTags, IconSegmented, KnowledgeIcon, Progress, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/ui";
 import { SubjectPicker } from "../../components/SubjectPicker";
 import { ensureLogin } from "../../lib/auth";
 import { captureInto, type Source } from "../../lib/capture";
@@ -182,7 +182,6 @@ export default function FolderPage() {
                 )}
               </View>
             </View>
-            {p.scanJob && <Icon name="sparkles" size={20} color={C.brand} />}
             {!p.scanJob && q.warn && (
               <View className="quality-tag">
                 <Icon name="alert" size={13} color={C.accentOn} stroke={2.4} />
@@ -251,7 +250,6 @@ export default function FolderPage() {
         </View>
       )}
       {tree.pending.length > 0 && paperList(tree.pending)}
-      {folder.papers.length > 0 && <Hint>{scope ? "点一张试卷看电子版，长按可以排序、改名、改学科、删除；右边的刷子导出去掉作答的原题空白卷。" : "试卷扫描后按学科自动归档。点一张试卷看电子版，长按可以排序、改名、改学科、删除。"}</Hint>}
     </>
   );
 

@@ -141,7 +141,6 @@ export default function FolderDetail() {
             )}
           </span>
         </span>
-        {p.scanJob && <Icon name="sparkles" size={20} style={{ color: "var(--brand)" }} />}
         {!p.scanJob && paperQuality(p).warn && <span className="quality-tag"><Icon name="alert" size={13} stroke={2.4} />{paperQuality(p).label}</span>}
         <EraseButton busy={!!erasing[p.id] || !!p.eraseJob} disabled={!!p.scanJob} onClick={() => openErase(p)} />
         {st.scanned && <Outline sections={outlineOf(folder, p)} />}
@@ -208,12 +207,6 @@ export default function FolderDetail() {
       {scope && paperList(scopedPapers)}
       {tree.pending.length > 0 && (tree.subjects.length > 0 || scope) && pendingHead}
       {tree.pending.length > 0 && paperList(tree.pending)}
-      {folder.papers.length > 0 && (
-        <span className="t-foot c-sec" style={{ display: "flex", gap: 6, padding: "0 4px" }}>
-          <Icon name="info" size={14} stroke={2} style={{ flexShrink: 0, marginTop: 2 }} />
-          {scope ? "认错学科的试卷，点开后在右上角「…」里改学科。" : "试卷扫描后按学科自动归档；认错了可以点开试卷改学科。"}
-        </span>
-      )}
     </>
   );
 
