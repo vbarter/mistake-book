@@ -3,9 +3,11 @@ import { Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { Row } from "../../components/ui";
 import { currentUser, loginLabel, logout } from "../../lib/auth";
+import { useShare } from "../../lib/share";
 
 /** 账号与登录（和 App 的同名页面一致） */
 export default function Account() {
+  useShare();
   const user = useMemo(() => currentUser(), []);
   const doLogout = async () => {
     const m = await Taro.showModal({ title: "退出登录？", content: "本机的试卷和错题不会删除。", confirmText: "退出", confirmColor: "#b42323" });

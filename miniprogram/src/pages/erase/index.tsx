@@ -14,6 +14,7 @@ import { scanStageText } from "../../lib/jobs";
 import { validDigitized } from "../../lib/logic";
 import { getFolder } from "../../lib/store";
 import { C } from "../../lib/theme";
+import { useShare } from "../../lib/share";
 
 /**
  * 擦除手写 = 原题空白卷（和 App 一致）：题目用扫描识别出的文字重排（题干、选项、空位留白），作答、批改、得分都不要；
@@ -21,6 +22,7 @@ import { C } from "../../lib/theme";
  * 所以把有插图的照片放到服务器后台擦一遍手写，插图从擦过的照片里裁。
  */
 export default function ErasePage() {
+  useShare();
   const { params } = useRouter();
   const folderId = params.folderId ?? "";
   const paperId = params.paperId ?? "";

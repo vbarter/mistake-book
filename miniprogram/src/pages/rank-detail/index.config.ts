@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "错题详情", disableScroll: true });
+export default definePageConfig({ enableShareAppMessage: true, navigationBarTitleText: "错题详情", disableScroll: true });

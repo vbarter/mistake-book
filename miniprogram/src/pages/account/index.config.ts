@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "账号与登录" });
+export default definePageConfig({ enableShareAppMessage: true, navigationBarTitleText: "账号与登录" });

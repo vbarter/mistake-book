@@ -14,12 +14,15 @@ import { setRankView } from "../../lib/rankView";
 import { listFolders } from "../../lib/store";
 import { C } from "../../lib/theme";
 import type { Subject } from "../../lib/types";
+import { useShare, useShareTimelineToo } from "../../lib/share";
 
 /**
  * 分析 = 错题榜（和 App 一致）。顶部时间范围，下面学科页签和四个榜单切换，再下面是带名次的列表；点卡片进详情页，左右滑切换。
  * 易错指数由错题数量、是否真错、跨几份试卷、离现在多近算出（lib/ranks.ts），扫描完自动更新。
  */
 export default function Ranking() {
+  useShare();
+  useShareTimelineToo();
   useTabBar(2);
   const [version] = useDataVersion();
   const folders = useMemo(() => listFolders(), [version]);

@@ -14,6 +14,7 @@ import { getLastExportAt } from "../../lib/prefs";
 import { currentUser } from "../../lib/auth";
 import { listFolders } from "../../lib/store";
 import { C } from "../../lib/theme";
+import { useShare, useShareTimelineToo } from "../../lib/share";
 
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -22,6 +23,8 @@ const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
  * 导出按钮固定在 Tab 栏上方，知识点再多也不用滚到底才看得到。添加试卷走底栏中间的相机键。
  */
 export default function Home() {
+  useShare();
+  useShareTimelineToo();
   useTabBar(0);
   const [version, refresh] = useDataVersion();
   const [exporting, setExporting] = useState(false);

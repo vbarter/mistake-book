@@ -13,9 +13,12 @@ import { pollPendingJobs, scanStageText } from "../../lib/jobs";
 import { folderStats } from "../../lib/logic";
 import { deleteFolder, listFolders, moveFolder, saveFolder, type Folder } from "../../lib/store";
 import { C } from "../../lib/theme";
+import { useShare, useShareTimelineToo } from "../../lib/share";
 
 /** 试卷 Tab（和 App 一致）：一次考试一个文件夹，自动建、自动命名。添加试卷走底栏相机键，不用先选文件夹。 */
 export default function Papers() {
+  useShare();
+  useShareTimelineToo();
   useTabBar(1);
   const [version, refresh] = useDataVersion();
   const folders = useMemo(() => listFolders(), [version]);
