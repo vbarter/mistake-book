@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "登录", navigationStyle: "default" });
+export default definePageConfig({ enableShareAppMessage: true, navigationBarTitleText: "登录", navigationStyle: "default" });

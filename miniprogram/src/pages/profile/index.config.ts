@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationStyle: "custom", navigationBarTitleText: "我的" });
+export default definePageConfig({ enableShareAppMessage: true, enableShareTimeline: true, navigationStyle: "custom", navigationBarTitleText: "我的" });

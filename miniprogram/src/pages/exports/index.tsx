@@ -8,11 +8,13 @@ import { EXPORTS_EVENT, isPending, listExports, openExport, removeExport, type E
 import { formatDateTime } from "../../lib/format";
 import { toast } from "../../lib/hooks";
 import { C } from "../../lib/theme";
+import { useShare } from "../../lib/share";
 
 const sizeLabel = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
 /** 我的导出（和 App 一致）：最近 7 天在服务器上生成的错题本 / 电子试卷 / 空白卷，点一下下载打开；生成中的自动刷新。 */
 export default function Exports() {
+  useShare();
   const [items, setItems] = useState<ExportJob[] | null>(null);
 
   const refresh = async () => {

@@ -4,9 +4,11 @@ import Taro, { useUnload } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
 import { useMenuButton } from "../../components/ui";
 import { answerConfirm, confirmingSrc } from "../../lib/confirm";
+import { useShare } from "../../lib/share";
 
 /** 拍完照的全屏确认：黑底居中显示照片，左上 × 重拍，右上 ✓ 用这张，底下左转 / 右转把横着或倒着拍的试卷摆正（和 App 一致） */
 export default function ConfirmPage() {
+  useShare();
   const src = useMemo(() => confirmingSrc(), []);
   const mb = useMenuButton();
   const [turns, setTurns] = useState(0);

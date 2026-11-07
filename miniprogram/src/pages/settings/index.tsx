@@ -8,9 +8,11 @@ import { currentUser, ensureLogin, updateProfile } from "../../lib/auth";
 import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_GROUPS, SUBJECT_LABEL } from "../../lib/format";
 import { toast } from "../../lib/hooks";
 import type { Subject } from "../../lib/types";
+import { useShare } from "../../lib/share";
 
 /** 年级、城市与学科（和 App 的同名页面一致） */
 export default function Settings() {
+  useShare();
   const user = useMemo(() => currentUser(), []);
   const [grade, setGrade] = useState(user?.grade ?? "5");
   const [city, setCity] = useState<string>(() => (Taro.getStorageSync("zcb.city") as string) || "");

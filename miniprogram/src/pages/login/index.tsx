@@ -8,6 +8,7 @@ import { GRADE_LABEL, SUBJECTS, SUBJECT_LABEL } from "../../lib/format";
 import type { Subject } from "../../lib/types";
 import { SubjectTile } from "../../components/ui";
 import "./index.scss";
+import { useShare } from "../../lib/share";
 
 const GRADES = Object.keys(GRADE_LABEL);
 
@@ -22,6 +23,7 @@ function leave() {
  * 只在用户要扫描、导出等操作时打开（lib/auth 的 ensureLogin），随时可以「暂不登录」回去接着看。
  */
 export default function Login() {
+  useShare();
   const [grade, setGrade] = useState("7");
   const [subjects, setSubjects] = useState<Subject[]>(["math", "chinese", "english"]);
   const [nickname, setNickname] = useState("");

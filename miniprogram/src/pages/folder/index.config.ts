@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "文件夹" });
+export default definePageConfig({ enableShareAppMessage: true, navigationBarTitleText: "文件夹" });
