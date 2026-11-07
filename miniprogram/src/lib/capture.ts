@@ -36,7 +36,7 @@ async function scan(folderId: string, paperId: string, pages: FolderPage[]) {
   }
 }
 
-/** 拍照是连拍（和 App 一样）：每张拍完先全屏确认（× 重拍 / ✓ 用这张，可以左右转），确认后接着起相机，在相机里点取消才停。返回转正后的临时文件 */
+/** 拍照是连拍（和 App 一样）：每张拍完先全屏确认（上滑用这张 / 下滑重拍，可以左右转），确认后接着起相机，在相机里点取消才停。返回转正后的临时文件 */
 async function shootSeries(): Promise<string[]> {
   const shots: string[] = [];
   for (;;) {

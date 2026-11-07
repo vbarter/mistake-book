@@ -173,6 +173,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .thumb--sm { width: 34px; height: 44px; border-radius: 6px; }
 .thumb-wrap { position: relative; flex-shrink: 0; }
 .thumb-badge { position: absolute; right: -6px; bottom: -6px; box-shadow: 0 0 0 2px $card; }
+.subject-folder { position: relative; flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
 
 /* ---------- 学科方块 ---------- */
 .tile {
@@ -563,7 +564,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .erase__status { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; background: $brand-tint; color: $brand; font-size: 13px; }
 .erase__warn { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; background: $accent-bg; color: $accent-on; font-size: 13px; }
 
-/* ---------- 拍完照的确认：黑底照片，左上 × 重拍，右上 ✓ 用这张，底下左转 / 右转 ---------- */
+/* ---------- 拍完照的确认：黑底照片，上滑用这张、下滑重拍，底下左转 / 右转 ---------- */
 .confirm { position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: #000; display: flex; flex-direction: column; }
 .confirm__stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .confirm__img { transition: transform 0.25s ease; }
@@ -591,11 +592,9 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 @keyframes confirm-float { 0% { transform: translateY(6px); } 50% { transform: translateY(-4px); } 100% { transform: translateY(6px); } }
 @keyframes confirm-nudge { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-28px); } 55% { transform: translateY(0); } 70% { transform: translateY(-8px); } }
 @keyframes confirm-guide-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
-.confirm__tools { flex-shrink: 0; height: calc(88px + env(safe-area-inset-bottom)); padding: 0 12px env(safe-area-inset-bottom); display: flex; align-items: center; justify-content: center; gap: 12px; box-sizing: border-box; }
+.confirm__tools { flex-shrink: 0; height: calc(88px + env(safe-area-inset-bottom)); padding: 0 12px env(safe-area-inset-bottom); display: flex; align-items: center; justify-content: center; gap: 24px; box-sizing: border-box; }
 .confirm__tool { min-width: 92px; height: 48px; padding: 0 12px; display: flex; align-items: center; justify-content: center; gap: 4px; color: #fff; font-size: 15px; border-radius: 24px; background: rgba(255, 255, 255, 0.12); box-sizing: border-box; }
 .confirm__tool--hover { background: rgba(255, 255, 255, 0.24); }
-.confirm__ok { min-width: 112px; height: 52px; padding: 0 18px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #000; font-size: 16px; font-weight: 600; border-radius: 26px; background: #fff; box-sizing: border-box; }
-.confirm__ok--hover { background: rgba(255, 255, 255, 0.8); }
 
 /* ---------- 上传 / 处理中的 HUD ---------- */
 .hud { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 300; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.25); }

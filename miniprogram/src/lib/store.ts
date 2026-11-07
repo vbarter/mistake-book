@@ -26,7 +26,8 @@ export interface Paper {
   pages: FolderPage[];
   scannedAt?: string;
   digitized?: DigitizedResult;
-  subject?: Subject;
+  subject?: Subject; // 扫描时从卷头判断；决定这张试卷归进文件夹里的哪个学科子目录
+  subjectManual?: boolean; // 学科是用户手动选的：重新扫描不再用识别结果覆盖
   scanJob?: ScanJob;
   scanError?: string;
   gradedAt?: string;
@@ -232,13 +233,16 @@ export function moveFolder(id: string, dir: -1 | 1) {
   });
 }
 
-export function movePaper(folderId: string, paperId: string, dir: -1 | 1): Folder | undefined {
+/** 上移 / 下移一张试卷。within 是当前看到的那一组（某个学科子目录、或待归类）的试卷 id：只和组里相邻的那张换位置 */
+export function movePaper(folderId: string, paperId: string, dir: -1 | 1, within?: string[]): Folder | undefined {
   const folder = readFolder(folderId);
   if (!folder) return undefined;
   const papers = [...folder.papers];
   const i = papers.findIndex((p) => p.id === paperId);
-  const j = i + dir;
-  if (i < 0 || j < 0 || j >= papers.length) return folder;
+  const group = within ?? papers.map((p) => p.id);
+  const k = group.indexOf(paperId) + dir;
+  const j = k >= 0 && k < group.length ? papers.findIndex((p) => p.id === group[k]) : -1;
+  if (i < 0 || j < 0) return folder;
   [papers[i], papers[j]] = [papers[j], papers[i]];
   const next = { ...folder, papers };
   writeFolder(next);

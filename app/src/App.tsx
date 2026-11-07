@@ -103,7 +103,7 @@ export default function App() {
       try {
         const folder = target?.folderId ? await getFolder(target.folderId) : undefined;
         const paper = target?.paperId ? folder?.papers.find((p) => p.id === target.paperId) : undefined;
-        // 找回的照片也先全屏确认：× 不要这张，回到录入页直接再起相机重拍
+        // 找回的照片也先全屏确认：下滑不要这张，回到录入页直接再起相机重拍
         const confirmed = needsPhotoConfirm ? await confirmPhoto(dataUrl) : dataUrl;
         if (!confirmed) {
           const capture = useCapture.getState();

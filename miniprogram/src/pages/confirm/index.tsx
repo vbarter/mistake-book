@@ -7,7 +7,7 @@ import { answerConfirm, confirmingSrc } from "../../lib/confirm";
 import { useShare } from "../../lib/share";
 
 /**
- * 拍完照的全屏确认：黑底居中显示照片，底下一排「向左转 / ✓ 用这张 / 向右转」。
+ * 拍完照的全屏确认：黑底居中显示照片，底下一排「向左转 / 向右转」。没有确认按钮，靠上滑确认，照片下方有循环的上滑引导。
  * 右上角是微信的胶囊按钮（··· 和关闭），顶部不放任何按钮，只留出胶囊那一行的高度，免得误点到关闭。
  * 不要这张：在照片上往下滑（或系统返回）。
  * 手势：在照片上往上滑 = 用这张，往下滑 = 重拍。照片跟手移动，过了阈值有提示和轻震，松手飞出去；没过阈值弹回原位。
@@ -41,7 +41,7 @@ export default function ConfirmPage() {
       .catch(() => setSize({ w: 3, h: 4 }));
   }, [src]);
 
-  // 结果在页面关掉时才交回去：拍照流程接着要起相机，得等这一页退出以后。没点 × / ✓ 就离开（返回键、侧滑）当作不要这张
+  // 结果在页面关掉时才交回去：拍照流程接着要起相机，得等这一页退出以后。没上滑 / 下滑就离开（返回键、侧滑）当作不要这张
   const result = useRef<{ turns: number } | null>(null);
   useUnload(() => {
     answerConfirm(result.current);
@@ -165,10 +165,6 @@ export default function ConfirmPage() {
         <View className="confirm__tool" hoverClass="confirm__tool--hover" onClick={() => setTurns((t) => (t + 3) % 4)}>
           <Icon name="rotate" size={22} color="#ffffff" stroke={2} style={{ transform: "scaleX(-1)" }} />
           <Text>向左转</Text>
-        </View>
-        <View className="confirm__ok" hoverClass="confirm__ok--hover" onClick={() => done(true)}>
-          <Icon name="check" size={22} color="#000000" stroke={2.6} />
-          <Text>用这张</Text>
         </View>
         <View className="confirm__tool" hoverClass="confirm__tool--hover" onClick={() => setTurns((t) => (t + 1) % 4)}>
           <Icon name="rotate" size={22} color="#ffffff" stroke={2} />

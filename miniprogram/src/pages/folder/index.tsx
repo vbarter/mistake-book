@@ -5,7 +5,8 @@ import { ErrorCard, jumpToError } from "../../components/ErrorCard";
 import { ExportSheet } from "../../components/ExportSheet";
 import { AddSheet } from "../../components/AddSheet";
 import { Icon } from "../../components/Icon";
-import { Button, Empty, ErrorFilterTags, Hint, IconSegmented, KnowledgeIcon, Progress, Sheet, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, type ErrorFilter } from "../../components/ui";
+import { Button, Empty, ErrorFilterTags, IconSegmented, KnowledgeIcon, Progress, Stat, SubjectStack, SubjectTile, Tag, applyErrorFilter, subjectColors, type ErrorFilter } from "../../components/ui";
+import { SubjectPicker } from "../../components/SubjectPicker";
 import { ensureLogin } from "../../lib/auth";
 import { captureInto, type Source } from "../../lib/capture";
 import { folderErrors, groupByKnowledge, groupBySection, knowledgeKey, paperErrors } from "../../lib/errors";
@@ -13,31 +14,32 @@ import { C } from "../../lib/theme";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../../lib/format";
 import { toast, useDataVersion } from "../../lib/hooks";
 import { gradeIfNeeded, scanStageText, tagIfNeeded } from "../../lib/jobs";
-import { folderStats, paperQuality, paperStats, paperSubject } from "../../lib/logic";
+import { folderStats, paperQuality, paperStats, paperSubject, scopeFolder, subjectFolders } from "../../lib/logic";
 import { deleteFolder, deletePaper, getFolder, movePaper, saveFolder, updatePaper, type Folder, type Paper } from "../../lib/store";
 import type { Subject } from "../../lib/types";
 import { useShare } from "../../lib/share";
 
 type Tab = "papers" | "errors";
 
-/** 文件夹（和 App 一致）：「目录」是自动生成的试卷目录（序号 · 卷头标题 · 大题与错题数），「错题汇总」跨试卷合并、按知识点归类；底栏导出与加卷。 */
+/** 文件夹（和 App 一致）：「目录」是自动生成的试卷目录（序号 · 卷头标题 · 大题与错题数），「错题汇总」跨试卷合并、按知识点归类；底栏导出与加卷。
+ * 外层文件夹按扫描日期，里面的试卷扫描后按学科自动归进子目录（subject=math 就是只看数学这个子目录）；还没认出学科的放在「待归类」。 */
 export default function FolderPage() {
   useShare();
   const { params } = useRouter();
   const folderId = params.id ?? "";
+  const scope = (SUBJECTS as string[]).includes(params.subject ?? "") ? (params.subject as Subject) : null;
   const [version, refresh] = useDataVersion();
   const folder = useMemo(() => getFolder(folderId), [folderId, version]);
   const [tab, setTab] = useState<Tab>("papers");
   const [addSheet, setAddSheet] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [subject, setSubject] = useState<Subject | undefined>();
+  const [moving, setMoving] = useState<Paper | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<Subject | null>(null);
   const [filter, setFilter] = useState<ErrorFilter>("all");
 
   useEffect(() => {
-    if (folder) Taro.setNavigationBarTitle({ title: folder.name });
-  }, [folder?.name]);
+    if (folder) Taro.setNavigationBarTitle({ title: scope ? `${SUBJECT_LABEL[scope]} · ${folder.name}` : folder.name });
+  }, [folder?.name, scope]);
   // 有老师没批改的题：交给大模型补判（一张一张来）
   useEffect(() => {
     if (!folder) return;
@@ -49,14 +51,17 @@ export default function FolderPage() {
     })();
   }, [folder?.id]);
 
-  const stats = useMemo(() => (folder ? folderStats(folder) : null), [folder]);
-  const allErrors = useMemo(() => (folder ? folderErrors(folder) : []), [folder]);
+  // 子目录里：统计、目录、错题汇总、导出都只算这个学科的试卷
+  const view = useMemo(() => (folder ? scopeFolder(folder, scope) : null), [folder, scope]);
+  const tree = useMemo(() => (folder ? subjectFolders(folder) : null), [folder]);
+  const stats = useMemo(() => (view ? folderStats(view) : null), [view]);
+  const allErrors = useMemo(() => (view ? folderErrors(view) : []), [view]);
   const errorSubjects = useMemo(() => [...new Set(allErrors.map((e) => e.subject))], [allErrors]);
   const errors = useMemo(() => (subjectFilter && errorSubjects.includes(subjectFilter) ? allErrors.filter((e) => e.subject === subjectFilter) : allErrors), [allErrors, subjectFilter, errorSubjects]);
   const shown = useMemo(() => applyErrorFilter(errors, filter), [errors, filter]);
   const groups = useMemo(() => groupByKnowledge(shown), [shown]);
 
-  if (!folder || !stats) return <Empty title="文件夹不存在" />;
+  if (!folder || !stats || !view || !tree) return <Empty title="文件夹不存在" />;
 
   const add = async (source: Source) => {
     setAddSheet(false);
@@ -75,19 +80,29 @@ export default function FolderPage() {
     Taro.navigateTo({ url: `/pages/erase/index?folderId=${folder.id}&paperId=${p.id}` });
   };
 
-  const paperMenu = async (p: Paper) => {
+  /** 把一张试卷改到别的学科子目录（或识别不出学科时手动选）；之后重新扫描也不会被识别结果改回去 */
+  const moveTo = (p: Paper, sub: Subject) => {
+    setMoving(null);
+    if (paperSubject(p) === sub) return;
+    updatePaper(folder.id, p.id, { subject: sub, subjectManual: true });
+    toast(`已归到「${SUBJECT_LABEL[sub]}」`);
+    refresh();
+  };
+
+  const paperMenu = async (p: Paper, group: Paper[]) => {
     let r: { tapIndex: number };
     try {
-      r = await Taro.showActionSheet({ itemList: ["上移", "下移", "重命名", "删除"] });
+      r = await Taro.showActionSheet({ itemList: ["上移", "下移", "重命名", "改学科", "删除"] });
     } catch {
       return;
     }
-    if (r.tapIndex <= 1) movePaper(folder.id, p.id, r.tapIndex === 0 ? -1 : 1);
+    if (r.tapIndex <= 1) movePaper(folder.id, p.id, r.tapIndex === 0 ? -1 : 1, group.map((x) => x.id));
     if (r.tapIndex === 2) {
       const m = await Taro.showModal({ title: "试卷名称", editable: true, content: p.name });
       if (m.confirm && m.content?.trim()) updatePaper(folder.id, p.id, { name: m.content.trim().slice(0, 30) });
     }
-    if (r.tapIndex === 3) {
+    if (r.tapIndex === 3) return setMoving(p);
+    if (r.tapIndex === 4) {
       const m = await Taro.showModal({ title: "删除这张试卷？", content: "照片和电子版会一起删掉。", confirmText: "删除", confirmColor: "#b42323" });
       if (m.confirm) deletePaper(folder.id, p.id);
     }
@@ -97,7 +112,7 @@ export default function FolderPage() {
   const folderMenu = async () => {
     let r: { tapIndex: number };
     try {
-      r = await Taro.showActionSheet({ itemList: ["重命名", "改学科", "删除文件夹"] });
+      r = await Taro.showActionSheet({ itemList: ["重命名", "删除文件夹"] });
     } catch {
       return;
     }
@@ -107,10 +122,6 @@ export default function FolderPage() {
       refresh();
     }
     if (r.tapIndex === 1) {
-      setSubject(folder.subject ?? stats.subject ?? undefined);
-      setEditing(true);
-    }
-    if (r.tapIndex === 2) {
       const m = await Taro.showModal({ title: `删除「${folder.name}」？`, content: `会删掉里面 ${folder.papers.length} 张试卷的照片和电子版，不能恢复。`, confirmText: "删除", confirmColor: "#b42323" });
       if (m.confirm) {
         deleteFolder(folder.id);
@@ -120,22 +131,18 @@ export default function FolderPage() {
     }
   };
 
-  const papersTab = (
-    <>
-      {folder.papers.length === 0 && <Empty icon="document" title="还没有试卷" text="拍一张或从相册选，扫描后错题会自动汇总。" />}
-      {folder.papers.map((p, idx) => {
+  /** 一组试卷（某个学科子目录里的，或待归类的）：序号、上移下移都只在组里算 */
+  const paperList = (group: Paper[]) =>
+    group.map((p, idx) => {
         const st = paperStats(p);
         const q = paperQuality(p);
         const outline = st.scanned ? outlineOf(folder, p) : [];
         return (
-          <View key={p.id} className="card card--row" style={{ flexWrap: "wrap" }} hoverClass="card--pressed" onClick={() => openPaper(p)} onLongPress={() => paperMenu(p)}>
+          <View key={p.id} className="card card--row" style={{ flexWrap: "wrap" }} hoverClass="card--pressed" onClick={() => openPaper(p)} onLongPress={() => paperMenu(p, group)}>
             <Text className="toc-num num">{String(idx + 1).padStart(2, "0")}</Text>
             <Image className="thumb" src={p.pages[0]?.src} mode="aspectFill" />
             <View className="flex1 col gap4 minw0">
-              <View className="row-center gap6">
-                {paperSubject(p) && stats.subjects.length > 1 && <SubjectTile subject={paperSubject(p)} size="xs" />}
-                <Text className="t-headline ellipsis">{p.name}</Text>
-              </View>
+              <Text className="t-headline ellipsis">{p.name}</Text>
               <Text className="t-foot c-sec">
                 {p.pages.length} 张照片{st.scanned ? ` · ${st.total} 题` : ""} · {p.scannedAt ? `扫描于 ${formatDateTime(p.scannedAt)}` : `拍摄于 ${formatDate(p.createdAt)}`}
               </Text>
@@ -167,9 +174,14 @@ export default function FolderPage() {
                 ) : (
                   <Tag kind="pending">待扫描</Tag>
                 )}
+                {!p.scanJob && !p.scanError && st.scanned && !paperSubject(p) && (
+                  <View className="tag tag--accent" onClick={(e) => { e.stopPropagation(); setMoving(p); }}>
+                    <Icon name="folder" size={12} color="#fff" stroke={2.4} />
+                    <Text>选学科</Text>
+                  </View>
+                )}
               </View>
             </View>
-            {p.scanJob && <Icon name="sparkles" size={20} color={C.brand} />}
             {!p.scanJob && q.warn && (
               <View className="quality-tag">
                 <Icon name="alert" size={13} color={C.accentOn} stroke={2.4} />
@@ -193,8 +205,51 @@ export default function FolderPage() {
             )}
           </View>
         );
-      })}
-      {folder.papers.length > 0 && <Hint>点一张试卷看电子版，长按可以排序、改名、删除；右边的刷子导出去掉作答的原题空白卷。</Hint>}
+    });
+
+  const scopedPapers = scope ? view.papers : [];
+  const papersTab = (
+    <>
+      {folder.papers.length === 0 && <Empty icon="document" title="还没有试卷" text="拍一张或从相册选，扫描后会按学科自动归档，错题自动汇总。" />}
+      {!scope &&
+        tree.subjects.map(({ subject: sub, papers }) => {
+          const st = folderStats(scopeFolder(folder, sub));
+          const c = subjectColors(sub);
+          return (
+            <View key={sub} className="card card--row" hoverClass="card--pressed" onClick={() => Taro.navigateTo({ url: `/pages/folder/index?id=${folder.id}&subject=${sub}` })}>
+              <View className="subject-folder" style={{ background: c.bg }}>
+                <Icon name="folder" size={24} color={c.color} stroke={2} />
+                <SubjectTile subject={sub} size="xs" className="thumb-badge" style={{ position: "absolute" }} />
+              </View>
+              <View className="flex1 col gap4 minw0">
+                <Text className="t-headline">{SUBJECT_LABEL[sub]}</Text>
+                <Text className="t-foot c-sec ellipsis">
+                  {papers.length} 张试卷 · {papers.map((p) => p.name).slice(0, 2).join("、")}
+                  {papers.length > 2 ? " 等" : ""}
+                </Text>
+              </View>
+              {st.problems > 0 ? (
+                <Tag kind="wrong">
+                  {st.wrong} 错{st.blank ? ` · ${st.blank} 空` : ""}
+                </Tag>
+              ) : (
+                <Tag kind="correct" icon="check">
+                  无错题
+                </Tag>
+              )}
+              <Icon name="chevron-right" size={16} color={C.tertiary} stroke={2.4} />
+            </View>
+          );
+        })}
+      {scope && scopedPapers.length === 0 && tree.pending.length === 0 && <Empty icon="document" title={`这里没有${SUBJECT_LABEL[scope]}试卷了`} />}
+      {scope && paperList(scopedPapers)}
+      {tree.pending.length > 0 && (tree.subjects.length > 0 || scope) && (
+        <View className="row-center gap6" style={{ padding: "4px 4px 0" }}>
+          <Icon name="sparkles" size={14} color={C.brand} stroke={2.2} />
+          <Text className="t-foot c-sec">待归类 {tree.pending.length} · 扫描认出学科后自动放进对应的学科目录</Text>
+        </View>
+      )}
+      {tree.pending.length > 0 && paperList(tree.pending)}
     </>
   );
 
@@ -262,7 +317,7 @@ export default function FolderPage() {
                 {k} · {items.length} 题
               </Text>
               {items.map((i) => (
-                <ErrorCard key={i.key} item={i} showSource={folder.papers.length > 1} />
+                <ErrorCard key={i.key} item={i} showSource={view.papers.length > 1} />
               ))}
             </View>
           ))}
@@ -276,15 +331,21 @@ export default function FolderPage() {
       <View className="row-center gap12">
         {stats.subjects.length > 1 ? <SubjectStack subjects={stats.subjects} /> : <SubjectTile subject={stats.subject} size="lg" />}
         <View className="flex1 col gap4 minw0">
-          <Text className="t-title2 ellipsis xb">{folder.name}</Text>
+          <Text className="t-title2 ellipsis xb">{scope ? SUBJECT_LABEL[scope] : folder.name}</Text>
           <View className="row-center gap4">
-            <Icon name="pin" size={14} color={C.secondary} stroke={2} />
-            <Text className="t-foot c-sec ellipsis">{stats.exam || (stats.subject ? SUBJECT_LABEL[stats.subject] : "扫描后自动识别考试信息")}</Text>
+            <Icon name={scope ? "folder" : "pin"} size={14} color={C.secondary} stroke={2} />
+            <Text className="t-foot c-sec ellipsis">
+              {scope
+                ? `${folder.name}${stats.exam ? ` · ${stats.exam}` : ""}`
+                : stats.exam || (stats.subjects.length > 1 ? `${stats.subjects.length} 个学科 · 已按学科归档` : stats.subject ? SUBJECT_LABEL[stats.subject] : "扫描后自动识别考试信息，按学科归档")}
+            </Text>
           </View>
         </View>
-        <View className="icon-btn" onClick={folderMenu}>
-          <Icon name="ellipsis" size={24} color={C.brand} />
-        </View>
+        {!scope && (
+          <View className="icon-btn" onClick={folderMenu}>
+            <Icon name="ellipsis" size={24} color={C.brand} />
+          </View>
+        )}
       </View>
       <View className="stats">
         <Stat label="错题" value={stats.wrong} icon="xcircle" color={C.wrong} />
@@ -305,25 +366,15 @@ export default function FolderPage() {
 
       <AddSheet open={addSheet} onClose={() => setAddSheet(false)} onPick={add} />
 
-      <Sheet open={editing} onClose={() => setEditing(false)} title="文件夹学科">
-        <View className="row-wrap" style={{ gap: "8px" }}>
-          {SUBJECTS.map((s) => (
-            <View key={s} className={`chip${subject === s ? " chip--on" : ""}`} onClick={() => setSubject(subject === s ? undefined : s)}>
-              <SubjectTile subject={s} size="xs" />
-              <Text>{SUBJECT_LABEL[s]}</Text>
-            </View>
-          ))}
-        </View>
-        <Button onClick={() => { saveFolder({ ...folder, subject }); setEditing(false); refresh(); }}>保存</Button>
-      </Sheet>
+      <SubjectPicker paper={moving} onClose={() => setMoving(null)} onPick={(sub) => moving && moveTo(moving, sub)} />
 
       <ExportSheet
         open={exporting}
         onClose={() => setExporting(false)}
-        title={subjectFilter ? `${folder.name} · ${SUBJECT_LABEL[subjectFilter]}` : folder.name}
+        title={scope || subjectFilter ? `${folder.name} · ${SUBJECT_LABEL[(scope ?? subjectFilter)!]}` : folder.name}
         subtitle={stats.syllabus ? `按${stats.syllabus}归类` : stats.exam}
         errors={errors}
-        papers={subjectFilter ? folder.papers.filter((p) => paperSubject(p) === subjectFilter) : folder.papers}
+        papers={subjectFilter ? view.papers.filter((p) => paperSubject(p) === subjectFilter) : view.papers}
       />
     </View>
   );
