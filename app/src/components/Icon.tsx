@@ -6,9 +6,15 @@ export type IconName =
   | "lock" | "export" | "search" | "refresh" | "warning" | "seal" | "target" | "chart" | "book" | "sun" | "info"
   | "viewfinder" | "loop" | "family" | "shield" | "brain"
   | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation"
-  | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "eye" | "eye-off" | "rotate";
+  | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "eye" | "eye-off" | "rotate"
+  | "bolt" | "bolt-off" | "undo" | "corners" | "link";
 
 const paths: Record<IconName, string> = {
+  bolt: "M13 3 5 13.5h6l-1 7.5 8-10.5h-6z",
+  "bolt-off": "M13 3 5 13.5h6l-1 7.5 8-10.5h-6zM3 3l18 18",
+  undo: "M9 7 4.5 11.5 9 16M4.5 11.5H15a4.5 4.5 0 0 1 0 9h-3",
+  corners: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
+  link: "M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1",
   eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
   "eye-off": "M3 3l18 18M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7c1.9 0 3.6-.6 5-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2",
   // 学科图标
