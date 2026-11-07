@@ -7,9 +7,9 @@ import { answerConfirm, confirmingSrc } from "../../lib/confirm";
 import { useShare } from "../../lib/share";
 
 /**
- * 拍完照的全屏确认：黑底居中显示照片，左上 × 重拍，底下一排「向左转 / ✓ 用这张 / 向右转」。
- * 右上角是微信的胶囊按钮（··· 和关闭），✓ 放那儿会和胶囊叠在一起、误点到关闭，所以确认挪到底部操作区；
- * 顶栏只留 ×，和胶囊同一行垂直对齐，右侧给胶囊让位。
+ * 拍完照的全屏确认：黑底居中显示照片，底下一排「向左转 / ✓ 用这张 / 向右转」。
+ * 右上角是微信的胶囊按钮（··· 和关闭），顶部不放任何按钮，只留出胶囊那一行的高度，免得误点到关闭。
+ * 不要这张：在照片上往下滑（或系统返回）。
  * 手势：在照片上往上滑 = 用这张，往下滑 = 重拍。照片跟手移动，过了阈值有提示和轻震，松手飞出去；没过阈值弹回原位。
  */
 /** 顶栏在胶囊上下各多留的高度；底部操作区高度（和 .confirm__tools 一致） */
@@ -132,11 +132,7 @@ export default function ConfirmPage() {
   return (
     <View className="confirm" catchMove>
       <View style={{ height: `${barTop}px` }} />
-      <View className="confirm__bar" style={{ height: `${barH}px`, paddingRight: `${mb.right}px` }}>
-        <View className="confirm__btn" hoverClass="confirm__btn--hover" onClick={() => done(false)}>
-          <Icon name="xmark" size={28} color="#ffffff" stroke={2.2} />
-        </View>
-      </View>
+      <View style={{ height: `${barH}px` }} />
       <View className="confirm__stage" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
         <View className={`confirm__drag confirm__drag--${drag}${!touched && drag === "idle" ? " confirm__drag--nudge" : ""}`} style={dragStyle}>
           {src && <Image className="confirm__img" src={src} mode="scaleToFill" style={{ ...box, transform: `rotate(${turns * 90}deg)` }} />}
@@ -161,7 +157,7 @@ export default function ConfirmPage() {
               <Icon className="confirm__chev confirm__chev--3" name="chevron-up" size={22} color="#ffffff" stroke={2.6} />
             </View>
             <Text className="confirm__guide-text">上滑用这张</Text>
-            <Text className="confirm__guide-sub">下滑重拍</Text>
+            <Text className="confirm__guide-sub">↓ 下滑重拍</Text>
           </View>
         )}
       </View>
