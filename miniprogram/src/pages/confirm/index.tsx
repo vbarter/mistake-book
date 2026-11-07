@@ -6,7 +6,15 @@ import { useMenuButton } from "../../components/ui";
 import { answerConfirm, confirmingSrc } from "../../lib/confirm";
 import { useShare } from "../../lib/share";
 
-/** 拍完照的全屏确认：黑底居中显示照片，左上 × 重拍，右上 ✓ 用这张，底下左转 / 右转把横着或倒着拍的试卷摆正（和 App 一致） */
+/**
+ * 拍完照的全屏确认：黑底居中显示照片，左上 × 重拍，底下一排「向左转 / ✓ 用这张 / 向右转」。
+ * 右上角是微信的胶囊按钮（··· 和关闭），✓ 放那儿会和胶囊叠在一起、误点到关闭，所以确认挪到底部操作区；
+ * 顶栏只留 ×，和胶囊同一行垂直对齐，右侧给胶囊让位。
+ */
+/** 顶栏在胶囊上下各多留的高度；底部操作区高度（和 .confirm__tools 一致） */
+const BAR_PAD = 12;
+const TOOLS_H = 88;
+
 export default function ConfirmPage() {
   useShare();
   const src = useMemo(() => confirmingSrc(), []);
@@ -41,7 +49,9 @@ export default function ConfirmPage() {
 
   // 照片框：转了奇数次时宽高对调，按转过以后的样子塞进可用区域
   const stageW = sys.windowWidth;
-  const stageH = sys.windowHeight - (mb.top + 72) - 72 - (sys.safeArea ? sys.screenHeight - sys.safeArea.bottom : 0);
+  const barTop = Math.max(0, mb.top - BAR_PAD);
+  const barH = mb.height + BAR_PAD * 2;
+  const stageH = sys.windowHeight - (barTop + barH) - TOOLS_H - (sys.safeArea ? sys.screenHeight - sys.safeArea.bottom : 0);
   const odd = turns % 2 === 1;
   const box = size
     ? (() => {
@@ -52,13 +62,10 @@ export default function ConfirmPage() {
 
   return (
     <View className="confirm" catchMove>
-      <View style={{ height: `${mb.top}px` }} />
-      <View className="confirm__bar">
+      <View style={{ height: `${barTop}px` }} />
+      <View className="confirm__bar" style={{ height: `${barH}px`, paddingRight: `${mb.right}px` }}>
         <View className="confirm__btn" hoverClass="confirm__btn--hover" onClick={() => done(false)}>
-          <Icon name="xmark" size={30} color="#ffffff" stroke={2.2} />
-        </View>
-        <View className="confirm__btn" hoverClass="confirm__btn--hover" onClick={() => done(true)}>
-          <Icon name="check" size={32} color="#ffffff" stroke={2.4} />
+          <Icon name="xmark" size={28} color="#ffffff" stroke={2.2} />
         </View>
       </View>
       <View className="confirm__stage">
@@ -66,11 +73,15 @@ export default function ConfirmPage() {
       </View>
       <View className="confirm__tools">
         <View className="confirm__tool" hoverClass="confirm__tool--hover" onClick={() => setTurns((t) => (t + 3) % 4)}>
-          <Icon name="rotate" size={24} color="#ffffff" stroke={2} style={{ transform: "scaleX(-1)" }} />
+          <Icon name="rotate" size={22} color="#ffffff" stroke={2} style={{ transform: "scaleX(-1)" }} />
           <Text>向左转</Text>
         </View>
+        <View className="confirm__ok" hoverClass="confirm__ok--hover" onClick={() => done(true)}>
+          <Icon name="check" size={22} color="#000000" stroke={2.6} />
+          <Text>用这张</Text>
+        </View>
         <View className="confirm__tool" hoverClass="confirm__tool--hover" onClick={() => setTurns((t) => (t + 1) % 4)}>
-          <Icon name="rotate" size={24} color="#ffffff" stroke={2} />
+          <Icon name="rotate" size={22} color="#ffffff" stroke={2} />
           <Text>向右转</Text>
         </View>
       </View>
