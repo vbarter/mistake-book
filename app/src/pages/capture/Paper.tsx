@@ -10,11 +10,13 @@ import { releaseFigureSources } from "../../lib/figures";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet } from "../../components/ui";
 import { ErrorFilterTags, Hint, IconSegmented, Tag, applyErrorFilter, type ErrorFilter } from "../../components/v2";
-import { formatDateTime } from "../../lib/format";
+import { SUBJECT_LABEL, formatDateTime } from "../../lib/format";
 import { groupBySection, paperErrors } from "../../lib/errors";
-import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperStats, thumbOf, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
+import { autoMark, deletePaper, getFolder, isUnreadable, paperQuality, paperSubject, paperStats, thumbOf, updatePaper, validDigitized, type Folder, type Paper as PaperRecord } from "../../lib/folders";
 import { gradeIfNeeded, isGrading, notDuplicate, printIfNeeded, scanStageText, tagIfNeeded, useJobs } from "../../lib/jobs";
 import { useCapture } from "../../store/capture";
+import { SubjectPicker } from "../../components/SubjectPicker";
+import { toast } from "../../store/banner";
 import "../../styles/paper.css";
 
 type Tab = "paper" | "answers" | "errors";
@@ -43,6 +45,7 @@ export default function Paper() {
   const [folder, setFolder] = useState<Folder | null | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("paper");
   const [menu, setMenu] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const [rename, setRename] = useState(false);
   const [name, setName] = useState("");
@@ -251,8 +254,11 @@ export default function Paper() {
         <Button variant="tinted" icon="refresh" onClick={rescan}>重新扫描 / 改照片</Button>
         <Button variant="tinted" icon="photo" onClick={() => { setMenu(false); setShowOriginal((v) => !v); setTab("paper"); }}>{showOriginal ? "收起原图" : "查看原图"}</Button>
         <Button variant="tinted" icon="pencil" onClick={() => { setMenu(false); setName(paper.name); setRename(true); }}>重命名</Button>
+        <Button variant="tinted" icon="folder" onClick={() => { setMenu(false); setPicking(true); }}>改学科{paperSubject(paper) ? `（现在：${SUBJECT_LABEL[paperSubject(paper)!]}）` : ""}</Button>
         <Button variant="danger" icon="trash" onClick={() => { setMenu(false); setConfirmDelete(true); }}>删除这张试卷</Button>
       </Sheet>
+
+      <SubjectPicker paper={picking ? paper : null} onClose={() => setPicking(false)} onPick={async (sub) => { setPicking(false); await updatePaper(folderId, paperId, { subject: sub, subjectManual: true }); toast(`已归到「${SUBJECT_LABEL[sub]}」`, "success"); await reload(); }} />
 
       <Sheet open={rename} onClose={() => setRename(false)} title="试卷名称">
         <input className="input" autoFocus value={name} maxLength={30} onChange={(e) => setName(e.target.value)} />

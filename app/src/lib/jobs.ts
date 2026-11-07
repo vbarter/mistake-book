@@ -2,8 +2,7 @@
 import { create } from "zustand";
 import { api } from "../api/client";
 import type { DigitizeJob, DigitizedQuestion, DigitizedResult } from "../api/types";
-import { autoMark, getFolder, isDefaultFolderName, isDefaultPaperName, isProblem, isUnreadable, listFolders, loadPages, recognizedTitle, updateFolder, updatePaper, validDigitized, type Folder, type FullPage, type Paper } from "./folders";
-import { SUBJECT_LABEL } from "./format";
+import { autoMark, getFolder, isDefaultPaperName, isProblem, isUnreadable, listFolders, loadPages, recognizedTitle, updatePaper, validDigitized, type Folder, type FullPage, type Paper } from "./folders";
 import { isNative, prepareUpload, type UploadPart } from "./native";
 import { getCity } from "./prefs";
 import { findPaperMatch } from "./dedup";
@@ -52,18 +51,14 @@ async function finishJob(folderId: string, paperId: string, job: DigitizeJob, pa
   // 扫描时间取服务器上任务完成的时刻（切到后台很久才拿到结果，也记真实的扫描时间）
   const scannedAt = (job.status === "done" && job.updatedAt) || new Date().toISOString();
   const digitized: DigitizedResult = { ...remapParts(result, parts), provider: result.provider, at: scannedAt };
-  const subject = digitized.pages.find((s) => s.subject)?.subject;
-  // 自动归档：试卷名换成识别出的卷头标题，文件夹名补上学科和考试类型（用户改过的名字不动）
   const before = (await getFolder(folderId))?.papers.find((p) => p.id === paperId);
+  // 自动归档：试卷按识别出的学科进文件夹里的学科子目录（用户手动选过学科的不动），试卷名换成识别出的卷头标题（用户改过的名字不动）
+  const subject = before?.subjectManual && before.subject ? before.subject : digitized.pages.find((s) => s.subject)?.subject;
   const title = recognizedTitle(digitized);
   const name = before && isDefaultPaperName(before.name) && title ? title : undefined;
   await updatePaper(folderId, paperId, { digitized, scannedAt, corrected: {}, subject, scanJob: undefined, scanError: undefined, gradedAt: undefined, taggedAt: undefined, printedAt: scannedAt, duplicateOf: undefined, keepDuplicate: undefined, ...(name ? { name } : {}) });
   await markDuplicate(folderId, paperId);
-  const folder = await getFolder(folderId);
-  if (!folder) return;
-  const level = digitized.pages.find((s) => s.examLevel)?.examLevel ?? "";
-  const rename = isDefaultFolderName(folder.name) && subject ? `${folder.name.replace(/ 试卷$/, "")} ${SUBJECT_LABEL[subject]}${level ? ` · ${level}` : ""}` : null;
-  if ((!folder.subject && subject) || rename) await updateFolder(folderId, { subject: folder.subject ?? subject, name: rename ?? folder.name });
+  // 外层文件夹名保持扫描日期（「11月7日 试卷」），学科体现在子目录上，不再把文件夹改名成某一科
 }
 
 /** 压缩、上传、提交任务，任务号存到试卷上。返回时服务器已经在后台跑了。 */
