@@ -150,6 +150,7 @@ BAIDU_PARAMS = {
     "recg_formula": "true",  # 公式识别为 LaTeX
     "detect_direction": "true",
     "layout_analysis": "true",  # 返回分栏（sections），用来把两栏 / 对页的行按阅读顺序排
+    "line_probability": "true",  # 每行置信度 words.line_probability = {min, average}（单字的拿不到）
 }
 
 
@@ -177,6 +178,100 @@ def _baidu_doc_analysis(data: bytes, timeout: float) -> dict:
 
 FIGURE_TAG = "[图中文字]"
 FIGURE_LAYOUTS = {"figure": "插图", "table": "表格"}
+RED_TAG = "[红笔] "
+DOUBT_TAG = "[存疑] "  # 印刷行里最没把握的字置信度低于 DOUBT_BELOW：多半有生僻字、形近字或声调认错了
+DOUBT_BELOW = 0.65  # 手写行里红笔占多数：多半是老师的批改、分数，不是学生作答
+
+# 竖排：行框高是宽的这么多倍以上（还要比横排行高很多）。百度 doc_analysis 只按横排识别，竖格抄写的古诗会被认成一两个怪字
+VERTICAL_RATIO = 2.5
+VERTICAL_NOTE = "【竖排文字】照片上这些位置有竖排书写（多为竖格抄写古诗、竖排诗文，从右往左按列读），OCR 识别不了已略去，请直接看照片逐列转写："
+# 照片短边小于这个像素就先放大再送 OCR：App 上传最长边 1568，竖拍的一页卷子短边只有七百来像素，小字和手写认不出
+UPSCALE_BELOW = 1200
+UPSCALE_MAX = 2.0
+
+
+def _box(item: dict) -> tuple[float, float, float, float] | None:
+    loc = (item.get("words") or {}).get("words_location") or {}
+    try:
+        return float(loc["left"]), float(loc["top"]), float(loc["width"]), float(loc["height"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _line_min_prob(words: dict) -> float:
+    try:
+        return float((words.get("line_probability") or {}).get("min", 1.0))
+    except (TypeError, ValueError, AttributeError):
+        return 1.0
+
+
+def _vertical_lines(results: list) -> set[int]:
+    """行框又高又窄、明显比横排行高得多的行：竖排文字。没有坐标就不判断。"""
+    boxes = {i: _box(item) for i, item in enumerate(results)}
+    flat = sorted(b[3] for b in boxes.values() if b and b[2] >= b[3])
+    if not flat:
+        return set()
+    line_h = flat[len(flat) // 2]
+    return {i for i, b in boxes.items() if b and b[3] >= VERTICAL_RATIO * max(b[2], 1.0) and b[3] >= 3 * line_h}
+
+
+def _red_lines(results: list, rgb) -> set[int]:
+    """手写行里墨迹以红色为主的行（老师的分数、勾叉、批注）。rgb 是 numpy HxWx3 数组，没有就不判断。"""
+    if rgb is None:
+        return set()
+    import numpy as np
+
+    h, w = rgb.shape[:2]
+    out: set[int] = set()
+    for i, item in enumerate(results):
+        if item.get("words_type") != "handwriting":
+            continue
+        b = _box(item)
+        if not b:
+            continue
+        x0, y0 = max(0, int(b[0])), max(0, int(b[1]))
+        x1, y1 = min(w, int(b[0] + b[2])), min(h, int(b[1] + b[3]))
+        if x1 - x0 < 2 or y1 - y0 < 2:
+            continue
+        px = rgb[y0:y1, x0:x1].astype(np.int16)
+        gray = px.mean(axis=2)
+        ink = gray < np.percentile(gray, 90) - 40  # 比框里的纸面暗得多的像素算笔迹
+        red = ink & (px[..., 0] - np.maximum(px[..., 1], px[..., 2]) > 12)  # 黑笔、铅笔这项几乎是 0，照片里的红笔一般 15–35
+        n_ink, n_red = int(ink.sum()), int(red.sum())
+        if n_red >= 20 and n_red >= 0.4 * n_ink:  # 红笔勾穿过学生字迹时占比远低于这个
+            out.add(i)
+    return out
+
+
+def _rgb(data: bytes | None):
+    if not data:
+        return None
+    try:
+        import numpy as np
+        from PIL import Image
+
+        with Image.open(io.BytesIO(data)) as im:
+            return np.asarray(im.convert("RGB"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def upscale_for_ocr(data: bytes) -> bytes:
+    """短边不到 UPSCALE_BELOW 像素的照片放大（最多 2 倍、长边不超过 4000）再送百度；放大失败原样返回。
+    实测这样百度能多认出手写词（如「悲痛」「同心」）、少把印刷生僻字认错。坐标随之放大，换算 0–1 时用放大后的尺寸。"""
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(data)) as im:
+            w, h = im.size
+            f = min(UPSCALE_MAX, UPSCALE_BELOW / max(1, min(w, h)), 4000 / max(1, max(w, h)))
+            if f <= 1.05:
+                return data
+            buf = io.BytesIO()
+            im.convert("RGB").resize((round(w * f), round(h * f)), Image.LANCZOS).save(buf, "JPEG", quality=92)
+            return buf.getvalue()
+    except Exception:  # noqa: BLE001
+        return data
 
 
 @dataclass
@@ -221,11 +316,25 @@ def _baidu_order(r: dict) -> list[list[int]]:
     return groups
 
 
-def _figure_lines(r: dict) -> dict[int, str]:
+def _fake_figure(lay: dict, results: list, vertical: set[int]) -> bool:
+    """版面分析标成插图、其实是文字的区域：含竖排行（竖格抄写区），或者是三行以上成句的印刷文字（方框里的古诗、短文）。
+    这种区域的行不加 [图中文字]，也不当插图区域列出，不然大模型会把整首诗塞进 figure。表格不算。"""
+    if lay.get("layout") != "figure":
+        return False
+    idx = [i for i in lay.get("layout_idx") or [] if isinstance(i, int) and 0 <= i < len(results)]
+    if any(i in vertical for i in idx):
+        return True
+    sentences = [i for i in idx if results[i].get("words_type") != "handwriting" and len(str((results[i].get("words") or {}).get("word") or "").strip()) >= 5]
+    return len(sentences) >= 3 and len(sentences) * 2 >= len(idx)
+
+
+def _figure_lines(r: dict, vertical: set[int] | None = None) -> dict[int, str]:
     """版面分析里落在插图 / 表格里的行 → 该行的前缀"""
+    results = r.get("results") or []
+    vertical = _vertical_lines(results) if vertical is None else vertical
     out: dict[int, str] = {}
     for lay in r.get("layouts") or []:
-        if lay.get("layout") in FIGURE_LAYOUTS:
+        if lay.get("layout") in FIGURE_LAYOUTS and not _fake_figure(lay, results, vertical):
             for i in lay.get("layout_idx") or []:
                 if isinstance(i, int):
                     out[i] = FIGURE_TAG
@@ -237,11 +346,13 @@ def baidu_regions(r: dict, size: tuple[int, int] | None) -> list[dict]:
     if not size:
         return []
     w, h = size
+    results = r.get("results") or []
+    vertical = _vertical_lines(results)
     out = []
     for lay in r.get("layouts") or []:
         kind = lay.get("layout")
         pts = lay.get("layout_location") or []
-        if kind not in FIGURE_LAYOUTS or len(pts) < 2:
+        if kind not in FIGURE_LAYOUTS or len(pts) < 2 or _fake_figure(lay, results, vertical):
             continue
         xs = [float(p.get("x", 0)) for p in pts]
         ys = [float(p.get("y", 0)) for p in pts]
@@ -253,8 +364,9 @@ def baidu_regions(r: dict, size: tuple[int, int] | None) -> list[dict]:
     return out
 
 
-def baidu_page(r: dict, size: tuple[int, int] | None = None) -> OcrPage:
-    text = baidu_lines(r)
+def baidu_page(r: dict, size: tuple[int, int] | None = None, image: bytes | None = None) -> OcrPage:
+    """image 是送去识别的那张图（用来判断红笔行），size 是它的尺寸"""
+    text = baidu_lines(r, _rgb(image), size)
     regions = baidu_regions(r, size)
     if regions:
         listing = "\n".join(f"- {FIGURE_LAYOUTS[g['kind']]}{i + 1}：{g['bbox']}" for i, g in enumerate(regions))
@@ -266,29 +378,46 @@ def baidu_page(r: dict, size: tuple[int, int] | None = None) -> OcrPage:
     return OcrPage(text=text, direction=direction, regions=regions)
 
 
-def baidu_lines(r: dict) -> str:
-    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀，落在插图 / 表格里的行加 [图中文字] 前缀；没有 results 时退回 words_result。"""
+def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
+    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]），
+    印刷行置信度低的加 [存疑]，
+    落在插图 / 表格里的行加 [图中文字] 前缀；竖排的行认不出，略去并在末尾列出位置；没有 results 时退回 words_result。"""
     results = r.get("results") or []
-    in_figure = _figure_lines(r)
+    vertical = _vertical_lines(results)
+    in_figure = _figure_lines(r, vertical)
+    red = _red_lines(results, rgb)
     chunks: list[str] = []
     for group in _baidu_order(r):
         lines: list[str] = []
         for i in group:
+            if i in vertical:
+                continue
             item = results[i]
             words = item.get("words") or {}
             word = str(words.get("word") or "").strip()
             if word:
-                lines.append(in_figure.get(i, "") + (HANDWRITING_TAG if item.get("words_type") == "handwriting" else "") + word)
+                if item.get("words_type") == "handwriting":
+                    tag = RED_TAG if i in red else HANDWRITING_TAG
+                else:
+                    tag = DOUBT_TAG if _line_min_prob(words) < DOUBT_BELOW else ""
+                lines.append(in_figure.get(i, "") + tag + word)
         if lines:
             chunks.append("\n".join(lines))
     if not chunks:
         lines = [str(item.get("words") or "").strip() for item in r.get("words_result") or []]
         chunks = ["\n".join(w for w in lines if w)] if any(lines) else []
+    if vertical:
+        boxes = [_box(results[i]) for i in sorted(vertical)]
+        x0, y0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
+        x1, y1 = max(b[0] + b[2] for b in boxes), max(b[1] + b[3] for b in boxes)
+        where = f"约 [{x0 / size[0]:.2f}, {y0 / size[1]:.2f}, {x1 / size[0]:.2f}, {y1 / size[1]:.2f}]（相对整张照片）" if size else "照片中竖排的格子里"
+        chunks.append(f"{VERTICAL_NOTE}{where}，OCR 在这里检测到 {len(vertical)} 处")
     return "\n\n".join(chunks)
 
 
 def _baidu_ocr(data: bytes, timeout: float) -> OcrPage:
-    return baidu_page(_baidu_doc_analysis(data, timeout), image_size(data))
+    data = upscale_for_ocr(data)
+    return baidu_page(_baidu_doc_analysis(data, timeout), image_size(data), data)
 
 
 # ---------- 对外 ----------
@@ -363,4 +492,5 @@ def line_boxes(data: bytes, timeout: float = 60.0) -> dict | None:
     没配置返回 None，调用失败抛 OCRError。"""
     if not configured("baidu"):
         return None
+    data = upscale_for_ocr(data)
     return baidu_line_boxes(_baidu_doc_analysis(data, timeout), image_size(data))
