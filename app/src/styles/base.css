@@ -164,59 +164,100 @@ textarea.input { resize: none; }
 .consent__read > * { flex-shrink: 0; }
 .consent__actions { display: flex; flex-direction: column; }
 
-/* 拍完照的全屏确认：黑底居中显示照片，左上 × 重拍，右上 ✓ 加入队列 */
+/* 拍完照的全屏确认（和小程序一致）：黑底照片，上滑用这张、下滑重拍，底下左转 / 右转 */
 .photo-confirm {
   position: fixed;
   inset: 0;
   z-index: 900;
   background: #000;
   display: flex;
+  flex-direction: column;
+  padding: calc(var(--safe-top) + 24px) 0 var(--safe-bottom);
+  animation: photo-confirm-in .18s ease-out;
+  touch-action: none;
+}
+.photo-confirm__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(var(--safe-top) + 72px) 0 calc(var(--safe-bottom) + 72px);
-  animation: photo-confirm-in .18s ease-out;
+  overflow: hidden;
 }
+.photo-confirm__drag {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.photo-confirm__drag--back { transition: transform .2s ease-out, opacity .2s ease-out; }
+.photo-confirm__drag--fly { transition: transform .2s ease-in, opacity .2s ease-in; }
+/* 进来后照片轻轻往上探两下，示意可以往上推 */
+.photo-confirm__drag--nudge { animation: photo-confirm-nudge 1.4s ease-in-out .6s 2; }
 .photo-confirm__img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
+  pointer-events: none;
 }
-.photo-confirm__bar {
+.photo-confirm__hint {
   position: absolute;
-  top: var(--safe-top);
-  left: 0;
-  right: 0;
-  height: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 36px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-}
-.photo-confirm__btn {
-  width: 56px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  gap: 6px;
+  border-radius: 18px;
   color: #fff;
-  border-radius: 28px;
+  font-size: 15px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, .18);
+  white-space: nowrap;
+  pointer-events: none;
 }
-.photo-confirm__btn:active { background: rgba(255, 255, 255, .16); }
-.photo-confirm__tools {
+.photo-confirm__hint--up { top: 12px; }
+.photo-confirm__hint--down { bottom: 12px; }
+.photo-confirm__hint--ok { background: #fff; color: #000; }
+.photo-confirm__hint--no { background: #c0392b; }
+.photo-confirm__guide {
   position: absolute;
-  bottom: var(--safe-bottom);
-  left: 0;
-  right: 0;
-  height: 72px;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  padding: 10px 22px 8px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, .45);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  animation: photo-confirm-guide-in .4s ease-out both;
+}
+.photo-confirm__chevrons { height: 42px; width: 22px; display: flex; flex-direction: column; align-items: center; animation: photo-confirm-float 1.6s ease-in-out infinite; }
+.photo-confirm__chev { flex-shrink: 0; opacity: .2; animation: photo-confirm-chev 1.6s ease-in-out infinite; }
+.photo-confirm__chev + .photo-confirm__chev { margin-top: -12px; }
+.photo-confirm__chev--1 { animation-delay: .4s; }
+.photo-confirm__chev--2 { animation-delay: .2s; }
+.photo-confirm__chev--3 { animation-delay: 0s; }
+.photo-confirm__guide-text { margin-top: 4px; font-size: 14px; font-weight: 600; }
+.photo-confirm__guide-sub { margin-top: 3px; font-size: 12px; color: rgba(255, 255, 255, .75); }
+.photo-confirm__tools {
+  flex-shrink: 0;
+  height: 88px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 28px;
+  gap: 24px;
 }
 .photo-confirm__tool {
-  min-width: 88px;
+  min-width: 92px;
   height: 48px;
   padding: 0 14px;
   display: flex;
@@ -229,5 +270,9 @@ textarea.input { resize: none; }
   background: rgba(255, 255, 255, .12);
 }
 .photo-confirm__tool:active { background: rgba(255, 255, 255, .24); }
-.photo-confirm__tool:disabled, .photo-confirm__btn:disabled { opacity: .5; }
+.photo-confirm__tool:disabled { opacity: .5; }
 @keyframes photo-confirm-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes photo-confirm-chev { 0%, 100% { opacity: .2; } 30% { opacity: 1; } 60% { opacity: .2; } }
+@keyframes photo-confirm-float { 0% { transform: translateY(6px); } 50% { transform: translateY(-4px); } 100% { transform: translateY(6px); } }
+@keyframes photo-confirm-nudge { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-28px); } 55% { transform: translateY(0); } 70% { transform: translateY(-8px); } }
+@keyframes photo-confirm-guide-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }

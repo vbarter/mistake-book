@@ -1,5 +1,5 @@
 /**
- * 拍完照的全屏确认（和 App 的 PhotoConfirm 一样）：左上 × 不要这张、重拍；右上 ✓ 用这张；底下左转 / 右转把横着拍的试卷摆正。
+ * 拍完照的全屏确认（和 App 的 PhotoConfirm 一样）：上滑用这张、下滑重拍；底下左转 / 右转把横着拍的试卷摆正。
  * 拍照流程里 await confirmPhoto(临时文件) 拿到用户的选择，界面是 pages/confirm。
  */
 import Taro from "@tarojs/taro";

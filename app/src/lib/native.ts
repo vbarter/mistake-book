@@ -70,7 +70,7 @@ export async function pickImage(source: "camera" | "photos", target?: { folderId
 export const needsPhotoConfirm = Capacitor.getPlatform() !== "ios";
 
 /**
- * 拍一张并确认：拍完先全屏预览，可以左转 / 右转摆正；点 × 放弃这张、直接再起相机重拍；点 ✓ 返回这张照片（转过就是转正的）。在相机里点取消返回 null。
+ * 拍一张并确认：拍完先全屏预览，可以左转 / 右转摆正；下滑放弃这张、直接再起相机重拍；上滑返回这张照片（转过就是转正的）。在相机里点取消返回 null。
  * 只用于拍照；相册多选不走确认。
  */
 export async function takePhoto(target?: { folderId: string | null; paperId: string | null }): Promise<string | null> {
