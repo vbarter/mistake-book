@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "试卷" });
+export default definePageConfig({ enableShareAppMessage: true, navigationBarTitleText: "试卷" });

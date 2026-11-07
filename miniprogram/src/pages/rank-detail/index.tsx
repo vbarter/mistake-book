@@ -8,6 +8,7 @@ import { allErrors, type ErrorItem } from "../../lib/errors";
 import { getRankView } from "../../lib/rankView";
 import { listFolders } from "../../lib/store";
 import { C } from "../../lib/theme";
+import { useShare } from "../../lib/share";
 
 /** 只渲染当前这张和左右各 NEAR 张：整张榜上百题一起画，插图同时裁图很占内存（和 App 一样的做法） */
 const NEAR = 1;
@@ -17,6 +18,7 @@ const NEAR = 1;
  * 每张顶部是名次、所属知识点和易错指数，下面是原题、作答、正确答案和解析。
  */
 export default function RankDetail() {
+  useShare();
   const { params } = useRouter();
   const { title, entries } = useMemo(() => getRankView(), []);
   const [current, setCurrent] = useState(Number(params.index) || 0);

@@ -16,11 +16,13 @@ import { gradeIfNeeded, scanStageText, tagIfNeeded } from "../../lib/jobs";
 import { folderStats, paperQuality, paperStats, paperSubject } from "../../lib/logic";
 import { deleteFolder, deletePaper, getFolder, movePaper, saveFolder, updatePaper, type Folder, type Paper } from "../../lib/store";
 import type { Subject } from "../../lib/types";
+import { useShare } from "../../lib/share";
 
 type Tab = "papers" | "errors";
 
 /** 文件夹（和 App 一致）：「目录」是自动生成的试卷目录（序号 · 卷头标题 · 大题与错题数），「错题汇总」跨试卷合并、按知识点归类；底栏导出与加卷。 */
 export default function FolderPage() {
+  useShare();
   const { params } = useRouter();
   const folderId = params.id ?? "";
   const [version, refresh] = useDataVersion();

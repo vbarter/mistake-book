@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "原题空白卷" });
+export default definePageConfig({ enableShareAppMessage: true, navigationBarTitleText: "原题空白卷" });

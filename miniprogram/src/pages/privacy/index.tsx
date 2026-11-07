@@ -4,9 +4,11 @@ import Taro from "@tarojs/taro";
 import { Row } from "../../components/ui";
 import { toast, useDataVersion } from "../../lib/hooks";
 import { clearAllFolders, listFolders } from "../../lib/store";
+import { useShare } from "../../lib/share";
 
 /** 隐私与数据（和 App 的同名页面一致），底部可以清空本应用数据 */
 export default function Privacy() {
+  useShare();
   const [version, refresh] = useDataVersion();
   const folders = useMemo(() => listFolders(), [version]);
   const papers = folders.reduce((n, f) => n + f.papers.length, 0);

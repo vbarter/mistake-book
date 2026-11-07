@@ -15,11 +15,13 @@ import { gradeIfNeeded, isGrading, notDuplicate, printIfNeeded, scanStageText, t
 import { autoMark, paperQuality, paperStats, validDigitized } from "../../lib/logic";
 import { mathPlain } from "../../lib/math";
 import { deletePaper, getFolder, updatePaper } from "../../lib/store";
+import { useShare } from "../../lib/share";
 
 type Tab = "paper" | "answers" | "errors";
 
 /** 一张试卷的电子版：「试卷」干净原题，「作答」逐空对照，「错题」按试卷顺序 */
 export default function PaperPage() {
+  useShare();
   const { params } = useRouter();
   const folderId = params.folderId ?? "";
   const paperId = params.paperId ?? "";

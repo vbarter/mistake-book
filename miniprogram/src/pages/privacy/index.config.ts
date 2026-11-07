@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "隐私与数据" });
+export default definePageConfig({ enableShareAppMessage: true, navigationBarTitleText: "隐私与数据" });
