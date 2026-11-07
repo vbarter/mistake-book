@@ -57,6 +57,8 @@ export default function ConfirmPage() {
   // 上滑用这张 / 下滑重拍
   const [dy, setDy] = useState(0);
   const [drag, setDrag] = useState<"idle" | "drag" | "back" | "fly">("idle");
+  // 用户第一次上下拖过以后就不再显示上滑引导动画
+  const [touched, setTouched] = useState(false);
   const touch = useRef<{ x: number; y: number; t: number; lastY: number; lastT: number; armed: boolean; vertical: boolean | null } | null>(null);
   const threshold = Math.max(SWIPE_MIN, Math.round(sys.windowHeight * 0.12));
 
@@ -84,6 +86,7 @@ export default function ConfirmPage() {
     if (armed && !t.armed) void Taro.vibrateShort({ type: "light" }).catch(() => undefined);
     t.armed = armed;
     setDrag("drag");
+    setTouched(true);
     setDy(ddy);
   };
   const onTouchEnd = () => {
@@ -135,7 +138,7 @@ export default function ConfirmPage() {
         </View>
       </View>
       <View className="confirm__stage" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
-        <View className={`confirm__drag confirm__drag--${drag}`} style={dragStyle}>
+        <View className={`confirm__drag confirm__drag--${drag}${!touched && drag === "idle" ? " confirm__drag--nudge" : ""}`} style={dragStyle}>
           {src && <Image className="confirm__img" src={src} mode="scaleToFill" style={{ ...box, transform: `rotate(${turns * 90}deg)` }} />}
         </View>
         {hint === "up" && (
@@ -150,7 +153,17 @@ export default function ConfirmPage() {
             <Text>{armed ? "松手重拍" : "继续下滑重拍"}</Text>
           </View>
         )}
-        {drag === "idle" && <Text className="confirm__tip">上滑用这张 · 下滑重拍</Text>}
+        {!touched && (
+          <View className="confirm__guide">
+            <View className="confirm__chevrons">
+              <Icon className="confirm__chev confirm__chev--1" name="chevron-up" size={22} color="#ffffff" stroke={2.6} />
+              <Icon className="confirm__chev confirm__chev--2" name="chevron-up" size={22} color="#ffffff" stroke={2.6} />
+              <Icon className="confirm__chev confirm__chev--3" name="chevron-up" size={22} color="#ffffff" stroke={2.6} />
+            </View>
+            <Text className="confirm__guide-text">上滑用这张</Text>
+            <Text className="confirm__guide-sub">下滑重拍</Text>
+          </View>
+        )}
       </View>
       <View className="confirm__tools">
         <View className="confirm__tool" hoverClass="confirm__tool--hover" onClick={() => setTurns((t) => (t + 3) % 4)}>

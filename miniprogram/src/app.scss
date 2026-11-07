@@ -579,7 +579,21 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .confirm__hint--down { bottom: 12px; }
 .confirm__hint--ok { background: #fff; color: #000; }
 .confirm__hint--no { background: #c0392b; }
-.confirm__tip { position: absolute; bottom: 6px; left: 0; right: 0; text-align: center; font-size: 12px; color: rgba(255, 255, 255, 0.5); pointer-events: none; }
+.confirm__guide { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); padding: 10px 22px 8px; border-radius: 20px; background: rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; align-items: center; pointer-events: none; animation: confirm-guide-in 0.4s ease-out both; }
+.confirm__chevrons { position: relative; height: 42px; width: 22px; display: flex; flex-direction: column; align-items: center; animation: confirm-float 1.6s ease-in-out infinite; }
+.confirm__chev { animation: confirm-chev 1.6s ease-in-out infinite; opacity: 0.2; }
+.confirm__chev + .confirm__chev { margin-top: -12px; }
+.confirm__chev--1 { animation-delay: 0.4s; }
+.confirm__chev--2 { animation-delay: 0.2s; }
+.confirm__chev--3 { animation-delay: 0s; }
+.confirm__guide-text { margin-top: 4px; font-size: 14px; font-weight: 600; color: #fff; }
+.confirm__guide-sub { margin-top: 2px; font-size: 11px; color: rgba(255, 255, 255, 0.55); }
+/* 进页面后照片轻轻往上探两下，示意可以往上推 */
+.confirm__drag--nudge { animation: confirm-nudge 1.4s ease-in-out 0.6s 2; }
+@keyframes confirm-chev { 0%, 100% { opacity: 0.2; } 30% { opacity: 1; } 60% { opacity: 0.2; } }
+@keyframes confirm-float { 0% { transform: translateY(6px); } 50% { transform: translateY(-4px); } 100% { transform: translateY(6px); } }
+@keyframes confirm-nudge { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-28px); } 55% { transform: translateY(0); } 70% { transform: translateY(-8px); } }
+@keyframes confirm-guide-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .confirm__tools { flex-shrink: 0; height: calc(88px + env(safe-area-inset-bottom)); padding: 0 12px env(safe-area-inset-bottom); display: flex; align-items: center; justify-content: center; gap: 12px; box-sizing: border-box; }
 .confirm__tool { min-width: 92px; height: 48px; padding: 0 12px; display: flex; align-items: center; justify-content: center; gap: 4px; color: #fff; font-size: 15px; border-radius: 24px; background: rgba(255, 255, 255, 0.12); box-sizing: border-box; }
 .confirm__tool--hover { background: rgba(255, 255, 255, 0.24); }
