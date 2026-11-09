@@ -14,6 +14,7 @@ export default defineAppConfig({
     "pages/settings/index",
     "pages/privacy/index",
     "pages/account/index",
+    "pages/bind-phone/index",
   ],
   window: {
     backgroundTextStyle: "dark",

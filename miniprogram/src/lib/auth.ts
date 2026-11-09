@@ -109,3 +109,22 @@ export async function updateProfile(patch: Record<string, unknown>): Promise<Use
   setUser(u);
   return u;
 }
+
+/** 绑定手机号：先发验证码。registered = 这个号码已经有账号（比如在 App 里注册过），绑定时要合并 */
+export async function sendBindCode(phone: string): Promise<{ registered: boolean; devCode?: string }> {
+  const r = await api<{ registered?: boolean; devCode?: string }>("/api/auth/code", { method: "POST", body: { phone, purpose: "bind", allowMerge: true } });
+  return { registered: Boolean(r.registered), devCode: r.devCode };
+}
+
+/**
+ * 绑定手机号（验证码，或微信「手机号快速验证」的 code）。号码已有账号时 merge = true 把当前账号并进去，
+ * 返回的是那个账号（token 换成它的），之后用微信或手机号登录都是同一个账号、同一份试卷。
+ */
+export async function bindPhone(body: { phone: string; code: string } | { wxCode: string }, merge = false): Promise<User> {
+  const res = "wxCode" in body
+    ? await api<{ user: User; token?: string }>("/api/auth/bind/wechat-phone", { method: "POST", body: { code: body.wxCode, merge } })
+    : await api<{ user: User; token?: string }>("/api/auth/bind", { method: "POST", body: { ...body, merge } });
+  if (res.token) setToken(res.token);
+  setUser(res.user);
+  return res.user;
+}

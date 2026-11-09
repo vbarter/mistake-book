@@ -55,6 +55,16 @@ class Config:
     # 知识图谱标注：识别完后把错题交给大模型挑图谱里的知识点 id（数据见 app/data/taxonomy.json）。默认关
     TAXONOMY_TAGGING = os.getenv("TAXONOMY_TAGGING", "0") == "1"
 
+    # 云同步：文件夹、试卷、电子版存 MySQL（sync_* 表），照片存对象存储。SYNC_ENABLED=0 时同步接口返回 503，客户端只存本机
+    SYNC_ENABLED = os.getenv("SYNC_ENABLED", "1") == "1"
+    # 照片存储：cos（腾讯云对象存储）| local（服务器磁盘 UPLOAD_DIR/sync）；留空自动：COS 四项配置齐了用 cos
+    STORAGE_PROVIDER = os.getenv("STORAGE_PROVIDER", "").strip()
+    COS_SECRET_ID = os.getenv("COS_SECRET_ID", "").strip()
+    COS_SECRET_KEY = os.getenv("COS_SECRET_KEY", "").strip()
+    COS_REGION = os.getenv("COS_REGION", "ap-shanghai").strip()
+    COS_BUCKET = os.getenv("COS_BUCKET", "").strip()  # 带 APPID 后缀的完整桶名，如 zhicuoben-data-1250000000
+    SYNC_URL_EXPIRES = int(os.getenv("SYNC_URL_EXPIRES", "900"))  # 上传 / 下载签名链接有效期（秒）
+
     MAX_CROPS_PER_RECOGNIZE = 6
     MAX_PAGES_PER_SCAN = 100  # 前端不限照片张数；宽幅照片会拆成左右两张上传，这里只防滥用
     DAILY_REVIEW_LIMIT = 20
