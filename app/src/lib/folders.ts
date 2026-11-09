@@ -371,8 +371,13 @@ export function createFolder(name: string, subject?: Subject): Promise<Folder> {
   return locked(() => newFolder(name, subject));
 }
 
-/** 清空本机全部文件夹、试卷照片和电子版（账号不受影响） */
+/** 清空全部文件夹、试卷照片和电子版（账号不受影响）；用户主动清空，云同步会把删除也推上去（见 lib/sync.ts 的防误删） */
 export function clearAllFolders(): Promise<void> {
+  try {
+    localStorage.setItem("zcb.sync.bulkDelete", String(Date.now()));
+  } catch {
+    /* 存不了就只清本机 */
+  }
   return locked(async () => {
     await ready();
     await run([STORE, PHOTOS], "readwrite", (t) => {

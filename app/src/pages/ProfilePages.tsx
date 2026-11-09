@@ -206,7 +206,7 @@ export function Account() {
 
         <section className="acct__section acct__section--end">
           <button className="acct__logout" onClick={() => setConfirm(true)}>退出登录</button>
-          <p className="acct__foot acct__foot--center">{user?.loginMethod === "guest" ? "游客账号退出后本机数据无法再访问，建议先绑定。" : "已同步的试卷保存在云端，换个账号登录时这台设备上会换成那个账号的试卷。"}</p>
+          <p className="acct__foot acct__foot--center">{user?.loginMethod === "guest" ? "游客账号退出后本机数据无法再访问，建议先绑定。" : "退出后本机的试卷不会删除，已同步的也保存在云端。"}</p>
           <button className="acct__delete" onClick={() => setDeleting(true)}>注销账号</button>
         </section>
       </div>

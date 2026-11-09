@@ -209,6 +209,7 @@ function removePhotos(paper: Paper) {
 
 /** 清空本机全部文件夹、试卷照片、电子版和裁好的插图（账号和学习设置不受影响） */
 export function clearAllFolders() {
+  Taro.setStorageSync("zcb.sync.bulkDelete", Date.now()); // 用户主动清空：云同步放行这次批量删除（lib/sync.ts 防误删）
   for (const id of readIndex()) deleteFolder(id);
   writeIndex([]);
   const fs = Taro.getFileSystemManager();

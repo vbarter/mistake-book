@@ -7,8 +7,8 @@
  * 3. 照片：原图、缩略图、擦除版传到对象存储（服务器签的临时链接直传）；别的设备上传的下载回来。
  * 冲突由服务器裁决（新的赢），输了就用服务器给的版本覆盖本机。错题不单独同步：错题榜、汇总都由试卷电子版现算。
  *
- * 换账号：这台设备上次同步的是另一个账号时，本机数据属于那个账号（已在云端），先清掉本机再拉当前账号的；
- * 从没同步过（升级前的数据、没登录时拍的）就并进当前账号。
+ * 兼容老版本：升级后第一次（登录状态下打开 App 时）在后台静默同步一次，本机已有的试卷全部传上去，本机数据一条不删。
+ * 换账号登录时同样不删本机数据：本机已有的试卷并进当前账号。
  */
 import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
@@ -17,7 +17,6 @@ import { ApiError, api, getApiBase } from "../api/client";
 import { useAuth } from "../store/auth";
 import {
   FOLDERS_CHANGED_EVENT,
-  clearAllFolders,
   erasedKey,
   getFolder,
   hasPhoto,
@@ -33,6 +32,21 @@ import {
 import { useJobs } from "./jobs";
 
 const STATE_KEY = "zcb.sync";
+
+/**
+ * 防误删：一次要推的删除超过 10 条、又超过已同步记录的一半，多半是本机存储读不出来（不是用户删的），
+ * 这时不推删除、只记日志；用户在「清空本应用数据」里主动清空时会先打开 BULK_DELETE_KEY 放行一次。
+ */
+export const BULK_DELETE_KEY = "zcb.sync.bulkDelete";
+function takeBulkDelete(): boolean {
+  try {
+    const at = Number(localStorage.getItem(BULK_DELETE_KEY) || 0);
+    localStorage.removeItem(BULK_DELETE_KEY);
+    return Date.now() - at < 86400_000;
+  } catch {
+    return false;
+  }
+}
 const PAPER_META = ["scannedAt", "gradedAt", "taggedAt", "printedAt", "duplicateOf", "notDuplicateOf", "keepDuplicate"] as const;
 const PUSH_ITEMS = 150;
 const PUSH_BYTES = 2 * 1024 * 1024;
@@ -254,9 +268,20 @@ async function collect(s: State): Promise<Outgoing> {
       });
     });
   }
-  for (const id of Object.keys(s.f)) if (!seen.f.has(id)) out.folders.push({ id, deleted: true, updatedAt: now, baseRev: s.f[id][1] });
-  for (const id of Object.keys(s.p)) if (!seen.p.has(id)) out.papers.push({ id, deleted: true, updatedAt: now, baseRev: s.p[id][1] });
-  for (const id of Object.keys(s.g)) if (!seen.g.has(id)) out.pages.push({ id, deleted: true, updatedAt: now, baseRev: s.g[id][1] });
+  const gone = {
+    folders: Object.keys(s.f).filter((id) => !seen.f.has(id)).map((id) => ({ id, deleted: true, updatedAt: now, baseRev: s.f[id][1] })),
+    papers: Object.keys(s.p).filter((id) => !seen.p.has(id)).map((id) => ({ id, deleted: true, updatedAt: now, baseRev: s.p[id][1] })),
+    pages: Object.keys(s.g).filter((id) => !seen.g.has(id)).map((id) => ({ id, deleted: true, updatedAt: now, baseRev: s.g[id][1] })),
+  };
+  const n = gone.folders.length + gone.papers.length + gone.pages.length;
+  const known = Object.keys(s.f).length + Object.keys(s.p).length + Object.keys(s.g).length;
+  if (n > 10 && n > known / 2 && !takeBulkDelete()) {
+    console.warn(`[sync] 本机少了 ${n} 条记录（共 ${known} 条），不像是用户删的，这次不推删除`);
+    return out;
+  }
+  out.folders.push(...gone.folders);
+  out.papers.push(...gone.papers);
+  out.pages.push(...gone.pages);
   return out;
 }
 
@@ -467,12 +492,8 @@ async function runOnce() {
   }
   setStatus({ state: "running", error: undefined });
   let s = await readState();
-  if (s && s.owner !== user.id) {
-    // 这台设备上次同步的是另一个账号：本机数据属于它（已在云端），清掉再拉当前账号的
-    await clearAllFolders();
-    s = null;
-  }
-  s ??= fresh(user.id);
+  // 第一次同步（老版本升级上来）或换了账号：从头来，本机已有的数据全部当新的推给当前账号，不删本机任何东西
+  if (!s || s.owner !== user.id) s = fresh(user.id);
   try {
     await push(s);
     if (await pull(s)) useJobs.getState().bump();

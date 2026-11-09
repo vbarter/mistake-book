@@ -8,6 +8,7 @@
  * 冲突由服务器裁决（新的赢），输了就用服务器给的版本覆盖本机。错题不单独同步：错题榜、汇总都由试卷电子版现算。
  *
  * 小程序的本地缓存按微信号隔离，所以本机的数据都是这个微信用户的；第一次登录（或换了账号）时把本机全部数据并进当前账号。
+ * 兼容老版本：升级后第一次打开（已登录）在后台静默同步一次，本机已有的试卷全部传上去，本机数据一条不删。
  */
 import Taro from "@tarojs/taro";
 import { ApiError, api } from "./api";
@@ -29,6 +30,21 @@ import {
 } from "./store";
 
 const STATE_KEY = "zcb.sync";
+
+/**
+ * 防误删：一次要推的删除超过 10 条、又超过已同步记录的一半，多半是本机存储读不出来（不是用户删的），
+ * 这时不推删除、只记日志；用户在「清空本应用数据」里主动清空时会先打开 BULK_DELETE_KEY 放行一次。
+ */
+export const BULK_DELETE_KEY = "zcb.sync.bulkDelete";
+function takeBulkDelete(): boolean {
+  try {
+    const at = Number(Taro.getStorageSync(BULK_DELETE_KEY) || 0);
+    Taro.removeStorageSync(BULK_DELETE_KEY);
+    return Date.now() - at < 86400_000;
+  } catch {
+    return false;
+  }
+}
 export const SYNC_EVENT = "sync";
 const PAPER_META = ["scannedAt", "gradedAt", "taggedAt", "printedAt", "duplicateOf", "notDuplicateOf", "keepDuplicate"] as const;
 const PUSH_ITEMS = 150;
@@ -273,9 +289,20 @@ function collect(s: State): Outgoing {
     });
   }
   // 本机已经没有、上次同步过的：推删除。文件夹删了服务器会连带删里面的，不用再逐条推
-  for (const id of Object.keys(s.f)) if (!seen.f.has(id)) out.folders.push({ id, deleted: true, updatedAt: now, baseRev: s.f[id][1] });
-  for (const id of Object.keys(s.p)) if (!seen.p.has(id)) out.papers.push({ id, deleted: true, updatedAt: now, baseRev: s.p[id][1] });
-  for (const id of Object.keys(s.g)) if (!seen.g.has(id)) out.pages.push({ id, deleted: true, updatedAt: now, baseRev: s.g[id][1] });
+  const gone = {
+    folders: Object.keys(s.f).filter((id) => !seen.f.has(id)).map((id) => ({ id, deleted: true, updatedAt: now, baseRev: s.f[id][1] })),
+    papers: Object.keys(s.p).filter((id) => !seen.p.has(id)).map((id) => ({ id, deleted: true, updatedAt: now, baseRev: s.p[id][1] })),
+    pages: Object.keys(s.g).filter((id) => !seen.g.has(id)).map((id) => ({ id, deleted: true, updatedAt: now, baseRev: s.g[id][1] })),
+  };
+  const n = gone.folders.length + gone.papers.length + gone.pages.length;
+  const known = Object.keys(s.f).length + Object.keys(s.p).length + Object.keys(s.g).length;
+  if (n > 10 && n > known / 2 && !takeBulkDelete()) {
+    console.warn(`[sync] 本机少了 ${n} 条记录（共 ${known} 条），不像是用户删的，这次不推删除`);
+    return out;
+  }
+  out.folders.push(...gone.folders);
+  out.papers.push(...gone.papers);
+  out.pages.push(...gone.pages);
   return out;
 }
 
