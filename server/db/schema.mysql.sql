@@ -190,3 +190,78 @@ CREATE TABLE IF NOT EXISTS usage_events (
 -- 已有库升级：管理后台按账号认人（用 root 执行）
 -- ALTER TABLE users ADD COLUMN apple_name VARCHAR(64) NULL COMMENT 'Apple 首次授权给的姓名' AFTER wx_openid, ADD COLUMN apple_email VARCHAR(128) NULL COMMENT 'Apple identityToken 里的邮箱' AFTER apple_name;
 -- ALTER TABLE mistakes ADD COLUMN topic_id VARCHAR(24) NULL COMMENT '知识图谱知识点 id' AFTER knowledge_points, ADD KEY ix_mistakes_topic_id (topic_id);
+
+-- 云同步：文件夹 → 试卷 → 照片（id 是客户端生成的；时间字段是客户端 ISO 字符串；rev 是账号内递增的版本号；deleted 是删除标记）
+CREATE TABLE IF NOT EXISTS sync_state (
+  user_id VARCHAR(32) NOT NULL,
+  rev     BIGINT      NOT NULL DEFAULT 0 COMMENT '这个账号的同步版本号，每写一条同步记录 +1',
+  PRIMARY KEY (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云同步：账号版本号';
+
+CREATE TABLE IF NOT EXISTS sync_folders (
+  id                VARCHAR(32)  NOT NULL,
+  user_id           VARCHAR(32)  NOT NULL,
+  name              VARCHAR(120) NULL,
+  subject           VARCHAR(16)  NULL,
+  sort_order        INT          NULL,
+  created_at        VARCHAR(32)  NULL,
+  updated_at        VARCHAR(32)  NULL,
+  rev               BIGINT       NOT NULL DEFAULT 0,
+  deleted           TINYINT(1)   NOT NULL DEFAULT 0,
+  server_updated_at DATETIME     NULL,
+  PRIMARY KEY (id),
+  KEY ix_sync_folders_user_id (user_id),
+  KEY ix_sync_folders_user_rev (user_id, rev),
+  KEY ix_sync_folders_server_updated_at (server_updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云同步：文件夹';
+
+CREATE TABLE IF NOT EXISTS sync_papers (
+  id                VARCHAR(32)  NOT NULL,
+  user_id           VARCHAR(32)  NOT NULL,
+  folder_id         VARCHAR(32)  NOT NULL,
+  name              VARCHAR(120) NULL,
+  subject           VARCHAR(16)  NULL,
+  subject_manual    TINYINT(1)   NULL,
+  position          INT          NULL,
+  meta              JSON         NULL     COMMENT 'scannedAt / gradedAt / taggedAt / printedAt / duplicateOf / notDuplicateOf / keepDuplicate',
+  digitized         LONGTEXT     NULL     COMMENT '电子版 JSON',
+  digitized_hash    VARCHAR(16)  NULL,
+  created_at        VARCHAR(32)  NULL,
+  updated_at        VARCHAR(32)  NULL,
+  rev               BIGINT       NOT NULL DEFAULT 0,
+  deleted           TINYINT(1)   NOT NULL DEFAULT 0,
+  server_updated_at DATETIME     NULL,
+  PRIMARY KEY (id),
+  KEY ix_sync_papers_user_id (user_id),
+  KEY ix_sync_papers_folder_id (folder_id),
+  KEY ix_sync_papers_user_rev (user_id, rev),
+  KEY ix_sync_papers_server_updated_at (server_updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云同步：试卷';
+
+CREATE TABLE IF NOT EXISTS sync_pages (
+  id                VARCHAR(32)  NOT NULL,
+  user_id           VARCHAR(32)  NOT NULL,
+  owner_id          VARCHAR(32)  NOT NULL COMMENT '照片文件在对象存储里所在的用户目录',
+  paper_id          VARCHAR(32)  NOT NULL,
+  position          INT          NULL,
+  width             INT          NULL,
+  height            INT          NULL,
+  sha               VARCHAR(32)  NULL,
+  dhash             VARCHAR(32)  NULL,
+  erased_at         VARCHAR(32)  NULL,
+  has_original      TINYINT(1)   NULL,
+  has_erased        VARCHAR(32)  NULL,
+  has_thumb         TINYINT(1)   NULL,
+  bytes             BIGINT       NULL,
+  created_at        VARCHAR(32)  NULL,
+  updated_at        VARCHAR(32)  NULL,
+  rev               BIGINT       NOT NULL DEFAULT 0,
+  deleted           TINYINT(1)   NOT NULL DEFAULT 0,
+  server_updated_at DATETIME     NULL,
+  PRIMARY KEY (id),
+  KEY ix_sync_pages_user_id (user_id),
+  KEY ix_sync_pages_paper_id (paper_id),
+  KEY ix_sync_pages_user_rev (user_id, rev),
+  KEY ix_sync_pages_server_updated_at (server_updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云同步：试卷照片';
+
