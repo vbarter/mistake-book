@@ -443,6 +443,9 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .prow { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 16px; border-top: 1px solid $sep-light; }
 .group .prow:first-child { border-top: 0; }
 .prow--pressed { background: $fill-light; }
+/* 客服行用的是原生 button：去掉默认的边框、底色、居中和行高，看起来和其他行一样 */
+.prow--btn { width: 100%; margin: 0; background: transparent; border-radius: 0; text-align: left; line-height: normal; color: inherit; font-size: inherit; overflow: visible; }
+.prow--btn::after { border: 0; }
 .prow__icon { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .prow__title { flex: 1; min-width: 0; font-size: 17px; font-weight: 500; }
 .prow__value { display: flex; align-items: center; gap: 6px; color: $secondary; font-size: 17px; flex-shrink: 0; }

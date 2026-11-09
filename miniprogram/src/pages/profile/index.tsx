@@ -136,8 +136,12 @@ export default function Profile() {
         <Text className="group-note">试卷照片和电子版只保存在这台手机上，不上传；导出的 PDF 在服务器上保留 7 天。</Text>
       </View>
 
-      <View className="group">
-        <Row icon="info" iconBg={C.secondary} title="关于错误本" value={VERSION} chevron={false} />
+      <View className="col">
+        <View className="group">
+          <Row icon="bubble" iconBg={C.ok} title="联系客服" value="问题与建议" contact sessionFrom={`profile|${user?.id ?? "guest"}|${VERSION}`} />
+          <Row icon="info" iconBg={C.secondary} title="关于错误本" value={VERSION} chevron={false} />
+        </View>
+        <Text className="group-note">用不明白、识别不对或者有想要的功能，都可以直接找我们。</Text>
       </View>
     </View>
   );
