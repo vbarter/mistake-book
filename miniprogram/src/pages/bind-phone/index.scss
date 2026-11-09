@@ -1,0 +1,6 @@
+button.btn {
+  width: 100%;
+  margin: 0;
+  line-height: normal;
+  &::after { border: none; }
+}

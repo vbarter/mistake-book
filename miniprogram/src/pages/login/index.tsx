@@ -82,7 +82,7 @@ export default function Login() {
       <Text className="t-sub c-brand center" onClick={leave}>
         暂不登录，先看看
       </Text>
-      <Text className="t-cap c-sec center">试卷照片和电子版只保存在你的手机上。扫描时照片会发到服务器识别，识别完不保留。</Text>
+      <Text className="t-cap c-sec center">登录后试卷和错题会保存到云端，同一个微信在别的手机、电脑上也能看到；绑定手机号后，在知错本 App 里也能看到。</Text>
     </View>
   );
 }

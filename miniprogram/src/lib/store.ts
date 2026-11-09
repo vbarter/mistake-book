@@ -1,4 +1,4 @@
-/** 文件夹 → 试卷 → 照片：只存在本机。
+/** 文件夹 → 试卷 → 照片：先存在本机，登录后由 lib/sync.ts 在后台和云端同步（同一账号多台设备看到一样的内容）。
  *
  * 小程序没有 IndexedDB：文件夹列表和试卷信息放本地缓存（单个 key 上限 1MB），
  * 每张试卷的电子版单独一个 key（可能有几百 KB），照片存成用户目录下的 jpg 文件。
@@ -141,6 +141,23 @@ function writeFolder(folder: Folder) {
   Taro.setStorageSync(folderKey(folder.id), light);
   const ids = readIndex();
   if (!ids.includes(folder.id)) writeIndex([folder.id, ...ids]);
+  changed();
+}
+
+/** 本机文件夹数据变了（云同步据此排一次上传）；同步自己写回来的时候不发 */
+export const STORE_CHANGED_EVENT = "store:changed";
+let quiet = 0;
+function changed() {
+  if (!quiet) Taro.eventCenter.trigger(STORE_CHANGED_EVENT);
+}
+/** 云同步把服务器上的修改写回本机时用：不触发「本机改了」 */
+export function quietly<T>(fn: () => T): T {
+  quiet++;
+  try {
+    return fn();
+  } finally {
+    quiet--;
+  }
 }
 
 function compareFolders(a: Folder, b: Folder): number {
@@ -210,6 +227,43 @@ export function deleteFolder(id: string) {
   Taro.removeStorageSync(folderKey(id));
   writeIndex(readIndex().filter((x) => x !== id));
   unlinkDuplicates(new Set(f?.papers.map((p) => p.id) ?? []));
+  changed();
+}
+
+/** 原样写回一个文件夹（不改更新时间）：云同步写服务器上的版本、补下载好的照片路径时用 */
+export function putFolder(folder: Folder) {
+  writeFolder(folder);
+}
+
+/** 照片在本机的存放路径（云同步下载的照片也放这里） */
+export function photoPath(pageId: string, suffix = ""): string {
+  ensurePhotoDir();
+  return `${PHOTO_DIR}/${pageId}${suffix}.jpg`;
+}
+
+export function ensurePhotoDir() {
+  const fs = Taro.getFileSystemManager();
+  try {
+    fs.accessSync(PHOTO_DIR);
+  } catch {
+    fs.mkdirSync(PHOTO_DIR, true);
+  }
+}
+
+/** 本机文件在不在 */
+export function fileExists(path?: string): boolean {
+  if (!path) return false;
+  try {
+    Taro.getFileSystemManager().accessSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 删一张试卷的照片文件（云同步删除服务器上已删的试卷时用） */
+export function removePaperFiles(paper: Paper) {
+  removePhotos(paper);
 }
 
 /** 删掉的试卷如果是别的试卷标的「同一份」，把标记去掉：原来那份没了，这份的错题要重新计入 */
