@@ -1,4 +1,4 @@
-/** 文件夹 → 试卷 → 照片：本地 IndexedDB 存储，不上传服务器。
+/** 文件夹 → 试卷 → 照片：本地 IndexedDB 存储；登录后由 lib/sync.ts 在后台和云端同步（同一账号多台设备看到一样的内容）。
  *
  * 一次考试一个文件夹，一个文件夹装多张试卷；每张试卷有若干照片和 AI 还原的电子版。
  * 错题不再单独"收录"：扫描完的试卷里判错的题（含未作答）自动算进文件夹和错题库。
@@ -137,8 +137,13 @@ const photoIds = (pg: FolderPage) => (pg.erased ? [pg.id, erasedKey(pg.id)] : [p
 const pageIds = (folder: Folder) => new Set(folder.papers.flatMap((p) => p.pages.flatMap(photoIds)));
 
 /** 存一个文件夹：带原图的照片写进照片表（已存过的 id 跳过），文件夹记录只留尺寸和小图；dropped 里不再被引用的照片删掉 */
-function putFolder(folder: Folder, opts: { stored?: Set<string>; dropped?: Iterable<string> } = {}): Promise<undefined> {
+/** 本机文件夹数据变了（云同步据此排一次上传）；同步自己写回来的时候不发 */
+export const FOLDERS_CHANGED_EVENT = "zcb:folders-changed";
+const changed = () => window.dispatchEvent(new Event(FOLDERS_CHANGED_EVENT));
+
+function putFolder(folder: Folder, opts: { stored?: Set<string>; dropped?: Iterable<string>; quiet?: boolean } = {}): Promise<undefined> {
   const keep = pageIds(folder);
+  if (!opts.quiet) queueMicrotask(changed);
   return run([STORE, PHOTOS], "readwrite", (t) => {
     const photos = t.objectStore(PHOTOS);
     for (const paper of folder.papers)
@@ -374,6 +379,7 @@ export function clearAllFolders(): Promise<void> {
       t.objectStore(STORE).clear();
       t.objectStore(PHOTOS).clear();
     });
+    changed();
   });
 }
 
@@ -385,7 +391,40 @@ export function deleteFolder(id: string): Promise<void> {
       for (const pid of folder ? pageIds(folder) : []) t.objectStore(PHOTOS).delete(pid);
     });
     await unlinkDuplicates(new Set(folder?.papers.map((p) => p.id) ?? []));
+    changed();
   });
+}
+
+// ---------------------------------------------------------------- 云同步写回（lib/sync.ts 用，不触发「本机改了」）
+
+/** 原样写回一个文件夹（不改更新时间）；photos 是要一起存进照片表的原图 / 擦除版 */
+export function putSyncedFolder(folder: Folder, photos: { id: string; src: string }[] = []): Promise<void> {
+  return locked(async () => {
+    await ready();
+    const before = await getFolder(folder.id);
+    const keep = pageIds(folder);
+    const dropped = before ? [...pageIds(before)].filter((id) => !keep.has(id)) : [];
+    if (photos.length) await run(PHOTOS, "readwrite", (t) => { for (const p of photos) t.objectStore(PHOTOS).put(p); });
+    await putFolder(folder, { stored: keep, dropped, quiet: true });
+  });
+}
+
+/** 删掉一个文件夹和它的照片（服务器上已删） */
+export function removeSyncedFolder(id: string): Promise<void> {
+  return locked(async () => {
+    const folder = await getFolder(id);
+    await run([STORE, PHOTOS], "readwrite", (t) => {
+      t.objectStore(STORE).delete(id);
+      for (const pid of folder ? pageIds(folder) : []) t.objectStore(PHOTOS).delete(pid);
+    });
+  });
+}
+
+/** 照片表里有没有这张原图（不读出内容） */
+export async function hasPhoto(id: string): Promise<boolean> {
+  await ready();
+  const n = await run<number>(PHOTOS, "readonly", (t) => t.objectStore(PHOTOS).count(id));
+  return n > 0;
 }
 
 /** 删掉的试卷如果是别的试卷标的「同一份」，把标记去掉：原来那份没了，这份的错题要重新计入（在写入锁里调用） */

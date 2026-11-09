@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./store/auth";
 import { startJobPoller } from "./lib/jobs";
+import { startSync } from "./lib/sync";
 import { isTabRoot, needsPhotoConfirm, setupBackButton, setupEdgeSwipeBack } from "./lib/native";
 import { listenRestoredPhoto } from "./lib/cameraRestore";
 import { addPaper, getFolder, loadPages, toPage, updatePaper } from "./lib/folders";
@@ -92,6 +93,11 @@ export default function App() {
   useEffect(() => {
     if (!token) return;
     return startJobPoller();
+  }, [token]);
+  // 登录后和云端同步：本机改动、回前台时自动推拉（lib/sync.ts）
+  useEffect(() => {
+    if (!token) return;
+    return startSync();
   }, [token]);
   // 安卓：拍照时 App 被系统回收，重启后把那张照片放回原来的试卷，打开录入页接着扫
   const nav = useNavigate();
