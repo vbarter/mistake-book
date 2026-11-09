@@ -217,3 +217,75 @@ def test_cos_provider_selected_when_configured(app):
     store = storage.CosStorage("ap-shanghai", "zhicuoben-data-1250000000", "AKID", "k", 900)
     url = store.presign(storage.object_key("u1", "g1", "erased"), "PUT")
     assert url.startswith("https://zhicuoben-data-1250000000.cos.ap-shanghai.myqcloud.com/u/u1/p/g1~erased.jpg?") and "q-signature=" in url
+
+
+def _wx_login(client, code="wx-a"):
+    r = client.post("/api/auth/wechat", json={"code": code})
+    assert r.status_code == 200, r.get_json()
+    return {"Authorization": f"Bearer {r.get_json()['token']}"}, r.get_json()["user"]
+
+
+def _bind(client, headers, phone, merge=False):
+    r = client.post("/api/auth/code", json={"phone": phone, "purpose": "bind", "allowMerge": True})
+    assert r.status_code == 200, r.get_json()
+    registered = r.get_json()["registered"]
+    return registered, client.post("/api/auth/bind", json={"phone": phone, "code": r.get_json()["devCode"], "merge": merge}, headers=headers)
+
+
+def test_wechat_binds_new_phone_then_app_phone_login_is_same_account(client):
+    wx, wx_user = _wx_login(client)
+    registered, r = _bind(client, wx, "13700000001")
+    assert not registered and r.status_code == 200 and r.get_json()["user"]["phone"] == "13700000001"
+    code = client.post("/api/auth/code", json={"phone": "13700000001", "purpose": "login"}).get_json()["devCode"]
+    login = client.post("/api/auth/login", json={"phone": "13700000001", "code": code}).get_json()
+    assert login["user"]["id"] == wx_user["id"]
+
+
+def test_wechat_merges_into_existing_phone_account(client, app):
+    from app.models import ExportJob, User
+
+    app_headers, app_uid = _login(client, "13700000002")  # App 里用手机号注册、扫过卷子
+    _seed(client, app_headers)
+    wx, wx_user = _wx_login(client, "wx-b")  # 小程序里用微信登录，也有自己的文件夹
+    client.post("/api/sync/push", json={"folders": [{"id": "fw", "name": "微信里的", "updatedAt": T1}]}, headers=wx)
+    with app.app_context():
+        db.session.add(ExportJob(user_id=wx_user["id"], title="导出"))
+        db.session.commit()
+
+    # 不带 merge：告诉客户端号码已有账号
+    registered, r = _bind(client, wx, "13700000002")
+    assert registered and r.status_code == 409 and r.get_json()["error"] == "phone_taken"
+    # 老版本客户端发码时不带 allowMerge：照旧 409
+    assert client.post("/api/auth/code", json={"phone": "13700000002", "purpose": "bind"}).status_code == 409
+
+    _, r = _bind(client, wx, "13700000002", merge=True)
+    assert r.status_code == 200, r.get_json()
+    merged = r.get_json()
+    assert merged["user"]["id"] == app_uid and merged["user"]["loginMethod"] == "wechat"
+    token = {"Authorization": f"Bearer {merged['token']}"}
+    ch = client.get("/api/sync/changes?since=0", headers=token).get_json()
+    assert {f["id"] for f in ch["folders"]} == {"f1", "fw"}
+
+    # 之后用微信登录也是这个账号；小程序原来的账号没了
+    again = client.post("/api/auth/wechat", json={"code": "wx-b"}).get_json()
+    assert again["user"]["id"] == app_uid
+    with app.app_context():
+        assert db.session.get(User, wx_user["id"]) is None
+        assert ExportJob.query.filter_by(user_id=app_uid).count() == 1
+    # 旧 token 失效
+    assert client.get("/api/auth/me", headers=wx).status_code == 401
+
+
+def test_cannot_merge_two_different_wechats(client):
+    wx1, _ = _wx_login(client, "wx-c")
+    _bind(client, wx1, "13700000003")
+    wx2, _ = _wx_login(client, "wx-d")
+    _, r = _bind(client, wx2, "13700000003", merge=True)
+    assert r.status_code == 409 and "另一个微信" in r.get_json()["message"]
+
+
+def test_bind_with_wechat_quick_phone(client):
+    wx, _ = _wx_login(client, "wx-e")
+    r = client.post("/api/auth/bind/wechat-phone", json={"code": "13700000004"}, headers=wx)
+    assert r.status_code == 200 and r.get_json()["user"]["phone"] == "13700000004"
+    assert client.post("/api/auth/bind/wechat-phone", json={"code": "bad"}, headers=wx).status_code == 400

@@ -78,24 +78,24 @@ def send_code():
         abort(409, "这个手机号已经注册过了，请直接登录")
     if purpose in ("login", "reset") and not exists:
         abort(404, "这个手机号还没注册，请先注册")
-    if purpose == "bind" and exists:
-        abort(409, "这个手机号已绑定其他账号")
+    if purpose == "bind" and exists and not data.get("allowMerge"):
+        abort(409, "这个手机号已绑定其他账号")  # 老版本客户端：不支持合并账号
     if _is_review(phone):
         # 审核账号不发短信、不回显验证码：审核员按提交审核时填的验证码登录
-        return jsonify({"ok": True, "expiresIn": 300})
+        return jsonify({"ok": True, "expiresIn": 300, "registered": exists})
     provider = current_app.config["SMS_PROVIDER"]
     if provider == "aliyun":
         try:
             sms.send_code(phone)
         except sms.SmsError as e:
             abort(503 if "暂时不可用" in str(e) or "没配置" in str(e) else 429, str(e))
-        return jsonify({"ok": True, "expiresIn": sms.VALID_SECONDS})
+        return jsonify({"ok": True, "expiresIn": sms.VALID_SECONDS, "registered": exists})
     if provider != "mock":
         # 没接真实短信服务：不能让固定验证码在线上生效（否则谁都能登别人的手机号账号）
         abort(503, "手机号登录暂未开放，请使用 Apple 登录")
     code = current_app.config["DEV_SMS_CODE"]
     _codes[phone] = (code, time.time() + 300)
-    payload = {"ok": True, "expiresIn": 300}
+    payload = {"ok": True, "expiresIn": 300, "registered": exists}
     if current_app.config["SMS_PROVIDER"] == "mock":
         payload["devCode"] = code  # mock 模式回显，方便联调
     return jsonify(payload)
@@ -341,15 +341,17 @@ def login_as_guest():
 @bp.post("/auth/bind")
 @login_required
 def bind_account():
-    """把游客账号绑定到手机号（验证码）或 Apple。"""
+    """把当前账号绑定到手机号（验证码）或 Apple。
+    手机号已经是另一个账号的（比如在 App 里用这个手机号注册过）：带 merge=true 时把当前账号合并进那个账号，
+    两边的试卷都保留，返回那个账号的新 token；不带 merge 时 409（error = phone_taken）。"""
     user = current_user()
     data = request.get_json(silent=True) or {}
     if data.get("phone"):
         phone, code = str(data["phone"]).strip(), str(data.get("code", "")).strip()
+        if not PHONE_RE.match(phone):
+            abort(400, "请输入 11 位手机号")
         _verify_code(phone, code)
-        if User.query.filter(User.phone == phone, User.id != user.id).first():
-            abort(400, "该手机号已绑定其他账号")
-        user.phone = phone
+        return _bind_phone(user, phone, bool(data.get("merge")))
     elif data.get("identityToken"):
         claims = _decode_identity_token(str(data["identityToken"]))
         if User.query.filter(User.apple_sub == claims.get("sub"), User.id != user.id).first():
@@ -360,6 +362,119 @@ def bind_account():
         abort(400, "缺少绑定信息")
     db.session.commit()
     return jsonify({"user": user.to_dict()})
+
+
+@bp.post("/auth/bind/wechat-phone")
+@login_required
+def bind_wechat_phone():
+    """小程序「手机号快速验证」（button open-type=getPhoneNumber 给的 code）换手机号后绑定；规则同 /auth/bind"""
+    data = request.get_json(silent=True) or {}
+    code = str(data.get("code", "")).strip()
+    if not code:
+        abort(400, "缺少 code")
+    return _bind_phone(current_user(), _wx_phone(code), bool(data.get("merge")))
+
+
+def _bind_phone(user: User, phone: str, merge: bool):
+    if user.phone == phone:
+        return jsonify({"user": user.to_dict()})
+    if user.phone:
+        abort(400, "这个账号已经绑定了手机号 " + user.phone[:3] + "****" + user.phone[-4:])
+    other = User.query.filter(User.phone == phone, User.id != user.id).first()
+    if other is None:
+        user.phone = phone
+        db.session.commit()
+        return jsonify({"user": user.to_dict()})
+    if not merge:
+        return jsonify({"error": "phone_taken", "message": "这个手机号已经有账号了，合并后两边的试卷都会保留"}), 409
+    if user.wx_openid and other.wx_openid and user.wx_openid != other.wx_openid:
+        abort(409, "这个手机号已经绑定了另一个微信，不能合并")
+    if user.apple_sub and other.apple_sub and user.apple_sub != other.apple_sub:
+        abort(409, "这个手机号已经绑定了另一个 Apple ID，不能合并")
+    merge_accounts(user, other)
+    db.session.commit()
+    return _issue(other, "login", "merge")
+
+
+def merge_accounts(source: User, target: User) -> None:
+    """把 source 合并进 target：试卷、云同步数据、导出、扫描 / 擦除任务、使用记录都搬过去，登录方式（微信 / Apple）也挪过去，
+    然后删掉 source。资料（称呼、年级、学科、密码）以 target 为准。调用方负责 commit。"""
+    from ..models import DigitizeJob, EraseJob, ExportJob, Mistake, PracticeSession, ReviewLog, UsageEvent
+    from .sync import merge_user_sync
+
+    log.info("merge account %s -> %s", source.id, target.id)
+    merge_user_sync(source.id, target.id)
+    for model in (Mistake, ReviewLog, PracticeSession, DigitizeJob, ExportJob, EraseJob, UsageEvent):
+        model.query.filter_by(user_id=source.id).update({"user_id": target.id}, synchronize_session=False)
+    openid, apple_sub, apple_name, apple_email = source.wx_openid, source.apple_sub, source.apple_name, source.apple_email
+    source.wx_openid = source.apple_sub = None
+    db.session.flush()  # 先腾出唯一键，再挂到 target 上
+    if openid and not target.wx_openid:
+        target.wx_openid = openid
+    if apple_sub and not target.apple_sub:
+        target.apple_sub = apple_sub
+        target.apple_name = target.apple_name or apple_name
+        target.apple_email = target.apple_email or apple_email
+    if not target.grade and source.grade:
+        target.grade = source.grade
+    db.session.expire(source, ["mistakes"])
+    db.session.delete(source)
+
+
+_wx_token: dict = {"value": "", "expires": 0.0}
+
+
+def _wx_access_token() -> str:
+    """小程序接口调用凭证（client_credential），进程内缓存，提前 5 分钟刷新"""
+    import os
+    import urllib.parse
+    import urllib.request
+
+    if _wx_token["value"] and _wx_token["expires"] > time.time():
+        return _wx_token["value"]
+    appid, secret = os.getenv("WX_APPID", "").strip(), os.getenv("WX_SECRET", "").strip()
+    if not (appid and secret):
+        abort(503, "微信登录还没配置（服务器缺少 WX_APPID / WX_SECRET）")
+    query = urllib.parse.urlencode({"grant_type": "client_credential", "appid": appid, "secret": secret})
+    try:
+        with urllib.request.urlopen(f"https://api.weixin.qq.com/cgi-bin/token?{query}", timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:  # noqa: BLE001
+        log.warning("wx token failed: %s", e)
+        abort(502, "连接微信服务器失败，请稍后再试")
+    if not data.get("access_token"):
+        log.warning("wx token error: %s", data)
+        abort(502, "微信接口调用失败：" + str(data.get("errmsg") or "未知错误"))
+    _wx_token.update(value=data["access_token"], expires=time.time() + int(data.get("expires_in") or 7200) - 300)
+    return _wx_token["value"]
+
+
+def _wx_phone(code: str) -> str:
+    """getPhoneNumber 的 code 换手机号（getuserphonenumber）。需要小程序是企业 / 个体户主体"""
+    import os
+    import urllib.request
+
+    if current_app.config.get("TESTING") and not os.getenv("WX_APPID", "").strip():
+        return code if PHONE_RE.match(code) else abort(400, "手机号获取失败")  # 测试：code 就是手机号
+    token = _wx_access_token()
+    req = urllib.request.Request(
+        f"https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token={token}",
+        data=json.dumps({"code": code}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:  # noqa: BLE001
+        log.warning("getuserphonenumber failed: %s", e)
+        abort(502, "连接微信服务器失败，请稍后再试")
+    if data.get("errcode") in (40001, 42001):
+        _wx_token["value"] = ""
+    phone = str((data.get("phone_info") or {}).get("purePhoneNumber") or "")
+    if not PHONE_RE.match(phone):
+        log.warning("getuserphonenumber error: %s", {k: v for k, v in data.items() if k != "phone_info"})
+        abort(400, "手机号获取失败：" + str(data.get("errmsg") or "请改用验证码"))
+    return phone
 
 
 def _apply_profile(user: User, data: dict) -> None:
