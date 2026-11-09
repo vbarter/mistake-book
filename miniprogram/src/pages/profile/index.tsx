@@ -133,7 +133,7 @@ export default function Profile() {
             <Row icon="person" iconBg={C.label} title="登录" value="微信一键登录" onClick={() => go(LOGIN_PAGE)} />
           )}
         </View>
-        <Text className="group-note">试卷照片和电子版只保存在这台手机上，不上传；导出的 PDF 在服务器上保留 7 天。</Text>
+        <Text className="group-note">登录后试卷照片和电子版会同步到云端，换手机、在电脑上打开都能看到；导出的 PDF 在服务器上保留 7 天。</Text>
       </View>
 
       <View className="col">

@@ -17,6 +17,7 @@ import "../styles/auth.css";
 import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
 import { isNative, isAndroid } from "../lib/native";
+import { syncNow, useSync } from "../lib/sync";
 
 /* ---------- 年级、城市与学科 ---------- */
 export function Subjects() {
@@ -85,9 +86,22 @@ export function Subjects() {
 /* ---------- 账号与登录 ---------- */
 const maskPhone = (p: string, sep = "") => `${p.slice(0, 3)}${sep}****${sep}${p.slice(-4)}`;
 
+function syncLabel(s: ReturnType<typeof useSync.getState>): string {
+  if (s.state === "running") return s.pendingUploads ? `上传中，还剩 ${s.pendingUploads} 个` : s.pendingDownloads ? `下载中，还剩 ${s.pendingDownloads} 张` : "同步中…";
+  if (s.state === "error") return "同步失败，点一下重试";
+  if (s.state === "off") return "未开启";
+  return s.lastAt ? "已同步" : "点一下同步";
+}
+
 export function Account() {
   const nav = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout: signOut } = useAuth();
+  const sync = useSync();
+  // 退出前把还没传完的改动推上去（失败不拦着退出）
+  const logout = async () => {
+    await Promise.race([syncNow().catch(() => undefined), new Promise((r) => setTimeout(r, 8000))]);
+    await signOut();
+  };
   const [confirm, setConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -173,6 +187,14 @@ export function Account() {
           <p className="acct__foot">登录后会一直保持，直到你在这里退出。</p>
         </section>
 
+        <section className="acct__section">
+          <h2 className="acct__label">云同步</h2>
+          <div className="group">
+            <Row icon="refresh" iconColor="var(--brand)" title="试卷和错题" value={syncLabel(sync)} onClick={() => void syncNow()} />
+          </div>
+          <p className="acct__foot">用同一个手机号（或在错误本小程序里绑定了这个手机号的微信）登录，在别的手机、电脑上也能看到同样的试卷和错题。{sync.state === "error" && sync.error ? `上次失败：${sync.error}` : ""}</p>
+        </section>
+
         {isNative && import.meta.env.DEV && (
           <section className="acct__section">
             <h2 className="acct__label">开发</h2>
@@ -184,7 +206,7 @@ export function Account() {
 
         <section className="acct__section acct__section--end">
           <button className="acct__logout" onClick={() => setConfirm(true)}>退出登录</button>
-          <p className="acct__foot acct__foot--center">{user?.loginMethod === "guest" ? "游客账号退出后本机数据无法再访问，建议先绑定。" : "退出后本机的试卷照片不会删除。"}</p>
+          <p className="acct__foot acct__foot--center">{user?.loginMethod === "guest" ? "游客账号退出后本机数据无法再访问，建议先绑定。" : "退出后本机的试卷不会删除，已同步的也保存在云端。"}</p>
           <button className="acct__delete" onClick={() => setDeleting(true)}>注销账号</button>
         </section>
       </div>
@@ -194,7 +216,7 @@ export function Account() {
       </Sheet>
       <Sheet open={deleting} onClose={() => setDeleting(false)} title="注销账号？">
         <p className="t-sub c-sec">账号会被永久删除，服务器上和这个账号有关的记录也会一起删除，无法恢复。之后可以用同一个{user?.loginMethod === "apple" ? " Apple 账号" : user?.loginMethod === "wechat" ? "微信" : "手机号"}重新注册。</p>
-        <p className="t-sub c-sec">这台设备上的试卷照片和电子版不会被删除，可以在「我的 → 隐私与权限」里清空。</p>
+        <p className="t-sub c-sec">云端同步的试卷照片和电子版会一起删除；这台设备上的不会被删除，可以在「我的 → 隐私与数据」里清空。</p>
         <Button variant="danger" onClick={deleteAccount} disabled={deleteBusy}>{deleteBusy ? "正在注销…" : "确认注销"}</Button>
         <Button variant="plain" onClick={() => setDeleting(false)}>取消</Button>
       </Sheet>
@@ -245,11 +267,11 @@ export function Privacy() {
       <div className="screen__content screen__content--modal" style={{ paddingTop: 8 }}>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">我们收集什么</span>
-          <p className="t-sub c-sec">账号只保存昵称、年级、学科设置和登录方式。试卷照片、电子版和错题只保存在这台设备上，不会上传备份。不收集姓名、学校、班级、位置。</p>
+          <p className="t-sub c-sec">账号保存昵称、年级、学科设置和登录方式。登录后，试卷照片、电子版和错题会同步保存到我们在腾讯云（上海）的存储空间，用于在你的其他设备上查看；照片加密存储，只有你的账号能访问。不收集姓名、学校、班级、位置。</p>
         </div>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">扫描时如何处理照片</span>
-          <p className="t-sub c-sec">扫描时把试卷照片发到我们的服务器识别和批改，并要求 AI 忽略姓名、学校、班级等信息。服务器不保存照片；识别结果保留一天，方便切走 App 后取回，之后自动删除。导出的错题本 / 电子试卷 PDF 在服务器上保留 7 天，方便在「我的导出」里再次下载，可以随时删除，到期自动删除。</p>
+          <p className="t-sub c-sec">扫描时把试卷照片发到我们的服务器识别和批改，并要求 AI 忽略姓名、学校、班级等信息。识别用的临时文件和识别结果保留一天，方便切走 App 后取回，之后自动删除。导出的错题本 / 电子试卷 PDF 在服务器上保留 7 天，方便在「我的导出」里再次下载，可以随时删除，到期自动删除。</p>
         </div>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">第三方 SDK</span>
@@ -257,7 +279,7 @@ export function Privacy() {
         </div>
         <div className="card" style={{ gap: 8 }}>
           <span className="t-headline">你的权利</span>
-          <p className="t-sub c-sec">随时可以在下面清空知错本保存在这台设备上的全部试卷和错题。清空后不能恢复，账号和学习设置不受影响。</p>
+          <p className="t-sub c-sec">随时可以在下面清空全部试卷和错题，已登录时云端和你其他设备上的也会一起删除。清空后不能恢复，账号和学习设置不受影响。</p>
         </div>
         <div className="group">
           <Row icon="info" iconColor="var(--secondary)" title="隐私政策" onClick={() => nav("/legal/privacy")} />
@@ -268,7 +290,7 @@ export function Privacy() {
         </div>
       </div>
       <Sheet open={confirm} onClose={() => setConfirm(false)} title="清空本应用数据？">
-        <p className="t-sub c-sec">会删掉知错本在这台设备上保存的 {counts?.folders ?? 0} 个文件夹、{counts?.papers ?? 0} 张试卷，以及它们的照片、电子版和错题，不能恢复。账号和学习设置不受影响。</p>
+        <p className="t-sub c-sec">会删掉 {counts?.folders ?? 0} 个文件夹、{counts?.papers ?? 0} 张试卷，以及它们的照片、电子版和错题，不能恢复。已登录时云端和其他设备上的也会一起删除。账号和学习设置不受影响。</p>
         <Button variant="danger" onClick={clearAll} disabled={busy}>{busy ? "正在清空…" : "清空"}</Button>
         <Button variant="plain" onClick={() => setConfirm(false)}>取消</Button>
       </Sheet>

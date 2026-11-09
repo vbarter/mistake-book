@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import JSON
+from sqlalchemy.dialects.mysql import LONGTEXT
 
 from .extensions import db
 from . import taxonomy
@@ -309,3 +310,128 @@ class UsageEvent(db.Model):
     questions = db.Column(db.Integer, default=0)  # 还原出的题数
     wrong = db.Column(db.Integer, default=0)  # 其中错题 / 未作答数
     created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+
+
+# ---------------------------------------------------------------------------
+# 云同步：文件夹 → 试卷 → 照片。id 用客户端生成的 id；时间字段原样保存客户端的 ISO 字符串（UTC），
+# 用来排序和判断两台设备谁改得晚；rev 是服务器给的版本号（同一账号内递增、不重复），客户端按它增量拉取。
+# deleted 是删除标记，保留一段时间让别的设备知道删了，之后由 scripts/sync_purge.py 清掉。
+
+
+class SyncState(db.Model):
+    """每个账号的同步版本号：每写一条同步记录 +1。单独一张表，不改 users 表（老代码、没跑 DDL 的库不受影响）"""
+
+    __tablename__ = "sync_state"
+    user_id = db.Column(db.String(32), primary_key=True)
+    rev = db.Column(db.BigInteger, default=0, nullable=False)
+
+
+class SyncFolder(db.Model):
+    __tablename__ = "sync_folders"
+    __table_args__ = (db.Index("ix_sync_folders_user_rev", "user_id", "rev"),)
+
+    id = db.Column(db.String(32), primary_key=True)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    name = db.Column(db.String(120), default="")
+    subject = db.Column(db.String(16), nullable=True)
+    sort_order = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.String(32), default="")
+    updated_at = db.Column(db.String(32), default="")
+    rev = db.Column(db.BigInteger, default=0, nullable=False)
+    deleted = db.Column(db.Boolean, default=False, nullable=False)
+    server_updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+
+    def to_dict(self) -> dict:
+        data = {"id": self.id, "rev": self.rev, "updatedAt": self.updated_at}
+        if self.deleted:
+            return {**data, "deleted": True}
+        data.update({"name": self.name, "createdAt": self.created_at})
+        if self.subject:
+            data["subject"] = self.subject
+        if self.sort_order is not None:
+            data["order"] = self.sort_order
+        return data
+
+
+class SyncPaper(db.Model):
+    __tablename__ = "sync_papers"
+    __table_args__ = (db.Index("ix_sync_papers_user_rev", "user_id", "rev"),)
+
+    id = db.Column(db.String(32), primary_key=True)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    folder_id = db.Column(db.String(32), index=True, nullable=False)
+    name = db.Column(db.String(120), default="")
+    subject = db.Column(db.String(16), nullable=True)
+    subject_manual = db.Column(db.Boolean, default=False)
+    position = db.Column(db.Integer, default=0)  # 在文件夹里的顺序
+    meta = db.Column(JSON, default=dict)  # scannedAt / gradedAt / taggedAt / printedAt / duplicateOf / notDuplicateOf / keepDuplicate
+    digitized = db.Column(db.Text().with_variant(LONGTEXT(), "mysql"), nullable=True)  # 电子版 JSON 原文
+    digitized_hash = db.Column(db.String(16), nullable=True)
+    created_at = db.Column(db.String(32), default="")
+    updated_at = db.Column(db.String(32), default="")
+    rev = db.Column(db.BigInteger, default=0, nullable=False)
+    deleted = db.Column(db.Boolean, default=False, nullable=False)
+    server_updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+
+    def to_dict(self, with_digitized: bool = True) -> dict:
+        import json
+
+        data = {"id": self.id, "folderId": self.folder_id, "rev": self.rev, "updatedAt": self.updated_at}
+        if self.deleted:
+            return {**data, "deleted": True}
+        data.update({"name": self.name, "createdAt": self.created_at, "position": self.position or 0, "digitizedHash": self.digitized_hash})
+        if self.subject:
+            data["subject"] = self.subject
+        if self.subject_manual:
+            data["subjectManual"] = True
+        data.update(self.meta or {})
+        if with_digitized:
+            data["digitized"] = json.loads(self.digitized) if self.digitized else None
+        return data
+
+
+class SyncPage(db.Model):
+    __tablename__ = "sync_pages"
+    __table_args__ = (db.Index("ix_sync_pages_user_rev", "user_id", "rev"),)
+
+    id = db.Column(db.String(32), primary_key=True)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    owner_id = db.Column(db.String(32), nullable=False)  # 文件在对象存储里所在的用户目录（合并账号后可能和 user_id 不同）
+    paper_id = db.Column(db.String(32), index=True, nullable=False)
+    position = db.Column(db.Integer, default=0)
+    width = db.Column(db.Integer, default=0)
+    height = db.Column(db.Integer, default=0)
+    sha = db.Column(db.String(32), nullable=True)
+    dhash = db.Column(db.String(32), nullable=True)
+    erased_at = db.Column(db.String(32), nullable=True)  # 擦过手写的时间；空 = 没擦
+    has_original = db.Column(db.Boolean, default=False)
+    has_erased = db.Column(db.String(32), nullable=True)  # 已上传的擦除版对应的 erased_at；和 erased_at 相同才是最新的
+    has_thumb = db.Column(db.Boolean, default=False)
+    bytes = db.Column(db.BigInteger, default=0)
+    created_at = db.Column(db.String(32), default="")
+    updated_at = db.Column(db.String(32), default="")
+    rev = db.Column(db.BigInteger, default=0, nullable=False)
+    deleted = db.Column(db.Boolean, default=False, nullable=False)
+    server_updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+
+    def to_dict(self) -> dict:
+        data = {"id": self.id, "paperId": self.paper_id, "rev": self.rev, "updatedAt": self.updated_at}
+        if self.deleted:
+            return {**data, "deleted": True}
+        data.update(
+            {
+                "position": self.position or 0,
+                "width": self.width or 0,
+                "height": self.height or 0,
+                "createdAt": self.created_at,
+                "files": {
+                    "original": bool(self.has_original),
+                    "erased": bool(self.erased_at and self.has_erased == self.erased_at),
+                    "thumb": bool(self.has_thumb),
+                },
+            }
+        )
+        for key, value in (("sha", self.sha), ("dhash", self.dhash), ("erased", self.erased_at)):
+            if value:
+                data[key] = value
+        return data
