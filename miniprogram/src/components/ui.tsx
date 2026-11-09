@@ -1,7 +1,7 @@
 /** 通用小组件（和 App 的 components/ui.tsx、v2.tsx 一一对应）：学科方块、状态标签、按钮、底部面板、分段切换、统计格、顶栏… */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import Taro from "@tarojs/taro";
-import { ScrollView, Text, View } from "@tarojs/components";
+import { Button as NativeButton, ScrollView, Text, View } from "@tarojs/components";
 import { Icon, type IconName } from "./Icon";
 import type { Mark, Subject } from "../lib/types";
 import { toSegments } from "../lib/math";
@@ -70,9 +70,13 @@ export function KnowledgeIcon({ name, subject }: { name: string; subject?: Subje
 }
 
 /** 设置行：彩色方块图标 + 标题 + 右侧值 + 箭头 */
-export function Row({ icon, iconBg, title, value, chevron = true, danger, onClick }: { icon: IconName; iconBg: string; title: string; value?: ReactNode; chevron?: boolean; danger?: boolean; onClick?: () => void }) {
-  return (
-    <View className="prow" hoverClass={onClick ? "prow--pressed" : "none"} onClick={onClick}>
+/**
+ * 设置列表的一行。传 contact 时整行换成原生 <button open-type="contact">，点了直接进微信客服会话
+ *（只能用原生按钮触发，View 的 onClick 不行）；sessionFrom 会随会话带给客服，用来区分从哪进来的
+ */
+export function Row({ icon, iconBg, title, value, chevron = true, danger, onClick, contact, sessionFrom }: { icon: IconName; iconBg: string; title: string; value?: ReactNode; chevron?: boolean; danger?: boolean; onClick?: () => void; contact?: boolean; sessionFrom?: string }) {
+  const inner = (
+    <>
       <View className="prow__icon" style={{ background: iconBg }}>
         <Icon name={icon} size={18} color="#ffffff" stroke={2} />
       </View>
@@ -81,6 +85,17 @@ export function Row({ icon, iconBg, title, value, chevron = true, danger, onClic
         {typeof value === "string" ? <Text>{value}</Text> : value}
         {chevron && <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />}
       </View>
+    </>
+  );
+  if (contact)
+    return (
+      <NativeButton className="prow prow--btn" hoverClass="prow--pressed" openType="contact" sessionFrom={sessionFrom}>
+        {inner}
+      </NativeButton>
+    );
+  return (
+    <View className="prow" hoverClass={onClick ? "prow--pressed" : "none"} onClick={onClick}>
+      {inner}
     </View>
   );
 }
