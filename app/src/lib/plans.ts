@@ -101,12 +101,22 @@ const dataUrlBytes = (src: string) => Math.floor(((src.length - src.indexOf(",")
 
 export const scanDraft = (page: FullPage, index: number): DraftFile => ({ clientId: page.id, kind: "scan", name: `扫描件 第 ${index + 1} 页.jpg`, mime: "image/jpeg", size: dataUrlBytes(page.src), thumb: page.thumb ?? page.src, page });
 
+const EXT_MIME: Record<string, string> = { pdf: "application/pdf", doc: "application/msword", docx: ATTACHMENT_MIMES[2], jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
+const MIME_EXT: Record<string, string> = { "application/pdf": "pdf", "application/msword": "doc", [ATTACHMENT_MIMES[2]]: "docx", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+
+/**
+ * 选好的一个文件 → 附件草稿。类型先看扩展名、再看系统给的 MIME：
+ * 安卓的文件选择器常常不给 MIME 或给 application/octet-stream（Word 尤其常见），也有只给 MIME、文件名不带扩展名的。
+ */
 export function attachmentDraft(file: File): DraftFile | string {
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  const mime = file.type || ({ pdf: "application/pdf", doc: "application/msword", docx: ATTACHMENT_MIMES[2], jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" } as Record<string, string>)[ext] || "";
-  if (!ATTACHMENT_MIMES.includes(mime)) return `「${file.name}」不是 PDF、Word 或图片`;
+  const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
+  const type = file.type === "image/jpg" ? "image/jpeg" : file.type;
+  const mime = EXT_MIME[ext] || (ATTACHMENT_MIMES.includes(type) ? type : "");
+  if (!mime) return `「${file.name}」不是 PDF、Word 或图片`;
   if (file.size > MAX_PLAN_FILE_BYTES) return `「${file.name}」超过 20 MB 了`;
-  return { clientId: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, kind: "attachment", name: file.name, mime, size: file.size, file };
+  if (file.size === 0) return `「${file.name}」是空的，换一个文件`;
+  const name = EXT_MIME[ext] ? file.name : `${file.name || "附件"}.${MIME_EXT[mime]}`; // 没扩展名的补上，同学那边才打得开
+  return { clientId: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, kind: "attachment", name, mime, size: file.size, file, thumb: mime.startsWith("image/") ? URL.createObjectURL(file) : undefined };
 }
 
 async function uploadAll(uploads: Upload[], drafts: DraftFile[], onStage?: (text: string) => void): Promise<void> {
