@@ -1,4 +1,4 @@
--- 知错本 MySQL 8 数据库结构（与 server/app/models.py 一一对应）
+-- 上壹课 MySQL 8 数据库结构（与 server/app/models.py 一一对应）
 -- 用法：mysql -h 127.0.0.1 -P 3306 -u root -p < server/db/schema.mysql.sql
 
 CREATE DATABASE IF NOT EXISTS zhicuoben

@@ -1,4 +1,4 @@
-"""知错本服务端应用工厂。"""
+"""上壹课服务端应用工厂。"""
 from __future__ import annotations
 
 import os

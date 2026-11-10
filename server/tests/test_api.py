@@ -1536,7 +1536,7 @@ def test_mistake_stores_topic_id(client, auth):
 
 
 def test_taxonomy_extra_topics_join_candidates():
-    """知错本自补的上海英语考纲大类（zcb_ 前缀）并进英语初中、高中候选池，不进小学；能被 view 和标注校验接受。"""
+    """上壹课自补的上海英语考纲大类（zcb_ 前缀）并进英语初中、高中候选池，不进小学；能被 view 和标注校验接受。"""
     from app import taxonomy
     from app.ai.base import DigitizedBlock
     from app.ai.digitize import apply_topic
