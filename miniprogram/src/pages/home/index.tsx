@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Image, Text, View } from "@tarojs/components";
+import { Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh } from "@tarojs/taro";
 import { Buddy } from "../../components/Buddy";
-import { ExportSheet } from "../../components/ExportSheet";
-import { Icon, type IconName } from "../../components/Icon";
-import { KnowledgeBars } from "../../components/Insights";
-import { Button, Progress, TopBar } from "../../components/ui";
+import { Icon } from "../../components/Icon";
+import { Progress, SubjectTile, TopBar } from "../../components/ui";
+import { captureInto } from "../../lib/capture";
 import { allErrors } from "../../lib/errors";
 import { useDataVersion, useTabBar } from "../../lib/hooks";
-import { analyze, inRange, since } from "../../lib/insights";
+import { analyze, inRange } from "../../lib/insights";
 import { pollPendingJobs, scanStageText } from "../../lib/jobs";
-import { getLastExportAt } from "../../lib/prefs";
 import { currentUser, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
 import { PLANS_EVENT, dueLabel, fetchPlans, type PlanSummary } from "../../lib/plans";
@@ -21,17 +19,15 @@ import { useShare, useShareTimelineToo } from "../../lib/share";
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
- * 首页（和 App 一致）：问候、识别进度、近 30 天各学科薄弱知识点、导出错题本。
- * 导出按钮固定在 Tab 栏上方，知识点再多也不用滚到底才看得到。添加试卷走底栏中间的相机键。
+ * 首页（和 App 一致）：顶部「今日安排」（学习计划、待办事项），中间小人用气泡说识别进度 / 近 30 天错题总结，
+ * 底部两块大入口「错题收集」「试卷擦除」。导出错题本在「分析」页。
  */
 export default function Home() {
   useShare();
   useShareTimelineToo();
   useTabBar(0);
   const [version, refresh] = useDataVersion();
-  const [exporting, setExporting] = useState(false);
-  const folders = useMemo(() => listFolders(), [version, exporting]);
-  const lastExport = useMemo(() => getLastExportAt(), [version, exporting]);
+  const folders = useMemo(() => listFolders(), [version]);
   const nickname = useMemo(() => currentUser()?.nickname ?? "", [version]);
 
   // 学习计划的汇总：没登录、没网时这一行照样在，只是不带数字
@@ -50,15 +46,8 @@ export default function Home() {
       .then((r) => setPlans(r.summary))
       .catch(() => undefined);
   }, [version, plansVersion]);
-  const planLine =
-    !plans || plans.owned + plans.joined === 0
-      ? "老师布置作业，同学拍照交回"
-      : [
-          plans.todo > 0 ? `待交 ${plans.todo} 份${plans.nextTitle ? `：${plans.nextTitle}${plans.nextDue ? `（截止 ${dueLabel(plans.nextDue)}）` : ""}` : ""}` : "",
-          plans.owned > 0 ? `今天已交 ${plans.submittedToday} 份 · 待批阅 ${plans.toReview} 份` : "",
-        ]
-          .filter(Boolean)
-          .join(" · ") || "作业都交了";
+  const hasPlans = !!plans && plans.owned + plans.joined > 0;
+  const planCount = plans ? plans.todo + plans.toReview : 0;
 
   usePullDownRefresh(async () => {
     await pollPendingJobs();
@@ -68,147 +57,157 @@ export default function Home() {
 
   const errors = useMemo(() => allErrors(folders), [folders]);
   const recent = useMemo(() => analyze(inRange(errors, "30d")), [errors]);
-  const fresh = useMemo(() => since(errors, lastExport), [errors, lastExport]);
   const papers = folders.flatMap((f) => f.papers.map((p) => ({ f, p })));
   const scanning = papers.filter(({ p }) => p.scanJob);
   const failed = papers.filter(({ p }) => p.scanError && !p.scanJob);
-  const exportSet = fresh.length > 0 ? fresh : errors;
   const go = (url: string) => Taro.navigateTo({ url });
 
   const now = new Date();
-  const eyebrow = `${now.getMonth() + 1}月${now.getDate()}日 星期${WEEKDAY[now.getDay()]}`;
   const h = now.getHours();
   const hello = h < 5 ? "夜深了" : h < 11 ? "早上好" : h < 13 ? "中午好" : h < 18 ? "下午好" : "晚上好";
+  const today = `${now.getMonth() + 1}月${now.getDate()}日 周${WEEKDAY[now.getDay()]}`;
+
+  const collect = async () => {
+    let r: Taro.showActionSheet.SuccessCallbackResult;
+    try {
+      r = await Taro.showActionSheet({ itemList: ["拍照", "从相册选"] });
+    } catch {
+      return;
+    }
+    try {
+      const fid = await captureInto(null, r.tapIndex === 0 ? "camera" : "album");
+      if (fid) go(`/pages/folder/index?id=${fid}`);
+    } catch (e) {
+      toast(String((e as Error).message || e));
+    }
+  };
+
+  // 试卷擦除：从最近的试卷里挑一份去擦；一份都没有就先去拍
+  const erase = async () => {
+    const recentPapers = papers
+      .filter(({ p }) => !p.scanJob)
+      .sort((x, y) => (x.p.createdAt < y.p.createdAt ? 1 : -1))
+      .slice(0, 6);
+    if (recentPapers.length === 0) return toast(papers.length ? "试卷还在识别，好了再来擦" : "先拍一份试卷，再来擦掉手写");
+    try {
+      const r = await Taro.showActionSheet({ alertText: "擦哪一份试卷", itemList: recentPapers.map(({ p }) => p.name.slice(0, 20)) });
+      const { f, p } = recentPapers[r.tapIndex];
+      go(`/pages/erase/index?folderId=${f.id}&paperId=${p.id}`);
+    } catch {
+      /* 取消 */
+    }
+  };
 
   return (
-    <View className={`page page--tab${errors.length > 0 ? " page--dock" : ""}`} style={{ gap: "16px", paddingTop: 0 }}>
+    <View className="home2">
       <TopBar>
-        <Text className="topbar__text">{eyebrow}</Text>
+        <View className="home2__logo">
+          <Icon name="check" size={18} color="#ffffff" stroke={3} />
+        </View>
+        <Text className="home2__name">上壹课</Text>
+        <Text className="home2__date">{today}</Text>
       </TopBar>
 
-      <View className="greet rise">
-        <View className="greet__text">
-          <Text className="t-title1">
-            {hello}
-            {nickname ? `，${nickname}` : ""}
-          </Text>
-          <Text className="t-sub c-sec">{papers.length === 0 ? "点下面的相机，拍下第一张试卷。" : scanning.length ? "试卷正在识别，好了会自动归档。" : "拍下新试卷，错题会自动整理。"}</Text>
+      <View className="plan rise">
+        <View className="plan__top">
+          <Text className="plan__title">今日安排</Text>
+          <Text className="plan__sub">计划和作业，一眼看清</Text>
         </View>
-        <Buddy scene={scanning.length ? "scan" : "hero"} size={112} style={{ margin: "-8px -4px -12px 0" }} />
+        <View className="plan__cards">
+          <View className="pc" hoverClass="pc--hover" onClick={() => go("/pages/plans/index")}>
+            <View className="pc__h">
+              <Text className="pc__t">学习计划</Text>
+              <View className="pc__go">
+                <Icon name="chevron-right" size={11} color={C.tertiary} stroke={3} />
+              </View>
+            </View>
+            {hasPlans && plans ? (
+              <>
+                <View className="pc__big">
+                  <Text className="pc__num">{planCount}</Text>
+                  <Text>{plans.todo > 0 || plans.toReview === 0 ? "份 作业待交" : "份 等你批阅"}</Text>
+                </View>
+                <View className="pc__m">
+                  {plans.todo > 0 && plans.nextSubject && plans.nextSubject !== "mixed" && <SubjectTile subject={plans.nextSubject} size="xs" className="pc__tile" />}
+                  <Text className="ellipsis flex1">{plans.todo > 0 ? plans.nextTitle ?? "作业" : plans.owned > 0 ? `今天已交 ${plans.submittedToday} 份` : "作业都交了"}</Text>
+                </View>
+                {plans.todo > 0 && plans.nextDue && <Text className="pc__m pc__m--due">{dueLabel(plans.nextDue)} 截止</Text>}
+              </>
+            ) : (
+              <>
+                <Text className="pc__empty">还没有计划</Text>
+                <Text className="pc__m pc__m--wrap">加入老师的计划，或自己建一个</Text>
+              </>
+            )}
+          </View>
+          {/* 待办事项还没做好：先占个位置，点了提示一下（和 App 一致） */}
+          <View className="pc pc--tie" hoverClass="pc--hover" onClick={() => toast("待办事项还在开发中，过几天就能用了")}>
+            <View className="pc__h">
+              <Text className="pc__t">待办事项</Text>
+              <Text className="tag tag--neutral">即将上线</Text>
+            </View>
+            <Text className="pc__empty">记下今天要做的事</Text>
+            <Text className="pc__m pc__m--wrap">拍一张作业单，自动列成待办</Text>
+          </View>
+        </View>
       </View>
 
-      {(scanning.length > 0 || failed.length > 0) && (
-        <View className="group rise rise--2">
-          <View className="group__header">
-            <Text>识别中</Text>
-            <Text>完成后自动归档</Text>
-          </View>
-          {scanning.map(({ f, p }) => (
-            <View key={p.id} className="list-row" hoverClass="list-row--hover" style={{ minHeight: "60px" }} onClick={() => go(`/pages/folder/index?id=${f.id}`)}>
-              <Image className="thumb thumb--sm" src={p.pages[0]?.src} mode="aspectFill" />
-              <View className="flex1 col gap4 minw0">
-                <Text className="row__title ellipsis">{p.name}</Text>
-                <Progress value={p.scanJob!.progress} />
-              </View>
-              <Text className="t-cap c-brand b">{scanStageText(p.scanJob!)}</Text>
-            </View>
-          ))}
-          {failed.map(({ f, p }) => (
-            <View key={p.id} className="list-row" hoverClass="list-row--hover" style={{ minHeight: "56px" }} onClick={() => go(`/pages/paper/index?folderId=${f.id}&paperId=${p.id}`)}>
-              <View className="row__icon" style={{ background: C.wrong }}>
-                <Icon name="warning" size={18} color="#ffffff" />
-              </View>
-              <View className="flex1 col gap2 minw0">
-                <Text className="row__title ellipsis">{p.name}</Text>
-                <Text className="row__sub">识别失败 · 点开重新识别</Text>
-              </View>
-              <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-            </View>
-          ))}
-        </View>
-      )}
-
-      <View className="group rise rise--2">
-        <View className="group__header">
-          <Text>今日安排</Text>
-        </View>
-        <View className="list-row" hoverClass="list-row--hover" style={{ minHeight: "60px" }} onClick={() => go("/pages/plans/index")}>
-          <View className="row__icon" style={{ background: C.brand }}>
-            <Icon name="graduation" size={18} color="#ffffff" stroke={2} />
-          </View>
-          <View className="flex1 col gap2 minw0">
-            <Text className="row__title">学习计划</Text>
-            <Text className="row__sub ellipsis">{planLine}</Text>
-          </View>
-          {plans && plans.todo + plans.toReview > 0 && (
-            <Text className="num-chip" style={{ background: C.brand, color: "#ffffff" }}>
-              {plans.todo + plans.toReview}
+      <View className="hero2 rise rise--2">
+        {scanning.length > 0 ? (
+          <View className="bubble" onClick={() => go(`/pages/folder/index?id=${scanning[0].f.id}`)}>
+            <Text className="bubble__small">
+              正在识别 · {scanStageText(scanning[0].p.scanJob!)}
+              {scanning.length > 1 ? ` · 共 ${scanning.length} 份` : ""}
             </Text>
-          )}
-          <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-        </View>
-        {/* 待办事项还没做好：先占个位置，点了提示一下（和 App 一致） */}
-        <View className="list-row" hoverClass="list-row--hover" style={{ minHeight: "60px" }} onClick={() => toast("待办事项还在开发中，过几天就能用了")}>
-          <View className="row__icon" style={{ background: C.tertiary }}>
-            <Icon name="list" size={18} color="#ffffff" stroke={2} />
+            <Text className="bubble__text">「{scanning[0].p.name}」好了会自动归档。</Text>
+            <Progress value={scanning[0].p.scanJob!.progress} style={{ marginTop: "8px" }} />
           </View>
-          <View className="flex1 col gap2 minw0">
-            <Text className="row__title">待办事项</Text>
-            <Text className="row__sub">记下今天要做的事</Text>
+        ) : failed.length > 0 ? (
+          <View className="bubble" onClick={() => go(`/pages/paper/index?folderId=${failed[0].f.id}&paperId=${failed[0].p.id}`)}>
+            <Text className="bubble__small" style={{ color: C.wrong }}>
+              识别失败
+            </Text>
+            <Text className="bubble__text">「{failed[0].p.name}」没识别出来。</Text>
+            <Text className="bubble__more">点开重新识别 ›</Text>
           </View>
-          <Text className="tag tag--neutral">即将上线</Text>
-        </View>
+        ) : recent.total > 0 ? (
+          <View className="bubble" onClick={() => Taro.switchTab({ url: "/pages/rank/index" })}>
+            <Text className="bubble__small">近 30 天 · {recent.total} 道错题</Text>
+            <Text className="bubble__text">{recent.summary}</Text>
+            <Text className="bubble__more">看错题榜 ›</Text>
+          </View>
+        ) : (
+          <View className="bubble">
+            <Text className="bubble__small">
+              {hello}
+              {nickname ? `，${nickname}` : ""}
+            </Text>
+            <Text className="bubble__text">{papers.length === 0 ? "点「错题收集」或下面的相机，拍下第一张试卷。" : "拍下新试卷，错题会自动整理。"}</Text>
+          </View>
+        )}
+        <Buddy scene={scanning.length ? "scan" : "hero"} size={148} />
       </View>
 
-      {recent.total > 0 && (
-        <View className="card rise rise--3" style={{ gap: "14px" }}>
-          <View className="row-center" onClick={() => Taro.switchTab({ url: "/pages/rank/index" })}>
-            <View className="flex1 col gap2 minw0">
-              <Text className="t-foot c-sec b">近 30 天 · {recent.total} 道错题</Text>
-              <Text className="t-body" style={{ fontWeight: 600 }}>
-                {recent.summary}
-              </Text>
+      <View className="sheet2 rise rise--3">
+        <View className="big">
+          <View className="bt bt--a" hoverClass="bt--hover" onClick={collect}>
+            <View className="bt__deco" />
+            <View className="bt__ic">
+              <Icon name="camera" size={25} color="#ffffff" stroke={2} />
             </View>
-            <Icon name="chevron-right" size={16} color={C.tertiary} stroke={2.4} />
+            <Text className="bt__t">错题收集</Text>
+            <Text className="bt__s">拍试卷，错题自动整理</Text>
           </View>
-          <KnowledgeBars groups={recent.bySubject} />
-        </View>
-      )}
-
-      {papers.length === 0 && (
-        <View className="group rise rise--2">
-          <View className="group__header">
-            <Text>怎么用</Text>
-          </View>
-          {(
-            [
-              ["camera", "拍试卷", "拍照，或从相册一次选多张"],
-              ["viewfinder", "自动识别", "还原题目和批改，按知识点归类"],
-              ["chart", "看错题榜", "最近错在哪、哪个知识点该补"],
-              ["printer", "导出错题本", "PDF，打印出来重做"],
-            ] as [IconName, string, string][]
-          ).map(([icon, t, s]) => (
-            <View key={t} className="list-row" style={{ minHeight: "56px" }}>
-              <View className="row__icon" style={{ background: C.brandTint }}>
-                <Icon name={icon} size={18} color={C.brand} stroke={2.2} />
-              </View>
-              <View className="flex1 col gap2 minw0">
-                <Text className="row__title">{t}</Text>
-                <Text className="row__sub">{s}</Text>
-              </View>
+          <View className="bt bt--b" hoverClass="bt--hover" onClick={erase}>
+            <View className="bt__deco" />
+            <View className="bt__ic">
+              <Icon name="brush" size={25} color="#ffffff" stroke={2} />
             </View>
-          ))}
+            <Text className="bt__t">试卷擦除</Text>
+            <Text className="bt__s">擦掉手写，空白卷重练</Text>
+          </View>
         </View>
-      )}
-
-      {errors.length > 0 && (
-        <View className="home-dock">
-          <Button icon="printer" className="btn--glow rise rise--4" onClick={() => setExporting(true)}>
-            {fresh.length > 0 && lastExport ? `导出新增的 ${fresh.length} 道错题` : `导出错题本（${errors.length} 题）`}
-          </Button>
-        </View>
-      )}
-      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={fresh.length > 0 && lastExport ? "新增错题" : "全部错题"} errors={exportSet} />
+      </View>
     </View>
   );
 }

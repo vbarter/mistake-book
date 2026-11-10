@@ -2,7 +2,7 @@
  *
  * 四幕：
  *   1. 0.0–3.3s  试卷从天而降堆成山，小人抱头、头变大、冒汗、头顶转星星
- *   2. 3.3–6.9s  掏出知错本「拍拍拍」，闪光一次，试卷飞进英语 / 数学 / 化学三个文件夹
+ *   2. 3.3–6.9s  掏出上壹课「拍拍拍」，闪光一次，试卷飞进英语 / 数学 / 化学三个文件夹
  *   3. 6.9–10.1s 三张错题卡片逐张翻面，✗ 变 ✓，头顶亮灯泡
  *   4. 10.1–12.9s 镜头拉远，爸妈进场鼓掌冒爱心，老师举「真棒！」牌，彩纸飘落，小人蹦跳
  *   之后 12.9s 起由页面叠上 Logo（见 components/Splash.tsx）
@@ -15,7 +15,7 @@ export const DURATION = 14.2;
 export const LOGO_AT = 12.9;
 export const CAPTIONS: { from: number; to: number; text: string }[] = [
   { from: 0.3, to: 3.3, text: "试卷堆成山，好头大……" },
-  { from: 3.5, to: 6.8, text: "打开知错本，拍拍拍，自动归档分类" },
+  { from: 3.5, to: 6.8, text: "打开上壹课，拍拍拍，自动归档分类" },
   { from: 7.0, to: 9.9, text: "错题逐个复习，搞懂一道勾一道" },
   { from: 10.2, to: 12.8, text: "知识掌握啦！爸妈表扬，老师称赞" },
 ];
@@ -207,7 +207,7 @@ function phoneTexture() {
     g.fillStyle = "#ffffff";
     g.font = `bold 20px ${FONT}`;
     g.textAlign = "center";
-    g.fillText("知错本", 64, 192);
+    g.fillText("上壹课", 64, 192);
   });
 }
 

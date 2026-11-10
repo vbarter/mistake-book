@@ -6,14 +6,16 @@ import { MathText } from "../components/MathText";
 import { Buddy } from "../components/Illustration";
 import { TrendBars } from "../components/Insights";
 import { CountUp } from "../components/Motion";
-import { Segmented } from "../components/ui";
+import { ExportSheet } from "../components/ExportSheet";
+import { Button, Segmented } from "../components/ui";
 import { SubjectTile } from "../components/v2";
 import { allErrors } from "../lib/errors";
 import { listFolders, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL } from "../lib/format";
-import { RANGE_LABEL, analyze, inRange, type Range } from "../lib/insights";
+import { RANGE_LABEL, analyze, inRange, since, type Range } from "../lib/insights";
 import { BOARDS, rank, type Board } from "../lib/ranks";
 import { useJobs } from "../lib/jobs";
+import { getLastExportAt } from "../lib/prefs";
 import { useRankView } from "../store/rankView";
 
 /**
@@ -29,11 +31,18 @@ export default function Ranking() {
   const setView = useRankView((s) => s.set);
   const jobsVersion = useJobs((s) => s.version);
 
+  const [lastExport, setLastExport] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
   useEffect(() => {
     listFolders().then(setFolders).catch(() => setFolders([]));
-  }, [jobsVersion]);
+    void getLastExportAt().then(setLastExport);
+  }, [jobsVersion, exporting]);
 
   const errors = useMemo(() => (folders ? allErrors(folders) : []), [folders]);
+  // 导出：只导上次导出之后新增的错题，没有新增就导全部（原来在首页底部）
+  const fresh = useMemo(() => since(errors, lastExport), [errors, lastExport]);
+  const exportNew = fresh.length > 0 && !!lastExport;
   const ranged = useMemo(() => inRange(errors, range), [errors, range]);
   const insight = useMemo(() => analyze(ranged), [ranged]);
   const subjects = insight.subjects.map(([s]) => s);
@@ -59,7 +68,7 @@ export default function Ranking() {
         </div>
       </header>
 
-      <div className="screen__content" style={{ gap: 14 }}>
+      <div className={`screen__content${errors.length > 0 ? " screen__content--dock" : ""}`} style={{ gap: 14 }}>
         {folders && errors.length === 0 && <div className="empty rise"><Buddy scene="chart" size={150} /><span className="empty__title">还没有错题榜</span><span className="t-sub">扫描试卷后，这里会按易错程度排出你的错题榜。</span></div>}
 
         {errors.length > 0 && (
@@ -107,6 +116,12 @@ export default function Ranking() {
           </>
         )}
       </div>
+      {errors.length > 0 && (
+        <div className="home-dock">
+          <Button icon="printer" onClick={() => setExporting(true)}>{exportNew ? `导出新增的 ${fresh.length} 道错题` : `导出错题本（${errors.length} 题）`}</Button>
+        </div>
+      )}
+      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={exportNew ? "新增错题" : "全部错题"} errors={fresh.length > 0 ? fresh : errors} />
     </div>
   );
 }

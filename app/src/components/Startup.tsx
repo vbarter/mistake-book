@@ -28,10 +28,10 @@ export default function Startup({ ready, error, onRetry, onDone }: StartupProps)
   }, [ready, held, error, onDone]);
 
   return (
-    <main className={`startup${leaving ? " startup--leaving" : ""}`} aria-label="知错本启动页" aria-busy={!ready && !error}>
+    <main className={`startup${leaving ? " startup--leaving" : ""}`} aria-label="上壹课启动页" aria-busy={!ready && !error}>
       <div className="startup__brand">
         <Buddy scene="hero" size={168} style={{ display: "block", margin: "0 auto 8px" }} />
-        <h1>知错本</h1>
+        <h1>上壹课</h1>
       </div>
       <div className="startup__loading" role="status" aria-live="polite">
         {error ? (

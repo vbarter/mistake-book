@@ -192,7 +192,7 @@ export function Account() {
           <div className="group">
             <Row icon="refresh" iconColor="var(--brand)" title="试卷和错题" value={syncLabel(sync)} onClick={() => void syncNow()} />
           </div>
-          <p className="acct__foot">用同一个手机号（或在错误本小程序里绑定了这个手机号的微信）登录，在别的手机、电脑上也能看到同样的试卷和错题。{sync.state === "error" && sync.error ? `上次失败：${sync.error}` : ""}</p>
+          <p className="acct__foot">用同一个手机号（或在上壹课小程序里绑定了这个手机号的微信）登录，在别的手机、电脑上也能看到同样的试卷和错题。{sync.state === "error" && sync.error ? `上次失败：${sync.error}` : ""}</p>
         </section>
 
         {isNative && import.meta.env.DEV && (

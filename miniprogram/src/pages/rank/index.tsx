@@ -2,13 +2,15 @@ import { useMemo, useState } from "react";
 import { ScrollView, Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { Buddy } from "../../components/Buddy";
+import { ExportSheet } from "../../components/ExportSheet";
 import { Icon } from "../../components/Icon";
 import { TrendBars } from "../../components/Insights";
-import { Empty, MathText, Segmented, SubjectTile, TopBar } from "../../components/ui";
+import { Button, Empty, MathText, Segmented, SubjectTile, TopBar } from "../../components/ui";
 import { allErrors } from "../../lib/errors";
 import { SUBJECT_LABEL } from "../../lib/format";
 import { useDataVersion, useTabBar } from "../../lib/hooks";
-import { RANGE_LABEL, analyze, inRange, type Range } from "../../lib/insights";
+import { RANGE_LABEL, analyze, inRange, since, type Range } from "../../lib/insights";
+import { getLastExportAt } from "../../lib/prefs";
 import { BOARDS, rank, type Board } from "../../lib/ranks";
 import { setRankView } from "../../lib/rankView";
 import { listFolders } from "../../lib/store";
@@ -25,12 +27,17 @@ export default function Ranking() {
   useShareTimelineToo();
   useTabBar(2);
   const [version] = useDataVersion();
+  const [exporting, setExporting] = useState(false);
   const folders = useMemo(() => listFolders(), [version]);
+  const lastExport = useMemo(() => getLastExportAt(), [version, exporting]);
   const [range, setRange] = useState<Range>("30d");
   const [board, setBoard] = useState<Board>("question");
   const [pickedSubject, setSubject] = useState<Subject | "all">("all");
 
   const errors = useMemo(() => allErrors(folders), [folders]);
+  // 导出：只导上次导出之后新增的错题，没有新增就导全部（原来在首页底部）
+  const fresh = useMemo(() => since(errors, lastExport), [errors, lastExport]);
+  const exportNew = fresh.length > 0 && !!lastExport;
   const ranged = useMemo(() => inRange(errors, range), [errors, range]);
   const insight = useMemo(() => analyze(ranged), [ranged]);
   const subjects = insight.subjects.map(([s]) => s);
@@ -49,7 +56,7 @@ export default function Ranking() {
   };
 
   return (
-    <View className="page page--tab" style={{ gap: "14px", paddingTop: 0 }}>
+    <View className={`page page--tab${errors.length > 0 ? " page--dock" : ""}`} style={{ gap: "14px", paddingTop: 0 }}>
       {/* 时间范围放在顶栏，和右上角胶囊按钮同一行（App 里是居中的一条） */}
       <TopBar>
         <View className="flex1">
@@ -135,6 +142,14 @@ export default function Ranking() {
           </View>
         </>
       )}
+      {errors.length > 0 && (
+        <View className="home-dock">
+          <Button icon="printer" className="btn--glow" onClick={() => setExporting(true)}>
+            {exportNew ? `导出新增的 ${fresh.length} 道错题` : `导出错题本（${errors.length} 题）`}
+          </Button>
+        </View>
+      )}
+      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={exportNew ? "新增错题" : "全部错题"} errors={fresh.length > 0 ? fresh : errors} />
     </View>
   );
 }
