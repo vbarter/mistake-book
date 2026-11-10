@@ -8,9 +8,12 @@ export type IconName =
   | "lock" | "export" | "search" | "refresh" | "warning" | "seal" | "target" | "chart" | "book" | "sun" | "info"
   | "viewfinder" | "loop" | "family" | "shield" | "brain"
   | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation"
-  | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "rotate";
+  | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "rotate" | "eye" | "eye-off" | "link";
 
 const paths: Record<IconName, string> = {
+  link: "M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1",
+  eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+  "eye-off": "M3 3l18 18M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7c1.9 0 3.6-.6 5-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2",
   // 学科图标
   calculator: "M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM8 6h8v3H8zM8.5 12.5h.01M12 12.5h.01M15.5 12.5h.01M8.5 16h.01M12 16h.01M15.5 16h.01",
   brush: "M15 4l5 5-8.5 8.5a3 3 0 0 1-4.2 0L7 17.2a3 3 0 0 1 0-4.2zM4 20c0-2 1-3 3-3M12 7l5 5",
@@ -106,4 +109,20 @@ export function iconUri(name: IconName, color: string, stroke = 1.8, fill = fals
 
 export function Icon({ name, size = 22, color = "#1c1c1e", stroke = 1.8, fill = false, style, className }: { name: IconName; size?: number; color?: string; stroke?: number; fill?: boolean; style?: CSSProperties; className?: string }) {
   return <Image className={className} src={iconUri(name, color, stroke, fill)} style={{ width: `${size}px`, height: `${size}px`, flexShrink: 0, ...style }} mode="aspectFit" />;
+}
+
+/** 微信的两个对话气泡（实心，转发按钮上用）。和 App 的 WechatIcon 同一组路径 */
+export const WECHAT_PATHS = [
+  "M9.2 3.6c-4.3 0-7.7 2.9-7.7 6.5 0 2 1.1 3.8 2.8 5l-.8 2.4 2.8-1.4c.9.25 1.7.4 2.6.45-.15-.5-.2-1-.2-1.55 0-3.3 3.1-6 7-6 .3 0 .6 0 .9.05C16.05 5.9 12.95 3.6 9.2 3.6zM6.6 7.3a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM11.8 7.3a1 1 0 1 1 0 2 1 1 0 0 1 0-2z",
+  "M22.5 15c0-2.9-2.9-5.2-6.3-5.2s-6.3 2.3-6.3 5.2 2.9 5.2 6.3 5.2c.7 0 1.4-.1 2.1-.3l2.2 1.2-.6-2c1.6-1 2.6-2.4 2.6-4.1zM14.1 13.3a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7zM18.3 13.3a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7z",
+];
+export function WechatIcon({ size = 18, color = "#07c160" }: { size?: number; color?: string }) {
+  const key = `wechat|${color}`;
+  let uri = cache.get(key);
+  if (!uri) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="${color}" fill-rule="evenodd">${WECHAT_PATHS.map((d) => `<path d="${d}"/>`).join("")}</svg>`;
+    uri = `data:image/svg+xml;base64,${base64(svg)}`;
+    cache.set(key, uri);
+  }
+  return <Image src={uri} style={{ width: `${size}px`, height: `${size}px`, flexShrink: 0 }} mode="aspectFit" />;
 }

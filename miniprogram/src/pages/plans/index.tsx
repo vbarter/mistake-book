@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
-import { LoginGate, PlanTile, loggedIn, usePlansVersion } from "../../components/plan";
+import { Count, LoginGate, PlanTile, loggedIn, usePlansVersion } from "../../components/plan";
 import { Button, Empty, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
@@ -43,18 +43,29 @@ export default function Plans() {
       <PlanTile subject={p.subject} />
       <View className="flex1 col gap2 minw0">
         <Text className="t-headline ellipsis">{p.name}</Text>
-        <Text className="t-foot c-sec ellipsis">
-          {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"} · {p.role === "owner" ? `${p.members ?? 0} 人 · ${p.assignments ?? 0} 份作业` : `${p.teacher} · ${p.assignments ?? 0} 份作业`}
-        </Text>
+        <View className="plan-counts" style={{ gap: "10px" }}>
+          <Text className="t-foot c-sec ellipsis">
+            {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}
+            {p.role === "member" ? ` · ${p.teacher}` : ""}
+          </Text>
+          {p.role === "owner" && (
+            <Count icon="family" color={C.tertiary}>
+              {p.members ?? 0}
+            </Count>
+          )}
+          <Count icon="document" color={C.tertiary}>
+            {p.assignments ?? 0}
+          </Count>
+        </View>
       </View>
       {p.role === "owner" && (p.toReview ?? 0) > 0 && (
         <Tag kind="info" icon="pencil">
-          待阅 {p.toReview}
+          {p.toReview}
         </Tag>
       )}
       {p.role === "member" && (p.todo ?? 0) > 0 && (
         <Tag kind="pending" icon="clock">
-          待交 {p.todo}
+          {p.todo}
         </Tag>
       )}
       <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
@@ -68,7 +79,7 @@ export default function Plans() {
           <View className="spinner spinner--lg" />
         </View>
       )}
-      {plans && plans.length === 0 && <Empty icon="graduation" title="还没有学习计划" text={"老师：新建一个计划，扫描或上传作业，转发到微信群。\n学生：点开老师发的卡片，就自动加入了。"} />}
+      {plans && plans.length === 0 && <Empty icon="graduation" title="还没有学习计划" text="新建一个，或点开老师发的卡片加入" />}
       {owned.length > 0 && (
         <View className="plan-field__label" style={{ paddingTop: "4px" }}>
           <Text>我创建的</Text>

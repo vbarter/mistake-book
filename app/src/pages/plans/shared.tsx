@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Icon } from "../../components/Icon";
+import { useEffect, useState, type ReactNode } from "react";
+import { Icon, type IconName } from "../../components/Icon";
 import { Button, Sheet } from "../../components/ui";
 import { SubjectTile } from "../../components/v2";
 import { toPage, type FullPage } from "../../lib/folders";
@@ -8,6 +8,41 @@ import type { PlanSubject } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
 import "../../styles/plans.css";
+
+/** 图标 + 数字的一小格：人数、份数、对 / 错 / 没做都用它，代替「已交 3」这类文字 */
+export function Count({ icon, color = "var(--secondary)", children }: { icon: IconName; color?: string; children: ReactNode }) {
+  return <span className="plan-count" style={{ color }}><Icon name={icon} size={14} stroke={2.4} /><span className="num">{children}</span></span>;
+}
+
+type Score = { correct: number; wrong: number; blank: number };
+
+/** 一行里的对 / 错 / 没做：绿勾、红叉、灰横线各带一个数字 */
+export function ScoreCounts({ score }: { score: Score }) {
+  return (
+    <span className="plan-counts" aria-label={`对 ${score.correct}，错 ${score.wrong}，没做 ${score.blank}`}>
+      <Count icon="checkcircle" color="var(--mastered)">{score.correct}</Count>
+      <Count icon="xcircle" color="var(--wrong)">{score.wrong}</Count>
+      <Count icon="minus" color="var(--tertiary)">{score.blank}</Count>
+    </span>
+  );
+}
+
+/** 对 / 错 / 没做三个色块：图标 + 大数字，不写字 */
+export function ScoreStats({ score }: { score: Score }) {
+  const cell = (label: string, icon: IconName, color: string, bg: string, n: number) => (
+    <div className="stat plan-stat--icon" style={{ background: bg, color }} aria-label={`${label} ${n}`}>
+      <Icon name={icon} size={20} stroke={2.4} />
+      <span className="stat__value num">{n}</span>
+    </div>
+  );
+  return (
+    <div className="plan-stats plan-stats--3">
+      {cell("对", "checkcircle", "var(--mastered)", "var(--mastered-bg)", score.correct)}
+      {cell("错", "xcircle", "var(--wrong)", "var(--wrong-bg)", score.wrong)}
+      {cell("没做", "minus", "var(--secondary)", "var(--fill-light)", score.blank)}
+    </div>
+  );
+}
 
 /** 学科方块：综合用中性色 */
 export function PlanTile({ subject, size = "md" }: { subject: PlanSubject | null | undefined; size?: "lg" | "md" | "sm" | "xs" }) {
@@ -53,12 +88,12 @@ export function useScanPick(onPages: (pages: FullPage[]) => void, title = "扫�
           <button className="add-tile" onClick={camera}>
             <span className="add-tile__icon"><Icon name="camera" size={28} stroke={2} /></span>
             <span className="t-headline">拍照</span>
-            <span className="t-cap c-sec">一页一张，可以接着拍</span>
+            
           </button>
           <button className="add-tile" onClick={album}>
             <span className="add-tile__icon"><Icon name="photo" size={28} stroke={2} /></span>
-            <span className="t-headline">相册导入</span>
-            <span className="t-cap c-sec">一次选多张</span>
+            <span className="t-headline">相册</span>
+            
           </button>
         </div>
       </Sheet>
@@ -100,10 +135,10 @@ export function NameSheet({ open, required, onClose, onDone }: { open: boolean; 
     }
   };
   return (
-    <Sheet open={open} onClose={required ? () => undefined : onClose} title={required ? "先告诉老师你是谁" : "改名字"}>
-      <p className="t-sub c-sec">写真实姓名，老师看作业时认得出你。以后可以在「我的」里改，改了这里跟着变。</p>
+    <Sheet open={open} onClose={required ? () => undefined : onClose} title={required ? "你的名字" : "改名字"}>
+      <p className="t-foot c-sec">写真实姓名，老师才认得出你</p>
       <input className="input" value={name} maxLength={16} placeholder="你的名字" autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void save(); }} />
-      <Button onClick={save} disabled={busy || !name.trim()}>{required ? "确定，加入学习计划" : "保存"}</Button>
+      <Button onClick={save} disabled={busy || !name.trim()}>{required ? "加入" : "保存"}</Button>
     </Sheet>
   );
 }

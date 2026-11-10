@@ -114,3 +114,13 @@ export function Icon({ name, size = 22, stroke = 1.8, fill = false, className, s
     </svg>
   );
 }
+
+/** 微信的两个对话气泡（实心，转发按钮上用）。和小程序的 WechatIcon 同一组路径 */
+export function WechatIcon({ size = 18, color = "#07c160" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} fillRule="evenodd" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M9.2 3.6c-4.3 0-7.7 2.9-7.7 6.5 0 2 1.1 3.8 2.8 5l-.8 2.4 2.8-1.4c.9.25 1.7.4 2.6.45-.15-.5-.2-1-.2-1.55 0-3.3 3.1-6 7-6 .3 0 .6 0 .9.05C16.05 5.9 12.95 3.6 9.2 3.6zM6.6 7.3a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM11.8 7.3a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+      <path d="M22.5 15c0-2.9-2.9-5.2-6.3-5.2s-6.3 2.3-6.3 5.2 2.9 5.2 6.3 5.2c.7 0 1.4-.1 2.1-.3l2.2 1.2-.6-2c1.6-1 2.6-2.4 2.6-4.1zM14.1 13.3a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7zM18.3 13.3a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7z" />
+    </svg>
+  );
+}

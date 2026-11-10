@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Icon } from "../../components/Icon";
+import { Icon, WechatIcon } from "../../components/Icon";
 import { PrintSheets } from "../../components/PrintPaper";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
-import { Tag } from "../../components/v2";
+import { Stat, Tag } from "../../components/v2";
 import type { FullPage, Paper } from "../../lib/folders";
 import { haptic } from "../../lib/native";
 import { STATUS_LABEL, dueLabel, fetchAssignment, isAssignmentScanning, isOverdue, isSubmissionPending, memberName, revokeAssignment, shareInvite, sizeLabel, submitHomework, usePlans, type AssignmentRes, type PlanFileView, type ResultRow } from "../../lib/plans";
 import { assetUrl } from "../../api/client";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
-import { Busy, ConfirmSheet, useScanPick } from "./shared";
+import { Busy, ConfirmSheet, Count, ScoreCounts, ScoreStats, useScanPick } from "./shared";
 import "../../styles/paper.css";
 
 const fileUrl = (f: PlanFileView) => assetUrl(f.url) ?? "";
@@ -60,6 +60,7 @@ export default function Assignment() {
   const owner = plan.role === "owner";
   const scans = a.files.filter((f) => f.kind === "scan");
   const attachments = a.files.filter((f) => f.kind === "attachment");
+  const canRevoke = owner && !a.revoked;
   const canSubmit = !owner && !a.revoked && (!sub || sub.status !== "reviewed");
 
   const hand = async () => {
@@ -67,7 +68,7 @@ export default function Assignment() {
       await submitHomework(a, pages, setStage);
       setPages([]);
       void haptic.success();
-      toast("交上去了，批改好会显示在这里", "success");
+      toast("交上去了", "success");
       await load();
     } catch (e) {
       toastError(e);
@@ -80,7 +81,7 @@ export default function Assignment() {
     try {
       const job = await submitExport({ kind: "clean", title: a.title, papers: [{ title: a.title, scannedAt: "", pages: digitized.pages, questions: digitized.questions }] });
       setExporting(false);
-      toast(job ? (job.status === "done" ? "已生成" : "正在后台生成，好了会提醒你；也可以在「我的 › 我的导出」里查看") : "服务器暂时不支持导出");
+      toast(job ? (job.status === "done" ? "已生成" : "正在生成，好了会提醒你") : "服务器暂时不支持导出");
     } catch (e) {
       toastError(e);
     }
@@ -90,13 +91,15 @@ export default function Assignment() {
   const content = (
     <>
       <div className="card" style={{ gap: 6 }}>
-        <span className="t-title3" style={{ fontWeight: 800 }}>{a.title}</span>
-        <span className="t-foot c-sec">
-          {plan.name}{owner ? "" : ` · ${plan.teacher}`}
-          {a.dueAt ? ` · ${isOverdue(a.dueAt) ? "已截止 " : "截止 "}${dueLabel(a.dueAt)}` : ""}
-          {a.questionCount ? ` · ${a.questionCount} 题` : ""}
-        </span>
-        {a.revoked && <Tag kind="neutral" style={{ alignSelf: "flex-start" }}>老师已撤回</Tag>}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="t-title3 ellipsis" style={{ fontWeight: 800, flex: 1 }}>{a.title}</span>
+          {a.revoked && <Tag kind="neutral">已撤回</Tag>}
+        </div>
+        <div className="plan-counts">
+          <span className="t-foot c-sec ellipsis">{plan.name}{owner ? "" : ` · ${plan.teacher}`}</span>
+          {a.dueAt && <Count icon="clock" color={isOverdue(a.dueAt) ? "var(--wrong)" : undefined}>{dueLabel(a.dueAt)}</Count>}
+          {a.questionCount ? <Count icon="list">{a.questionCount} 题</Count> : null}
+        </div>
       </div>
       {attachments.length > 0 && (
         <div className="group">
@@ -113,7 +116,7 @@ export default function Assignment() {
       {scans.length > 0 && (
         <>
           {pseudo ? <Segmented value={view} options={[{ value: "photo", label: "照片" }, { value: "text", label: "电子版" }]} onChange={setView} />
-            : owner && isAssignmentScanning(a.id) ? <p className="t-foot c-sec" style={{ padding: "0 4px" }}><span className="spinner-ring" style={{ display: "inline-block", width: 12, height: 12, borderWidth: 2, verticalAlign: -1, marginRight: 6 }} />正在识别成电子版，同学现在已经可以看照片</p> : null}
+            : owner && isAssignmentScanning(a.id) ? <p className="t-foot c-sec" style={{ padding: "0 4px" }}><span className="spinner-ring" style={{ display: "inline-block", width: 12, height: 12, borderWidth: 2, verticalAlign: -1, marginRight: 6 }} />正在识别电子版…</p> : null}
           {view === "text" && pseudo
             ? <PrintSheets paper={pseudo} sheets={digitized!.pages} clean />
             : scans.map((f) => (f.url ? <img key={f.id} className="plan-photo" src={fileUrl(f)} alt={f.name} loading="lazy" onClick={() => openFile(f)} /> : <div key={f.id} className="plan-files__empty card">「{f.name}」还在上传</div>))}
@@ -126,31 +129,27 @@ export default function Assignment() {
     <div className="screen">
       <InlineNav
         title={owner ? "作业情况" : "作业"}
+        onTitle={canRevoke ? () => setMenu(true) : undefined}
         back
         onBack={() => nav(`/plans/${plan.id}`)}
-        right={owner ? (
-          <>
-            {!a.revoked && <button className="plan-pill" onClick={() => forward()}><Icon name="export" size={15} stroke={2.2} />转发</button>}
-            <button className="nav-btn" aria-label="更多" onClick={() => setMenu(true)}><Icon name="ellipsis" size={22} stroke={2.2} /></button>
-          </>
-        ) : undefined}
+        right={canRevoke ? <button className="plan-pill" onClick={() => forward()}><WechatIcon />转发</button> : undefined}
       />
       <div className="screen__content screen__content--modal" style={{ paddingTop: 8, gap: 12 }}>
         {owner && board && (
           <>
             <div className="plan-stats plan-stats--3">
-              <div className="stat"><span className="stat__label">已交</span><span className="stat__value num" style={{ color: "var(--mastered)" }}>{board.submitted.length}<span className="t-foot c-sec" style={{ fontWeight: 500 }}> /{board.members}</span></span></div>
-              <div className="stat"><span className="stat__label">没交</span><span className="stat__value num" style={{ color: board.missing.length ? "var(--due)" : undefined }}>{board.missing.length}</span></div>
-              <div className="stat"><span className="stat__label">还没看</span><span className="stat__value num">{board.unseen}</span></div>
+              <Stat icon="checkcircle" label="已交" value={`${board.submitted.length}/${board.members}`} color={board.submitted.length ? "var(--mastered)" : undefined} />
+              <Stat icon="clock" label="没交" value={board.missing.length} color={board.missing.length ? "var(--due)" : undefined} />
+              <Stat icon="eye-off" label="没看" value={board.unseen} />
             </div>
             {board.hardest.length > 0 && (
               <div className="group">
-                <div className="group__header"><span>错得最多的题</span><span>已批改 {board.hardest[0].graded} 份</span></div>
+                <div className="group__header"><span>错得最多</span></div>
                 {board.hardest.map((h) => (
                   <div key={h.number} className="row" style={{ alignItems: "flex-start" }}>
                     <span className="plan-q plan-q--wrong" style={{ width: 40, flexShrink: 0 }}>{h.number}</span>
-                    <span className="row__main"><span className="t-body clamp" style={{ WebkitLineClamp: 2 }}>{h.stem || "（没有识别出题干）"}</span>{h.knowledge && <span className="row__sub">{h.knowledge}</span>}</span>
-                    <span className="t-headline" style={{ color: "var(--wrong)", whiteSpace: "nowrap" }}>{h.wrong} 人错</span>
+                    <span className="row__main"><span className="t-body clamp" style={{ WebkitLineClamp: 2 }}>{h.stem || `第 ${h.number} 题`}</span>{h.knowledge && <span className="row__sub">{h.knowledge}</span>}</span>
+                    <span aria-label={`${h.wrong} 人错`}><Count icon="person" color="var(--wrong)">{h.wrong}</Count></span>
                   </div>
                 ))}
               </div>
@@ -162,22 +161,23 @@ export default function Assignment() {
                   <div key={m.userId} className="row">
                     <span className="plan-avatar" aria-hidden="true">{m.name.slice(-1)}</span>
                     <span className="row__main"><span className="row__title ellipsis">{memberName(m)}</span></span>
-                    {m.returned ? <Tag kind="wrong">已退回重做</Tag> : m.viewed ? <Tag kind="neutral" icon="eye">看过</Tag> : <Tag kind="pending" icon="eye-off">没看</Tag>}
+                    {m.returned ? <Tag kind="wrong" icon="refresh">退回</Tag> : <Icon name={m.viewed ? "eye" : "eye-off"} size={18} stroke={2.2} aria-label={m.viewed ? "看过" : "没看"} style={{ color: m.viewed ? "var(--tertiary)" : "var(--due)" }} />}
                   </div>
                 ))}
               </div>
             )}
             <div className="group">
               <div className="group__header"><span>已交 {board.submitted.length}</span></div>
-              {board.submitted.length === 0 && <div className="plan-files__empty">{board.members === 0 ? "还没有人加入。点右上角「转发」发到微信群。" : "还没有人交。"}</div>}
+              {board.submitted.length === 0 && <div className="plan-files__empty">{board.members === 0 ? "还没有人加入" : "还没有人交"}</div>}
               {board.submitted.map((s) => (
                 <button key={s.submissionId} className="row" onClick={() => nav(`/plans/s/${s.submissionId}`)}>
                   <span className="plan-avatar" aria-hidden="true">{s.name.slice(-1)}</span>
                   <span className="row__main">
                     <span className="row__title ellipsis">{memberName(s)}{s.left ? "（已退出）" : ""}</span>
-                    <span className="row__sub">{s.score ? `对 ${s.score.correct} · 错 ${s.score.wrong} · 没做 ${s.score.blank}` : "批改中"}{s.late ? " · 迟交" : ""}</span>
+                    {s.score ? <ScoreCounts score={s.score} /> : <span className="row__sub">批改中</span>}
                   </span>
-                  {s.status === "reviewed" ? <Tag kind="correct">已阅</Tag> : <Tag kind="info" icon="pencil">待阅</Tag>}
+                  {s.late && <Tag kind="neutral">迟交</Tag>}
+                  {s.status === "reviewed" ? <Icon name="checkcircle" size={20} stroke={2.2} aria-label="已阅" style={{ color: "var(--mastered)" }} /> : <Tag kind="info" icon="pencil">待阅</Tag>}
                   <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                 </button>
               ))}
@@ -196,16 +196,12 @@ export default function Assignment() {
             {sub.comment && <p className="t-sub" style={{ color: sub.status === "returned" ? "var(--wrong)" : undefined }}>老师：{sub.comment}</p>}
             {sub.results && sub.score ? (
               <>
-                <div className="plan-stats plan-stats--3">
-                  <div className="stat" style={{ background: "var(--mastered-bg)" }}><span className="stat__label">对</span><span className="stat__value num" style={{ color: "var(--mastered)" }}>{sub.score.correct}</span></div>
-                  <div className="stat" style={{ background: "var(--wrong-bg)" }}><span className="stat__label">错</span><span className="stat__value num" style={{ color: "var(--wrong)" }}>{sub.score.wrong}</span></div>
-                  <div className="stat" style={{ background: "var(--fill-light)" }}><span className="stat__label">没做</span><span className="stat__value num">{sub.score.blank}</span></div>
-                </div>
+                <ScoreStats score={sub.score} />
                 <QuestionGrid results={sub.results} />
-                <span className="t-cap c-sec">错题已经自动进了你的错题榜，交的这份也存在「试卷」里。</span>
+                {sub.score.wrong > 0 && <span className="t-cap c-sec">错题已进错题榜</span>}
               </>
             ) : (
-              <span className="t-sub c-sec">{isSubmissionPending(sub.id) ? "正在批改，好了会显示在这里。可以先离开。" : "已经交给老师了。批改结果在「试卷」里这份作业上，打开它会自动补交给老师。"}</span>
+              <span className="t-sub c-sec">{isSubmissionPending(sub.id) ? "正在批改…" : "已交，批改结果在「试卷」里"}</span>
             )}
           </div>
         )}
@@ -241,7 +237,7 @@ export default function Assignment() {
             ) : (
               <>
                 <Button variant="outline" icon="printer" onClick={() => setExporting(true)}>导出</Button>
-                {canSubmit && <Button icon="camera" onClick={scan.open}>{sub ? "重新扫描上传" : "扫描上传"}</Button>}
+                {canSubmit && <Button icon="camera" onClick={scan.open}>{sub ? "重新扫描" : "扫描上传"}</Button>}
               </>
             )}
           </div>
@@ -253,23 +249,23 @@ export default function Assignment() {
           {digitized && (
             <button className="row" onClick={exportPdf}>
               <span className="row__icon" style={{ background: "var(--brand)" }}><Icon name="printer" size={18} stroke={2} /></span>
-              <span className="row__main"><span className="row__title">电子版 PDF</span><span className="row__sub">排好版的原题，方便打印</span></span>
+              <span className="row__main"><span className="row__title">电子版 PDF</span></span>
             </button>
           )}
           {a.files.map((f) => (
             <button key={f.id} className="row" onClick={() => openFile(f)}>
               <span className="row__icon" style={{ background: "var(--secondary)" }}><Icon name={f.mime.startsWith("image/") ? "photo" : "document"} size={18} stroke={2} /></span>
-              <span className="row__main"><span className="row__title ellipsis">{f.name}</span><span className="row__sub">原件 · {sizeLabel(f.size)}</span></span>
+              <span className="row__main"><span className="row__title ellipsis">{f.name}</span><span className="row__sub">{sizeLabel(f.size)}</span></span>
             </button>
           ))}
         </div>
       </Sheet>
       <Sheet open={menu} onClose={() => setMenu(false)} title={a.title}>
-        <div className="group" style={{ background: "var(--fill-light)" }}>
-          <button className="row" style={{ color: "var(--wrong)" }} onClick={() => { setMenu(false); setRevoking(true); }}><span className="row__main"><span className="row__title">撤回这份作业</span><span className="row__sub">没交的同学不会再看到；交过的同学还能看到自己那份</span></span></button>
+        <div className="plan-quiet plan-quiet--only">
+          <button className="plan-quiet__danger" onClick={() => { setMenu(false); setRevoking(true); }}>撤回这份作业</button>
         </div>
       </Sheet>
-      <ConfirmSheet open={revoking} danger title="撤回这份作业？" action="撤回" onClose={() => setRevoking(false)}
+      <ConfirmSheet open={revoking} danger title="撤回这份作业？" text="没交的同学不会再看到，交过的还能看到自己那份。" action="撤回" onClose={() => setRevoking(false)}
         onConfirm={async () => { try { await revokeAssignment(a.id); usePlans.getState().bump(); toast("已撤回", "success"); nav(`/plans/${plan.id}`, { replace: true }); } catch (e) { toastError(e); } }} />
       {scan.sheet}
       {stage && <Busy text={stage} />}

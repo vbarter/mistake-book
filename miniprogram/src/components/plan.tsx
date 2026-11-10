@@ -2,7 +2,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Taro, { useDidShow, useShareAppMessage } from "@tarojs/taro";
 import { Button as NativeButton, Input, Text, View } from "@tarojs/components";
-import { Icon, type IconName } from "./Icon";
+import { Icon, WechatIcon, type IconName } from "./Icon";
 import { Button, Empty, Sheet, SubjectTile } from "./ui";
 import { errorText } from "../lib/api";
 import { currentUser, ensureLogin, isLoggedIn, updateProfile } from "../lib/auth";
@@ -11,6 +11,56 @@ import { toast } from "../lib/hooks";
 import { DEFAULT_NICKNAME, PLANS_EVENT, sharePayload, startPlanSync, type PlanSubject, type ResultRow, type ShareInfo } from "../lib/plans";
 import { SHARE_TITLE } from "../lib/share";
 import { C } from "../lib/theme";
+
+/** 图标 + 数字的一小格：人数、份数、对 / 错 / 没做都用它，代替「已交 3」这类文字 */
+export function Count({ icon, color = C.secondary, children }: { icon: IconName; color?: string; children: ReactNode }) {
+  return (
+    <View className="plan-count">
+      <Icon name={icon} size={14} color={color} stroke={2.4} />
+      <Text className="num" style={{ color }}>
+        {children}
+      </Text>
+    </View>
+  );
+}
+
+type Score = { correct: number; wrong: number; blank: number };
+
+/** 一行里的对 / 错 / 没做：绿勾、红叉、灰横线各带一个数字 */
+export function ScoreCounts({ score }: { score: Score }) {
+  return (
+    <View className="plan-counts">
+      <Count icon="checkcircle" color={C.ok}>
+        {score.correct}
+      </Count>
+      <Count icon="xcircle" color={C.wrong}>
+        {score.wrong}
+      </Count>
+      <Count icon="minus" color={C.tertiary}>
+        {score.blank}
+      </Count>
+    </View>
+  );
+}
+
+/** 对 / 错 / 没做三个色块：图标 + 大数字，不写字 */
+export function ScoreStats({ score }: { score: Score }) {
+  const cell = (kind: string, icon: IconName, color: string, n: number) => (
+    <View className={`stat stat--${kind} stat--icon`}>
+      <Icon name={icon} size={20} color={color} stroke={2.4} />
+      <Text className="stat__value num" style={{ color }}>
+        {n}
+      </Text>
+    </View>
+  );
+  return (
+    <View className="stats">
+      {cell("ok", "checkcircle", C.ok, score.correct)}
+      {cell("wrong", "xcircle", C.wrong, score.wrong)}
+      {cell("mute", "minus", C.secondary, score.blank)}
+    </View>
+  );
+}
 
 /** 学科方块：综合用中性色 */
 export function PlanTile({ subject, size = "md" }: { subject: PlanSubject | null | undefined; size?: "lg" | "md" | "sm" | "xs" }) {
@@ -37,10 +87,10 @@ export function usePlansVersion(): [number, () => void] {
 }
 
 /** 学习计划都在服务器上，没登录时整页换成这一块 */
-export function LoginGate({ what = "使用学习计划", text = "学习计划要一个账号：老师靠它知道是谁交的作业。用微信一键登录即可。" }: { what?: string; text?: string }) {
+export function LoginGate({ what = "使用学习计划", text = "" }: { what?: string; text?: string }) {
   return (
     <View className="page center-page">
-      <Empty icon="graduation" title="登录后才能用学习计划" text={text}>
+      <Empty icon="graduation" title="登录后使用学习计划" text={text || undefined}>
         <Button size="sm" onClick={() => void ensureLogin(what)} style={{ width: "auto", padding: "0 24px" }}>
           微信登录
         </Button>
@@ -88,20 +138,19 @@ export function ScanSheet({ open, title = "扫描", onClose, onPhotos }: { open:
       if (!/cancel/i.test(msg)) toast(/auth|权限/.test(msg) ? "需要相机 / 相册权限，可以在右上角「设置」里打开" : errorText(e));
     }
   };
-  const tile = (icon: IconName, name: string, sub: string, source: Source) => (
+  const tile = (icon: IconName, name: string, source: Source) => (
     <View className="add-tile" hoverClass="card--pressed" onClick={() => void pick(source)}>
       <View className="add-tile__icon">
         <Icon name={icon} size={28} color="#ffffff" stroke={2} />
       </View>
       <Text className="t-headline">{name}</Text>
-      <Text className="t-cap c-sec">{sub}</Text>
     </View>
   );
   return (
     <Sheet open={open} onClose={onClose} title={title}>
       <View className="add-grid">
-        {tile("camera", "拍照", "一页一张，可以接着拍", "camera")}
-        {tile("photo", "相册导入", "一次选多张", "album")}
+        {tile("camera", "拍照", "camera")}
+        {tile("photo", "相册", "album")}
       </View>
     </Sheet>
   );
@@ -133,11 +182,11 @@ export function NameSheet({ open, required, onClose, onDone }: { open: boolean; 
     }
   };
   return (
-    <Sheet open={open} onClose={required ? () => undefined : onClose} title={required ? "先告诉老师你是谁" : "改名字"}>
-      <Text className="t-sub c-sec">写真实姓名，老师看作业时认得出你。以后可以在「我的」里改，改了这里跟着变。</Text>
+    <Sheet open={open} onClose={required ? () => undefined : onClose} title={required ? "你的名字" : "改名字"}>
+      <Text className="t-foot c-sec">写真实姓名，老师才认得出你</Text>
       <Input className="input" value={name} maxlength={16} placeholder="你的名字" focus adjustPosition={false} confirmType="done" onInput={(e) => setName(e.detail.value)} onConfirm={() => void save()} />
       <Button onClick={() => void save()} disabled={busy || !name.trim()}>
-        {required ? "确定，加入学习计划" : "保存"}
+        {required ? "加入" : "保存"}
       </Button>
     </Sheet>
   );
@@ -161,11 +210,13 @@ export function QuestionGrid({ results, onPick }: { results: ResultRow[]; onPick
  * 转发按钮：小程序里只有用户亲手点原生的 <button open-type="share"> 才能拉起转发，
  * 所以所有「转发到微信」都是这个按钮；卡片的内容由页面的 useShareAppMessage 决定（remind = 提醒没交的同学）。
  */
-export function ShareButton({ children, variant = "primary", pill, icon = "export", remind, style, onTap }: { children: ReactNode; variant?: "primary" | "outline" | "tinted"; pill?: boolean; icon?: IconName; remind?: boolean; style?: CSSProperties; onTap?: () => void }) {
+export function ShareButton({ children, variant = "primary", pill, icon, remind, style, onTap }: { children: ReactNode; variant?: "primary" | "outline" | "tinted"; pill?: boolean; icon?: IconName; remind?: boolean; style?: CSSProperties; onTap?: () => void }) {
   const cls = pill ? "plan-pill btn-native" : ["btn", "btn-native", variant !== "primary" && `btn--${variant}`].filter(Boolean).join(" ");
+  const light = pill || variant !== "primary";
   return (
     <NativeButton className={cls} hoverClass={pill ? "none" : "btn--hover"} openType="share" data-remind={remind ? "1" : ""} style={style} onClick={onTap}>
-      <Icon name={icon} size={pill ? 15 : 20} color={pill || variant !== "primary" ? C.brand : "#ffffff"} stroke={2.2} />
+      {/* 没指定图标就是微信图标：让人一眼知道是发到微信 */}
+      {icon ? <Icon name={icon} size={pill ? 15 : 20} color={light ? C.brand : "#ffffff"} stroke={2.2} /> : <WechatIcon size={pill ? 18 : 22} color={light ? "#07c160" : "#ffffff"} />}
       <Text>{children}</Text>
     </NativeButton>
   );
