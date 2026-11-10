@@ -665,7 +665,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-file__x { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .plan-add { display: flex; gap: 10px; }
 .plan-add .btn { flex: 1; min-width: 0; }
-.plan-pill { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px; border-radius: 16px; background: $brand-tint; color: $brand; font-size: 14px; font-weight: 600; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; }
+.plan-pill { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px 0 11px; border-radius: 17px; background: $card; border: 1px solid $sep-light; color: $label; font-size: 14px; font-weight: 600; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; }
 .plan-head { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
 .plan-banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: $accent-bg; color: $accent-on; font-size: 14px; line-height: 20px; }
 .plan-banner__act { font-weight: 700; white-space: nowrap; text-decoration: underline; }
@@ -696,3 +696,5 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .stat--ok { background: $ok-bg; }
 .stat--wrong { background: $wrong-bg; }
 .stat--mute { background: $fill-light; }
+.plan-counts { display: flex; align-items: center; gap: 14px; }
+.plan-count { display: flex; align-items: center; gap: 4px; font-size: 13px; line-height: 18px; font-weight: 600; }

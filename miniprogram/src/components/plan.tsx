@@ -2,7 +2,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Taro, { useDidShow, useShareAppMessage } from "@tarojs/taro";
 import { Button as NativeButton, Input, Text, View } from "@tarojs/components";
-import { Icon, type IconName } from "./Icon";
+import { Icon, WechatIcon, type IconName } from "./Icon";
 import { Button, Empty, Sheet, SubjectTile } from "./ui";
 import { errorText } from "../lib/api";
 import { currentUser, ensureLogin, isLoggedIn, updateProfile } from "../lib/auth";
@@ -161,11 +161,13 @@ export function QuestionGrid({ results, onPick }: { results: ResultRow[]; onPick
  * 转发按钮：小程序里只有用户亲手点原生的 <button open-type="share"> 才能拉起转发，
  * 所以所有「转发到微信」都是这个按钮；卡片的内容由页面的 useShareAppMessage 决定（remind = 提醒没交的同学）。
  */
-export function ShareButton({ children, variant = "primary", pill, icon = "export", remind, style, onTap }: { children: ReactNode; variant?: "primary" | "outline" | "tinted"; pill?: boolean; icon?: IconName; remind?: boolean; style?: CSSProperties; onTap?: () => void }) {
+export function ShareButton({ children, variant = "primary", pill, icon, remind, style, onTap }: { children: ReactNode; variant?: "primary" | "outline" | "tinted"; pill?: boolean; icon?: IconName; remind?: boolean; style?: CSSProperties; onTap?: () => void }) {
   const cls = pill ? "plan-pill btn-native" : ["btn", "btn-native", variant !== "primary" && `btn--${variant}`].filter(Boolean).join(" ");
+  const light = pill || variant !== "primary";
   return (
     <NativeButton className={cls} hoverClass={pill ? "none" : "btn--hover"} openType="share" data-remind={remind ? "1" : ""} style={style} onClick={onTap}>
-      <Icon name={icon} size={pill ? 15 : 20} color={pill || variant !== "primary" ? C.brand : "#ffffff"} stroke={2.2} />
+      {/* 没指定图标就是微信图标：让人一眼知道是发到微信 */}
+      {icon ? <Icon name={icon} size={pill ? 15 : 20} color={light ? C.brand : "#ffffff"} stroke={2.2} /> : <WechatIcon size={pill ? 18 : 22} color={light ? "#07c160" : "#ffffff"} />}
       <Text>{children}</Text>
     </NativeButton>
   );

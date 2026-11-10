@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Icon } from "../../components/Icon";
+import { Icon, WechatIcon } from "../../components/Icon";
 import { PrintSheets } from "../../components/PrintPaper";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Tag } from "../../components/v2";
@@ -130,7 +130,7 @@ export default function Assignment() {
         onBack={() => nav(`/plans/${plan.id}`)}
         right={owner ? (
           <>
-            {!a.revoked && <button className="plan-pill" onClick={() => forward()}><Icon name="export" size={15} stroke={2.2} />转发</button>}
+            {!a.revoked && <button className="plan-pill" onClick={() => forward()}><WechatIcon />转发</button>}
             <button className="nav-btn" aria-label="更多" onClick={() => setMenu(true)}><Icon name="ellipsis" size={22} stroke={2.2} /></button>
           </>
         ) : undefined}

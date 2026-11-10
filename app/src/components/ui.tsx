@@ -14,6 +14,7 @@ export function InlineNav({
   backLabel,
   right,
   onBack,
+  onTitle,
 }: {
   title: string;
   subtitle?: string;
@@ -21,6 +22,8 @@ export function InlineNav({
   backLabel?: string;
   right?: ReactNode;
   onBack?: () => void;
+  /** 传了就能点标题（标题旁带一支小笔），用来改名 */
+  onTitle?: () => void;
 }) {
   const nav = useNavigate();
   return (
@@ -34,7 +37,14 @@ export function InlineNav({
         )}
       </div>
       <div className="nav__center">
-        <span className="t-headline ellipsis" style={{ maxWidth: "100%" }}>{title}</span>
+        {onTitle ? (
+          <button className="nav__title-btn" onClick={onTitle} aria-label={`改名：${title}`}>
+            <span className="t-headline ellipsis">{title}</span>
+            <Icon name="pencil" size={14} stroke={2.2} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
+          </button>
+        ) : (
+          <span className="t-headline ellipsis" style={{ maxWidth: "100%" }}>{title}</span>
+        )}
         {subtitle && <span className="t-cap c-sec">{subtitle}</span>}
       </div>
       <div className="nav__side nav__side--end">{right}</div>
