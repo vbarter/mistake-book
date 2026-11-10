@@ -13,7 +13,8 @@ export default defineConfig<"webpack5">(() => ({
     // 后端地址：和 App 共用同一个服务
     API_BASE: JSON.stringify(process.env.TARO_APP_API_BASE || "https://book.openmindai.cn"),
   },
-  copy: { patterns: [], options: {} },
+  // 学习计划转发卡片的备用封面（画不出自定义封面时用，免得微信拿当前页面截图当封面）
+  copy: { patterns: [{ from: "src/assets/", to: "dist/assets/" }], options: {} },
   framework: "react",
   compiler: "webpack5",
   cache: { enable: false },

@@ -61,7 +61,7 @@ function finishJob(folderId: string, paperId: string, job: DigitizeJob, parts: S
 const UPLOAD_MAX_SIDE = 1568;
 const SPLIT_ASPECT = 1.3;
 
-interface UploadPart {
+export interface UploadPart {
   page: number;
   image: string; // dataURL
   x0: number;
@@ -103,7 +103,7 @@ async function drawPart(src: string, W: number, H: number, x0: number, w: number
 }
 
 /** 一页照片 → 上传片段：宽幅照片切成左右两张（各带 2% 重叠），其余整张；都缩到 1568 */
-async function prepareUpload(page: FolderPage, index: number): Promise<UploadPart[]> {
+export async function prepareUpload(page: Pick<FolderPage, "src" | "width" | "height">, index: number): Promise<UploadPart[]> {
   const parts = page.width / page.height >= SPLIT_ASPECT ? [{ x0: 0, w: 0.52 }, { x0: 0.48, w: 0.52 }] : [{ x0: 0, w: 1 }];
   const out: UploadPart[] = [];
   for (const p of parts) {

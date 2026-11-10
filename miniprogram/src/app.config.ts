@@ -15,6 +15,12 @@ export default defineAppConfig({
     "pages/privacy/index",
     "pages/account/index",
     "pages/bind-phone/index",
+    "pages/plans/index",
+    "pages/plan-new/index",
+    "pages/plan/index",
+    "pages/plan-task/index",
+    "pages/plan-review/index",
+    "pages/plan-join/index",
   ],
   window: {
     backgroundTextStyle: "dark",
