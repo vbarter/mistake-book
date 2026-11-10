@@ -265,3 +265,90 @@ CREATE TABLE IF NOT EXISTS sync_pages (
   KEY ix_sync_pages_server_updated_at (server_updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云同步：试卷照片';
 
+
+-- ---------------------------------------------------------------- 学习计划（老师布置作业）
+
+CREATE TABLE IF NOT EXISTS plans (
+  id          VARCHAR(32) NOT NULL,
+  owner_id    VARCHAR(32) NOT NULL COMMENT '创建人（老师）',
+  name        VARCHAR(60) NULL,
+  subject     VARCHAR(16) NULL COMMENT '学科，或 mixed（综合）',
+  invite_code VARCHAR(16) NOT NULL COMMENT '转发出去的卡片 / 链接里带的码',
+  created_at  DATETIME    NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY ix_plans_invite_code (invite_code),
+  KEY ix_plans_owner_id (owner_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习计划';
+
+CREATE TABLE IF NOT EXISTS plan_members (
+  id        VARCHAR(32) NOT NULL,
+  plan_id   VARCHAR(32) NOT NULL,
+  user_id   VARCHAR(32) NOT NULL,
+  joined_at DATETIME    NULL,
+  removed   TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '退出或被移除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_plan_members (plan_id, user_id),
+  KEY ix_plan_members_plan_id (plan_id),
+  KEY ix_plan_members_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习计划：成员（名字不存，显示时取账号称呼）';
+
+CREATE TABLE IF NOT EXISTS plan_assignments (
+  id             VARCHAR(32)  NOT NULL,
+  plan_id        VARCHAR(32)  NOT NULL,
+  title          VARCHAR(120) NULL,
+  due_at         VARCHAR(32)  NULL COMMENT '截止时间（客户端给的 ISO 时间）',
+  digitized      LONGTEXT     NULL COMMENT '扫描件识别出的电子版',
+  question_count INT          NULL,
+  revoked        TINYINT(1)   NOT NULL DEFAULT 0,
+  created_at     DATETIME     NULL,
+  PRIMARY KEY (id),
+  KEY ix_plan_assignments_plan_id (plan_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习计划：作业';
+
+CREATE TABLE IF NOT EXISTS plan_files (
+  id            VARCHAR(32)  NOT NULL,
+  plan_id       VARCHAR(32)  NOT NULL,
+  assignment_id VARCHAR(32)  NOT NULL,
+  submission_id VARCHAR(32)  NULL COMMENT '空 = 作业内容；非空 = 这次提交的照片',
+  kind          VARCHAR(12)  NULL COMMENT 'scan | attachment',
+  name          VARCHAR(120) NULL,
+  mime          VARCHAR(80)  NULL,
+  ext           VARCHAR(8)   NULL,
+  size          BIGINT       NULL,
+  position      INT          NULL,
+  uploaded      TINYINT(1)   NOT NULL DEFAULT 0,
+  created_at    DATETIME     NULL,
+  PRIMARY KEY (id),
+  KEY ix_plan_files_plan_id (plan_id),
+  KEY ix_plan_files_assignment_id (assignment_id),
+  KEY ix_plan_files_submission_id (submission_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习计划：文件（本体在对象存储 plans/<planId>/<id>.<ext>）';
+
+CREATE TABLE IF NOT EXISTS plan_submissions (
+  id            VARCHAR(32)  NOT NULL,
+  plan_id       VARCHAR(32)  NOT NULL,
+  assignment_id VARCHAR(32)  NOT NULL,
+  user_id       VARCHAR(32)  NOT NULL,
+  status        VARCHAR(12)  NULL COMMENT 'submitted | reviewed | returned',
+  comment       VARCHAR(200) NULL,
+  late          TINYINT(1)   NULL,
+  results       JSON         NULL COMMENT '逐题结果',
+  submitted_at  DATETIME     NULL,
+  reviewed_at   DATETIME     NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_plan_submissions (assignment_id, user_id),
+  KEY ix_plan_submissions_plan_id (plan_id),
+  KEY ix_plan_submissions_assignment_id (assignment_id),
+  KEY ix_plan_submissions_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习计划：学生的提交';
+
+CREATE TABLE IF NOT EXISTS plan_views (
+  id            INT         NOT NULL AUTO_INCREMENT,
+  assignment_id VARCHAR(32) NOT NULL,
+  user_id       VARCHAR(32) NOT NULL,
+  viewed_at     DATETIME    NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_plan_views (assignment_id, user_id),
+  KEY ix_plan_views_assignment_id (assignment_id),
+  KEY ix_plan_views_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习计划：成员打开过哪份作业';

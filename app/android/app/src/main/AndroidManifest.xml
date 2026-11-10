@@ -23,6 +23,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- 学习计划：点开微信里转发的卡片（落地页）用 shangyike://plans/join?code=… 唤起 App 自动加入 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="shangyike" />
+            </intent-filter>
+
         </activity>
 
         <provider

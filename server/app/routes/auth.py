@@ -404,6 +404,9 @@ def merge_accounts(source: User, target: User) -> None:
 
     log.info("merge account %s -> %s", source.id, target.id)
     merge_user_sync(source.id, target.id)
+    from .plans import merge_user_plans
+
+    merge_user_plans(source.id, target.id)
     for model in (Mistake, ReviewLog, PracticeSession, DigitizeJob, ExportJob, EraseJob, UsageEvent):
         model.query.filter_by(user_id=source.id).update({"user_id": target.id}, synchronize_session=False)
     openid, apple_sub, apple_name, apple_email = source.wx_openid, source.apple_sub, source.apple_name, source.apple_email
@@ -532,6 +535,9 @@ def delete_me():
     delete_user_exports(user.id)
     delete_user_sync(user.id, drop_counter=True)
     delete_user_erase_jobs(user.id)
+    from .plans import delete_user_plans
+
+    delete_user_plans(user.id)
     for model in (ReviewLog, PracticeSession, DigitizeJob, UsageEvent):
         model.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     db.session.delete(user)

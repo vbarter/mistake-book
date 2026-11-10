@@ -401,11 +401,12 @@ def blob_put(token: str):
     key = store.resolve_token(token, "PUT")
     if key is None:
         abort(403, "链接无效或已过期")
-    if (request.content_length or 0) > storage.MAX_BLOB_BYTES:
-        abort(413, "照片太大")
+    limit = storage.max_bytes(key)
+    if (request.content_length or 0) > limit:
+        abort(413, "文件太大")
     data = request.get_data(cache=False)
-    if not data or len(data) > storage.MAX_BLOB_BYTES:
-        abort(400 if not data else 413, "照片是空的" if not data else "照片太大")
+    if not data or len(data) > limit:
+        abort(400 if not data else 413, "文件是空的" if not data else "文件太大")
     store.write(key, data)
     return "", 200
 
@@ -417,7 +418,9 @@ def blob_get(token: str):
     path = store.file_path(key) if key else None
     if path is None:
         abort(404 if key else 403)
-    return send_file(path, mimetype="image/jpeg", max_age=3600)
+    import mimetypes
+
+    return send_file(path, mimetype=mimetypes.guess_type(path)[0] or "application/octet-stream", max_age=3600)
 
 
 # --------------------------------------------------------------------------- 删除 / 合并账号

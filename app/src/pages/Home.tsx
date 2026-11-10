@@ -12,6 +12,7 @@ import { listFolders, thumbOf, type Folder } from "../lib/folders";
 import { analyze, inRange, since } from "../lib/insights";
 import { scanStageText, useJobs } from "../lib/jobs";
 import { getLastExportAt } from "../lib/prefs";
+import { dueLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
@@ -29,6 +30,22 @@ export default function Home() {
   const [exporting, setExporting] = useState(false);
   const jobsVersion = useJobs((s) => s.version);
   const nickname = useAuth((s) => s.user?.nickname) ?? "";
+  const [plans, setPlans] = useState<PlanSummary | null>(null);
+  const plansVersion = usePlans((s) => s.version);
+  // 点开了老师的卡片、刚登录 / 注册完落到首页：接着去加入
+  useEffect(() => {
+    const target = pendingJoin();
+    if (target) nav(joinPath(target), { replace: true });
+  }, [nav]);
+  useEffect(() => {
+    fetchPlans().then((r) => setPlans(r.summary)).catch(() => undefined); // 没网时卡片照样在，只是不带数字
+  }, [plansVersion]);
+  const planLine = !plans || plans.owned + plans.joined === 0
+    ? "老师布置作业，同学拍照交回"
+    : [
+        plans.todo > 0 ? `待交 ${plans.todo} 份${plans.nextTitle ? `：${plans.nextTitle}${plans.nextDue ? `（截止 ${dueLabel(plans.nextDue)}）` : ""}` : ""}` : "",
+        plans.owned > 0 ? `今天已交 ${plans.submittedToday} 份 · 待批阅 ${plans.toReview} 份` : "",
+      ].filter(Boolean).join(" · ") || "作业都交了";
 
   useEffect(() => {
     listFolders().then(setFolders).catch(() => setFolders([]));
@@ -84,6 +101,16 @@ export default function Home() {
             ))}
           </div>
         )}
+
+        <div className="group rise" style={{ ["--i" as string]: 2 }}>
+          <div className="group__header"><span>今日安排</span></div>
+          <button className="row" style={{ minHeight: 60 }} onClick={() => nav("/plans")}>
+            <span className="row__icon" style={{ background: "var(--brand)" }}><Icon name="graduation" size={18} stroke={2} /></span>
+            <span className="row__main"><span className="row__title">学习计划</span><span className="row__sub ellipsis">{planLine}</span></span>
+            {plans && plans.todo + plans.toReview > 0 && <span className="num-chip" style={{ background: "var(--brand)", color: "#fff" }}>{plans.todo + plans.toReview}</span>}
+            <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+          </button>
+        </div>
 
         {recent.total > 0 && (
           <section className="card rise" style={{ gap: 14, ["--i" as string]: 3 }}>
