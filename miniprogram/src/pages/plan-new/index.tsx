@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Image, Input, Picker, ScrollView, Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
-import { Icon } from "../../components/Icon";
+import { Icon, WechatIcon } from "../../components/Icon";
 import { Busy, LoginGate, ScanSheet, ShareButton, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { Button, Sheet } from "../../components/ui";
 import { errorText } from "../../lib/api";
@@ -139,7 +139,7 @@ export default function PlanNew() {
     if (files.length >= MAX_FILES) return void toast(`一份作业最多 ${MAX_FILES} 个文件`);
     let tap = -1;
     try {
-      tap = (await Taro.showActionSheet({ itemList: ["从相册选图片", "从微信聊天选文件（PDF、Word、图片）"] })).tapIndex;
+      tap = (await Taro.showActionSheet({ itemList: ["相册图片", "微信聊天里的文件"] })).tapIndex;
     } catch {
       return; // 点了取消
     }
@@ -175,11 +175,11 @@ export default function PlanNew() {
     <View className="page" style={{ gap: "16px" }}>
       {planId ? (
         <>
-          {plan && <Text className="t-foot c-sec pad12">布置到「{plan.name}」</Text>}
+          {plan && <Text className="t-foot c-sec pad12">{plan.name}</Text>}
           <View className="plan-field">
             <View className="plan-field__label">
               <Text>作业名称</Text>
-              <Text className="plan-field__note">不填就用日期或附件名</Text>
+              <Text className="plan-field__note">选填</Text>
             </View>
             <Input className="input input--card" value={title} maxlength={120} placeholder="例如：第三单元练习" onInput={(e) => setTitle(e.detail.value)} />
           </View>
@@ -231,10 +231,14 @@ export default function PlanNew() {
       <View className="plan-field">
         <View className="plan-field__label">
           <Text>作业内容</Text>
-          <Text className="plan-field__note">{files.length ? `已添加 ${files.length} 个` : "扫描件会识别成题目，自动批改"}</Text>
+          {files.length > 0 && <Text className="plan-field__note">{files.length}</Text>}
         </View>
         <ScrollView scrollY className="plan-files" enhanced showScrollbar={false} scrollIntoView={bottom} scrollWithAnimation>
-          {files.length === 0 && <Text className="plan-empty">{"还没有内容。\n点下面的「扫描」拍下作业（会识别成题目、自动批改），或「上传附件」选图片、PDF、Word（同学直接打开看）。"}</Text>}
+          {files.length === 0 && (
+            <View className="plan-empty plan-empty--icon">
+              <Icon name="document" size={32} color={C.tertiary} stroke={1.6} />
+            </View>
+          )}
           {files.map((f) => (
             <View key={f.clientId} id={`pf-${f.clientId}`} className="plan-file">
               {f.mime.startsWith("image/") ? (
@@ -248,9 +252,7 @@ export default function PlanNew() {
                 <Text className="t-body ellipsis" style={{ fontWeight: 500 }}>
                   {f.name}
                 </Text>
-                <Text className="t-cap c-sec">
-                  {f.kind === "scan" ? "扫描件" : "附件"} · {sizeLabel(f.size)}
-                </Text>
+                <Text className="t-cap c-sec">{sizeLabel(f.size)}</Text>
               </View>
               <View className="plan-file__x" onClick={() => setFiles((cur) => cur.filter((x) => x.clientId !== f.clientId))}>
                 <Icon name="xmark" size={16} color={C.tertiary} stroke={2.4} />
@@ -269,17 +271,18 @@ export default function PlanNew() {
       </View>
 
       <View className="bottom-bar">
-        <Button icon="export" className="flex1" disabled={Boolean(stage) || Boolean(done)} onClick={() => void submit()}>
-          确定，转发到微信
+        <Button className="flex1" disabled={Boolean(stage) || Boolean(done)} onClick={() => void submit()}>
+          <WechatIcon size={22} color="#ffffff" />
+          <Text>确定，转发到微信</Text>
         </Button>
       </View>
 
       <ScanSheet open={scanning} onClose={() => setScanning(false)} onPhotos={(p) => void onPhotos(p)} />
       <Sheet open={Boolean(done)} onClose={finish} title="已布置">
-        <Text className="t-sub c-sec">点下面的按钮，选一个微信群或同学。同学点开卡片就自动加入「{done?.plan.name}」，直接看到这份作业。</Text>
+        <Text className="t-foot c-sec">同学点开卡片就自动加入</Text>
         <ShareButton>转发到微信</ShareButton>
         <Button variant="plain" onClick={finish}>
-          看作业情况
+          完成
         </Button>
       </Sheet>
       {stage && <Busy text={stage} />}

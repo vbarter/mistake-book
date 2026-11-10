@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Image, Input, Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
-import { LoginGate, PageState, QuestionGrid, loggedIn, usePlansVersion } from "../../components/plan";
+import { LoginGate, PageState, QuestionGrid, ScoreStats, loggedIn, usePlansVersion } from "../../components/plan";
 import { Button, MathText, Sheet, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { formatDateTime } from "../../lib/format";
@@ -71,12 +71,12 @@ export default function PlanReview() {
     }
   };
   const finish = async (status: "reviewed" | "returned") => {
-    if (status === "returned" && !comment.trim()) return void toast("写一句话告诉同学哪里要重做");
+    if (status === "returned" && !comment.trim()) return void toast("先写一句哪里要重做");
     setBusy(true);
     try {
       await reviewSubmission(sub.id, { status, comment: comment.trim() });
       bumpPlans();
-      toast(status === "reviewed" ? "已阅" : "已退回，同学那边会显示「退回重做」");
+      toast(status === "reviewed" ? "已阅" : "已退回", "success");
       if (status === "reviewed" && pager?.next) void open(pager.next);
       else back();
     } catch (e) {
@@ -92,7 +92,8 @@ export default function PlanReview() {
         <View className="flex1 col minw0">
           <Text className="t-headline ellipsis">{assignment?.title ?? "作业"}</Text>
           <Text className="t-foot c-sec">
-            {formatDateTime(sub.submittedAt)} 交{pager ? ` · 第 ${pager.index}/${pager.total} 份` : ""}
+            {formatDateTime(sub.submittedAt)}
+            {pager ? ` · ${pager.index}/${pager.total}` : ""}
           </Text>
         </View>
         {pager && (
@@ -109,7 +110,14 @@ export default function PlanReview() {
 
       <View className="card" style={{ gap: "12px" }}>
         <View className="row-center gap8">
-          <Text className="t-foot c-sec flex1">自动批改结果</Text>
+          {owner && results && sub.score ? (
+            <View className="flex1 row-center gap4">
+              <Icon name="pencil" size={13} color={C.tertiary} stroke={2.4} />
+              <Text className="t-cap c-sec">点题号可改判</Text>
+            </View>
+          ) : (
+            <View className="flex1" />
+          )}
           {sub.late && (
             <Tag kind="neutral" icon={null}>
               迟交
@@ -121,25 +129,14 @@ export default function PlanReview() {
         </View>
         {results && sub.score ? (
           <>
-            <View className="stats">
-              <View className="stat stat--ok">
-                <Text className="stat__label">对</Text>
-                <Text className="stat__value num c-ok">{sub.score.correct}</Text>
-              </View>
-              <View className="stat stat--wrong">
-                <Text className="stat__label">错</Text>
-                <Text className="stat__value num c-wrong">{sub.score.wrong}</Text>
-              </View>
-              <View className="stat stat--mute">
-                <Text className="stat__label">没做</Text>
-                <Text className="stat__value num">{sub.score.blank}</Text>
-              </View>
-            </View>
+            <ScoreStats score={sub.score} />
             <QuestionGrid results={results} onPick={setPicked} />
-            {owner && <Text className="t-cap c-sec">点题号看作答，判得不对可以改。右上角有小点的是你改过的。</Text>}
           </>
         ) : (
-          <Text className="t-sub c-sec">这份还在自动批改，先看下面的照片。批改好了再进来就有逐题结果。</Text>
+          <View className="row-center gap8">
+            <View className="spinner" />
+            <Text className="t-sub c-sec">正在批改…</Text>
+          </View>
         )}
       </View>
 
@@ -149,18 +146,13 @@ export default function PlanReview() {
 
       {owner && (
         <>
-          <View className="plan-field">
-            <View className="plan-field__label">
-              <Text>给同学的一句话（退回重做时必填）</Text>
-            </View>
-            <Input className="input input--card" value={comment} maxlength={200} placeholder="例如：第 3 题再想想" cursorSpacing={90} onInput={(e) => setComment(e.detail.value)} />
-          </View>
+          <Input className="input input--card" value={comment} maxlength={200} placeholder="给同学留句话（退回时必填）" cursorSpacing={90} onInput={(e) => setComment(e.detail.value)} />
           <View className="bottom-bar">
-            <Button variant="outline" disabled={busy} onClick={() => void finish("returned")}>
-              退回重做
+            <Button variant="outline" icon="refresh" disabled={busy} onClick={() => void finish("returned")}>
+              退回
             </Button>
             <Button icon="check" className="flex1" disabled={busy} onClick={() => void finish("reviewed")}>
-              {pager?.next ? "已阅，下一个" : "已阅"}
+              {pager?.next ? "已阅，下一份" : "已阅"}
             </Button>
           </View>
         </>
@@ -173,14 +165,14 @@ export default function PlanReview() {
             <View className="group group--fill">
               <View className="list-row">
                 <View className="flex1 col gap2 minw0">
-                  <Text className="row__sub">同学的作答</Text>
-                  {q.s ? <MathText className="t-body" text={q.s} /> : <Text className="t-body">（没写）</Text>}
+                  <Text className="row__sub">作答</Text>
+                  {q.s ? <MathText className="t-body" text={q.s} /> : <Text className="t-body c-sec">（没写）</Text>}
                 </View>
               </View>
               <View className="list-row">
                 <View className="flex1 col gap2 minw0">
-                  <Text className="row__sub">正确答案</Text>
-                  {q.a ? <MathText className="t-body" text={q.a} /> : <Text className="t-body">（没有识别出答案）</Text>}
+                  <Text className="row__sub">答案</Text>
+                  {q.a ? <MathText className="t-body" text={q.a} /> : <Text className="t-body c-sec">（没识别出）</Text>}
                 </View>
               </View>
             </View>

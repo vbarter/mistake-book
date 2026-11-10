@@ -10,6 +10,7 @@ import { formatDateTime } from "../../lib/format";
 import { fetchSubmission, memberName, reviewSubmission, usePlans, type SubmissionRes } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { QuestionGrid } from "./Assignment";
+import { ScoreStats } from "./shared";
 import "../../styles/plans.css";
 
 const MARK_OPTIONS: { value: Mark; label: string }[] = [{ value: "correct", label: "对" }, { value: "wrong", label: "错" }, { value: "partial", label: "半对" }, { value: "blank", label: "没做" }];
@@ -50,12 +51,12 @@ export default function Submission() {
     }
   };
   const finish = async (status: "reviewed" | "returned") => {
-    if (status === "returned" && !comment.trim()) return toast("写一句话告诉同学哪里要重做");
+    if (status === "returned" && !comment.trim()) return toast("先写一句哪里要重做");
     setBusy(true);
     try {
       await reviewSubmission(sub.id, { status, comment: comment.trim() });
       usePlans.getState().bump();
-      toast(status === "reviewed" ? "已阅" : "已退回，同学那边会显示「退回重做」", "success");
+      toast(status === "reviewed" ? "已阅" : "已退回", "success");
       if (status === "reviewed" && pager?.next) nav(`/plans/s/${pager.next}`, { replace: true });
       else back();
     } catch (e) {
@@ -82,22 +83,18 @@ export default function Submission() {
       <div className="screen__content screen__content--modal" style={{ paddingTop: 8, gap: 12 }}>
         <div className="card" style={{ gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span className="t-foot c-sec" style={{ flex: 1 }}>{formatDateTime(sub.submittedAt)} 交</span>
+            <span className="t-foot c-sec" style={{ flex: 1 }}>{formatDateTime(sub.submittedAt)}</span>
             {sub.late && <Tag kind="neutral">迟交</Tag>}
             <Tag kind={sub.status === "reviewed" ? "correct" : sub.status === "returned" ? "wrong" : "info"}>{sub.status === "reviewed" ? "已阅" : sub.status === "returned" ? "已退回" : "待阅"}</Tag>
           </div>
           {results && sub.score ? (
             <>
-              <div className="plan-stats plan-stats--3">
-                <div className="stat" style={{ background: "var(--mastered-bg)" }}><span className="stat__label">对</span><span className="stat__value num" style={{ color: "var(--mastered)" }}>{sub.score.correct}</span></div>
-                <div className="stat" style={{ background: "var(--wrong-bg)" }}><span className="stat__label">错</span><span className="stat__value num" style={{ color: "var(--wrong)" }}>{sub.score.wrong}</span></div>
-                <div className="stat" style={{ background: "var(--fill-light)" }}><span className="stat__label">没做</span><span className="stat__value num">{sub.score.blank}</span></div>
-              </div>
+              <ScoreStats score={sub.score} />
               <QuestionGrid results={results} onPick={setPicked} />
-              {owner && <span className="t-cap c-sec">点题号看作答，判得不对可以改。右上角有小点的是你改过的。</span>}
+              {owner && <span className="t-cap c-sec" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="pencil" size={13} stroke={2.4} />点题号可改判</span>}
             </>
           ) : (
-            <span className="t-sub c-sec">这份还在自动批改，先看下面的照片。批改好了再进来就有逐题结果。</span>
+            <span className="t-sub c-sec">正在批改…</span>
           )}
         </div>
 
@@ -105,13 +102,10 @@ export default function Submission() {
 
         {owner && (
           <>
-            <label className="plan-field">
-              <span className="plan-field__label">给同学的一句话（退回重做时必填）</span>
-              <input className="input input--card" value={comment} maxLength={200} placeholder="例如：第 3 题再想想" onChange={(e) => setComment(e.target.value)} />
-            </label>
+            <input className="input input--card" aria-label="给同学留句话" value={comment} maxLength={200} placeholder="给同学留句话（退回时必填）" onChange={(e) => setComment(e.target.value)} />
             <div className="bottom-bar" style={{ marginTop: "auto" }}>
-              <Button variant="outline" onClick={() => finish("returned")} disabled={busy} style={{ flex: "0 0 auto", width: "auto", whiteSpace: "nowrap" }}>退回重做</Button>
-              <Button icon="check" onClick={() => finish("reviewed")} disabled={busy}>{pager?.next ? "已阅，下一个" : "已阅"}</Button>
+              <Button variant="outline" icon="refresh" onClick={() => finish("returned")} disabled={busy} style={{ flex: "0 0 auto", width: "auto", whiteSpace: "nowrap" }}>退回</Button>
+              <Button icon="check" onClick={() => finish("reviewed")} disabled={busy}>{pager?.next ? "已阅，下一份" : "已阅"}</Button>
             </div>
           </>
         )}
@@ -122,8 +116,8 @@ export default function Submission() {
           <>
             {q.t && <div className="t-body"><MathText text={q.t} /></div>}
             <div className="group" style={{ background: "var(--fill-light)" }}>
-              <div className="row"><span className="row__main"><span className="row__sub">同学的作答</span><span className="t-body">{q.s ? <MathText text={q.s} /> : "（没写）"}</span></span></div>
-              <div className="row"><span className="row__main"><span className="row__sub">正确答案</span><span className="t-body">{q.a ? <MathText text={q.a} /> : "（没有识别出答案）"}</span></span></div>
+              <div className="row"><span className="row__main"><span className="row__sub">作答</span><span className="t-body">{q.s ? <MathText text={q.s} /> : "（没写）"}</span></span></div>
+              <div className="row"><span className="row__main"><span className="row__sub">答案</span><span className="t-body">{q.a ? <MathText text={q.a} /> : "（没识别出）"}</span></span></div>
             </div>
             {owner && (
               <div className="plan-marks">
