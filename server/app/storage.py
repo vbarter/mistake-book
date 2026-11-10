@@ -25,6 +25,13 @@ _SUFFIX = {"original": "", "erased": "~erased", "thumb": "~thumb"}
 MAX_BLOB_BYTES = 15 * 1024 * 1024  # 单张照片上限（原图最长边 2400，正常 1 MB 以内）
 
 
+MAX_PLAN_FILE_BYTES = 20 * 1024 * 1024  # 学习计划的附件（PDF / Word / 图片）上限
+
+
+def max_bytes(key: str) -> int:
+    return MAX_PLAN_FILE_BYTES if key.startswith("plans/") else MAX_BLOB_BYTES
+
+
 def object_key(owner_id: str, page_id: str, kind: str) -> str:
     return f"u/{owner_id}/p/{page_id}{_SUFFIX[kind]}.jpg"
 

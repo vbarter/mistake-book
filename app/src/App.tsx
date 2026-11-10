@@ -3,7 +3,8 @@ import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react
 import { useAuth } from "./store/auth";
 import { startJobPoller } from "./lib/jobs";
 import { startSync } from "./lib/sync";
-import { isTabRoot, needsPhotoConfirm, setupBackButton, setupEdgeSwipeBack } from "./lib/native";
+import { joinPath, parseJoinUrl, pendingJoin, rememberJoin, startPlanSync } from "./lib/plans";
+import { isNative, isTabRoot, needsPhotoConfirm, setupBackButton, setupEdgeSwipeBack } from "./lib/native";
 import { listenRestoredPhoto } from "./lib/cameraRestore";
 import { addPaper, getFolder, loadPages, toPage, updatePaper } from "./lib/folders";
 import { useCapture } from "./store/capture";
@@ -35,6 +36,12 @@ import { ErasePaper } from "./pages/Erase";
 import Profile from "./pages/Profile";
 import { Account, Privacy, Subjects } from "./pages/ProfilePages";
 import { Exports } from "./pages/Exports";
+import Plans from "./pages/plans/Plans";
+import PlanNew from "./pages/plans/PlanNew";
+import PlanDetail from "./pages/plans/PlanDetail";
+import PlanJoin from "./pages/plans/PlanJoin";
+import Assignment from "./pages/plans/Assignment";
+import Submission from "./pages/plans/Submission";
 
 function RequireAuth() {
   const { ready, token } = useAuth();
@@ -99,8 +106,43 @@ export default function App() {
     if (!token) return;
     return startSync();
   }, [token]);
-  // 安卓：拍照时 App 被系统回收，重启后把那张照片放回原来的试卷，打开录入页接着扫
   const nav = useNavigate();
+  // 学习计划：回填老师布置的扫描件电子版、学生交的作业的批改结果（lib/plans.ts）
+  useEffect(() => {
+    if (!token) return;
+    return startPlanSync();
+  }, [token]);
+  // 学习计划：点开微信里的卡片（shangyike://plans/join?code=…）唤起 App 后自动加入；还没登录就先记下，登录 / 注册完再加入
+  useEffect(() => {
+    if (!ready) return;
+    const go = (url: string | undefined | null) => {
+      const target = url ? parseJoinUrl(url) : null;
+      if (!target) return;
+      rememberJoin(target);
+      if (useAuth.getState().token) nav(joinPath(target));
+    };
+    // 网页：没登录时直接打开了加入链接，会被带去欢迎页，先把邀请码记下
+    if (!useAuth.getState().token && window.location.pathname.endsWith("/plans/join")) go(window.location.href);
+    if (!isNative) return;
+    let remove: (() => void) | undefined;
+    let active = true;
+    void import("@capacitor/app").then(async ({ App: CapApp }) => {
+      const handle = await CapApp.addListener("appUrlOpen", ({ url }) => go(url));
+      if (active) remove = () => void handle.remove();
+      else void handle.remove();
+      go((await CapApp.getLaunchUrl())?.url);
+    });
+    return () => {
+      active = false;
+      remove?.();
+    };
+  }, [ready, nav]);
+  useEffect(() => {
+    if (!token || startup) return;
+    const target = pendingJoin();
+    if (target) nav(joinPath(target), { replace: true });
+  }, [token, startup, nav]);
+  // 安卓：拍照时 App 被系统回收，重启后把那张照片放回原来的试卷，打开录入页接着扫
   useEffect(() => {
     if (!token) return;
     let stop: (() => void) | undefined;
@@ -203,6 +245,13 @@ export default function App() {
           <Route path="/profile/account" element={<Account />} />
           <Route path="/profile/privacy" element={<Privacy />} />
           <Route path="/profile/exports" element={<Exports />} />
+          <Route path="/plans" element={<Plans />} />
+          <Route path="/plans/new" element={<PlanNew />} />
+          <Route path="/plans/join" element={<PlanJoin />} />
+          <Route path="/plans/a/:assignmentId" element={<Assignment />} />
+          <Route path="/plans/s/:submissionId" element={<Submission />} />
+          <Route path="/plans/:planId" element={<PlanDetail />} />
+          <Route path="/plans/:planId/new" element={<PlanNew />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
