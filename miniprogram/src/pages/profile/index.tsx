@@ -15,7 +15,7 @@ import { useShare, useShareTimelineToo } from "../../lib/share";
 /** 小程序版本：三位 */
 const VERSION = "1.8.9";
 
-/** 我的：和 App 的「我的」同一套布局——账号卡片、统计、学习设置、数据与隐私、关于。没登录也能看，账号卡片换成「点这里登录」 */
+/** 我的：和 App 的「我的」同一套布局——账号卡片、统计、学习设置、数据与隐私、关于。没登录也能看，账号卡片换成「登录」。只留图标和短标题，不放解释性的段落 */
 export default function Profile() {
   useShare();
   useShareTimelineToo();
@@ -72,76 +72,59 @@ export default function Profile() {
           {gradeShort && <Text className="avatar__badge">{gradeShort}</Text>}
         </View>
         <View className="flex1 col gap4 minw0">
-          <Text className="t-title3 b ellipsis">{user ? user.nickname : "未登录"}</Text>
-          {user && (
+          <View className="row-center gap6 minw0">
+            <Text className="t-title3 b ellipsis">{user ? user.nickname : "登录"}</Text>
+            {guest && <Text className="pill-mute">游客</Text>}
+          </View>
+          {user && (city || grade) && (
             <View className="row-center gap4">
               <Icon name="pin" size={13} color={C.secondary} stroke={2.2} />
               <Text className="t-foot c-sec">{[city, grade].filter(Boolean).join(" · ")}</Text>
             </View>
-          )}
-          {!user ? (
-            <Text className="t-cap c-sec">点这里登录，登录后可以扫描试卷、导出错题本</Text>
-          ) : (
-          <View className="row-center gap4">
-            <Icon name={guest ? "info" : "checkcircle"} size={12} color={guest ? C.secondary : C.ok} stroke={2.6} />
-            <Text className={`t-cap ${guest ? "c-sec" : "c-ok"}`}>{guest ? "游客，建议用微信登录" : `${loginLabel(user.loginMethod)}账号已登录`}</Text>
-          </View>
           )}
         </View>
         <Icon name="chevron-right" size={16} color={C.tertiary} stroke={2.4} />
       </View>
 
       <View className="stats">
-        <Stat center label="张试卷" value={stats.papers} />
-        <Stat center label="道答错" value={stats.wrong} color={C.wrong} />
-        <Stat center label="道未作答" value={stats.blank} />
+        <Stat icon="document" label="试卷" value={stats.papers} />
+        <Stat icon="xcircle" label="答错" value={stats.wrong} color={C.wrong} />
+        <Stat icon="minus" label="未答" value={stats.blank} />
       </View>
 
-      <View className="col">
-        <Text className="group-title">学习设置</Text>
-        <View className="group">
-          <Row icon="graduation" iconBg={C.brand} title="年级与城市" value={[grade || "未设置年级", city].filter(Boolean).join(" · ")} onClick={() => goLoggedIn("/pages/settings/index", "修改年级")} />
-          <Row
-            icon="books"
-            iconBg={C.brand}
-            title="学科"
-            value={
-              // 最多露 3 个学科图标，其余用「+N」收起
-              <View className="row-center gap4">
-                {(user?.subjects ?? []).slice(0, 3).map((s) => (
-                  <SubjectTile key={s} subject={s} size="xs" />
-                ))}
-                {(user?.subjects.length ?? 0) > 3 && <Text className="t-foot c-sec">+{user!.subjects.length - 3}</Text>}
-                {!user?.subjects.length && <Text className="t-foot c-sec">未选</Text>}
-              </View>
-            }
-            onClick={() => goLoggedIn("/pages/settings/index", "修改学科")}
-          />
-        </View>
-        <Text className="group-note">年级和城市决定错题按哪套考纲归类知识点；试卷上能看出来的以试卷为准。</Text>
+      <View className="group">
+        <Row icon="graduation" iconBg={C.brand} title="年级" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => goLoggedIn("/pages/settings/index", "修改年级")} />
+        <Row
+          icon="books"
+          iconBg={C.brand}
+          title="学科"
+          value={
+            // 最多露 3 个学科图标，其余用「+N」收起
+            <View className="row-center gap4">
+              {(user?.subjects ?? []).slice(0, 3).map((s) => (
+                <SubjectTile key={s} subject={s} size="xs" />
+              ))}
+              {(user?.subjects.length ?? 0) > 3 && <Text className="t-foot c-sec">+{user!.subjects.length - 3}</Text>}
+            </View>
+          }
+          onClick={() => goLoggedIn("/pages/settings/index", "修改学科")}
+        />
       </View>
 
-      <View className="col">
-        <Text className="group-title">数据与隐私</Text>
-        <View className="group">
-          <Row icon="export" iconBg={C.brand} title="我的导出" value="最近 7 天" onClick={() => goLoggedIn("/pages/exports/index", "查看导出")} />
-          <Row icon="photo" iconBg={C.accentOn} title="本机试卷照片" value={`${stats.papers} 张 · ${stats.mb} MB`} chevron={false} />
-          <Row icon="shield" iconBg={C.ok} title="隐私与权限" onClick={() => go("/pages/privacy/index")} />
-          {user ? (
-            <Row icon="person" iconBg={C.label} title="账号与登录" value={loginLabel(user.loginMethod)} onClick={() => go("/pages/account/index")} />
-          ) : (
-            <Row icon="person" iconBg={C.label} title="登录" value="微信一键登录" onClick={() => go(LOGIN_PAGE)} />
-          )}
-        </View>
-        <Text className="group-note">登录后试卷照片和电子版会同步到云端，换手机、在电脑上打开都能看到；导出的 PDF 在服务器上保留 7 天。</Text>
+      <View className="group">
+        <Row icon="export" iconBg={C.brand} title="导出" onClick={() => goLoggedIn("/pages/exports/index", "查看导出")} />
+        <Row icon="photo" iconBg={C.accentOn} title="照片" value={`${stats.mb} MB`} chevron={false} />
+        <Row icon="shield" iconBg={C.ok} title="隐私" onClick={() => go("/pages/privacy/index")} />
+        {user ? (
+          <Row icon="person" iconBg={C.label} title="账号" value={guest ? "" : loginLabel(user.loginMethod)} onClick={() => go("/pages/account/index")} />
+        ) : (
+          <Row icon="person" iconBg={C.label} title="登录" onClick={() => go(LOGIN_PAGE)} />
+        )}
       </View>
 
-      <View className="col">
-        <View className="group">
-          <Row icon="bubble" iconBg={C.ok} title="联系客服" value="问题与建议" contact sessionFrom={`profile|${user?.id ?? "guest"}|${VERSION}`} />
-          <Row icon="info" iconBg={C.secondary} title="关于上壹课" value={VERSION} chevron={false} />
-        </View>
-        <Text className="group-note">用不明白、识别不对或者有想要的功能，都可以直接找我们。</Text>
+      <View className="group">
+        <Row icon="bubble" iconBg={C.ok} title="客服" contact sessionFrom={`profile|${user?.id ?? "guest"}|${VERSION}`} />
+        <Row icon="info" iconBg={C.secondary} title="关于" value={VERSION} chevron={false} />
       </View>
     </View>
   );
