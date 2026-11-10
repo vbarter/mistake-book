@@ -63,6 +63,10 @@ class Config:
     COS_SECRET_KEY = os.getenv("COS_SECRET_KEY", "").strip()
     COS_REGION = os.getenv("COS_REGION", "ap-shanghai").strip()
     COS_BUCKET = os.getenv("COS_BUCKET", "").strip()  # 带 APPID 后缀的完整桶名，如 zhicuoben-data-1250000000
+    # 学习计划转发出去的链接用的公网地址（含前缀，如 https://example.com/zhicuoben）；留空用请求的域名
+    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip()
+    APP_URL_SCHEME = os.getenv("APP_URL_SCHEME", "shangyike").strip()  # App 注册的 URL scheme，落地页用它唤起 App
+    APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "").strip()  # 没装 App 的人去哪下载
     SYNC_URL_EXPIRES = int(os.getenv("SYNC_URL_EXPIRES", "900"))  # 上传 / 下载签名链接有效期（秒）
 
     MAX_CROPS_PER_RECOGNIZE = 6

@@ -435,3 +435,94 @@ class SyncPage(db.Model):
             if value:
                 data[key] = value
         return data
+
+
+# --------------------------------------------------------------------------- 学习计划（老师布置作业）
+
+
+class Plan(db.Model):
+    """学习计划：一位创建人（老师）+ 一个学科 + 一组成员 + 若干份作业。成员靠点微信里的卡片（带 invite_code）加入"""
+
+    __tablename__ = "plans"
+
+    id = db.Column(db.String(32), primary_key=True, default=_uuid)
+    owner_id = db.Column(db.String(32), index=True, nullable=False)
+    name = db.Column(db.String(60), default="")
+    subject = db.Column(db.String(16), nullable=True)  # SUBJECTS 之一或 mixed（综合）
+    invite_code = db.Column(db.String(16), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+
+class PlanMember(db.Model):
+    __tablename__ = "plan_members"
+    __table_args__ = (db.UniqueConstraint("plan_id", "user_id", name="uq_plan_members"),)
+
+    id = db.Column(db.String(32), primary_key=True, default=_uuid)
+    plan_id = db.Column(db.String(32), index=True, nullable=False)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    joined_at = db.Column(db.DateTime, default=datetime.now)
+    removed = db.Column(db.Boolean, default=False, nullable=False)  # 退出或被移除；交过的记录创建人还能看
+
+
+class PlanAssignment(db.Model):
+    __tablename__ = "plan_assignments"
+
+    id = db.Column(db.String(32), primary_key=True, default=_uuid)
+    plan_id = db.Column(db.String(32), index=True, nullable=False)
+    title = db.Column(db.String(120), default="")
+    due_at = db.Column(db.String(32), nullable=True)  # 客户端给的 ISO 时间，原样存
+    digitized = db.Column(db.Text().with_variant(LONGTEXT(), "mysql"), nullable=True)  # 扫描件识别出的电子版（原题），成员看的就是它
+    question_count = db.Column(db.Integer, default=0)
+    revoked = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+
+class PlanFile(db.Model):
+    """作业的内容文件（扫描件 / 附件）或一次提交的照片。文件本体在对象存储 plans/<planId>/<id>.<ext>"""
+
+    __tablename__ = "plan_files"
+
+    id = db.Column(db.String(32), primary_key=True, default=_uuid)
+    plan_id = db.Column(db.String(32), index=True, nullable=False)
+    assignment_id = db.Column(db.String(32), index=True, nullable=False)
+    submission_id = db.Column(db.String(32), index=True, nullable=True)  # 空 = 作业内容；非空 = 这次提交的照片
+    kind = db.Column(db.String(12), default="scan")  # scan（扫描 / 照片）| attachment（PDF、Word、图片附件）
+    name = db.Column(db.String(120), default="")
+    mime = db.Column(db.String(80), default="image/jpeg")
+    ext = db.Column(db.String(8), default="jpg")
+    size = db.Column(db.BigInteger, default=0)
+    position = db.Column(db.Integer, default=0)
+    uploaded = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    @property
+    def key(self) -> str:
+        return f"plans/{self.plan_id}/{self.id}.{self.ext}"
+
+
+class PlanSubmission(db.Model):
+    __tablename__ = "plan_submissions"
+    __table_args__ = (db.UniqueConstraint("assignment_id", "user_id", name="uq_plan_submissions"),)
+
+    id = db.Column(db.String(32), primary_key=True, default=_uuid)
+    plan_id = db.Column(db.String(32), index=True, nullable=False)
+    assignment_id = db.Column(db.String(32), index=True, nullable=False)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    status = db.Column(db.String(12), default="submitted")  # submitted | reviewed | returned
+    comment = db.Column(db.String(200), default="")  # 老师已阅 / 退回时写的一句话
+    late = db.Column(db.Boolean, default=False)
+    results = db.Column(JSON, nullable=True)  # 逐题结果 [{n 题号, m 判定, s 学生作答, a 正确答案, t 题干, k 知识点, o 老师改判过}]；空 = 还没批改出来
+    submitted_at = db.Column(db.DateTime, default=datetime.now)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+
+
+class PlanView(db.Model):
+    """成员打开过哪份作业（老师那边区分「没交」和「没看」）"""
+
+    __tablename__ = "plan_views"
+    __table_args__ = (db.UniqueConstraint("assignment_id", "user_id", name="uq_plan_views"),)
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    assignment_id = db.Column(db.String(32), index=True, nullable=False)
+    user_id = db.Column(db.String(32), index=True, nullable=False)
+    viewed_at = db.Column(db.DateTime, default=datetime.now)

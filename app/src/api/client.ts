@@ -62,7 +62,7 @@ export function assetUrl(path: string | null): string | undefined {
 }
 
 interface Options {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   auth?: boolean;
   timeoutMs?: number;
