@@ -90,7 +90,7 @@ export default function Splash({ onDone }: { onDone: () => void }) {
             <path d="M24 44l6 6 12-14" stroke="#22b07d" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <span className="splash__name">知错本</span>
+        <span className="splash__name">上壹课</span>
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ export default defineAppConfig({
   window: {
     backgroundTextStyle: "dark",
     navigationBarBackgroundColor: "#f3f4f8",
-    navigationBarTitleText: "错误本",
+    navigationBarTitleText: "上壹课",
     navigationBarTextStyle: "black",
     backgroundColor: "#f3f4f8",
   },

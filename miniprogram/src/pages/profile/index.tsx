@@ -139,7 +139,7 @@ export default function Profile() {
       <View className="col">
         <View className="group">
           <Row icon="bubble" iconBg={C.ok} title="联系客服" value="问题与建议" contact sessionFrom={`profile|${user?.id ?? "guest"}|${VERSION}`} />
-          <Row icon="info" iconBg={C.secondary} title="关于错误本" value={VERSION} chevron={false} />
+          <Row icon="info" iconBg={C.secondary} title="关于上壹课" value={VERSION} chevron={false} />
         </View>
         <Text className="group-note">用不明白、识别不对或者有想要的功能，都可以直接找我们。</Text>
       </View>

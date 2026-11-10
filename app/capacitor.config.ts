@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.zhicuoben.app",
-  appName: "知错本",
+  appName: "上壹课",
   webDir: "dist",
   // androidScheme 必须保持 http：改成 https 会换掉页面的 origin，已装用户 IndexedDB 里的试卷照片会全部读不到。
   // 明文 HTTP 不在这里放开，交给 android/app/src/{main,debug}/res/xml/network_security_config.xml：正式包只走 HTTPS，调试包允许连局域网后端。

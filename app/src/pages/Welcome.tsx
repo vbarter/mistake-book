@@ -16,7 +16,7 @@ export default function Welcome() {
       <div className="screen__content screen__content--modal" style={{ paddingTop: "calc(var(--safe-top) + 48px)", paddingLeft: 24, paddingRight: 24, paddingBottom: "calc(var(--safe-bottom) + 24px)", gap: 28 }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, paddingTop: 16 }}>
           <Buddy scene="hero" size={148} />
-          <h1 className="t-large">知错本</h1>
+          <h1 className="t-large">上壹课</h1>
           <p className="t-body c-sec" style={{ textAlign: "center" }}>拍下试卷，自动挑出错题，按知识点整理。</p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

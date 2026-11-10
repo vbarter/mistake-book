@@ -53,7 +53,7 @@ export function PrivacyConsent({ onAgree }: { onAgree: () => void }) {
           <>
             <h2 className="t-title3">用户协议与隐私政策</h2>
             <p className="t-sub c-sec">
-              欢迎使用知错本。使用前请仔细阅读
+              欢迎使用上壹课。使用前请仔细阅读
               <button className="consent__link" onClick={() => setReading("terms")}>《用户协议》</button>和
               <button className="consent__link" onClick={() => setReading("privacy")}>《隐私政策》</button>。
             </p>
@@ -67,7 +67,7 @@ export function PrivacyConsent({ onAgree }: { onAgree: () => void }) {
         ) : (
           <>
             <h2 className="t-title3">需要你的同意才能继续</h2>
-            <p className="t-sub c-sec">知错本需要联网识别试卷，不同意《用户协议》和《隐私政策》就无法使用。你可以再看看，或者{isAndroid ? "退出应用" : "稍后再来"}。</p>
+            <p className="t-sub c-sec">上壹课需要联网识别试卷，不同意《用户协议》和《隐私政策》就无法使用。你可以再看看，或者{isAndroid ? "退出应用" : "稍后再来"}。</p>
             <Button onClick={() => setStep("ask")}>再看看</Button>
             {isAndroid && <Button variant="plain" onClick={quit}>不同意并退出</Button>}
           </>

@@ -55,7 +55,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .page--tab {
   padding-bottom: calc(#{$tabbar-h} + 32px + env(safe-area-inset-bottom));
 }
-/* 首页：底下还压着固定的导出按钮 */
+/* 分析页：底下还压着固定的导出按钮 */
 .page--dock {
   padding-bottom: calc(#{$tabbar-h} + 132px + env(safe-area-inset-bottom));
 }
@@ -478,7 +478,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .kbar__track { height: 6px; border-radius: 3px; background: $fill-light; overflow: hidden; }
 .kbar__fill { height: 100%; border-radius: 3px; transform-origin: left; animation: grow-x 0.8s $spring both; }
 .kbar__count { min-width: 24px; text-align: right; font-size: 17px; font-weight: 700; }
-/* 导出按钮固定在 Tab 栏上方，内容在它下面滚动；上沿渐变把滚过去的内容柔和地压住 */
+/* 导出按钮固定在 Tab 栏上方（分析页），内容在它下面滚动；上沿渐变把滚过去的内容柔和地压住 */
 .home-dock {
   position: fixed;
   left: 0;
@@ -488,6 +488,47 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
   padding: 20px 16px 30px;
   background: linear-gradient(to bottom, rgba(243, 244, 248, 0), $bg 22px);
 }
+/* 新首页：一屏放下，小人那一块吃掉多出来的高度；底部白色面板一直铺到 Tab 栏后面 */
+.home2 { display: flex; flex-direction: column; min-height: 100vh; padding: 0 16px; box-sizing: border-box; }
+.home2 .topbar__row { justify-content: flex-start; gap: 8px; }
+.home2__logo { position: relative; flex-shrink: 0; width: 28px; height: 28px; border-radius: 9px; background: $brand; display: flex; align-items: center; justify-content: center; }
+.home2__logo::after { content: ""; position: absolute; left: 50%; bottom: -3px; width: 8px; height: 8px; margin-left: -4px; background: $tie; transform: rotate(45deg); border-radius: 2px; }
+.home2__name { font-size: 20px; font-weight: 800; letter-spacing: 1px; color: $brand; }
+.home2__date { font-size: 13px; font-weight: 600; color: $secondary; margin-left: 4px; }
+.plan { margin-top: 6px; border-radius: 22px; padding: 14px 12px 12px; background: linear-gradient(180deg, #dfe6f5 0%, #e9e4ef 55%, #f6dfe3 100%); display: flex; flex-direction: column; gap: 12px; }
+.plan__top { display: flex; align-items: baseline; gap: 10px; padding: 0 6px; }
+.plan__title { font-size: 23px; font-weight: 800; color: $brand; letter-spacing: 0.5px; }
+.plan__sub { font-size: 13px; color: $secondary; }
+.plan__cards { display: flex; gap: 10px; }
+.pc { flex: 1; min-width: 0; min-height: 104px; background: rgba(255, 255, 255, 0.94); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 2px rgba(31, 59, 115, 0.06); }
+.pc--hover { background: #ffffff; transform: scale(0.98); }
+.pc__h { display: flex; align-items: center; gap: 6px; }
+.pc__t { flex: 1; white-space: nowrap; font-size: 17px; font-weight: 700; color: $label; }
+.pc__go { width: 20px; height: 20px; border-radius: 10px; border: 1.5px solid $tertiary; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.pc__big { display: flex; align-items: baseline; gap: 4px; font-size: 13px; color: $secondary; }
+.pc__num { font-size: 24px; line-height: 28px; font-weight: 800; color: $brand; }
+.pc__empty { font-size: 15px; line-height: 28px; font-weight: 600; color: $label; }
+.pc__m { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; line-height: 16px; color: $secondary; }
+.pc__m--wrap { display: block; }
+.pc__m--due { color: $tie; font-weight: 600; }
+.pc .tag { flex-shrink: 0; padding: 0 6px; height: 20px; font-size: 11px; }
+.pc__tile.tile--xs { width: 16px; height: 16px; border-radius: 5px; font-size: 10px; }
+.hero2 { flex: 1; min-height: 190px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.bubble { position: relative; flex: 0 1 206px; min-width: 0; background: $card; border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(31, 59, 115, 0.08); }
+.bubble::after { content: ""; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; margin-top: -6px; background: $card; transform: rotate(45deg); border-radius: 2px; }
+.bubble__small { font-size: 12px; line-height: 16px; font-weight: 600; color: $secondary; margin-bottom: 3px; }
+.bubble__text { font-size: 15px; line-height: 22px; color: $label; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.bubble__more { margin-top: 4px; font-size: 13px; font-weight: 600; color: $brand; }
+.sheet2 { margin: 0 -16px; padding: 16px 16px calc(#{$tabbar-h} + 36px + env(safe-area-inset-bottom)); background: $card; border-radius: 26px 26px 0 0; box-shadow: 0 -2px 12px rgba(31, 59, 115, 0.05); }
+.big { display: flex; gap: 12px; }
+.bt { position: relative; flex: 1; min-width: 0; height: 132px; border-radius: 18px; padding: 0 14px 15px; color: #ffffff; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; overflow: hidden; }
+.bt--a { background: linear-gradient(145deg, #2a4c8f, $brand); }
+.bt--b { background: linear-gradient(145deg, #b94454, $tie); }
+.bt--hover { opacity: 0.9; transform: scale(0.98); }
+.bt__t { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
+.bt__s { font-size: 12px; opacity: 0.88; }
+.bt__ic { position: absolute; right: 10px; top: 10px; width: 46px; height: 46px; border-radius: 14px; background: rgba(255, 255, 255, 0.18); display: flex; align-items: center; justify-content: center; }
+.bt__deco { position: absolute; right: -18px; top: -22px; width: 110px; height: 110px; border-radius: 55px; background: rgba(255, 255, 255, 0.07); }
 
 /* ---------- 试卷：文件夹目录 ---------- */
 .toc-num { min-width: 20px; font-size: 13px; font-weight: 700; color: $tertiary; }
