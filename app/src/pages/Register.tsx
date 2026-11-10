@@ -74,7 +74,7 @@ export default function Register() {
       <InlineNav title="" back />
       <div className="screen__content screen__content--modal auth" style={{ paddingTop: 0 }}>
         <div className="auth__head">
-          <h1 className="t-title1">注册知错本</h1>
+          <h1 className="t-title1">注册上壹课</h1>
           <p className="t-sub c-sec">{isAndroid ? "用手机号和验证码注册。" : "用手机号和验证码，或 Apple 账号注册。"}</p>
         </div>
 

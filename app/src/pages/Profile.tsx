@@ -103,7 +103,7 @@ export default function Profile() {
         </div>
 
         <div className="group">
-          <Row icon="info" iconColor="var(--secondary)" title="关于知错本" value={version} chevron={false} />
+          <Row icon="info" iconColor="var(--secondary)" title="关于上壹课" value={version} chevron={false} />
         </div>
       </div>
 

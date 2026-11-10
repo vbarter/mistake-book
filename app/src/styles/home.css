@@ -42,7 +42,7 @@
 .thumb-add:disabled { opacity: 0.5; }
 .thumb-add__icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--brand); color: #fff; box-shadow: 0 4px 10px color-mix(in srgb, var(--brand) 25%, transparent); }
 
-/* 首页导出按钮：固定在 Tab 栏上方，内容在它下面滚动。
+/* 导出按钮（分析页）：固定在 Tab 栏上方，内容在它下面滚动。
    底部留 30px 让出凸起的相机键（top -22px + 5px 描边），上沿渐变把滚过去的内容柔和地压住。
    z-index 低于 .fab-scrim(29)，相机菜单展开时会被遮罩盖住。 */
 .home-dock { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h) + var(--safe-bottom)); z-index: 25; padding: 20px var(--gutter, 16px) 30px; background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 22px); pointer-events: none; }
@@ -74,3 +74,45 @@
 .export-tree__kps { padding: 0 12px 12px 44px; }
 .export-tree__kps .chip--select { background: var(--card); }
 .export-tree__kps .chip--select.on { background: var(--brand-tint); }
+
+/* 新首页：一屏放下，小人那一块吃掉多出来的高度；底部白色面板一直铺到 Tab 栏后面 */
+.home2__head { justify-content: flex-start; gap: 8px; }
+.home2__logo { position: relative; flex-shrink: 0; width: 28px; height: 28px; border-radius: 9px; background: var(--brand-solid); color: #fff; display: flex; align-items: center; justify-content: center; }
+.home2__logo::after { content: ""; position: absolute; left: 50%; bottom: -3px; width: 8px; height: 8px; margin-left: -4px; background: var(--tie); transform: rotate(45deg); border-radius: 2px; }
+.home2__name { font-size: 20px; font-weight: 800; letter-spacing: 1px; color: var(--brand); }
+.home2__date { font-size: 13px; font-weight: 600; color: var(--secondary); margin-left: 4px; }
+.home2__body { flex: 1; display: flex; flex-direction: column; padding: 0 16px; }
+.plan { margin-top: 6px; border-radius: 22px; padding: 14px 12px 12px; background: linear-gradient(180deg, #dfe6f5 0%, #e9e4ef 55%, #f6dfe3 100%); display: flex; flex-direction: column; gap: 12px; }
+@media (prefers-color-scheme: dark) { .plan { background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 22%, var(--card)) 0%, color-mix(in srgb, var(--tie) 22%, var(--card)) 100%); } }
+.plan__top { display: flex; align-items: baseline; gap: 10px; padding: 0 6px; }
+.plan__title { font-size: 23px; font-weight: 800; color: var(--brand); letter-spacing: 0.5px; }
+.plan__sub { font-size: 13px; color: var(--secondary); }
+.plan__cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pc { min-width: 0; min-height: 104px; background: color-mix(in srgb, var(--card) 94%, transparent); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 6px; text-align: left; box-shadow: 0 1px 2px rgba(31, 59, 115, 0.06); transition: transform 0.25s var(--spring); }
+.pc:active { transform: scale(0.97); }
+.pc__h { display: flex; align-items: center; gap: 6px; }
+.pc__t { flex: 1; white-space: nowrap; font-size: 17px; font-weight: 700; color: var(--label); }
+.pc__go { width: 20px; height: 20px; border-radius: 10px; border: 1.5px solid var(--tertiary); color: var(--tertiary); display: flex; align-items: center; justify-content: center; }
+.pc__big { display: flex; align-items: baseline; gap: 4px; font-size: 13px; color: var(--secondary); }
+.pc__num { font-size: 24px; line-height: 28px; font-weight: 800; color: var(--brand); font-variant-numeric: tabular-nums; }
+.pc__empty { font-size: 15px; line-height: 28px; font-weight: 600; color: var(--label); }
+.pc__m { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; line-height: 16px; color: var(--secondary); }
+.pc__m--wrap { display: block; }
+.pc__m--due { color: var(--tie); font-weight: 600; }
+.pc .tag { flex-shrink: 0; padding: 0 6px; height: 20px; font-size: 11px; }
+.hero2 { flex: 1; min-height: 190px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.bubble { position: relative; flex: 0 1 206px; min-width: 0; background: var(--card); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; text-align: left; box-shadow: 0 2px 8px rgba(31, 59, 115, 0.08); }
+.bubble::after { content: ""; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; margin-top: -6px; background: var(--card); transform: rotate(45deg); border-radius: 2px; }
+.bubble__small { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--secondary); margin-bottom: 3px; }
+.bubble__text { font-size: 15px; line-height: 22px; color: var(--label); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.bubble__more { margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--brand); }
+.sheet2 { margin: 0 -16px; padding: 16px 16px calc(var(--tabbar-h) + var(--safe-bottom) + 36px); background: var(--card); border-radius: 26px 26px 0 0; box-shadow: 0 -2px 12px rgba(31, 59, 115, 0.05); }
+.big { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.bt { position: relative; min-width: 0; height: 132px; border-radius: 18px; padding: 0 14px 15px; color: #fff; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; overflow: hidden; text-align: left; transition: transform 0.25s var(--spring); }
+.bt:active { transform: scale(0.97); }
+.bt--a { background: linear-gradient(145deg, #2a4c8f, #1f3b73); }
+.bt--b { background: linear-gradient(145deg, #b94454, #a3303f); }
+.bt__t { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
+.bt__s { font-size: 12px; opacity: 0.88; }
+.bt__ic { position: absolute; right: 10px; top: 10px; width: 46px; height: 46px; border-radius: 14px; background: rgba(255, 255, 255, 0.18); display: flex; align-items: center; justify-content: center; }
+.bt__deco { position: absolute; right: -18px; top: -22px; width: 110px; height: 110px; border-radius: 55px; background: rgba(255, 255, 255, 0.07); }

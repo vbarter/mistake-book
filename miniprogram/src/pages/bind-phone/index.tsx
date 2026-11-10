@@ -6,7 +6,7 @@ import { bindPhone, sendBindCode } from "../../lib/auth";
 import { syncNow } from "../../lib/sync";
 import "./index.scss";
 
-const MERGE_TEXT = "这个手机号已经有账号了（比如在知错本 App 里注册过）。合并后两边的试卷都会保留，以后用微信或这个手机号登录都能看到同样的内容。合并后不能拆开。";
+const MERGE_TEXT = "这个手机号已经有账号了（比如在上壹课 App 里注册过）。合并后两边的试卷都会保留，以后用微信或这个手机号登录都能看到同样的内容。合并后不能拆开。";
 
 /**
  * 绑定手机号：绑定后在 App 里用这个手机号登录就是同一个账号。
@@ -100,7 +100,7 @@ export default function BindPhone() {
 
   return (
     <View className="page">
-      <Text className="t-sub c-sec">绑定后，在知错本 App 里用这个手机号登录，就能看到同样的试卷和错题。</Text>
+      <Text className="t-sub c-sec">绑定后，在上壹课 App 里用这个手机号登录，就能看到同样的试卷和错题。</Text>
       <Button className="btn btn--wx" openType="getPhoneNumber" onGetPhoneNumber={onWxPhone} disabled={busy}>
         微信手机号一键绑定
       </Button>

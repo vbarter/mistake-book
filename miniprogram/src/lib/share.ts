@@ -7,7 +7,7 @@ import { useShareAppMessage, useShareTimeline } from "@tarojs/taro";
  *
  * 错题、试卷都只在本机，转发出去的链接一律落到首页，不带任何个人数据。
  */
-export const SHARE_TITLE = "错误本：拍下试卷，自动整理错题";
+export const SHARE_TITLE = "上壹课：拍下试卷，自动整理错题";
 const HOME = "/pages/home/index";
 
 /** 转发给朋友：所有页面都调用 */

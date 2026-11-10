@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAddPaper } from "../components/AddSheet";
-import { ExportSheet } from "../components/ExportSheet";
-import { Icon, type IconName } from "../components/Icon";
-import { KnowledgeBars } from "../components/Insights";
-import { CountUp } from "../components/Motion";
+import { Icon } from "../components/Icon";
 import { Buddy } from "../components/Illustration";
-import { Button } from "../components/ui";
+import { Sheet } from "../components/ui";
+import { SubjectTile } from "../components/v2";
 import { allErrors } from "../lib/errors";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
-import { analyze, inRange, since } from "../lib/insights";
+import { analyze, inRange } from "../lib/insights";
 import { scanStageText, useJobs } from "../lib/jobs";
-import { getLastExportAt } from "../lib/prefs";
 import { dueLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/banner";
@@ -19,16 +16,14 @@ import { toast } from "../store/banner";
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
- * 首页：问候、识别进度、近 30 天错题摘要、导出错题本。
- * 导出按钮固定在 Tab 栏上方，知识点再多也不用滚到底才看得到。
- * 添加试卷走底栏相机，识别、归类、命名、分析都自动完成。
+ * 首页：顶部「今日安排」（学习计划、待办事项），中间小人用气泡说识别进度 / 近 30 天错题总结，
+ * 底部两块大入口「错题收集」「试卷擦除」。导出错题本在「分析」页。
  */
 export default function Home() {
   const nav = useNavigate();
   const add = useAddPaper();
   const [folders, setFolders] = useState<Folder[] | null>(null);
-  const [lastExport, setLastExport] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const [picking, setPicking] = useState(false);
   const jobsVersion = useJobs((s) => s.version);
   const nickname = useAuth((s) => s.user?.nickname) ?? "";
   const [plans, setPlans] = useState<PlanSummary | null>(null);
@@ -41,124 +36,122 @@ export default function Home() {
   useEffect(() => {
     fetchPlans().then((r) => setPlans(r.summary)).catch(() => undefined); // 没网时卡片照样在，只是不带数字
   }, [plansVersion]);
-  const planLine = !plans || plans.owned + plans.joined === 0
-    ? "老师布置作业，同学拍照交回"
-    : [
-        plans.todo > 0 ? `待交 ${plans.todo} 份${plans.nextTitle ? `：${plans.nextTitle}${plans.nextDue ? `（截止 ${dueLabel(plans.nextDue)}）` : ""}` : ""}` : "",
-        plans.owned > 0 ? `今天已交 ${plans.submittedToday} 份 · 待批阅 ${plans.toReview} 份` : "",
-      ].filter(Boolean).join(" · ") || "作业都交了";
+  const hasPlans = !!plans && plans.owned + plans.joined > 0;
+  const planCount = plans ? plans.todo + plans.toReview : 0;
 
   useEffect(() => {
     listFolders().then(setFolders).catch(() => setFolders([]));
-    void getLastExportAt().then(setLastExport);
-  }, [jobsVersion, exporting]);
+  }, [jobsVersion]);
 
   const errors = useMemo(() => (folders ? allErrors(folders) : []), [folders]);
   const recent = useMemo(() => analyze(inRange(errors, "30d")), [errors]);
-  const fresh = useMemo(() => since(errors, lastExport), [errors, lastExport]);
   const papers = folders?.flatMap((f) => f.papers.map((p) => ({ f, p }))) ?? [];
   const scanning = papers.filter(({ p }) => p.scanJob);
   const failed = papers.filter(({ p }) => p.scanError && !p.scanJob);
-  const exportSet = fresh.length > 0 ? fresh : errors;
+  // 试卷擦除：从最近的试卷里挑一份去擦
+  const erasable = papers.filter(({ p }) => !p.scanJob).sort((x, y) => (x.p.createdAt < y.p.createdAt ? 1 : -1)).slice(0, 8);
 
   const now = new Date();
-  const eyebrow = `${now.getMonth() + 1}月${now.getDate()}日 星期${WEEKDAY[now.getDay()]}`;
+  const today = `${now.getMonth() + 1}月${now.getDate()}日 周${WEEKDAY[now.getDay()]}`;
   const h = now.getHours();
   const hello = h < 5 ? "夜深了" : h < 11 ? "早上好" : h < 13 ? "中午好" : h < 18 ? "下午好" : "晚上好";
 
+  const erase = () => {
+    if (erasable.length === 0) return toast(papers.length ? "试卷还在识别，好了再来擦" : "先拍一份试卷，再来擦掉手写");
+    setPicking(true);
+  };
+
   return (
-    <div className="screen">
-      <header className="topbar">
-        <span className="t-foot c-sec" style={{ fontWeight: 600 }}>{eyebrow}</span>
+    <div className="screen home2">
+      <header className="topbar home2__head">
+        <span className="home2__logo"><Icon name="check" size={18} stroke={3} /></span>
+        <span className="home2__name">上壹课</span>
+        <span className="home2__date">{today}</span>
       </header>
-      <div className={`screen__content${errors.length > 0 ? " screen__content--dock" : ""}`} style={{ gap: 16 }}>
-        <section className="greet rise" style={{ ["--i" as string]: 0 }}>
-          <div className="greet__text">
-            <h1 className="t-title1">{hello}{nickname ? `，${nickname}` : ""}</h1>
-            <p className="t-sub c-sec">{papers.length === 0 ? "点下面的相机，拍下第一张试卷。" : scanning.length ? "试卷正在识别，好了会自动归档。" : "拍下新试卷，错题会自动整理。"}</p>
+      <div className="home2__body">
+        <section className="plan rise" style={{ ["--i" as string]: 0 }}>
+          <div className="plan__top"><span className="plan__title">今日安排</span><span className="plan__sub">计划和作业，一眼看清</span></div>
+          <div className="plan__cards">
+            <button className="pc" onClick={() => nav("/plans")}>
+              <span className="pc__h"><span className="pc__t">学习计划</span><span className="pc__go"><Icon name="chevron-right" size={11} stroke={3} /></span></span>
+              {hasPlans && plans ? (
+                <>
+                  <span className="pc__big"><b className="pc__num">{planCount}</b>{plans.todo > 0 || plans.toReview === 0 ? "份 作业待交" : "份 等你批阅"}</span>
+                  <span className="pc__m">
+                    {plans.todo > 0 && plans.nextSubject && plans.nextSubject !== "mixed" && <SubjectTile subject={plans.nextSubject} size="xs" style={{ width: 16, height: 16, borderRadius: 5, fontSize: 10 }} />}
+                    <span className="ellipsis">{plans.todo > 0 ? plans.nextTitle ?? "作业" : plans.owned > 0 ? `今天已交 ${plans.submittedToday} 份` : "作业都交了"}</span>
+                  </span>
+                  {plans.todo > 0 && plans.nextDue && <span className="pc__m pc__m--due">{dueLabel(plans.nextDue)} 截止</span>}
+                </>
+              ) : (
+                <>
+                  <span className="pc__empty">还没有计划</span>
+                  <span className="pc__m pc__m--wrap">加入老师的计划，或自己建一个</span>
+                </>
+              )}
+            </button>
+            {/* 待办事项还没做好：先占个位置，点了提示一下 */}
+            <button className="pc" onClick={() => toast("待办事项还在开发中，过几天就能用了")}>
+              <span className="pc__h"><span className="pc__t">待办事项</span><span className="tag tag--neutral">即将上线</span></span>
+              <span className="pc__empty">记下今天要做的事</span>
+              <span className="pc__m pc__m--wrap">拍一张作业单，自动列成待办</span>
+            </button>
           </div>
-          <Buddy scene={scanning.length ? "scan" : "hero"} size={112} style={{ flexShrink: 0, margin: "-8px -4px -12px 0" }} />
         </section>
 
-        {(scanning.length > 0 || failed.length > 0) && (
-          <div className="group rise" style={{ ["--i" as string]: 2 }}>
-            <div className="group__header"><span>识别中</span><span>完成后自动归档</span></div>
-            {scanning.map(({ f, p }) => (
-              <button key={p.id} className="row" style={{ minHeight: 60 }} onClick={() => nav(`/papers/${f.id}`)}>
-                <img className="thumb thumb--sm" src={thumbOf(p.pages[0])} alt="" />
-                <span className="row__main">
-                  <span className="row__title ellipsis">{p.name}</span>
-                  <span className="progress" style={{ background: "var(--brand-tint)" }}><span style={{ width: `${Math.max(6, p.scanJob!.progress)}%` }} /></span>
-                </span>
-                <span className="t-cap" style={{ color: "var(--brand)", fontWeight: 700, whiteSpace: "nowrap" }}>{scanStageText(p.scanJob!)}</span>
-              </button>
-            ))}
-            {failed.map(({ f, p }) => (
-              <button key={p.id} className="row" style={{ minHeight: 56 }} onClick={() => nav(`/papers/${f.id}/${p.id}`)}>
-                <span className="row__icon" style={{ background: "var(--wrong)" }}><Icon name="warning" size={18} /></span>
-                <span className="row__main"><span className="row__title ellipsis">{p.name}</span><span className="row__sub">识别失败 · 点开重新识别</span></span>
-                <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="group rise" style={{ ["--i" as string]: 2 }}>
-          <div className="group__header"><span>今日安排</span></div>
-          <button className="row" style={{ minHeight: 60 }} onClick={() => nav("/plans")}>
-            <span className="row__icon" style={{ background: "var(--brand)" }}><Icon name="graduation" size={18} stroke={2} /></span>
-            <span className="row__main"><span className="row__title">学习计划</span><span className="row__sub ellipsis">{planLine}</span></span>
-            {plans && plans.todo + plans.toReview > 0 && <span className="num-chip" style={{ background: "var(--brand)", color: "#fff" }}>{plans.todo + plans.toReview}</span>}
-            <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-          </button>
-          {/* 待办事项还没做好：先占个位置，点了提示一下 */}
-          <button className="row" style={{ minHeight: 60 }} onClick={() => toast("待办事项还在开发中，过几天就能用了")}>
-            <span className="row__icon" style={{ background: "var(--tertiary)" }}><Icon name="list" size={18} stroke={2} /></span>
-            <span className="row__main"><span className="row__title">待办事项</span><span className="row__sub">记下今天要做的事</span></span>
-            <span className="tag tag--neutral">即将上线</span>
-          </button>
-        </div>
-
-        {recent.total > 0 && (
-          <section className="card rise" style={{ gap: 14, ["--i" as string]: 3 }}>
-            <button style={{ display: "flex", alignItems: "center", gap: 8, textAlign: "left" }} onClick={() => nav("/rank")}>
-              <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                <span className="t-foot c-sec" style={{ fontWeight: 600 }}>近 30 天 · <CountUp value={recent.total} /> 道错题</span>
-                <span className="t-body" style={{ fontWeight: 600 }}>{recent.summary}</span>
-              </span>
-              <Icon name="chevron-right" size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+        <section className="hero2 rise" style={{ ["--i" as string]: 2 }}>
+          {scanning.length > 0 ? (
+            <button className="bubble" onClick={() => nav(`/papers/${scanning[0].f.id}`)}>
+              <span className="bubble__small">正在识别 · {scanStageText(scanning[0].p.scanJob!)}{scanning.length > 1 ? ` · 共 ${scanning.length} 份` : ""}</span>
+              <span className="bubble__text">「{scanning[0].p.name}」好了会自动归档。</span>
+              <span className="progress" style={{ background: "var(--brand-tint)", marginTop: 8 }}><span style={{ width: `${Math.max(6, scanning[0].p.scanJob!.progress)}%` }} /></span>
             </button>
-            <KnowledgeBars groups={recent.bySubject} />
-          </section>
-        )}
+          ) : failed.length > 0 ? (
+            <button className="bubble" onClick={() => nav(`/papers/${failed[0].f.id}/${failed[0].p.id}`)}>
+              <span className="bubble__small" style={{ color: "var(--wrong)" }}>识别失败</span>
+              <span className="bubble__text">「{failed[0].p.name}」没识别出来。</span>
+              <span className="bubble__more">点开重新识别 ›</span>
+            </button>
+          ) : recent.total > 0 ? (
+            <button className="bubble" onClick={() => nav("/rank")}>
+              <span className="bubble__small">近 30 天 · {recent.total} 道错题</span>
+              <span className="bubble__text">{recent.summary}</span>
+              <span className="bubble__more">看错题榜 ›</span>
+            </button>
+          ) : (
+            <div className="bubble">
+              <span className="bubble__small">{hello}{nickname ? `，${nickname}` : ""}</span>
+              <span className="bubble__text">{papers.length === 0 ? "点「错题收集」或下面的相机，拍下第一张试卷。" : "拍下新试卷，错题会自动整理。"}</span>
+            </div>
+          )}
+          <Buddy scene={scanning.length ? "scan" : "hero"} size={148} style={{ flexShrink: 0 }} />
+        </section>
 
-        {papers.length === 0 && folders && (
-          <div className="group rise" style={{ ["--i" as string]: 2 }}>
-            <div className="group__header"><span>怎么用</span></div>
-            {[
-              ["camera", "拍试卷", "拍照，或从相册一次选多张"],
-              ["viewfinder", "自动识别", "还原题目和批改，按知识点归类"],
-              ["chart", "看错题榜", "最近错在哪、哪个知识点该补"],
-              ["printer", "导出错题本", "PDF，打印出来重做"],
-            ].map(([icon, t, s]) => (
-              <div key={t} className="row" style={{ minHeight: 56 }}>
-                <span className="row__icon" style={{ background: "var(--brand-tint)", color: "var(--brand)" }}><Icon name={icon as IconName} size={18} stroke={2.2} /></span>
-                <span className="row__main"><span className="row__title">{t}</span><span className="row__sub">{s}</span></span>
-              </div>
-            ))}
+        <section className="sheet2 rise" style={{ ["--i" as string]: 3 }}>
+          <div className="big">
+            <button className="bt bt--a" onClick={add.open}>
+              <span className="bt__deco" /><span className="bt__ic"><Icon name="camera" size={25} stroke={2} /></span>
+              <span className="bt__t">错题收集</span><span className="bt__s">拍试卷，错题自动整理</span>
+            </button>
+            <button className="bt bt--b" onClick={erase}>
+              <span className="bt__deco" /><span className="bt__ic"><Icon name="brush" size={25} stroke={2} /></span>
+              <span className="bt__t">试卷擦除</span><span className="bt__s">擦掉手写，空白卷重练</span>
+            </button>
           </div>
-        )}
-
+        </section>
       </div>
-      {errors.length > 0 && (
-        <div className="home-dock">
-          <div className="rise" style={{ ["--i" as string]: 4 }}>
-            <Button icon="printer" onClick={() => setExporting(true)}>{fresh.length > 0 && lastExport ? `导出新增的 ${fresh.length} 道错题` : `导出错题本（${errors.length} 题）`}</Button>
-          </div>
-        </div>
-      )}
       {add.sheet}
-      <ExportSheet open={exporting} onClose={() => setExporting(false)} title={fresh.length > 0 && lastExport ? "新增错题" : "全部错题"} errors={exportSet} />
+      <Sheet open={picking} onClose={() => setPicking(false)} title="擦哪一份试卷">
+        <div className="group">
+          {erasable.map(({ f, p }) => (
+            <button key={p.id} className="row" style={{ minHeight: 56 }} onClick={() => { setPicking(false); nav(`/papers/${f.id}/${p.id}/erase`); }}>
+              <img className="thumb thumb--sm" src={thumbOf(p.pages[0])} alt="" />
+              <span className="row__main"><span className="row__title ellipsis">{p.name}</span><span className="row__sub ellipsis">{f.name}</span></span>
+              <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+            </button>
+          ))}
+        </div>
+      </Sheet>
     </div>
   );
 }
