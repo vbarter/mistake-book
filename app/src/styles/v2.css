@@ -142,3 +142,6 @@
 .quality-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--accent-bg, #fff0e3); color: var(--accent-on, #b35300); }
 .quality-card b { font-size: 15px; }
 .quality-card .t-foot { color: inherit; opacity: 0.9; margin-top: 2px; }
+
+/* 昵称旁的小灰标（「游客」） */
+.pill-mute { flex-shrink: 0; font-size: 11px; font-weight: 600; line-height: 16px; color: var(--secondary); background: var(--fill-light); border-radius: 8px; padding: 1px 7px; }
