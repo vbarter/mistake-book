@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Icon } from "../../components/Icon";
+import { Icon, WechatIcon } from "../../components/Icon";
 import { Button, InlineNav } from "../../components/ui";
 import { SUBJECTS } from "../../lib/format";
 import { PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, publishAssignment, scanDraft, shareInvite, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject } from "../../lib/plans";
@@ -99,7 +99,7 @@ export default function PlanNew() {
         )}
         {planId && (
           <label className="plan-field">
-            <span className="plan-field__label"><span>作业名称</span><span style={{ fontWeight: 400 }}>不填就用日期或附件名</span></span>
+            <span className="plan-field__label"><span>作业名称</span><span style={{ fontWeight: 400 }}>选填</span></span>
             <input className="input input--card" value={title} maxLength={120} placeholder="例如：第三单元练习" onChange={(e) => setTitle(e.target.value)} />
           </label>
         )}
@@ -119,15 +119,15 @@ export default function PlanNew() {
         )}
 
         <div className="plan-field">
-          <span className="plan-field__label"><span>作业内容</span><span style={{ fontWeight: 400 }}>{files.length ? `已添加 ${files.length} 个` : "扫描件会识别成题目，自动批改"}</span></span>
+          <span className="plan-field__label"><span>作业内容</span>{files.length > 0 && <span style={{ fontWeight: 400 }}>{files.length}</span>}</span>
           <div className="plan-files" ref={list}>
-            {files.length === 0 && <div className="plan-files__empty">还没有内容。<br />点下面的「扫描」拍下作业，或「上传附件」选 PDF、Word、图片。</div>}
+            {files.length === 0 && <div className="plan-files__empty"><Icon name="document" size={32} stroke={1.6} style={{ color: "var(--tertiary)" }} /></div>}
             {files.map((f) => (
               <div key={f.clientId} className="plan-file">
                 {f.thumb ? <img className="plan-file__icon" src={f.thumb} alt="" /> : <span className="plan-file__icon">{fileBadge(f)}</span>}
                 <span className="plan-file__main">
                   <span className="t-body ellipsis" style={{ fontWeight: 500 }}>{f.name}</span>
-                  <span className="t-cap c-sec">{f.kind === "scan" ? "扫描件" : "附件"} · {sizeLabel(f.size)}</span>
+                  <span className="t-cap c-sec">{sizeLabel(f.size)}</span>
                 </span>
                 <button className="plan-file__x" aria-label={`删除 ${f.name}`} onClick={() => setFiles((cur) => cur.filter((x) => x.clientId !== f.clientId))}><Icon name="xmark" size={16} stroke={2.4} /></button>
               </div>
@@ -141,7 +141,7 @@ export default function PlanNew() {
         </div>
 
         <div className="bottom-bar" style={{ marginTop: "auto" }}>
-          <Button icon="export" onClick={submit} disabled={Boolean(stage)}>确定，转发到微信</Button>
+          <Button onClick={submit} disabled={Boolean(stage)}><WechatIcon size={22} color="#fff" />确定，转发到微信</Button>
         </div>
       </div>
       {scan.sheet}

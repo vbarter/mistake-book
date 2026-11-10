@@ -5,7 +5,7 @@ import { Button, InlineNav, Spinner } from "../../components/ui";
 import { Tag } from "../../components/v2";
 import { PLAN_SUBJECT_LABEL, fetchPlans, usePlans, type PlanInfo } from "../../lib/plans";
 import { toastError } from "../../store/banner";
-import { PlanTile } from "./shared";
+import { Count, PlanTile } from "./shared";
 
 /** 学习计划列表：我创建的、我加入的。加入只能靠点微信里的卡片，这里只有「新建」一个入口。 */
 export default function Plans() {
@@ -24,12 +24,14 @@ export default function Plans() {
       <PlanTile subject={p.subject} />
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span className="t-headline ellipsis">{p.name}</span>
-        <span className="t-foot c-sec ellipsis">
-          {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"} · {p.role === "owner" ? `${p.members ?? 0} 人 · ${p.assignments ?? 0} 份作业` : `${p.teacher} · ${p.assignments ?? 0} 份作业`}
+        <span className="plan-counts" style={{ gap: 10 }}>
+          <span className="t-foot c-sec ellipsis">{PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}{p.role === "member" ? ` · ${p.teacher}` : ""}</span>
+          {p.role === "owner" && <Count icon="family" color="var(--tertiary)">{p.members ?? 0}</Count>}
+          <Count icon="document" color="var(--tertiary)">{p.assignments ?? 0}</Count>
         </span>
       </span>
-      {p.role === "owner" && (p.toReview ?? 0) > 0 && <Tag kind="info" icon="pencil">待阅 {p.toReview}</Tag>}
-      {p.role === "member" && (p.todo ?? 0) > 0 && <Tag kind="pending" icon="clock">待交 {p.todo}</Tag>}
+      {p.role === "owner" && (p.toReview ?? 0) > 0 && <Tag kind="info" icon="pencil">{p.toReview}</Tag>}
+      {p.role === "member" && (p.todo ?? 0) > 0 && <Tag kind="pending" icon="clock">{p.todo}</Tag>}
       <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
     </button>
   );
@@ -43,7 +45,7 @@ export default function Plans() {
           <div className="empty">
             <Icon name="graduation" size={44} className="empty__icon" />
             <span className="empty__title">还没有学习计划</span>
-            <span className="t-sub">老师：新建一个计划，扫描或上传作业，转发到微信群。<br />学生：点开老师发的卡片，就自动加入了。</span>
+            <span className="t-sub">新建一个，或点开老师发的卡片加入</span>
           </div>
         )}
         {owned.length > 0 && <div className="plan-field__label" style={{ paddingTop: 4 }}><span>我创建的</span></div>}

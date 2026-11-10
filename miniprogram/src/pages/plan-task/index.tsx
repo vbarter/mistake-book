@@ -3,8 +3,8 @@ import { Image, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
 import { PrintSheets } from "../../components/PrintSheets";
-import { Busy, LoginGate, MenuRow, PageState, QuestionGrid, ScanSheet, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
-import { Button, Segmented, Sheet, Tag } from "../../components/ui";
+import { Busy, Count, LoginGate, PageState, QuestionGrid, ScanSheet, ScoreCounts, ScoreStats, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
+import { Button, Segmented, Sheet, Stat, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { submitExport } from "../../lib/export";
 import { toast } from "../../lib/hooks";
@@ -62,6 +62,7 @@ export default function PlanTask() {
   const owner = plan.role === "owner";
   const scans = a.files.filter((f) => f.kind === "scan");
   const attachments = a.files.filter((f) => f.kind === "attachment");
+  const canRevoke = owner && !a.revoked;
   const canSubmit = !owner && !a.revoked && (!sub || sub.status !== "reviewed");
 
   const hand = async () => {
@@ -69,7 +70,7 @@ export default function PlanTask() {
       await submitHomework(a, shots, setStage);
       setShots([]);
       void Taro.vibrateShort({ type: "light" }).catch(() => undefined);
-      toast("交上去了，批改好会显示在这里");
+      toast("交上去了", "success");
       await load();
     } catch (e) {
       void Taro.showModal({ title: "没交上去", content: errorText(e), showCancel: false });
@@ -84,7 +85,7 @@ export default function PlanTask() {
     try {
       const job = await submitExport({ kind: "clean", title: a.title, papers: [{ title: a.title, scannedAt: "", pages: digitized.pages, questions: digitized.questions }] });
       Taro.hideLoading();
-      toast(job ? (job.status === "done" ? "已生成，在「我的 › 我的导出」里" : "正在后台生成，好了会提醒你") : "服务器暂时不支持导出");
+      toast(job ? (job.status === "done" ? "已生成，在「我的导出」里" : "正在生成，好了会提醒你") : "服务器暂时不支持导出");
     } catch (e) {
       Taro.hideLoading();
       toast(errorText(e));
@@ -108,33 +109,37 @@ export default function PlanTask() {
     <>
       <View className="card" style={{ gap: "6px" }}>
         <View className="row-center gap8">
-          <Text className="t-title3 flex1" style={{ fontWeight: 800 }}>
-            {a.title}
-          </Text>
-          {owner && !a.revoked && <ShareButton pill>转发</ShareButton>}
-          {owner && !a.revoked && (
-            <View className="plan-file__x" onClick={() => setMenu(true)}>
-              <Icon name="ellipsis" size={24} color={C.brand} stroke={2} />
-            </View>
+          {/* 创建人点作业名：不常用的「撤回」收在面板里，和学习计划页点计划名一个习惯 */}
+          <View className="flex1 row-center gap4 minw0" onClick={() => canRevoke && setMenu(true)}>
+            <Text className="t-title3 ellipsis" style={{ fontWeight: 800 }}>
+              {a.title}
+            </Text>
+            {canRevoke && <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />}
+          </View>
+          {a.revoked && (
+            <Tag kind="neutral" icon={null}>
+              已撤回
+            </Tag>
           )}
+          {canRevoke && <ShareButton pill>转发</ShareButton>}
         </View>
-        <Text className="t-foot c-sec">
-          {plan.name}
-          {owner ? "" : ` · ${plan.teacher}`}
-          {a.dueAt ? ` · ${isOverdue(a.dueAt) ? "已截止 " : "截止 "}${dueLabel(a.dueAt)}` : ""}
-          {a.questionCount ? ` · ${a.questionCount} 题` : ""}
-        </Text>
-        {a.revoked && (
-          <Tag kind="neutral" icon={null} style={{ alignSelf: "flex-start" }}>
-            老师已撤回
-          </Tag>
-        )}
+        <View className="plan-counts">
+          <Text className="t-foot c-sec ellipsis">
+            {plan.name}
+            {owner ? "" : ` · ${plan.teacher}`}
+          </Text>
+          {a.dueAt && (
+            <Count icon="clock" color={isOverdue(a.dueAt) ? C.wrong : C.secondary}>
+              {dueLabel(a.dueAt)}
+            </Count>
+          )}
+          {a.questionCount ? <Count icon="list">{a.questionCount} 题</Count> : null}
+        </View>
       </View>
       {attachments.length > 0 && (
         <View className="group">
           <View className="group__header">
             <Text>附件</Text>
-            <Text>点开后右上角可以转发、打印</Text>
           </View>
           {attachments.map((f) => (
             <View key={f.id} className="list-row" hoverClass="list-row--hover" onClick={() => void openPlanFile(f, attachments)}>
@@ -164,7 +169,7 @@ export default function PlanTask() {
           ) : owner && isAssignmentScanning(a.id) ? (
             <View className="row-center gap8 pad12">
               <View className="spinner" />
-              <Text className="t-foot c-sec">正在识别成电子版，同学现在已经可以看照片</Text>
+              <Text className="t-foot c-sec">正在识别电子版…</Text>
             </View>
           ) : null}
           {view === "text" && pseudo ? (
@@ -190,32 +195,14 @@ export default function PlanTask() {
       {owner && board && (
         <>
           <View className="stats">
-            <View className="stat">
-              <Text className="stat__label">已交</Text>
-              <Text className="stat__value num" style={{ color: C.ok }}>
-                {board.submitted.length}
-                <Text className="t-foot c-sec" style={{ fontWeight: 500 }}>
-                  {" "}
-                  /{board.members}
-                </Text>
-              </Text>
-            </View>
-            <View className="stat">
-              <Text className="stat__label">没交</Text>
-              <Text className="stat__value num" style={board.missing.length ? { color: C.accentOn } : undefined}>
-                {board.missing.length}
-              </Text>
-            </View>
-            <View className="stat">
-              <Text className="stat__label">还没看</Text>
-              <Text className="stat__value num">{board.unseen}</Text>
-            </View>
+            <Stat icon="checkcircle" label="已交" value={`${board.submitted.length}/${board.members}`} color={board.submitted.length ? C.ok : undefined} />
+            <Stat icon="clock" label="没交" value={board.missing.length} color={board.missing.length ? C.accentOn : undefined} />
+            <Stat icon="eye-off" label="没看" value={board.unseen} />
           </View>
           {board.hardest.length > 0 && (
             <View className="group">
               <View className="group__header">
-                <Text>错得最多的题</Text>
-                <Text>已批改 {board.hardest[0].graded} 份</Text>
+                <Text>错得最多</Text>
               </View>
               {board.hardest.map((h) => (
                 <View key={h.number} className="list-row" style={{ alignItems: "flex-start" }}>
@@ -223,10 +210,12 @@ export default function PlanTask() {
                     <Text>{h.number}</Text>
                   </View>
                   <View className="flex1 col gap2 minw0">
-                    <Text className="t-body clamp2">{h.stem || "（没有识别出题干）"}</Text>
+                    <Text className="t-body clamp2">{h.stem || `第 ${h.number} 题`}</Text>
                     {h.knowledge && <Text className="row__sub">{h.knowledge}</Text>}
                   </View>
-                  <Text className="t-headline c-wrong shrink0">{h.wrong} 人错</Text>
+                  <Count icon="person" color={C.wrong}>
+                    {h.wrong}
+                  </Count>
                 </View>
               ))}
             </View>
@@ -243,17 +232,11 @@ export default function PlanTask() {
                   </View>
                   <Text className="row__title ellipsis flex1">{memberName(m)}</Text>
                   {m.returned ? (
-                    <Tag kind="wrong" icon={null}>
-                      已退回重做
-                    </Tag>
-                  ) : m.viewed ? (
-                    <Tag kind="neutral" icon={null}>
-                      看过
+                    <Tag kind="wrong" icon="refresh">
+                      退回
                     </Tag>
                   ) : (
-                    <Tag kind="pending" icon={null}>
-                      没看
-                    </Tag>
+                    <Icon name={m.viewed ? "eye" : "eye-off"} size={18} color={m.viewed ? C.tertiary : C.accentOn} stroke={2.2} />
                   )}
                 </View>
               ))}
@@ -263,7 +246,7 @@ export default function PlanTask() {
             <View className="group__header">
               <Text>已交 {board.submitted.length}</Text>
             </View>
-            {board.submitted.length === 0 && <Text className="plan-empty">{board.members === 0 ? "还没有人加入。点下面作业名旁边的「转发」发到微信群。" : "还没有人交。"}</Text>}
+            {board.submitted.length === 0 && <Text className="plan-empty">{board.members === 0 ? "还没有人加入" : "还没有人交"}</Text>}
             {board.submitted.map((s) => (
               <View key={s.submissionId} className="list-row" hoverClass="list-row--hover" onClick={() => Taro.navigateTo({ url: `/pages/plan-review/index?id=${s.submissionId}` })}>
                 <View className="plan-avatar">
@@ -274,13 +257,15 @@ export default function PlanTask() {
                     {memberName(s)}
                     {s.left ? "（已退出）" : ""}
                   </Text>
-                  <Text className="row__sub">
-                    {s.score ? `对 ${s.score.correct} · 错 ${s.score.wrong} · 没做 ${s.score.blank}` : "批改中"}
-                    {s.late ? " · 迟交" : ""}
-                  </Text>
+                  {s.score ? <ScoreCounts score={s.score} /> : <Text className="row__sub">批改中</Text>}
                 </View>
+                {s.late && (
+                  <Tag kind="neutral" icon={null}>
+                    迟交
+                  </Tag>
+                )}
                 {s.status === "reviewed" ? (
-                  <Tag kind="correct">已阅</Tag>
+                  <Icon name="checkcircle" size={20} color={C.ok} stroke={2.2} />
                 ) : (
                   <Tag kind="info" icon="pencil">
                     待阅
@@ -316,25 +301,12 @@ export default function PlanTask() {
           )}
           {sub.results && sub.score ? (
             <>
-              <View className="stats">
-                <View className="stat stat--ok">
-                  <Text className="stat__label">对</Text>
-                  <Text className="stat__value num c-ok">{sub.score.correct}</Text>
-                </View>
-                <View className="stat stat--wrong">
-                  <Text className="stat__label">错</Text>
-                  <Text className="stat__value num c-wrong">{sub.score.wrong}</Text>
-                </View>
-                <View className="stat stat--mute">
-                  <Text className="stat__label">没做</Text>
-                  <Text className="stat__value num">{sub.score.blank}</Text>
-                </View>
-              </View>
+              <ScoreStats score={sub.score} />
               <QuestionGrid results={sub.results} />
-              <Text className="t-cap c-sec">错题已经自动进了你的错题榜，交的这份也存在「试卷」里。</Text>
+              {sub.score.wrong > 0 && <Text className="t-cap c-sec">错题已进错题榜</Text>}
             </>
           ) : (
-            <Text className="t-sub c-sec">{isSubmissionPending(sub.id) ? "正在批改，好了会显示在这里。可以先离开。" : "已经交给老师了。批改结果在「试卷」里这份作业上，打开小程序时会自动补交给老师。"}</Text>
+            <Text className="t-sub c-sec">{isSubmissionPending(sub.id) ? "正在批改…" : "已交，批改结果在「试卷」里"}</Text>
           )}
         </View>
       )}
@@ -382,7 +354,7 @@ export default function PlanTask() {
               </Button>
               {canSubmit && (
                 <Button icon="camera" className="flex1" onClick={() => setScanning(true)}>
-                  {sub ? "重新扫描上传" : "扫描上传"}
+                  {sub ? "重新扫描" : "扫描上传"}
                 </Button>
               )}
             </>
@@ -399,7 +371,6 @@ export default function PlanTask() {
               </View>
               <View className="flex1 col gap2 minw0">
                 <Text className="row__title">电子版 PDF</Text>
-                <Text className="row__sub">排好版的原题，方便打印</Text>
               </View>
             </View>
           )}
@@ -418,15 +389,17 @@ export default function PlanTask() {
               </View>
               <View className="flex1 col gap2 minw0">
                 <Text className="row__title ellipsis">{f.name}</Text>
-                <Text className="row__sub">原件 · {sizeLabel(f.size)} · {f.mime.startsWith("image/") ? "长按图片保存" : "打开后右上角转发或打印"}</Text>
+                <Text className="row__sub">{sizeLabel(f.size)}</Text>
               </View>
             </View>
           ))}
         </View>
       </Sheet>
       <Sheet open={menu} onClose={() => setMenu(false)} title={a.title}>
-        <View className="group group--fill">
-          <MenuRow title="撤回这份作业" sub="没交的同学不会再看到；交过的同学还能看到自己那份" danger onClick={() => void revoke()} />
+        <View className="plan-quiet plan-quiet--only">
+          <Text className="plan-quiet__item c-wrong" onClick={() => void revoke()}>
+            撤回这份作业
+          </Text>
         </View>
       </Sheet>
       <ScanSheet open={scanning} title={owner ? "扫描" : "拍下做完的作业"} onClose={() => setScanning(false)} onPhotos={(p) => setShots((cur) => [...cur, ...p])} />

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
+import { Icon } from "../../components/Icon";
 import { NameSheet, PageState, PlanTile } from "../../components/plan";
 import { Button } from "../../components/ui";
 import { api, errorText } from "../../lib/api";
@@ -8,6 +9,7 @@ import { LOGIN_CLOSED_EVENT, LOGIN_PAGE, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
 import { PLAN_SUBJECT_LABEL, bumpPlans, joinPlan, startPlanSync, type AssignmentBrief, type PlanInfo, type PlanSubject } from "../../lib/plans";
 import { useShare } from "../../lib/share";
+import { C } from "../../lib/theme";
 
 interface Preview {
   plan: { id: string; name: string; subject: PlanSubject; teacher: string };
@@ -86,17 +88,21 @@ export default function PlanJoin() {
           <View className="card plan-join" style={{ width: "100%", boxSizing: "border-box" }}>
             <PlanTile subject={preview.plan.subject} size="lg" />
             <Text className="t-foot c-sec" style={{ marginTop: "8px" }}>
-              {preview.plan.teacher} 邀请你加入 · {PLAN_SUBJECT_LABEL[preview.plan.subject] ?? "综合"}
+              {preview.plan.teacher} · {PLAN_SUBJECT_LABEL[preview.plan.subject] ?? "综合"}
             </Text>
             <Text className="t-title2" style={{ fontWeight: 800 }}>
               {preview.plan.name}
             </Text>
-            {preview.assignment && <Text className="t-sub c-sec">作业：{preview.assignment.title}</Text>}
+            {preview.assignment && (
+              <View className="row-center gap4">
+                <Icon name="document" size={14} color={C.secondary} stroke={2.2} />
+                <Text className="t-sub c-sec">{preview.assignment.title}</Text>
+              </View>
+            )}
           </View>
           <Button onClick={loginThenJoin} style={{ width: "100%" }}>
             加入学习计划
           </Button>
-          <Text className="t-cap c-sec">用微信登录后自动加入，不用老师批准</Text>
         </>
       )}
       <NameSheet
