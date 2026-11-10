@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Text, View } from "@tarojs/components";
+import { Input, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon, type IconName } from "../../components/Icon";
-import { LoginGate, NameSheet, PageState, PlanTile, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
-import { Button, Segmented, Stat, Tag, type TagKind } from "../../components/ui";
+import { LoginGate, PageState, PlanTile, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
+import { Button, Segmented, Sheet, Stat, Tag, type TagKind } from "../../components/ui";
 import { errorText } from "../../lib/api";
+import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
 import { PLAN_SUBJECT_LABEL, STATUS_LABEL, bumpPlans, deletePlan, dueLabel, fetchPlan, isOverdue, memberName, removeMember, updatePlan, type MemberAssignment, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C } from "../../lib/theme";
@@ -16,17 +17,18 @@ const leave = () => {
 };
 
 /**
- * 学习计划页（和 App 一致）。创建人：今日已交 / 待批阅、每份作业的进度、成员名单、转发、布置新作业；点计划名改名，
- * 「让旧卡片失效」「解散」在成员页签最下面。成员：只有自己的待交 / 已交和作业列表，看不到其他成员、人数和别人交没交；
- * 自己的名字和「退出」在列表下面。页面上能用图标 + 数字说清的就不写字。
+ * 学习计划页（和 App 一致）。创建人：今日已交 / 待批阅、每份作业的进度、成员名单、转发、布置新作业。成员：只有自己的待交 / 已交和作业列表，
+ * 看不到其他成员、人数和别人交没交。点计划名弹出面板：创建人改计划名、让旧卡片失效、解散；成员改老师看到的名字、退出。
+ * 页面上只留内容，不放这些不常用的操作。页面上能用图标 + 数字说清的就不写字。
  */
 export default function PlanDetail() {
   const id = useRouter().params.id || "";
-  const [version, refresh] = usePlansVersion();
+  const [version] = usePlansVersion();
   const [data, setData] = useState<PlanDetailRes | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"tasks" | "members">("tasks");
-  const [naming, setNaming] = useState(false);
+  const [panel, setPanel] = useState(false);
+  const [name, setName] = useState("");
   const logged = loggedIn();
 
   const load = async () => {
@@ -71,16 +73,21 @@ export default function PlanDetail() {
     }
   };
 
-  const rename = async () => {
-    const m = await Taro.showModal({ title: "改计划名称", editable: true, content: plan.name });
-    const value = m.content?.trim().slice(0, 60);
-    if (!m.confirm || !value) return;
+  const openPanel = () => {
+    setName(owner ? plan.name : data.me?.defaultName ? "" : (data.me?.name ?? ""));
+    setPanel(true);
+  };
+  const saveName = async () => {
+    const value = name.trim();
     await act(async () => {
-      await updatePlan(plan.id, { name: value });
+      if (owner) await updatePlan(plan.id, { name: value.slice(0, 60) });
+      else await updateProfile({ nickname: value.slice(0, 16) });
+      setPanel(false);
       await load();
-    }, "已更新");
+    }, owner ? "已更新" : "已改名");
   };
   const resetInvite = async () => {
+    setPanel(false);
     if (!(await confirm("让以前转发的卡片失效？", "之前发到微信里的卡片都不能再用来加入。之后要邀请新同学，需要重新转发一次。", "失效并换新的"))) return;
     await act(async () => {
       await updatePlan(plan.id, { resetInvite: true });
@@ -88,6 +95,7 @@ export default function PlanDetail() {
     }, "旧卡片已失效");
   };
   const dissolve = async () => {
+    setPanel(false);
     if (!(await confirm("解散这个学习计划？", "计划、作业和同学交上来的内容都会从服务器删除，不能恢复。同学自己试卷里存的那份不受影响。", "解散", true))) return;
     await act(async () => {
       await deletePlan(plan.id);
@@ -96,6 +104,7 @@ export default function PlanDetail() {
     }, "已解散");
   };
   const quit = async () => {
+    setPanel(false);
     if (!(await confirm("退出这个学习计划？", "退出后看不到这里的作业了。已经交过的作业老师还能看到。再点一次老师发的卡片可以重新加入。", "退出", true))) return;
     await act(async () => {
       await removeMember(plan.id, "me");
@@ -114,11 +123,11 @@ export default function PlanDetail() {
   const head = (
     <View className="plan-head">
       <PlanTile subject={plan.subject} size="sm" />
-      {/* 创建人点计划名就能改名 */}
-      <View className="flex1 col minw0" onClick={owner ? () => void rename() : undefined}>
+      {/* 点计划名弹出面板：改名，下面是不常用的操作（和 iOS 的标题菜单一个意思） */}
+      <View className="flex1 col minw0" onClick={openPanel}>
         <View className="row-center gap6">
           <Text className="t-headline ellipsis">{plan.name}</Text>
-          {owner && <Icon name="pencil" size={14} color={C.tertiary} stroke={2.2} />}
+          <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />
         </View>
         <Text className="t-foot c-sec ellipsis">{owner ? (PLAN_SUBJECT_LABEL[plan.subject] ?? "综合") : `${PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"} · ${plan.teacher}`}</Text>
       </View>
@@ -215,17 +224,6 @@ export default function PlanDetail() {
                 </View>
               ))}
             </View>
-            <View className="group">
-              <View className="list-row" hoverClass="list-row--hover" onClick={() => void resetInvite()}>
-                <Icon name="link" size={20} color={C.secondary} stroke={2} />
-                <Text className="row__title flex1">让旧卡片失效</Text>
-                <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-              </View>
-              <View className="list-row" hoverClass="list-row--hover" onClick={() => void dissolve()}>
-                <Icon name="trash" size={20} color={C.wrong} stroke={2} />
-                <Text className="row__title c-wrong flex1">解散学习计划</Text>
-              </View>
-            </View>
           </>
         )}
         <View className="bottom-bar">
@@ -243,6 +241,13 @@ export default function PlanDetail() {
     const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
     return (
       <>
+        {data.me?.defaultName && (
+          <View className="plan-banner" onClick={openPanel}>
+            <Icon name="person" size={18} color={C.accentOn} stroke={2.2} />
+            <Text className="flex1">老师看到的名字是「{data.me.name}」</Text>
+            <Text className="plan-banner__act">改名</Text>
+          </View>
+        )}
         <View className="stats">
           <Stat icon="clock" label="待交" value={todo} color={todo ? C.accentOn : undefined} />
           <Stat icon="checkcircle" label="已交" value={handed} />
@@ -292,25 +297,6 @@ export default function PlanDetail() {
             );
           })}
         </View>
-        <View className="group">
-          {/* 老师看到的名字：默认名时标橙色提醒去改 */}
-          <View className="list-row" hoverClass="list-row--hover" onClick={() => setNaming(true)}>
-            <Icon name="person" size={20} color={data.me?.defaultName ? C.accentOn : C.secondary} stroke={2} />
-            <Text className="row__title ellipsis flex1" style={data.me?.defaultName ? { color: C.accentOn } : undefined}>
-              {data.me?.name ?? ""}
-            </Text>
-            {data.me?.defaultName && (
-              <Tag kind="pending" icon={null}>
-                改成真名
-              </Tag>
-            )}
-            <Icon name="pencil" size={16} color={C.tertiary} stroke={2.2} />
-          </View>
-          <View className="list-row" hoverClass="list-row--hover" onClick={() => void quit()}>
-            <Icon name="xcircle" size={20} color={C.wrong} stroke={2} />
-            <Text className="row__title c-wrong flex1">退出学习计划</Text>
-          </View>
-        </View>
       </>
     );
   };
@@ -320,15 +306,27 @@ export default function PlanDetail() {
       {head}
       {owner ? ownerBody() : memberBody()}
 
-      <NameSheet
-        open={naming}
-        onClose={() => setNaming(false)}
-        onDone={(name) => {
-          setNaming(false);
-          toast(`已改成「${name}」，老师那边同步更新`);
-          refresh();
-        }}
-      />
+      <Sheet open={panel} onClose={() => setPanel(false)} title={owner ? "学习计划" : plan.name}>
+        <View className="plan-field">
+          <View className="plan-field__label">
+            <Text>{owner ? "名称" : "老师看到的名字"}</Text>
+          </View>
+          <Input className="input" value={name} maxlength={owner ? 60 : 16} adjustPosition={false} confirmType="done" onInput={(e) => setName(e.detail.value)} />
+        </View>
+        <Button disabled={!name.trim() || name.trim() === (owner ? plan.name : data.me?.name)} onClick={() => void saveName()}>
+          保存
+        </Button>
+        <View className="plan-quiet">
+          {owner && (
+            <Text className="plan-quiet__item" onClick={() => void resetInvite()}>
+              让旧卡片失效
+            </Text>
+          )}
+          <Text className="plan-quiet__item c-wrong" onClick={() => void (owner ? dissolve() : quit())}>
+            {owner ? "解散学习计划" : "退出学习计划"}
+          </Text>
+        </View>
+      </Sheet>
     </View>
   );
 }

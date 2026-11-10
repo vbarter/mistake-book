@@ -46,3 +46,9 @@
 .plan-counts { display: flex; align-items: center; gap: 14px; }
 .plan-count { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; line-height: 18px; font-weight: 600; }
 .plan-row-icon { flex-shrink: 0; color: var(--secondary); }
+/* 面板底部不常用的操作：纯文字，居中，破坏性的用红色 */
+.plan-quiet { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; border-top: 1px solid var(--separator-light); margin-top: 6px; }
+.plan-quiet button { height: 44px; padding: 0 16px; font-size: 16px; color: var(--brand); }
+.plan-quiet .plan-quiet__danger { color: var(--wrong); }
+button.plan-banner { width: 100%; }
+button.plan-banner b { font-weight: 700; white-space: nowrap; }
