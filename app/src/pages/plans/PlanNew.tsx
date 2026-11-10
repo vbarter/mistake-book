@@ -4,11 +4,16 @@ import { Icon } from "../../components/Icon";
 import { Button, InlineNav } from "../../components/ui";
 import { SUBJECTS } from "../../lib/format";
 import { PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, publishAssignment, scanDraft, shareInvite, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject } from "../../lib/plans";
-import { haptic } from "../../lib/native";
+import { haptic, isAndroid } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
 import { Busy, useScanPick } from "./shared";
 
 const MAX_FILES = 30;
+/**
+ * 安卓不限类型：带上类型时系统按第一个类型（PDF）起文件选择器，不少国产手机的选择器不认后面的类型，图片和 Word 点不了。
+ * 选完再在 attachmentDraft 里按扩展名把关。iOS / 网页照常限制，相册里的 HEIC 也会自动转成 JPG。
+ */
+const ATTACH_ACCEPT = isAndroid ? undefined : ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp";
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** 默认截止时间：今晚 21:00，已经过了就明晚 */
@@ -132,7 +137,7 @@ export default function PlanNew() {
             <Button variant="outline" icon="camera" onClick={scan.open}>扫描</Button>
             <Button variant="outline" icon="document" onClick={() => input.current?.click()}>上传附件</Button>
           </div>
-          <input ref={input} type="file" multiple hidden accept=".pdf,.doc,.docx,image/jpeg,image/png,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => onAttach(e.target.files)} />
+          <input ref={input} type="file" multiple hidden accept={ATTACH_ACCEPT} onChange={(e) => onAttach(e.target.files)} />
         </div>
 
         <div className="bottom-bar" style={{ marginTop: "auto" }}>

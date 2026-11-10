@@ -7,7 +7,8 @@ import { Button, Sheet } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { SUBJECTS } from "../../lib/format";
 import { toast } from "../../lib/hooks";
-import { MAX_FILES, PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject, type PublishRes } from "../../lib/plans";
+import { pickPhotos } from "../../lib/capture";
+import { MAX_FILES, PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, fileBadge, imageAttachmentDraft, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject, type PublishRes } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -89,22 +90,64 @@ export default function PlanNew() {
     }
   };
 
-  /** 小程序拿不到手机里的文件，只能从微信聊天记录里选（PDF、Word 先发给「文件传输助手」或任意一个聊天） */
-  const attach = async () => {
+  const fromAlbum = async () => {
+    const paths = await pickPhotos("album");
+    if (!paths.length) return;
+    setStage("正在读取照片");
     try {
-      const res = await Taro.chooseMessageFile({ count: 9, type: "all" });
+      const base = files.filter((f) => f.kind === "attachment" && f.mime.startsWith("image/")).length;
       const ok: DraftFile[] = [];
       let bad = "";
-      for (const f of res.tempFiles) {
-        const d = attachmentDraft({ path: f.path, name: f.name, size: f.size });
+      for (let i = 0; i < paths.length; i++) {
+        const d = await imageAttachmentDraft(paths[i], base + ok.length);
         if (typeof d === "string") bad = d;
         else ok.push(d);
       }
       if (ok.length) add(ok);
       if (bad) toast(bad);
+    } finally {
+      setStage(null);
+    }
+  };
+
+  /** 小程序读不到手机里的文件，PDF、Word 只能从微信聊天记录里选（先把文件发给「文件传输助手」或任意一个聊天） */
+  const fromChat = async () => {
+    let res: Taro.chooseMessageFile.SuccessCallbackResult;
+    try {
+      res = await Taro.chooseMessageFile({ count: 9, type: "all" });
     } catch (e) {
-      const msg = String((e as { errMsg?: string }).errMsg || "");
-      if (!/cancel/i.test(msg)) toast("没选成，请再试一次");
+      const msg = String((e as { errMsg?: string }).errMsg || (e as Error).message || "");
+      if (/cancel/i.test(msg)) return;
+      // 小程序后台的隐私指引没勾「选中的文件」时微信直接拒绝，得把原因说清楚，不能只说「没选成」
+      if (/privacy|scope is not declared/i.test(msg)) return void Taro.showModal({ title: "暂时不能从聊天里选文件", content: "小程序后台的「用户隐私保护指引」还没有声明「选中的文件」，微信不让打开聊天文件。图片可以先用「从相册选图片」。", showCancel: false });
+      if (/not support|is not a function|undefined/i.test(msg)) return void Taro.showModal({ title: "这个微信版本不支持", content: "电脑版微信或版本太旧时不能从聊天里选文件，请在手机上把微信升到最新版再试。", showCancel: false });
+      return void Taro.showModal({ title: "没选成", content: msg || "请再试一次", showCancel: false });
+    }
+    const ok: DraftFile[] = [];
+    let bad = "";
+    for (const f of res.tempFiles) {
+      const d = attachmentDraft({ path: f.path, name: f.name, size: f.size });
+      if (typeof d === "string") bad = d;
+      else ok.push(d);
+    }
+    if (ok.length) add(ok);
+    if (bad) toast(bad);
+  };
+
+  /** 上传附件：先问从哪选。图片走相册；PDF、Word 走微信聊天记录 */
+  const attach = async () => {
+    if (files.length >= MAX_FILES) return void toast(`一份作业最多 ${MAX_FILES} 个文件`);
+    let tap = -1;
+    try {
+      tap = (await Taro.showActionSheet({ itemList: ["从相册选图片", "从微信聊天选文件（PDF、Word、图片）"] })).tapIndex;
+    } catch {
+      return; // 点了取消
+    }
+    try {
+      if (tap === 0) await fromAlbum();
+      else if (tap === 1) await fromChat();
+    } catch (e) {
+      toast(errorText(e));
     }
   };
 
@@ -191,10 +234,10 @@ export default function PlanNew() {
           <Text className="plan-field__note">{files.length ? `已添加 ${files.length} 个` : "扫描件会识别成题目，自动批改"}</Text>
         </View>
         <ScrollView scrollY className="plan-files" enhanced showScrollbar={false} scrollIntoView={bottom} scrollWithAnimation>
-          {files.length === 0 && <Text className="plan-empty">{"还没有内容。\n点下面的「扫描」拍下作业，或「上传附件」从微信聊天里选 PDF、Word、图片。"}</Text>}
+          {files.length === 0 && <Text className="plan-empty">{"还没有内容。\n点下面的「扫描」拍下作业（会识别成题目、自动批改），或「上传附件」选图片、PDF、Word（同学直接打开看）。"}</Text>}
           {files.map((f) => (
             <View key={f.clientId} id={`pf-${f.clientId}`} className="plan-file">
-              {f.kind === "scan" ? (
+              {f.mime.startsWith("image/") ? (
                 <Image className="plan-file__icon" src={f.path} mode="aspectFill" />
               ) : (
                 <View className="plan-file__icon">
