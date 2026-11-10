@@ -14,6 +14,7 @@ import { scanStageText, useJobs } from "../lib/jobs";
 import { getLastExportAt } from "../lib/prefs";
 import { dueLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
+import { toast } from "../store/banner";
 
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -109,6 +110,12 @@ export default function Home() {
             <span className="row__main"><span className="row__title">学习计划</span><span className="row__sub ellipsis">{planLine}</span></span>
             {plans && plans.todo + plans.toReview > 0 && <span className="num-chip" style={{ background: "var(--brand)", color: "#fff" }}>{plans.todo + plans.toReview}</span>}
             <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+          </button>
+          {/* 待办事项还没做好：先占个位置，点了提示一下 */}
+          <button className="row" style={{ minHeight: 60 }} onClick={() => toast("待办事项还在开发中，过几天就能用了")}>
+            <span className="row__icon" style={{ background: "var(--tertiary)" }}><Icon name="list" size={18} stroke={2} /></span>
+            <span className="row__main"><span className="row__title">待办事项</span><span className="row__sub">记下今天要做的事</span></span>
+            <span className="tag tag--neutral">即将上线</span>
           </button>
         </div>
 
