@@ -49,6 +49,11 @@ async function shootSeries(): Promise<string[]> {
   return shots;
 }
 
+/** 只选照片、不建试卷（学习计划里老师扫描作业、学生拍做完的作业用）：拍照是连拍 + 逐张确认，相册一次最多 9 张 */
+export async function pickPhotos(source: Source): Promise<string[]> {
+  return source === "camera" ? shootSeries() : choose("album", 9);
+}
+
 /**
  * 加试卷（唯一的录入入口）：拍照（连拍）或从相册一次选多张 → 存进本机 → 建试卷 → 提交扫描。
  * 不先问放哪个文件夹：传了 folderId 就放进去，没传就放进今天的文件夹（今天还没有就自动新建），和 App 一致。

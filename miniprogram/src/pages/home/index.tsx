@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Image, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh } from "@tarojs/taro";
 import { Buddy } from "../../components/Buddy";
@@ -11,7 +11,9 @@ import { useDataVersion, useTabBar } from "../../lib/hooks";
 import { analyze, inRange, since } from "../../lib/insights";
 import { pollPendingJobs, scanStageText } from "../../lib/jobs";
 import { getLastExportAt } from "../../lib/prefs";
-import { currentUser } from "../../lib/auth";
+import { currentUser, isLoggedIn } from "../../lib/auth";
+import { toast } from "../../lib/hooks";
+import { PLANS_EVENT, dueLabel, fetchPlans, type PlanSummary } from "../../lib/plans";
 import { listFolders } from "../../lib/store";
 import { C } from "../../lib/theme";
 import { useShare, useShareTimelineToo } from "../../lib/share";
@@ -31,6 +33,32 @@ export default function Home() {
   const folders = useMemo(() => listFolders(), [version, exporting]);
   const lastExport = useMemo(() => getLastExportAt(), [version, exporting]);
   const nickname = useMemo(() => currentUser()?.nickname ?? "", [version]);
+
+  // 学习计划的汇总：没登录、没网时这一行照样在，只是不带数字
+  const [plans, setPlans] = useState<PlanSummary | null>(null);
+  const [plansVersion, setPlansVersion] = useState(0);
+  useEffect(() => {
+    const on = () => setPlansVersion((x) => x + 1);
+    Taro.eventCenter.on(PLANS_EVENT, on);
+    return () => {
+      Taro.eventCenter.off(PLANS_EVENT, on);
+    };
+  }, []);
+  useEffect(() => {
+    if (!isLoggedIn()) return setPlans(null);
+    fetchPlans()
+      .then((r) => setPlans(r.summary))
+      .catch(() => undefined);
+  }, [version, plansVersion]);
+  const planLine =
+    !plans || plans.owned + plans.joined === 0
+      ? "老师布置作业，同学拍照交回"
+      : [
+          plans.todo > 0 ? `待交 ${plans.todo} 份${plans.nextTitle ? `：${plans.nextTitle}${plans.nextDue ? `（截止 ${dueLabel(plans.nextDue)}）` : ""}` : ""}` : "",
+          plans.owned > 0 ? `今天已交 ${plans.submittedToday} 份 · 待批阅 ${plans.toReview} 份` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ") || "作业都交了";
 
   usePullDownRefresh(async () => {
     await pollPendingJobs();
@@ -99,6 +127,38 @@ export default function Home() {
           ))}
         </View>
       )}
+
+      <View className="group rise rise--2">
+        <View className="group__header">
+          <Text>今日安排</Text>
+        </View>
+        <View className="list-row" hoverClass="list-row--hover" style={{ minHeight: "60px" }} onClick={() => go("/pages/plans/index")}>
+          <View className="row__icon" style={{ background: C.brand }}>
+            <Icon name="graduation" size={18} color="#ffffff" stroke={2} />
+          </View>
+          <View className="flex1 col gap2 minw0">
+            <Text className="row__title">学习计划</Text>
+            <Text className="row__sub ellipsis">{planLine}</Text>
+          </View>
+          {plans && plans.todo + plans.toReview > 0 && (
+            <Text className="num-chip" style={{ background: C.brand, color: "#ffffff" }}>
+              {plans.todo + plans.toReview}
+            </Text>
+          )}
+          <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+        </View>
+        {/* 待办事项还没做好：先占个位置，点了提示一下（和 App 一致） */}
+        <View className="list-row" hoverClass="list-row--hover" style={{ minHeight: "60px" }} onClick={() => toast("待办事项还在开发中，过几天就能用了")}>
+          <View className="row__icon" style={{ background: C.tertiary }}>
+            <Icon name="list" size={18} color="#ffffff" stroke={2} />
+          </View>
+          <View className="flex1 col gap2 minw0">
+            <Text className="row__title">待办事项</Text>
+            <Text className="row__sub">记下今天要做的事</Text>
+          </View>
+          <Text className="tag tag--neutral">即将上线</Text>
+        </View>
+      </View>
 
       {recent.total > 0 && (
         <View className="card rise rise--3" style={{ gap: "14px" }}>
