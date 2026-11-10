@@ -2,6 +2,7 @@ import { PropsWithChildren } from "react";
 import { useDidHide, useDidShow } from "@tarojs/taro";
 import { isLoggedIn, refreshUser } from "./lib/auth";
 import { startJobPoller, stopJobPoller } from "./lib/jobs";
+import { startPlanSync, stopPlanSync } from "./lib/plans";
 import { initSync, scheduleSync } from "./lib/sync";
 import "./app.scss";
 
@@ -12,11 +13,15 @@ function App({ children }: PropsWithChildren) {
   useDidShow(() => {
     if (isLoggedIn()) {
       startJobPoller();
+      startPlanSync(); // 学习计划：老师的扫描件识别完回填电子版，学生交的作业批改完回填给老师
       void refreshUser(); // 顺带换新 token，登录状态一直保持到主动退出
       scheduleSync(800);
     }
   });
-  useDidHide(() => stopJobPoller());
+  useDidHide(() => {
+    stopJobPoller();
+    stopPlanSync();
+  });
   return children;
 }
 

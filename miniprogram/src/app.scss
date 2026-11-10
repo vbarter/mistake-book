@@ -602,3 +602,56 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 /* ---------- 上传 / 处理中的 HUD ---------- */
 .hud { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 300; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.25); }
 .hud__card { width: 200px; padding: 24px 16px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; background: $bar; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2); }
+
+/* ---------- 学习计划（和 App 的 styles/plans.css 对应） ---------- */
+/* 原生 <button open-type="share">：去掉微信自带的边框、行高、边距，外观用 .btn / .plan-pill */
+.btn-native { margin: 0; line-height: normal; overflow: visible; }
+.btn-native::after { border: 0; }
+.plan-field { display: flex; flex-direction: column; gap: 8px; }
+.plan-field__label { display: flex; justify-content: space-between; font-size: 13px; line-height: 18px; font-weight: 600; color: $secondary; padding: 0 4px; }
+.plan-field__label .plan-field__note { font-weight: 400; }
+.input--card { background: $card; }
+.plan-due { display: flex; gap: 10px; }
+.plan-due picker { flex: 1; min-width: 0; }
+.plan-due .field { background: $card; font-size: 17px; }
+/* 作业内容：文件列表自己滚，扫描 / 上传附件两个按钮固定在列表下面 */
+.plan-files { background: $card; border-radius: $radius-list; max-height: 38vh; box-sizing: border-box; }
+.plan-empty { display: block; padding: 28px 16px; text-align: center; color: $secondary; font-size: 14px; line-height: 20px; }
+.plan-file { display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 14px; border-top: 1px solid $sep-light; }
+.plan-file:first-child { border-top: 0; }
+.plan-file__icon { width: 38px; height: 48px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: $brand-tint; color: $brand; font-size: 11px; font-weight: 800; }
+.plan-file__icon--sm { width: 34px; height: 40px; }
+.plan-file__x { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.plan-add { display: flex; gap: 10px; }
+.plan-add .btn { flex: 1; min-width: 0; }
+.plan-pill { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px; border-radius: 16px; background: $brand-tint; color: $brand; font-size: 14px; font-weight: 600; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; }
+.plan-head { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+.plan-banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: $accent-bg; color: $accent-on; font-size: 14px; line-height: 20px; }
+.plan-banner__act { font-weight: 700; white-space: nowrap; text-decoration: underline; }
+.plan-task { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-top: 1px solid $sep-light; }
+.plan-task:first-child, .group__header + .plan-task { border-top: 0; }
+.plan-task__head { display: flex; align-items: center; gap: 8px; }
+.plan-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: $fill-light; }
+.plan-bar__seg { height: 100%; }
+.plan-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: $secondary; }
+.plan-legend__item { display: flex; align-items: center; gap: 4px; }
+.plan-legend__dot { width: 8px; height: 8px; border-radius: 2px; }
+.plan-photo { width: 100%; border-radius: 12px; background: $fill; display: block; }
+.plan-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-q { position: relative; width: 44px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; background: $fill-light; color: $secondary; flex-shrink: 0; }
+.plan-q--correct { background: $ok-bg; color: $ok; }
+.plan-q--wrong, .plan-q--partial { background: $wrong-bg; color: $wrong; }
+.plan-q--blank { background: $accent-bg; color: $accent-on; }
+.plan-q--hover { opacity: 0.6; }
+.plan-q__dot { position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 3px; background: $brand; }
+.plan-marks { display: flex; gap: 8px; }
+.plan-marks .chip { flex: 1; justify-content: center; height: 40px; border-radius: 12px; }
+.plan-avatar { width: 36px; height: 36px; border-radius: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: $brand-tint; color: $brand; font-weight: 800; font-size: 15px; }
+.plan-thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
+.plan-thumb { position: relative; }
+.plan-thumb__x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 11px; background: $label; display: flex; align-items: center; justify-content: center; }
+.plan-join { align-items: center; text-align: center; gap: 6px; padding: 28px 20px; }
+.group--fill { background: $fill-light; }
+.stat--ok { background: $ok-bg; }
+.stat--wrong { background: $wrong-bg; }
+.stat--mute { background: $fill-light; }
