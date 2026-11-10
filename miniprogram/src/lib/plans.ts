@@ -123,6 +123,18 @@ export function attachmentDraft(file: { path: string; name: string; size: number
   return { clientId: newId(), kind: "attachment", name: file.name, mime, size: file.size, path: file.path };
 }
 
+/** 从相册选的一张图片 → 附件草稿（不识别成题目，同学直接看图）；不是 JPG / PNG / WebP、太大的返回一句原因 */
+export async function imageAttachmentDraft(path: string, index: number): Promise<DraftFile | string> {
+  const info = await Taro.getImageInfo({ src: path });
+  const type = String(info.type || "").toLowerCase();
+  const ext = type === "jpg" || type === "jpeg" ? "jpg" : type === "png" || type === "webp" ? type : "";
+  const name = `图片 ${index + 1}.${ext || "jpg"}`;
+  if (!ext) return `「${name}」的格式不支持，换一张 JPG 或 PNG`;
+  const size = fileSize(path);
+  if (size > MAX_PLAN_FILE_BYTES) return `「${name}」超过 20 MB 了`;
+  return { clientId: newId(), kind: "attachment", name, mime: EXT_MIME[ext], size, path, width: info.width, height: info.height };
+}
+
 async function uploadAll(uploads: Upload[], drafts: DraftFile[], onStage?: (text: string) => void): Promise<void> {
   const byId = new Map(drafts.map((d) => [d.clientId, d]));
   const fs = Taro.getFileSystemManager();
