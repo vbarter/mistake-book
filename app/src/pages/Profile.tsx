@@ -12,7 +12,7 @@ import { useAuth } from "../store/auth";
 import { toast, toastError } from "../store/banner";
 
 
-/** 我的：账号、年级与城市（决定知识点按哪套考纲归类）、学科、本机数据与隐私、关于。 */
+/** 我的：账号、年级与城市（决定知识点按哪套考纲归类）、学科、本机数据与隐私、关于。只留图标和短标题，解释性的话放到各自的子页里。 */
 export default function Profile() {
   const nav = useNavigate();
   const { user, updateProfile } = useAuth();
@@ -60,50 +60,41 @@ export default function Profile() {
             {gradeShort && <span style={{ position: "absolute", right: -4, bottom: -2, fontSize: 10, fontWeight: 800, color: "#fff", background: "var(--brand)", border: "2px solid var(--card)", borderRadius: 9, padding: "1px 6px" }}>{gradeShort}</span>}
           </span>
           <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-            <span className="t-title3 ellipsis" style={{ fontWeight: 800 }}>{user.nickname}</span>
-            <span className="t-foot c-sec" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="pin" size={13} stroke={2.2} />{[city, grade].filter(Boolean).join(" · ")}</span>
-            <span className="t-cap" style={{ color: user.loginMethod === "guest" ? "var(--secondary)" : "var(--mastered)", display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <Icon name={user.loginMethod === "guest" ? "info" : "checkcircle"} size={12} stroke={2.6} />{user.loginMethod === "apple" ? "Apple 账号已绑定" : user.loginMethod === "phone" ? "手机号已绑定" : "游客，建议绑定账号"}
+            <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <span className="t-title3 ellipsis" style={{ fontWeight: 800 }}>{user.nickname}</span>
+              {user.loginMethod === "guest" && <span className="pill-mute">游客</span>}
             </span>
+            {(city || grade) && <span className="t-foot c-sec" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="pin" size={13} stroke={2.2} />{[city, grade].filter(Boolean).join(" · ")}</span>}
           </span>
           <Icon name="chevron-right" size={16} stroke={2.4} style={{ color: "var(--tertiary)" }} />
         </button>
 
         <div className="stats">
-          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num">{stats.papers}</span><span className="stat__label">张试卷</span></div>
-          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num" style={{ color: "var(--wrong)" }}>{stats.wrong}</span><span className="stat__label">道答错</span></div>
-          <div className="stat" style={{ alignItems: "center" }}><span className="stat__value num">{stats.blank}</span><span className="stat__label">道未作答</span></div>
-        </div>
-
-        <div>
-          <div className="group__header" style={{ padding: "0 12px 6px" }}><span>学习设置</span></div>
-          <div className="group">
-            <Row icon="graduation" iconColor="var(--brand)" title="年级与城市" value={[grade || "未设置年级", city].filter(Boolean).join(" · ")} onClick={() => nav("/profile/subjects")} />
-            <Row icon="books" iconColor="var(--brand)" title="学科" value={
-              // 最多露 3 个学科图标，其余用「+N」收起，免得学科多时把一行挤满
-              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                {user.subjects.slice(0, 3).map((s) => <SubjectTile key={s} subject={s} size="xs" />)}
-                {user.subjects.length > 3 && <span className="t-foot c-sec" style={{ marginLeft: 2 }}>+{user.subjects.length - 3}</span>}
-                {user.subjects.length === 0 && <span className="t-foot c-sec">未选</span>}
-              </span>
-            } onClick={() => nav("/profile/subjects")} />
-          </div>
-          <p className="t-cap c-sec" style={{ padding: "6px 12px 0" }}>年级和城市决定错题按哪套考纲归类知识点；试卷上能看出来的以试卷为准。</p>
-        </div>
-
-        <div>
-          <div className="group__header" style={{ padding: "0 12px 6px" }}><span>数据与隐私</span></div>
-          <div className="group">
-            <Row icon="export" iconColor="var(--brand)" title="我的导出" value="最近 7 天" onClick={() => nav("/profile/exports")} />
-            <Row icon="photo" iconColor="var(--accent-on)" title="本机试卷照片" value={`${stats.papers} 张 · ${stats.mb} MB`} chevron={false} />
-            <Row icon="shield" iconColor="var(--mastered)" title="隐私与权限" onClick={() => nav("/profile/privacy")} />
-            <Row icon="person" iconColor="var(--label)" title="账号与登录" value={user.loginMethod === "apple" ? "Apple" : user.loginMethod === "phone" ? "手机号" : "游客"} onClick={() => nav("/profile/account")} />
-          </div>
-          <p className="t-cap c-sec" style={{ padding: "6px 12px 0" }}>试卷照片和电子版只保存在这台设备上，不上传；导出的 PDF 在服务器上保留 7 天。</p>
+          <div className="stat"><span className="stat__label"><Icon name="document" size={13} stroke={2.4} />试卷</span><span className="stat__value num">{stats.papers}</span></div>
+          <div className="stat"><span className="stat__label" style={{ color: "var(--wrong)" }}><Icon name="xcircle" size={13} stroke={2.4} />答错</span><span className="stat__value num" style={{ color: "var(--wrong)" }}>{stats.wrong}</span></div>
+          <div className="stat"><span className="stat__label"><Icon name="minus" size={13} stroke={2.4} />未答</span><span className="stat__value num">{stats.blank}</span></div>
         </div>
 
         <div className="group">
-          <Row icon="info" iconColor="var(--secondary)" title="关于上壹课" value={version} chevron={false} />
+          <Row icon="graduation" iconColor="var(--brand)" title="年级" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => nav("/profile/subjects")} />
+          <Row icon="books" iconColor="var(--brand)" title="学科" value={
+            // 最多露 3 个学科图标，其余用「+N」收起，免得学科多时把一行挤满
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {user.subjects.slice(0, 3).map((s) => <SubjectTile key={s} subject={s} size="xs" />)}
+              {user.subjects.length > 3 && <span className="t-foot c-sec" style={{ marginLeft: 2 }}>+{user.subjects.length - 3}</span>}
+            </span>
+          } onClick={() => nav("/profile/subjects")} />
+        </div>
+
+        <div className="group">
+          <Row icon="export" iconColor="var(--brand)" title="导出" onClick={() => nav("/profile/exports")} />
+          <Row icon="photo" iconColor="var(--accent-on)" title="照片" value={`${stats.mb} MB`} chevron={false} />
+          <Row icon="shield" iconColor="var(--mastered)" title="隐私" onClick={() => nav("/profile/privacy")} />
+          <Row icon="person" iconColor="var(--label)" title="账号" value={user.loginMethod === "apple" ? "Apple" : user.loginMethod === "phone" ? "手机号" : ""} onClick={() => nav("/profile/account")} />
+        </div>
+
+        <div className="group">
+          <Row icon="info" iconColor="var(--secondary)" title="关于" value={version} chevron={false} />
         </div>
       </div>
 
