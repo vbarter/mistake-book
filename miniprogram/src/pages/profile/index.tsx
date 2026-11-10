@@ -13,7 +13,7 @@ import { listFolders, photosSizeMB } from "../../lib/store";
 import { useShare, useShareTimelineToo } from "../../lib/share";
 
 /** 小程序版本：三位 */
-const VERSION = "1.11.0";
+const VERSION = "1.12.0";
 
 /** 我的：和 App 的「我的」同一套布局——账号卡片、统计、学习设置、数据与隐私、关于。没登录也能看，账号卡片换成「点这里登录」 */
 export default function Profile() {
