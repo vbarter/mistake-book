@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { assetUrl } from "../api/client";
+import { avatarFallback, avatarId, avatarSrc } from "../lib/avatarCache";
 import type { Subject } from "../api/types";
 import { SUBJECT_LABEL } from "../lib/format";
 import { Icon, type IconName } from "./Icon";
@@ -37,9 +37,19 @@ export function subjectColors(s: Subject | null | undefined): { color: string; b
 
 /** 头像：有图用图，没有（或图加载失败）用名字最后一个字 */
 export function Avatar({ name, url, size = 36, style }: { name: string; url?: string | null; size?: number; style?: CSSProperties }) {
-  const [bad, setBad] = useState("");
+  // 同一版头像记一下试到哪一步：0 用缓存，1 缓存显示不出来改用最新地址，2 都不行用名字
+  const id = url ? avatarId(url) : "";
+  const [fail, setFail] = useState<{ id: string; step: number; src: string }>({ id: "", step: 0, src: "" });
+  const step = fail.id === id ? fail.step : 0;
   const box: CSSProperties = { width: size, height: size, borderRadius: size / 2, flexShrink: 0, ...style };
-  if (url && bad !== url) return <img src={assetUrl(url)} alt="" aria-hidden="true" onError={() => setBad(url)} style={{ ...box, objectFit: "cover", display: "block", background: "var(--fill-light)" }} />;
+  if (url && step < 2) {
+    const src = step === 1 ? fail.src : avatarSrc(url);
+    const onError = () => {
+      const fresh = step === 0 ? avatarFallback(url) : "";
+      setFail(fresh && fresh !== src ? { id, step: 1, src: fresh } : { id, step: 2, src: "" });
+    };
+    return <img src={src} alt="" aria-hidden="true" onError={onError} style={{ ...box, objectFit: "cover", display: "block", background: "var(--fill-light)" }} />;
+  }
   return <span aria-hidden="true" style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--avatar-bg)", color: "var(--avatar-fg)", fontWeight: 800, fontSize: Math.round(size * 0.42) }}>{name.slice(-1)}</span>;
 }
 
