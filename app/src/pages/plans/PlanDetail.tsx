@@ -180,7 +180,7 @@ export default function PlanDetail() {
           })()
         ) : (
           <>
-            <PlanCreator plan={plan} />
+            <PlanCreator plan={plan} brief />
             <PlanMember data={data} reload={load} />
           </>
         )}
