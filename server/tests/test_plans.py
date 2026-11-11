@@ -185,6 +185,9 @@ def test_submit_review_flow(client, auth):
     s3, _ = _login(client, "13800000003", "赵六")
     for s in (s1, s2, s3):
         _join(client, s, code)
+    # 还没人交：待批是 0，交上来过的也是 0（首页靠它不说「都批完了」）
+    row = next(p for p in client.get("/api/plans", headers=auth).get_json()["plans"] if p["id"] == pid)
+    assert (row["toReview"], row["handed"]) == (0, 0)
     assert client.post(f"/api/plans/assignments/{aid}/submission", json={"files": [SCAN]}, headers=auth).status_code == 403  # 老师不用交
     assert client.post(f"/api/plans/assignments/{aid}/submission", json={"files": [PDF]}, headers=s1).status_code == 400  # 交的必须是照片
 
@@ -201,6 +204,8 @@ def test_submit_review_flow(client, auth):
     assert board["hardest"][0] == {"number": "2", "wrong": 2, "knowledge": "乘法", "stem": "3×4=?", "graded": 2}
     plan = client.get(f"/api/plans/{pid}", headers=auth).get_json()
     assert plan["assignments"][0]["submitted"] == 2 and plan["plan"]["toReview"] == 2 and plan["plan"]["submittedToday"] == 2
+    row = next(p for p in client.get("/api/plans", headers=auth).get_json()["plans"] if p["id"] == pid)
+    assert (row["toReview"], row["handed"]) == (2, 2)
 
     # 老师检查：上一个 / 下一个、改判、已阅
     r = client.get(f"/api/plans/submissions/{sid1}", headers=auth).get_json()
