@@ -1,6 +1,6 @@
 {
   "name": "zhicuoben-miniprogram",
-  "version": "1.12.4",
+  "version": "1.12.5",
   "private": true,
   "description": "上壹课微信小程序（原名错误本，Taro + React）",
   "templateInfo": {
