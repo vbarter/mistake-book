@@ -162,15 +162,11 @@ export default function PlanDetail() {
       {/* 点计划名弹出面板：改名，下面是不常用的操作（和 iOS 的标题菜单一个意思） */}
       <View className="flex1 col minw0" onClick={openPanel}>
         <View className="row-center gap6">
-          <Text className="t-headline ellipsis">{plan.name}</Text>
+          {/* 成员：头像旁边是创建人的名字 + 计划的创建时间，计划名在下面每份作业的标题上；创建人自己看到的还是计划名 + 学科 */}
+          <Text className="t-headline ellipsis">{owner ? plan.name : plan.teacher}</Text>
           <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />
         </View>
-        {/* 成员：是谁建的、什么时候建的（创建人自己不用看这些） */}
-        <Text className="t-foot c-sec ellipsis">
-          {owner ? "" : `${plan.teacher} · `}
-          {PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}
-        </Text>
-        {!owner && <Text className="t-foot c-sec">{createdLabel(plan.createdAt)}</Text>}
+        <Text className="t-foot c-sec ellipsis">{owner ? (PLAN_SUBJECT_LABEL[plan.subject] ?? "综合") : createdLabel(plan.createdAt)}</Text>
       </View>
       {owner && data.invite && <ShareButton pill>转发</ShareButton>}
     </View>

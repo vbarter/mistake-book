@@ -8,7 +8,7 @@ import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
 import { toast } from "../lib/hooks";
-import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
+import { STATUS_LABEL, canHandIn, createdLabel, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
 import { C } from "../lib/theme";
 
 type Look = "done" | "returned" | "todo" | "revoked";
@@ -16,8 +16,15 @@ type Look = "done" | "returned" | "todo" | "revoked";
 const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
 const LOOK_ICON: Record<Look, [IconName, string]> = { done: ["checkcircle", C.ok], returned: ["refresh", C.wrong], todo: ["clock", C.accentOn], revoked: ["minus", C.tertiary] };
 
+/** 作业块的标题是计划名；老师另外起了作业名（不是文件名带出来的）才在下面一行带上 */
+const customTitle = (a: MemberAssignment, planName: string): string => {
+  const t = a.title.trim();
+  if (!t || t === planName) return "";
+  return (a.files ?? []).some((f) => f.name === t || f.name.replace(/\.[^.]+$/, "") === t) ? "" : t;
+};
+
 /**
- * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，每份作业一块（作业名 + 状态，下面直接平铺它的文件，点文件打开），
+ * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，每份作业一块（计划名 + 状态 + 这份作业的创建时间，下面直接平铺它的文件，点文件打开），
  * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
  * 交完页面跟着刷新，交了的作业整块标成绿色。交过的作业点作业名看自己那份的批改结果。
  */
@@ -110,10 +117,11 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
             >
               <View className="plan-task__head">
                 <Icon name={LOOK_ICON[look][0]} size={18} color={LOOK_ICON[look][1]} stroke={2.4} />
-                <Text className="t-headline ellipsis flex1">{a.title}</Text>
+                <Text className="t-headline ellipsis flex1">{data.plan.name}</Text>
                 {statusTag(a, true)}
                 {mine && <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />}
               </View>
+              <Text className="t-foot c-sec ellipsis">{[customTitle(a, data.plan.name), createdLabel(a.createdAt)].filter(Boolean).join(" · ")}</Text>
               <View className="plan-counts" style={waiting && !a.dueAt ? { display: "none" } : undefined}>
                 {waiting ? (
                   a.dueAt && (
