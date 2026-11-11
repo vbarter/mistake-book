@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
-import { Stat, Tag } from "../../components/v2";
+import { Avatar, Stat, Tag } from "../../components/v2";
 import { PLAN_SUBJECT_LABEL, STATUS_LABEL, deletePlan, dueLabel, fetchPlan, isOverdue, memberName, removeMember, shareInvite, updatePlan, usePlans, type MemberAssignment, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
@@ -121,7 +121,7 @@ export default function PlanDetail() {
                   {(data.members ?? []).length === 0 && <div className="plan-files__empty">还没有人加入</div>}
                   {(data.members ?? []).map((m) => (
                     <div key={m.userId} className="row" style={{ minHeight: 56 }}>
-                      <span className="plan-avatar" aria-hidden="true">{m.name.slice(-1)}</span>
+                      <Avatar name={m.name} url={m.avatar} />
                       <span className="row__main"><span className="row__title ellipsis">{memberName(m)}</span></span>
                       {count("checkcircle", m.assignments > 0 && m.submitted >= m.assignments ? "var(--mastered)" : "var(--tertiary)", `${m.submitted}/${m.assignments}`)}
                       <button className="plan-file__x" aria-label={`移除 ${m.name}`} onClick={() => setRemoving(m)}><Icon name="xmark" size={16} stroke={2.4} /></button>

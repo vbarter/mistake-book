@@ -41,6 +41,11 @@ class User(db.Model):
 
     mistakes = db.relationship("Mistake", backref="user", cascade="all, delete-orphan")
 
+    def _avatar(self) -> str | None:
+        from .avatars import avatar_url  # 在这里才导入，避免和 avatars 互相导入
+
+        return avatar_url(self.id)
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -48,6 +53,7 @@ class User(db.Model):
             "hasPassword": bool(self.password_hash),
             "loginMethod": "apple" if self.apple_sub else ("wechat" if self.wx_openid else ("phone" if self.phone else "guest")),
             "nickname": self.nickname,
+            "avatar": self._avatar(),
             "grade": self.grade,
             "subjects": self.subjects or [],
             "weeklyGoal": self.weekly_goal,
@@ -514,6 +520,16 @@ class PlanSubmission(db.Model):
     results = db.Column(JSON, nullable=True)  # 逐题结果 [{n 题号, m 判定, s 学生作答, a 正确答案, t 题干, k 知识点, o 老师改判过}]；空 = 还没批改出来
     submitted_at = db.Column(db.DateTime, default=datetime.now)
     reviewed_at = db.Column(db.DateTime, nullable=True)
+
+
+class UserAvatar(db.Model):
+    """用户头像：图片在对象存储，这里只记当前是哪一版（见 avatars.py）"""
+
+    __tablename__ = "user_avatars"
+
+    user_id = db.Column(db.String(32), primary_key=True)
+    version = db.Column(db.String(16), nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now)
 
 
 class PlanView(db.Model):

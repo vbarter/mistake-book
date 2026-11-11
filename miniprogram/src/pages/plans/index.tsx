@@ -3,7 +3,7 @@ import { Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
 import { Count, LoginGate, PlanTile, loggedIn, usePlansVersion } from "../../components/plan";
-import { Button, Empty, Tag } from "../../components/ui";
+import { Avatar, Button, Empty, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
 import { PLAN_SUBJECT_LABEL, fetchPlans, type PlanInfo } from "../../lib/plans";
@@ -44,9 +44,11 @@ export default function Plans() {
       <View className="flex1 col gap2 minw0">
         <Text className="t-headline ellipsis">{p.name}</Text>
         <View className="plan-counts" style={{ gap: "10px" }}>
-          <Text className="t-foot c-sec ellipsis">
+          {/* 我加入的：头像 + 名字，一眼看出是谁创建的 */}
+          {p.role === "member" && <Avatar name={p.teacher} url={p.teacherAvatar} size={18} />}
+          <Text className="t-foot c-sec ellipsis" style={p.role === "member" ? { marginLeft: "-4px" } : undefined}>
+            {p.role === "member" ? `${p.teacher} · ` : ""}
             {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}
-            {p.role === "member" ? ` · ${p.teacher}` : ""}
           </Text>
           {p.role === "owner" && (
             <Count icon="family" color={C.tertiary}>

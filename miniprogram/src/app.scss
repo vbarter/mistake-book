@@ -457,6 +457,10 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .pill-mute { flex-shrink: 0; font-size: 11px; font-weight: 600; line-height: 16px; color: $secondary; background: $fill-light; border-radius: 8px; padding: 1px 7px; }
 .avatar-wrap { position: relative; flex-shrink: 0; }
 .avatar { width: 60px; height: 60px; border-radius: 30px; background: $tie-bg; color: $tie; font-size: 24px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.avatar-img { flex-shrink: 0; display: block; background: $fill-light; }
+.avatar-btn { position: relative; padding: 0; width: 60px; height: 60px; border-radius: 30px; background: transparent; display: block; }
+.avatar-btn .plan-avatar { background: $tie-bg; color: $tie; }
+.avatar__cam { position: absolute; left: -2px; bottom: -2px; width: 20px; height: 20px; border-radius: 10px; background: rgba(0, 0, 0, 0.55); border: 2px solid #fff; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 .avatar__badge { position: absolute; right: -4px; bottom: -2px; font-size: 10px; font-weight: 800; color: #fff; background: $brand; border: 2px solid #fff; border-radius: 9px; padding: 1px 6px; line-height: 1.4; }
 
 /* ---------- 插画「试卷小人」 ---------- */

@@ -3,7 +3,7 @@ import { Input, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon, type IconName } from "../../components/Icon";
 import { LoginGate, PageState, PlanTile, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
-import { Button, Segmented, Sheet, Stat, Tag, type TagKind } from "../../components/ui";
+import { Avatar, Button, Segmented, Sheet, Stat, Tag, type TagKind } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
@@ -213,9 +213,7 @@ export default function PlanDetail() {
               {members.length === 0 && <Text className="plan-empty">还没有人加入</Text>}
               {members.map((m) => (
                 <View key={m.userId} className="list-row" style={{ minHeight: "56px" }}>
-                  <View className="plan-avatar">
-                    <Text>{m.name.slice(-1)}</Text>
-                  </View>
+                  <Avatar name={m.name} url={m.avatar} />
                   <Text className="row__title ellipsis flex1">{memberName(m)}</Text>
                   {count("checkcircle", m.submitted >= m.assignments && m.assignments > 0 ? C.ok : C.tertiary, `${m.submitted}/${m.assignments}`)}
                   <View className="plan-file__x" onClick={() => void kick(m)}>

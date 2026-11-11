@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getApiBase, setApiBase } from "../api/client";
 import type { Subject } from "../api/types";
 import { Button, InlineNav, Row, Sheet } from "../components/ui";
-import { SubjectTile, Tag } from "../components/v2";
+import { Avatar, SubjectTile, Tag } from "../components/v2";
 import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_GROUPS, SUBJECT_LABEL } from "../lib/format";
 import { getCity, setCity } from "../lib/prefs";
 import { clearAllFolders, listFolders } from "../lib/folders";
@@ -145,7 +145,7 @@ export function Account() {
       <InlineNav title="账号与登录" back />
       <div className="screen__content screen__content--modal acct">
         <div className="card acct__hero">
-          <span className="acct__avatar" aria-hidden="true">{user?.nickname.slice(-1)}</span>
+          <Avatar name={user?.nickname ?? ""} url={user?.avatar} size={64} />
           <span className="acct__id num">{user?.phone ? maskPhone(user.phone, " ") : user?.loginMethod === "apple" ? "Apple 账号" : "游客"}</span>
           {user?.loginMethod === "guest"
             ? <Tag kind="neutral" icon="info">仅保存在本机</Tag>

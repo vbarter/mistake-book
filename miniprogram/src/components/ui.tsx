@@ -1,7 +1,7 @@
 /** 通用小组件（和 App 的 components/ui.tsx、v2.tsx 一一对应）：学科方块、状态标签、按钮、底部面板、分段切换、统计格、顶栏… */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import Taro from "@tarojs/taro";
-import { Button as NativeButton, ScrollView, Text, View } from "@tarojs/components";
+import { Button as NativeButton, Image, ScrollView, Text, View } from "@tarojs/components";
 import { Icon, type IconName } from "./Icon";
 import type { Mark, Subject } from "../lib/types";
 import { toSegments } from "../lib/math";
@@ -104,6 +104,18 @@ export type TagKind = "wrong" | "pending" | "correct" | "neutral" | "info" | "pa
 
 const TAG_COLOR: Record<TagKind, string> = { wrong: C.wrong, pending: C.accentOn, partial: C.accentOn, correct: C.ok, info: C.brand, neutral: C.secondary, accent: "#ffffff" };
 const TAG_ICON: Partial<Record<TagKind, IconName>> = { wrong: "xmark", correct: "check", partial: "warning", pending: "viewfinder" };
+
+/** 头像：有图用图，没有（或图加载失败）用名字最后一个字 */
+export function Avatar({ name, url, size = 36 }: { name: string; url?: string | null; size?: number }) {
+  const [bad, setBad] = useState("");
+  const box: CSSProperties = { width: `${size}px`, height: `${size}px`, borderRadius: `${size / 2}px` };
+  if (url && bad !== url) return <Image className="avatar-img" src={url.startsWith("/") ? `${API_BASE}${url}` : url} mode="aspectFill" style={box} onError={() => setBad(url)} />;
+  return (
+    <View className="plan-avatar" style={{ ...box, fontSize: `${Math.round(size * 0.42)}px` }}>
+      <Text>{name.slice(-1)}</Text>
+    </View>
+  );
+}
 
 /** 状态标签：颜色和图标一起变（icon 传 null 不要图标） */
 export function Tag({ kind = "neutral", icon, children, style }: { kind?: TagKind; icon?: IconName | null; children: ReactNode; style?: CSSProperties }) {

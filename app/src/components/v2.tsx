@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { assetUrl } from "../api/client";
 import type { Subject } from "../api/types";
 import { SUBJECT_LABEL } from "../lib/format";
 import { Icon, type IconName } from "./Icon";
@@ -32,6 +33,14 @@ export function SubjectStack({ subjects, size = "md" }: { subjects: Subject[]; s
 
 export function subjectColors(s: Subject | null | undefined): { color: string; bg: string } {
   return s ? { color: TILE[s].color, bg: TILE[s].bg } : { color: "var(--secondary)", bg: "var(--fill-light)" };
+}
+
+/** 头像：有图用图，没有（或图加载失败）用名字最后一个字 */
+export function Avatar({ name, url, size = 36, style }: { name: string; url?: string | null; size?: number; style?: CSSProperties }) {
+  const [bad, setBad] = useState("");
+  const box: CSSProperties = { width: size, height: size, borderRadius: size / 2, flexShrink: 0, ...style };
+  if (url && bad !== url) return <img src={assetUrl(url)} alt="" aria-hidden="true" onError={() => setBad(url)} style={{ ...box, objectFit: "cover", display: "block", background: "var(--fill-light)" }} />;
+  return <span aria-hidden="true" style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--avatar-bg)", color: "var(--avatar-fg)", fontWeight: 800, fontSize: Math.round(size * 0.42) }}>{name.slice(-1)}</span>;
 }
 
 export function SubjectTile({ subject, size = "md", style }: { subject: Subject | null | undefined; size?: "lg" | "md" | "sm" | "xs"; style?: CSSProperties }) {

@@ -4,7 +4,7 @@ import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
 import { PrintSheets } from "../../components/PrintSheets";
 import { Busy, Count, LoginGate, PageState, QuestionGrid, ScanSheet, ScoreCounts, ScoreStats, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
-import { Button, Segmented, Sheet, Stat, Tag } from "../../components/ui";
+import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { submitExport } from "../../lib/export";
 import { toast } from "../../lib/hooks";
@@ -230,9 +230,7 @@ export default function PlanTask() {
               </View>
               {board.missing.map((m) => (
                 <View key={m.userId} className="list-row">
-                  <View className="plan-avatar">
-                    <Text>{m.name.slice(-1)}</Text>
-                  </View>
+                  <Avatar name={m.name} url={m.avatar} />
                   <Text className="row__title ellipsis flex1">{memberName(m)}</Text>
                   {m.returned ? (
                     <Tag kind="wrong" icon="refresh">
@@ -252,9 +250,7 @@ export default function PlanTask() {
             {board.submitted.length === 0 && <Text className="plan-empty">{board.members === 0 ? "还没有人加入" : "还没有人交"}</Text>}
             {board.submitted.map((s) => (
               <View key={s.submissionId} className="list-row" hoverClass="list-row--hover" onClick={() => Taro.navigateTo({ url: `/pages/plan-review/index?id=${s.submissionId}` })}>
-                <View className="plan-avatar">
-                  <Text>{s.name.slice(-1)}</Text>
-                </View>
+                <Avatar name={s.name} url={s.avatar} />
                 <View className="flex1 col gap2 minw0">
                   <Text className="row__title ellipsis">
                     {memberName(s)}

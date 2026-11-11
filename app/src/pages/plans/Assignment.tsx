@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Icon, WechatIcon } from "../../components/Icon";
 import { PrintSheets } from "../../components/PrintPaper";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
-import { Stat, Tag } from "../../components/v2";
+import { Avatar, Stat, Tag } from "../../components/v2";
 import type { FullPage, Paper } from "../../lib/folders";
 import { haptic, openRemoteFile } from "../../lib/native";
 import { STATUS_LABEL, dueLabel, fetchAssignment, isAssignmentScanning, isOverdue, isSubmissionPending, memberName, revokeAssignment, shareInvite, sizeLabel, submitHomework, usePlans, type AssignmentRes, type PlanFileView, type ResultRow } from "../../lib/plans";
@@ -176,7 +176,7 @@ export default function Assignment() {
                 <div className="group__header"><span>没交 {board.missing.length}</span></div>
                 {board.missing.map((m) => (
                   <div key={m.userId} className="row">
-                    <span className="plan-avatar" aria-hidden="true">{m.name.slice(-1)}</span>
+                    <Avatar name={m.name} url={m.avatar} />
                     <span className="row__main"><span className="row__title ellipsis">{memberName(m)}</span></span>
                     {m.returned ? <Tag kind="wrong" icon="refresh">退回</Tag> : <Icon name={m.viewed ? "eye" : "eye-off"} size={18} stroke={2.2} aria-label={m.viewed ? "看过" : "没看"} style={{ color: m.viewed ? "var(--tertiary)" : "var(--due)" }} />}
                   </div>
@@ -188,7 +188,7 @@ export default function Assignment() {
               {board.submitted.length === 0 && <div className="plan-files__empty">{board.members === 0 ? "还没有人加入" : "还没有人交"}</div>}
               {board.submitted.map((s) => (
                 <button key={s.submissionId} className="row" onClick={() => nav(`/plans/s/${s.submissionId}`)}>
-                  <span className="plan-avatar" aria-hidden="true">{s.name.slice(-1)}</span>
+                  <Avatar name={s.name} url={s.avatar} />
                   <span className="row__main">
                     <span className="row__title ellipsis">{memberName(s)}{s.left ? "（已退出）" : ""}</span>
                     {s.score ? <ScoreCounts score={s.score} /> : <span className="row__sub">批改中</span>}

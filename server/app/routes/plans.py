@@ -20,6 +20,7 @@ from flask import Blueprint, abort, current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from ..auth_utils import current_user, login_required
+from ..avatars import avatar_url, avatar_urls
 from ..constants import SUBJECT_LABELS, SUBJECTS
 from ..extensions import db
 from ..models import Plan, PlanAssignment, PlanFile, PlanMember, PlanSubmission, PlanView, User
@@ -103,6 +104,7 @@ def _plan_view(plan: Plan, role: str) -> dict:
         "subject": plan.subject,
         "role": role,
         "teacher": _teacher_name(plan),
+        "teacherAvatar": avatar_url(plan.owner_id),
         "createdAt": _iso(plan.created_at),
     }
 
@@ -213,10 +215,11 @@ def _display_names(users: list[User]) -> dict[str, dict]:
     for u in users:
         counts[u.nickname or DEFAULT_NICKNAME] = counts.get(u.nickname or DEFAULT_NICKNAME, 0) + 1
     out = {}
+    avatars = avatar_urls([u.id for u in users])
     for u in users:
         name = u.nickname or DEFAULT_NICKNAME
         tail = ((u.phone or "")[-4:] or u.id[-4:]) if counts[name] > 1 else ""
-        out[u.id] = {"name": name, "tail": tail}
+        out[u.id] = {"name": name, "tail": tail, "avatar": avatars.get(u.id)}
     return out
 
 

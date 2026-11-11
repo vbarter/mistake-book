@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "../../components/Icon";
 import { Button, InlineNav, Spinner } from "../../components/ui";
-import { Tag } from "../../components/v2";
+import { Avatar, Tag } from "../../components/v2";
 import { PLAN_SUBJECT_LABEL, fetchPlans, usePlans, type PlanInfo } from "../../lib/plans";
 import { toastError } from "../../store/banner";
 import { Count, PlanTile } from "./shared";
@@ -25,7 +25,9 @@ export default function Plans() {
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span className="t-headline ellipsis">{p.name}</span>
         <span className="plan-counts" style={{ gap: 10 }}>
-          <span className="t-foot c-sec ellipsis">{PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}{p.role === "member" ? ` · ${p.teacher}` : ""}</span>
+          {/* 我加入的：头像 + 名字，一眼看出是谁创建的 */}
+          {p.role === "member" && <Avatar name={p.teacher} url={p.teacherAvatar} size={18} style={{ marginRight: -4 }} />}
+          <span className="t-foot c-sec ellipsis">{p.role === "member" ? `${p.teacher} · ` : ""}{PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}</span>
           {p.role === "owner" && <Count icon="family" color="var(--tertiary)">{p.members ?? 0}</Count>}
           <Count icon="document" color="var(--tertiary)">{p.assignments ?? 0}</Count>
         </span>
