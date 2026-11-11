@@ -23,9 +23,9 @@ log = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).resolve().parent / "data"
 TAXONOMY_PATH = DATA_DIR / "taxonomy.json"
 ALIASES_PATH = DATA_DIR / "taxonomy_aliases.json"
-EXTRA_PATH = DATA_DIR / "taxonomy_extra.json"  # 知错本自己补的知识点（如上海英语考纲大类），id 用 zcb_ 前缀
+EXTRA_PATH = DATA_DIR / "taxonomy_extra.json"  # 上壹课自己补的知识点（如上海英语考纲大类），id 用 zcb_ 前缀
 
-# 图谱覆盖的学科（知错本的 subject 枚举）；化学、生物、地理没有图谱，维持自由文本知识点
+# 图谱覆盖的学科（上壹课的 subject 枚举）；化学、生物、地理没有图谱，维持自由文本知识点
 _lock = threading.Lock()
 _loaded: dict | None = None
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把 cn-math-taxonomy 的知识图谱精简成知错本用的 app/data/taxonomy.json。
+"""把 cn-math-taxonomy 的知识图谱精简成上壹课用的 app/data/taxonomy.json。
 
 用法（源仓库是本机克隆，锁定某个提交后再跑）：
 
@@ -20,7 +20,7 @@ from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "app" / "data" / "taxonomy.json"
 
-# 图谱的 subject → 知错本的 subject（constants.SUBJECTS）。图谱里数学没有 subject 字段。
+# 图谱的 subject → 上壹课的 subject（constants.SUBJECTS）。图谱里数学没有 subject 字段。
 SUBJECT_MAP = {
     None: "math",
     "": "math",

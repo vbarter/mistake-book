@@ -2,7 +2,7 @@
   "name": "zhicuoben-miniprogram",
   "version": "1.8.9",
   "private": true,
-  "description": "错误本（知错本的微信小程序版，Taro + React）",
+  "description": "上壹课微信小程序（原名错误本，Taro + React）",
   "templateInfo": {
     "name": "default",
     "typescript": true,
