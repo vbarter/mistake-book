@@ -292,20 +292,39 @@ def _owner_counts(plan: Plan, assignments: list[PlanAssignment]) -> dict[str, di
 # --------------------------------------------------------------------------- 计划
 
 
-def _create_assignment(plan: Plan, data: dict) -> tuple[PlanAssignment, list[dict]]:
+def _create_assignments(plan: Plan, data: dict) -> tuple[list[PlanAssignment], list[dict]]:
+    """布置：一个附件就是一份作业（同学一份一份地交、各有各的状态）；扫描件是同一份卷子的几页，合成一份。
+    返回的第一份是带扫描件的那份（有的话），客户端拿它去回填电子版、转发。"""
     files = _clean_files(data.get("files"), ("scan", "attachment"))
     if not files:
         abort(400, "先扫描或上传一个附件")
-    title = str(data.get("title") or "").strip()[:120]
-    if not title:
-        named = next((f["name"].rsplit(".", 1)[0] for f in files if f["kind"] == "attachment" and f["name"]), "")
-        now = datetime.now()
-        title = named or f"{now.month}月{now.day}日作业"
+    scans = [f for f in files if f["kind"] == "scan"]
+    units = ([scans] if scans else []) + [[f] for f in files if f["kind"] != "scan"]
+    custom = str(data.get("title") or "").strip()[:120]
+    now = datetime.now()
     due = data.get("dueAt")
-    a = PlanAssignment(plan_id=plan.id, title=title, due_at=due[:32] if isinstance(due, str) and due else None)
-    db.session.add(a)
-    db.session.flush()
-    return a, _add_files(plan, a, files)
+    due = due[:32] if isinstance(due, str) and due else None
+    out: list[PlanAssignment] = []
+    uploads: list[dict] = []
+    for i, unit in enumerate(units):
+        named = unit[0]["name"].rsplit(".", 1)[0] if unit[0]["kind"] == "attachment" and unit[0]["name"] else ""
+        # 起的名字只在只有一份时用；一次布置了几份就各用各的文件名
+        title = (custom if len(units) == 1 else "") or named or custom or f"{now.month}月{now.day}日作业"
+        # 列表按创建时间倒序：往前错开一秒，页面上就和选文件的顺序一致
+        a = PlanAssignment(plan_id=plan.id, title=title[:120], due_at=due, created_at=now - timedelta(seconds=i))
+        db.session.add(a)
+        db.session.flush()
+        out.append(a)
+        uploads += _add_files(plan, a, unit)
+    return out, uploads
+
+
+def _created_body(plan: Plan, assignments: list[PlanAssignment], uploads: list[dict]) -> dict:
+    first = assignments[0] if assignments else None
+    return {
+        "plan": _plan_view(plan, "owner"), "assignment": _assignment_brief(first) if first else None,
+        "assignments": [_assignment_brief(a) for a in assignments], "uploads": uploads, "invite": _invite(plan, first),
+    }
 
 
 def _invite(plan: Plan, assignment: PlanAssignment | None = None) -> dict:
@@ -331,9 +350,9 @@ def create_plan():
     plan = Plan(owner_id=user.id, name=name, subject=subject, invite_code=_new_code())
     db.session.add(plan)
     db.session.flush()
-    assignment, uploads = _create_assignment(plan, data) if has_files else (None, [])
+    assignments, uploads = _create_assignments(plan, data) if has_files else ([], [])
     db.session.commit()
-    return jsonify({"plan": _plan_view(plan, "owner"), "assignment": _assignment_brief(assignment) if assignment else None, "uploads": uploads, "invite": _invite(plan, assignment)}), 201
+    return jsonify(_created_body(plan, assignments, uploads)), 201
 
 
 @bp.get("/plans")
@@ -634,9 +653,9 @@ def remove_member(plan_id: str, user_id: str):
 def create_assignment(plan_id: str):
     plan = _plan_or_404(plan_id)
     _require_role(plan, "owner")
-    assignment, uploads = _create_assignment(plan, request.get_json(silent=True) or {})
+    assignments, uploads = _create_assignments(plan, request.get_json(silent=True) or {})
     db.session.commit()
-    return jsonify({"plan": _plan_view(plan, "owner"), "assignment": _assignment_brief(assignment), "uploads": uploads, "invite": _invite(plan, assignment)}), 201
+    return jsonify(_created_body(plan, assignments, uploads)), 201
 
 
 @bp.post("/plans/files/uploaded")

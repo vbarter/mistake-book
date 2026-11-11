@@ -217,21 +217,12 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
           <button className="thumb plan-thumb__add" aria-label="再拍几页" onClick={() => { setHanding(false); setPicking(true); }}><Icon name="plus" size={18} stroke={2.4} /></button>
         </div>
         <p className="t-foot c-sec">交到哪一份作业</p>
-        <div className="group" style={{ background: "var(--fill-light)" }}>
-          {open.map((a) => {
-            const on = chosen?.id === a.id;
-            return (
-              <button key={a.id} className="row" aria-pressed={on} onClick={() => setTarget(a.id)}>
-                <span className={`plan-radio${on ? " plan-radio--on" : ""}`}>{on && <Icon name="check" size={13} stroke={3.2} />}</span>
-                <span className="row__main">
-                  <span className="row__title ellipsis">{a.title}</span>
-                  {a.status === "submitted" && <span className="row__sub">交过了，再交会换掉上次那份</span>}
-                </span>
-                {statusTag(a)}
-              </button>
-            );
-          })}
-        </div>
+        {/* 下拉选择：列出所有还能交的作业 */}
+        <select className="input plan-select" aria-label="交到哪一份作业" value={chosen?.id ?? ""} onChange={(e) => setTarget(e.target.value || null)}>
+          {!chosen && <option value="">请选择作业</option>}
+          {open.map((a) => <option key={a.id} value={a.id}>{a.status === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`}</option>)}
+        </select>
+        {chosen?.status === "submitted" && <p className="t-foot c-sec">这份交过了，再交会换掉上次那份</p>}
         <Button icon="check" disabled={!chosen || !pages.length || busy || Boolean(stage)} onClick={hand}>{busy ? "照片调正中…" : "交给老师"}</Button>
       </Sheet>
 

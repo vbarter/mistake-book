@@ -1,6 +1,6 @@
 /** 成员看到的学习计划页（和 App 的 pages/plans/PlanMember.tsx 对应）。 */
 import { useState } from "react";
-import { Image, Text, View } from "@tarojs/components";
+import { Image, Picker, Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { Icon } from "./Icon";
 import { Busy, Count, ScanSheet } from "./plan";
@@ -14,6 +14,9 @@ import { C } from "../lib/theme";
 type Look = "done" | "returned" | "todo" | "revoked";
 /** 一份作业的样子：交了 = 绿，退回重做 = 红，待交 = 橙 */
 const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
+
+/** 下拉列表里的一行：作业名，交过的带上状态 */
+const optionLabel = (a: MemberAssignment) => (a.status === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`);
 
 /**
  * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），
@@ -202,21 +205,14 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
           </View>
         </View>
         <Text className="t-foot c-sec">交到哪一份作业</Text>
-        <View className="group group--fill">
-          {open.map((a) => {
-            const on = chosen?.id === a.id;
-            return (
-              <View key={a.id} className="list-row" hoverClass="list-row--hover" onClick={() => setTarget(a.id)}>
-                <View className={`plan-radio${on ? " plan-radio--on" : ""}`}>{on && <Icon name="check" size={13} color="#ffffff" stroke={3.2} />}</View>
-                <View className="flex1 col gap2 minw0">
-                  <Text className="row__title ellipsis">{a.title}</Text>
-                  {a.status === "submitted" && <Text className="row__sub">交过了，再交会换掉上次那份</Text>}
-                </View>
-                {statusTag(a)}
-              </View>
-            );
-          })}
-        </View>
+        {/* 下拉选择：点开是微信自带的滚轮，列出所有还能交的作业 */}
+        <Picker mode="selector" range={open.map(optionLabel)} value={Math.max(0, open.findIndex((a) => a.id === chosen?.id))} onChange={(e) => setTarget(open[Number(e.detail.value)]?.id ?? null)}>
+          <View className="field">
+            <Text className={`ellipsis flex1${chosen ? "" : " c-sec"}`}>{chosen ? chosen.title : "请选择作业"}</Text>
+            <Icon name="chevron-down" size={16} color={C.tertiary} stroke={2.4} />
+          </View>
+        </Picker>
+        {chosen?.status === "submitted" && <Text className="t-foot c-sec">这份交过了，再交会换掉上次那份</Text>}
         <Button icon="check" disabled={!chosen || shots.length === 0 || Boolean(stage)} onClick={() => void hand()}>
           交给老师
         </Button>
