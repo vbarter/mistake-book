@@ -71,7 +71,13 @@ export interface SubmissionRes { plan: PlanInfo; assignment: AssignmentBrief | n
 interface Upload { id: string; clientId: string; method: string; url: string; headers?: Record<string, string> }
 interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief | null; uploads: Upload[]; invite: Invite }
 
-/** 学习计划的数据有变化（回填完成、交了作业）就 +1，页面据此重新拉 */
+/**
+ * 这个计划对我来说已经没有了：创建人解散了（服务器回 plan_dissolved），或者不存在了（404）、我已经不在里面（403）。
+ * 页面上已经显示着内容时碰到它，要把内容换成提示、把人请出去，而不是当成一次没网悄悄略过。
+ */
+export const planGone = (e: unknown) => e instanceof ApiError && (e.code === "plan_dissolved" || e.status === 404 || e.status === 403);
+
+/** 学习计划的数据有变化（回填完成、交了作业、从后台回到前台）就 +1，页面据此重新拉 */
 export const usePlans = create<{ version: number; bump: () => void }>((set) => ({ version: 0, bump: () => set((s) => ({ version: s.version + 1 })) }));
 
 // ---------------------------------------------------------------- 接口
@@ -321,11 +327,25 @@ export function startPlanSync(): () => void {
     timer = setTimeout(tick, 2000);
   };
   const unsub = useJobs.subscribe(() => { void flushSubmissions(); });
+  // 从后台回到前台：别人那边可能变了（老师布置了新作业、批阅了、把计划解散了），开着的首页 / 列表 / 计划页重新拉一次
+  const refresh = () => usePlans.getState().bump();
+  let remove: (() => void) | null = null;
+  if (isNative) {
+    import("@capacitor/app").then(({ App }) => App.addListener("appStateChange", ({ isActive }) => { if (isActive) refresh(); })).then((h) => {
+      if (stopped) void h.remove();
+      else remove = () => void h.remove();
+    }).catch(() => undefined);
+  } else {
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    remove = () => document.removeEventListener("visibilitychange", onVisible);
+  }
   return () => {
     stopped = true;
     wake = null;
     if (timer) clearTimeout(timer);
     unsub();
+    remove?.();
   };
 }
 
