@@ -359,3 +359,11 @@ CREATE TABLE IF NOT EXISTS plan_views (
   KEY ix_plan_views_assignment_id (assignment_id),
   KEY ix_plan_views_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习计划：成员打开过哪份作业';
+
+CREATE TABLE IF NOT EXISTS plan_tombstones (
+  ref          VARCHAR(32) NOT NULL,
+  plan_id      VARCHAR(32) NOT NULL,
+  dissolved_at DATETIME    NULL,
+  PRIMARY KEY (ref),
+  KEY ix_plan_tombstones_plan_id (plan_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习计划：解散后留的记号（计划 id / 邀请码 / 作业 id），再有人点进来时说清已解散';

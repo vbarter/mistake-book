@@ -73,6 +73,12 @@ export interface SubmissionRes { plan: PlanInfo; assignment: AssignmentBrief | n
 interface Upload { id: string; clientId: string; method: string; url: string; headers?: Record<string, string> }
 export interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief | null; uploads: Upload[]; invite: Invite }
 
+/**
+ * 这个计划对我来说已经没有了：创建人解散了（服务器回 plan_dissolved），或者不存在了（404）、我已经不在里面（403）。
+ * 页面上已经显示着内容时碰到它，要把内容换成提示、把人请出去，而不是当成一次没网悄悄略过。
+ */
+export const planGone = (e: unknown) => e instanceof ApiError && (e.code === "plan_dissolved" || e.status === 404 || e.status === 403);
+
 /** 学习计划的数据有变化（回填完成、交了作业、批阅了）时通知页面重新拉 */
 export const PLANS_EVENT = "plans";
 export const bumpPlans = () => Taro.eventCenter.trigger(PLANS_EVENT);

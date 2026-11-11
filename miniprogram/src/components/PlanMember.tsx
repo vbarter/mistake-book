@@ -8,7 +8,7 @@ import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
 import { toast } from "../lib/hooks";
-import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
+import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
 import { C } from "../lib/theme";
 
 type Look = "done" | "returned" | "todo" | "revoked";
@@ -48,6 +48,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       await reload();
     } catch (e) {
       await Taro.showModal({ title: "没交上去", content: errorText(e), showCancel: false });
+      if (planGone(e)) return void reload(); // 计划被解散 / 自己被移出了：重新拉一次，页面换成提示
       setHanding(true);
     } finally {
       setStage(null);
@@ -66,6 +67,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     } catch (e) {
       Taro.hideLoading();
       toast(errorText(e));
+      if (planGone(e)) void reload();
     }
   };
 

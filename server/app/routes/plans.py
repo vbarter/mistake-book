@@ -16,15 +16,15 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, abort, current_app, jsonify, request
+from flask import Blueprint, abort, current_app, jsonify, make_response, request
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..auth_utils import current_user, login_required
 from ..avatars import avatar_url, avatar_urls
 from ..constants import SUBJECT_LABELS, SUBJECTS
 from ..extensions import db
-from ..models import Plan, PlanAssignment, PlanFile, PlanMember, PlanSubmission, PlanView, User
+from ..models import Plan, PlanAssignment, PlanFile, PlanMember, PlanSubmission, PlanTombstone, PlanView, User
 from .. import storage
 
 bp = Blueprint("plans", __name__)
@@ -62,9 +62,31 @@ def _new_code() -> str:
     abort(503, "请稍后再试")
 
 
+DISSOLVED = "这个学习计划已被创建人解散"
+
+
+def _abort_if_dissolved(ref: str | None) -> None:
+    """
+    ref（计划 id / 邀请码 / 作业 id）属于一个解散了的计划时，明说「已被创建人解散」，而不是「不存在」「卡片失效」。
+    状态码仍是 404（老版本客户端把 404 当成「不用再试了」），靠 error = plan_dissolved 区分：
+    新版本客户端收到后把人从计划页请出去、刷新自己的计划列表。
+    """
+    ref = str(ref or "").strip()
+    if not ref or len(ref) > 32:
+        return
+    try:
+        hit = db.session.get(PlanTombstone, ref)
+    except SQLAlchemyError:  # 线上还没建这张表时照旧回「不存在」
+        db.session.rollback()
+        return
+    if hit is not None:
+        abort(make_response(jsonify({"error": "plan_dissolved", "message": DISSOLVED}), 404))
+
+
 def _plan_or_404(plan_id: str) -> Plan:
     plan = db.session.get(Plan, plan_id)
     if plan is None:
+        _abort_if_dissolved(plan_id)
         abort(404, "这个学习计划不存在或已解散")
     return plan
 
@@ -89,6 +111,7 @@ def _require_role(plan: Plan, *roles: str) -> str:
 def _assignment_or_404(assignment_id: str) -> tuple[PlanAssignment, Plan]:
     a = db.session.get(PlanAssignment, assignment_id)
     if a is None:
+        _abort_if_dissolved(assignment_id)
         abort(404, "这份作业不存在")
     return a, _plan_or_404(a.plan_id)
 
@@ -458,8 +481,22 @@ def update_plan(plan_id: str):
     return jsonify({"plan": _plan_view(plan, "owner"), "invite": _invite(plan)})
 
 
+def _leave_tombstones(plan: Plan, assignment_ids: list[str]) -> None:
+    """解散前留个记号（见 PlanTombstone）。记不上不耽误解散：放在保存点里，失败只回滚这一小步"""
+    try:
+        with db.session.begin_nested():
+            for ref in {plan.id, plan.invite_code, *assignment_ids}:
+                db.session.merge(PlanTombstone(ref=ref, plan_id=plan.id))
+    except SQLAlchemyError:
+        log.exception("leave tombstones failed for %s", plan.id)
+
+
 def _drop_plan(plan: Plan) -> None:
+    """
+    解散：成员记录一起删掉，所有加入者随之退出 —— 他们的「我加入的」和首页里不再有这个计划，也不能再打开、再交作业。
+    """
     ids = [a.id for a in PlanAssignment.query.filter_by(plan_id=plan.id).all()]
+    _leave_tombstones(plan, ids)
     try:
         storage.get_storage().delete_prefix(f"plans/{plan.id}/")
     except Exception:  # noqa: BLE001
@@ -486,8 +523,10 @@ def delete_plan(plan_id: str):
 
 
 def _invite_plan(code: str) -> Plan:
-    plan = Plan.query.filter_by(invite_code=str(code or "").strip().lower()).first()
+    code = str(code or "").strip().lower()
+    plan = Plan.query.filter_by(invite_code=code).first()
     if plan is None:
+        _abort_if_dissolved(code)
         abort(404, "这张卡片已经失效，请让老师重新转发一次")
     return plan
 

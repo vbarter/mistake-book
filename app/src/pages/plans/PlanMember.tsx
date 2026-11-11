@@ -4,7 +4,7 @@ import { Icon, type IconName } from "../../components/Icon";
 import { Button, Sheet } from "../../components/ui";
 import { Stat, Tag } from "../../components/v2";
 import { haptic, pickImages, takePhoto } from "../../lib/native";
-import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../../lib/plans";
+import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../../lib/plans";
 import { canUseLiveCamera } from "../../lib/scanCamera";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
@@ -89,6 +89,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       await reload();
     } catch (e) {
       toastError(e);
+      if (planGone(e)) return void reload(); // 计划被解散 / 自己被移出了：重新拉一次，页面换成提示
       setHanding(true);
     } finally {
       setStage(null);
@@ -104,6 +105,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       toast(job ? (job.status === "done" ? "已生成" : "正在生成，好了会提醒你") : "服务器暂时不支持导出");
     } catch (e) {
       toastError(e);
+      if (planGone(e)) void reload();
     }
   };
 

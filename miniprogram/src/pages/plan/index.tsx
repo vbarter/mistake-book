@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon, type IconName } from "../../components/Icon";
@@ -8,7 +8,7 @@ import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui
 import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLAN_SUBJECT_LABEL, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
 const leave = () => {
@@ -55,16 +55,27 @@ export default function PlanDetail() {
   const [panel, setPanel] = useState(false);
   const [name, setName] = useState("");
   const logged = loggedIn();
+  const shown = useRef(false);
 
   const load = async () => {
     if (!loggedIn()) return;
     try {
       const r = await fetchPlan(id);
+      shown.current = true;
       setData(r);
       setError("");
       void Taro.setNavigationBarTitle({ title: r.plan.name });
     } catch (e) {
-      if (!data) setError(errorText(e) || "打不开");
+      const gone = planGone(e);
+      // 已经显示出来了，一次没拉到（没网）不换成报错页；但计划被解散 / 自己被移出了，就不能再留着旧内容
+      if (shown.current && !gone) return;
+      setError(errorText(e) || "打不开");
+      if (shown.current) {
+        shown.current = false;
+        setData(null);
+        void Taro.setNavigationBarTitle({ title: "学习计划" });
+        bumpPlans(); // 首页和列表里也把它去掉
+      }
     }
   };
   useEffect(() => {
