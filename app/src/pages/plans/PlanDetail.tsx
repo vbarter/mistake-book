@@ -3,30 +3,50 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Avatar, Stat, Tag } from "../../components/v2";
-import { PLAN_SUBJECT_LABEL, STATUS_LABEL, deletePlan, dueLabel, fetchPlan, isOverdue, memberName, removeMember, shareInvite, updatePlan, usePlans, type MemberAssignment, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, STATUS_LABEL, deletePlan, dueLabel, fetchPlan, fileBadge, isOverdue, memberName, memberState, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberAssignment, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
-import { ConfirmSheet } from "./shared";
+import { openFile } from "./Assignment";
+import { ConfirmSheet, ScoreCounts } from "./shared";
 
 const STATUS_TAG: Record<MemberAssignment["status"], "pending" | "info" | "correct" | "wrong"> = { todo: "pending", submitted: "info", reviewed: "correct", returned: "wrong" };
 
+type Filter = "all" | Exclude<MemberState, "none">;
+/** 从批阅页回来还停在刚才的页签和筛选上 */
+let remembered: { planId: string; tab: "tasks" | "members"; filter: Filter } | null = null;
+
 /**
- * 学习计划页。创建人：今日已交 / 待批阅、每份作业的进度、成员名单、转发、布置新作业；点标题弹出面板：改名，下面是「让旧卡片失效」「解散」。
+ * 学习计划页。创建人在这一页看完所有东西，不再有单独的「作业情况」页：
+ * 顶部今日已交 / 未交 / 总成员；「作业」平铺每份作业的文件（点文件直接打开，点作业名：转发、提醒没交的、撤回）；
+ * 「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，点一个人看他每份作业的情况并进去批阅、移出。
+ * 点标题弹出面板：改名，下面是「让旧卡片失效」「解散」。
  * 成员点标题：改老师看到的名字、退出。页面上只留内容，不放这些不常用的操作。能用图标 + 数字说清的就不写字。
  * 成员：只有自己的待交 / 已交和作业列表，看不到其他成员、人数和别人交没交。
  */
+/** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅 */
+const itemTag = (it: MemberItem) =>
+  it.status === "submitted" ? <Tag kind="info" icon="pencil">待阅</Tag>
+    : it.status === "reviewed" ? <Tag kind="correct">已阅</Tag>
+      : it.status === "returned" ? <Tag kind="wrong" icon="refresh">退回</Tag>
+        : <Tag kind="pending" icon={it.viewed ? "clock" : "eye-off"}>{it.viewed ? "未交" : "没看"}</Tag>;
+
 export default function PlanDetail() {
   const nav = useNavigate();
   const { planId = "" } = useParams();
   const updateProfile = useAuth((st) => st.updateProfile);
   const [data, setData] = useState<PlanDetailRes | null>(null);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"tasks" | "members">("tasks");
+  const [tab, setTab] = useState<"tasks" | "members">(remembered?.planId === planId ? remembered.tab : "tasks");
+  const [filter, setFilter] = useState<Filter>(remembered?.planId === planId ? remembered.filter : "all");
+  const [member, setMember] = useState<PlanMemberRow | null>(null);
+  const [task, setTask] = useState<OwnerAssignment | null>(null);
+  const [revoking, setRevoking] = useState<OwnerAssignment | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [planName, setPlanName] = useState("");
   const [confirm, setConfirm] = useState<"dissolve" | "leave" | "reset" | null>(null);
   const [removing, setRemoving] = useState<PlanMemberRow | null>(null);
   const version = usePlans((s) => s.version);
+  useEffect(() => { remembered = { planId, tab, filter }; }, [planId, tab, filter]);
 
   const load = useCallback(() => fetchPlan(planId).then(setData).catch((e) => setError((e as Error).message || "打不开")), [planId]);
   useEffect(() => { void load(); }, [load, version]);
@@ -44,10 +64,8 @@ export default function PlanDetail() {
       toastError(e);
     }
   };
-  const forward = () => act(async () => {
-    const first = data.assignments.find((a) => !a.revoked);
-    await shareInvite({ plan, invite: data.invite!, title: first?.title, assignmentId: first?.id });
-  });
+  const forward = (a: { id: string; title: string } | undefined = data.assignments.find((x) => !x.revoked), remind = false) =>
+    act(() => shareInvite({ plan, invite: data.invite!, title: a?.title, assignmentId: a?.id, remind }));
 
   const openPanel = () => { setPlanName(owner ? plan.name : data.me?.defaultName ? "" : data.me?.name ?? ""); setRenaming(true); };
   const saveName = () => act(async () => {
@@ -74,66 +92,83 @@ export default function PlanDetail() {
         back
         onBack={() => nav("/plans")}
         onTitle={openPanel}
-        right={owner && data.invite ? <button className="plan-pill" onClick={forward}><WechatIcon />转发</button> : undefined}
+        right={owner && data.invite ? <button className="plan-pill" onClick={() => forward()}><WechatIcon />转发</button> : undefined}
       />
       <div className="screen__content screen__content--modal" style={{ paddingTop: 8, gap: 12 }}>
         {owner ? (
-          <>
-            <div className="plan-stats plan-stats--3">
-              <Stat icon="checkcircle" label="今日已交" value={plan.submittedToday ?? 0} />
-              <Stat icon="pencil" label="待批阅" value={plan.toReview ?? 0} color={(plan.toReview ?? 0) > 0 ? "var(--brand)" : undefined} />
-              <Stat icon="family" label="成员" value={plan.members ?? 0} />
-            </div>
-            <Segmented value={tab} options={[{ value: "tasks", label: `作业 ${data.assignments.length}` }, { value: "members", label: `成员 ${data.members?.length ?? 0}` }]} onChange={setTab} />
-            {tab === "tasks" && (
-              <div className="group">
-                {data.assignments.length === 0 && <div className="plan-files__empty">还没有作业</div>}
-                {(data.assignments as OwnerAssignment[]).map((a) => {
-                  const total = Math.max(1, a.members);
-                  return (
-                    <button key={a.id} className="plan-task" onClick={() => nav(`/plans/a/${a.id}`)}>
+          (() => {
+            const tasks = data.assignments as OwnerAssignment[];
+            const rows = data.members ?? [];
+            const active = rows.filter((m) => !m.left);
+            const handed = active.filter((m) => memberState(m) === "submitted").length;
+            const missing = plan.missing ?? active.filter((m) => memberState(m) === "missing").length;
+            const shown = filter === "all" ? rows : active.filter((m) => memberState(m) === filter);
+            const filters: { value: Filter; label: string; n: number }[] = [{ value: "all", label: "全部", n: rows.length }, { value: "submitted", label: "已交", n: handed }, { value: "missing", label: "未交", n: missing }];
+            return (
+              <>
+                <div className="plan-stats plan-stats--3">
+                  <Stat icon="checkcircle" label="今日已交" value={plan.submittedToday ?? 0} />
+                  <Stat icon="clock" label="未交" value={missing} color={missing > 0 ? "var(--due)" : undefined} />
+                  <Stat icon="family" label="总成员" value={plan.members ?? active.length} />
+                </div>
+                <Segmented value={tab} options={[{ value: "tasks", label: `作业 ${tasks.length}` }, { value: "members", label: `成员 ${active.length}` }]} onChange={setTab} />
+                {tab === "tasks" && tasks.length === 0 && <div className="group"><div className="plan-files__empty">还没有作业</div></div>}
+                {tab === "tasks" && tasks.map((a) => (
+                  <div key={a.id} className="group">
+                    {/* 作业名一行：点开是转发 / 提醒 / 撤回；下面直接平铺这份作业的文件 */}
+                    <button className="plan-task" onClick={() => setTask(a)}>
                       <span className="plan-task__head">
-                        <span className="t-headline ellipsis" style={{ flex: 1 }}>{a.title}</span>
-                        {a.revoked && <Tag kind="neutral">已撤回</Tag>}
-                        {a.toReview > 0 && <Tag kind="info" icon="pencil">{a.toReview}</Tag>}
-                        <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-                      </span>
-                      <span className="plan-bar" aria-hidden="true">
-                        <span style={{ width: `${(a.submitted / total) * 100}%`, background: "var(--mastered)" }} />
-                        <span style={{ width: `${((a.missing - a.unseen) / total) * 100}%`, background: "var(--accent, #e08a2c)" }} />
+                        <span className="t-headline ellipsis" style={{ minWidth: 0 }}>{a.title}</span>
+                        <Icon name="chevron-down" size={14} stroke={2.6} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
+                        <span style={{ flex: 1 }} />
+                        {a.dueAt && due(a.dueAt)}
                       </span>
                       {/* 绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的 */}
                       <span className="plan-counts" aria-label={`已交 ${a.submitted}，没交 ${a.missing}，其中没看 ${a.unseen}`}>
                         {count("checkcircle", "var(--mastered)", a.submitted)}
                         {count("clock", "var(--accent-on, #8a4b00)", a.missing)}
                         {count("eye-off", "var(--tertiary)", a.unseen)}
-                        <span style={{ flex: 1 }} />
-                        {a.dueAt && due(a.dueAt)}
                       </span>
                     </button>
-                  );
-                })}
-              </div>
-            )}
-            {tab === "members" && (
-              <>
-                <div className="group">
-                  {(data.members ?? []).length === 0 && <div className="plan-files__empty">还没有人加入</div>}
-                  {(data.members ?? []).map((m) => (
-                    <div key={m.userId} className="row" style={{ minHeight: 56 }}>
-                      <Avatar name={m.name} url={m.avatar} />
-                      <span className="row__main"><span className="row__title ellipsis">{memberName(m)}</span></span>
-                      {count("checkcircle", m.assignments > 0 && m.submitted >= m.assignments ? "var(--mastered)" : "var(--tertiary)", `${m.submitted}/${m.assignments}`)}
-                      <button className="plan-file__x" aria-label={`移除 ${m.name}`} onClick={() => setRemoving(m)}><Icon name="xmark" size={16} stroke={2.4} /></button>
+                    {(a.files ?? []).map((f) => (
+                      <button key={f.id} className="row" onClick={() => openFile(f)}>
+                        <span className="plan-file__icon" style={{ width: 34, height: 40 }}>{fileBadge(f.mime)}</span>
+                        <span className="row__main"><span className="row__title ellipsis">{f.name}</span><span className="row__sub">{sizeLabel(f.size)}</span></span>
+                        <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+                      </button>
+                    ))}
+                  </div>
+                ))}
+                {tab === "members" && (
+                  <>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {filters.map((f) => (
+                        <button key={f.value} className={`chip chip--filter${filter === f.value ? " on" : ""}`} aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>{f.label} <span className="num">{f.n}</span></button>
+                      ))}
                     </div>
-                  ))}
+                    <div className="group">
+                      {shown.length === 0 && <div className="plan-files__empty">{rows.length === 0 ? "还没有人加入" : filter === "missing" ? "都交了" : "还没有人交"}</div>}
+                      {shown.map((m) => {
+                        const state = memberState(m);
+                        return (
+                          <button key={m.userId} className="row" style={{ minHeight: 56 }} onClick={() => setMember(m)}>
+                            <Avatar name={m.name} url={m.avatar} />
+                            <span className="row__main"><span className="row__title ellipsis">{memberName(m)}{m.left ? "（已退出）" : ""}</span></span>
+                            {(m.toReview ?? 0) > 0 && <Tag kind="info" icon="pencil">待阅</Tag>}
+                            {state === "submitted" ? <Tag kind="correct">已交</Tag> : state === "missing" ? <Tag kind="pending" icon="clock">未交</Tag> : null}
+                            <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+                <div className="bottom-bar" style={{ marginTop: "auto" }}>
+                  <Button icon="plus" onClick={() => nav(`/plans/${plan.id}/new`)}>布置新作业</Button>
                 </div>
               </>
-            )}
-            <div className="bottom-bar" style={{ marginTop: "auto" }}>
-              <Button icon="plus" onClick={() => nav(`/plans/${plan.id}/new`)}>布置新作业</Button>
-            </div>
-          </>
+            );
+          })()
         ) : (
           (() => {
             const list = data.assignments as MemberAssignment[];
@@ -200,6 +235,39 @@ export default function PlanDetail() {
         onConfirm={() => act(async () => { await deletePlan(plan.id); usePlans.getState().bump(); nav("/plans", { replace: true }); }, "已解散")} />
       <ConfirmSheet open={confirm === "leave"} danger title="退出这个学习计划？" text="退出后看不到这里的作业了。已经交过的作业老师还能看到。再点一次老师发的卡片可以重新加入。" action="退出" onClose={() => setConfirm(null)}
         onConfirm={() => act(async () => { await removeMember(plan.id, "me"); usePlans.getState().bump(); nav("/plans", { replace: true }); }, "已退出")} />
+      {/* 点一个成员：他每份作业交没交，交了的点进去批阅；最下面是移出 */}
+      <Sheet open={Boolean(member)} onClose={() => setMember(null)} title={member ? memberName(member) : ""}>
+        {member && (member.items ?? []).length > 0 && (
+          <div className="group" style={{ background: "var(--fill-light)" }}>
+            {(member.items ?? []).map((it) => (
+              <button key={it.assignmentId} className="row" disabled={!it.submissionId} onClick={() => { setMember(null); nav(`/plans/s/${it.submissionId}`); }}>
+                <span className="row__main">
+                  <span className="row__title ellipsis">{data.assignments.find((a) => a.id === it.assignmentId)?.title ?? "作业"}</span>
+                  {(it.status === "submitted" || it.status === "reviewed") && (it.score ? <ScoreCounts score={it.score} /> : <span className="row__sub">批改中</span>)}
+                </span>
+                {it.late && <Tag kind="neutral">迟交</Tag>}
+                {itemTag(it)}
+                {it.submissionId && <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />}
+              </button>
+            ))}
+          </div>
+        )}
+        {member && !member.left && (
+          <div className="plan-quiet plan-quiet--only">
+            <button className="plan-quiet__danger" onClick={() => { setRemoving(member); setMember(null); }}>移出学习计划</button>
+          </div>
+        )}
+      </Sheet>
+      {/* 点作业名：这份作业的转发、提醒、撤回 */}
+      <Sheet open={Boolean(task)} onClose={() => setTask(null)} title={task?.title}>
+        <div className="plan-quiet plan-quiet--only">
+          <button onClick={() => { const a = task!; setTask(null); void forward(a); }}>转发这份作业</button>
+          {task && task.missing > 0 && <button onClick={() => { const a = task; setTask(null); void forward(a, true); }}>提醒没交的同学</button>}
+          <button className="plan-quiet__danger" onClick={() => { setRevoking(task); setTask(null); }}>撤回这份作业</button>
+        </div>
+      </Sheet>
+      <ConfirmSheet open={Boolean(revoking)} danger title="撤回这份作业？" text="没交的同学不会再看到，交过的还能看到自己那份。" action="撤回" onClose={() => setRevoking(null)}
+        onConfirm={() => act(async () => { await revokeAssignment(revoking!.id); setRevoking(null); usePlans.getState().bump(); await load(); }, "已撤回")} />
       <ConfirmSheet open={Boolean(removing)} danger title={`把「${removing ? memberName(removing) : ""}」移出学习计划？`} text="移出后对方看不到这里的作业了，已经交过的你还能看到。" action="移出" onClose={() => setRemoving(null)}
         onConfirm={() => act(async () => { await removeMember(plan.id, removing!.userId); setRemoving(null); await load(); }, "已移出")} />
     </div>

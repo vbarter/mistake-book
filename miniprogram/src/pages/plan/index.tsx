@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { Input, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon, type IconName } from "../../components/Icon";
-import { LoginGate, PageState, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
+import { LoginGate, PageState, ScoreCounts, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { Avatar, Button, Segmented, Sheet, Stat, Tag, type TagKind } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLAN_SUBJECT_LABEL, STATUS_LABEL, bumpPlans, deletePlan, dueLabel, fetchPlan, isOverdue, memberName, removeMember, updatePlan, type MemberAssignment, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, STATUS_LABEL, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, isOverdue, memberName, memberState, openPlanFile, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberAssignment, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
 const STATUS_TAG: Record<MemberAssignment["status"], TagKind> = { todo: "pending", submitted: "info", reviewed: "correct", returned: "wrong" };
@@ -16,8 +16,30 @@ const leave = () => {
   else void Taro.redirectTo({ url: "/pages/plans/index" });
 };
 
+type Filter = "all" | Exclude<MemberState, "none">;
+
+/** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅 */
+const itemTag = (it: MemberItem) =>
+  it.status === "submitted" ? (
+    <Tag kind="info" icon="pencil">
+      待阅
+    </Tag>
+  ) : it.status === "reviewed" ? (
+    <Tag kind="correct">已阅</Tag>
+  ) : it.status === "returned" ? (
+    <Tag kind="wrong" icon="refresh">
+      退回
+    </Tag>
+  ) : (
+    <Tag kind="pending" icon={it.viewed ? "clock" : "eye-off"}>
+      {it.viewed ? "未交" : "没看"}
+    </Tag>
+  );
+
 /**
- * 学习计划页（和 App 一致）。创建人：今日已交 / 待批阅、每份作业的进度、成员名单、转发、布置新作业。成员：只有自己的待交 / 已交和作业列表，
+ * 学习计划页（和 App 一致）。创建人在这一页看完所有东西，不再有单独的「作业情况」页：顶部今日已交 / 未交 / 总成员；
+ * 「作业」平铺每份作业的文件（点文件直接打开，点作业名：转发、提醒没交的、撤回）；「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，
+ * 点一个人看他每份作业的情况并进去批阅、移出。成员：只有自己的待交 / 已交和作业列表，
  * 看不到其他成员、人数和别人交没交。点计划名弹出面板：创建人改计划名、让旧卡片失效、解散；成员改老师看到的名字、退出。
  * 页面上只留内容，不放这些不常用的操作。页面上能用图标 + 数字说清的就不写字。
  */
@@ -27,6 +49,9 @@ export default function PlanDetail() {
   const [data, setData] = useState<PlanDetailRes | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"tasks" | "members">("tasks");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [member, setMember] = useState<PlanMemberRow | null>(null);
+  const [task, setTask] = useState<OwnerAssignment | null>(null);
   const [panel, setPanel] = useState(false);
   const [name, setName] = useState("");
   const logged = loggedIn();
@@ -50,11 +75,12 @@ export default function PlanDetail() {
     Taro.stopPullDownRefresh();
   });
 
-  // 创建人转发：带上最近一份没撤回的作业，同学点开卡片加入后直接看到它
-  usePlanShare(() => {
+  // 创建人转发：右上角的「转发」带上最近一份没撤回的作业，同学点开卡片加入后直接看到它；作业面板里的按钮转发那一份
+  usePlanShare((_remind, aid) => {
     if (!data?.invite || data.plan.role !== "owner") return null;
-    const first = data.assignments.find((a) => !a.revoked);
-    return { plan: data.plan, invite: data.invite, title: first?.title, assignmentId: first?.id };
+    const live = data.assignments.filter((a) => !a.revoked);
+    const a = live.find((x) => x.id === aid) ?? live[0];
+    return { plan: data.plan, invite: data.invite, title: a?.title, assignmentId: a?.id };
   });
 
   if (!logged) return <LoginGate />;
@@ -112,7 +138,17 @@ export default function PlanDetail() {
       leave();
     }, "已退出");
   };
+  const revoke = async (a: OwnerAssignment) => {
+    setTask(null);
+    if (!(await confirm("撤回这份作业？", "没交的同学不会再看到；交过的同学还能看到自己那份。", "撤回", true))) return;
+    await act(async () => {
+      await revokeAssignment(a.id);
+      bumpPlans();
+      await load();
+    }, "已撤回");
+  };
   const kick = async (m: PlanMemberRow) => {
+    setMember(null);
     if (!(await confirm(`把「${memberName(m)}」移出学习计划？`, "移出后对方看不到这里的作业了，已经交过的你还能看到。", "移出", true))) return;
     await act(async () => {
       await removeMember(plan.id, m.userId);
@@ -153,74 +189,108 @@ export default function PlanDetail() {
 
   const ownerBody = () => {
     const list = data.assignments as OwnerAssignment[];
-    const members = data.members ?? [];
+    const rows = data.members ?? [];
+    const active = rows.filter((m) => !m.left);
+    const handed = active.filter((m) => memberState(m) === "submitted").length;
+    const missing = plan.missing ?? active.filter((m) => memberState(m) === "missing").length;
+    const shown = filter === "all" ? rows : active.filter((m) => memberState(m) === filter);
+    const filters: { value: Filter; label: string; n: number }[] = [
+      { value: "all", label: "全部", n: rows.length },
+      { value: "submitted", label: "已交", n: handed },
+      { value: "missing", label: "未交", n: missing },
+    ];
     return (
       <>
         <View className="stats">
           <Stat icon="checkcircle" label="今日已交" value={plan.submittedToday ?? 0} />
-          <Stat icon="pencil" label="待批阅" value={plan.toReview ?? 0} color={(plan.toReview ?? 0) > 0 ? C.brand : undefined} />
-          <Stat icon="family" label="成员" value={plan.members ?? 0} />
+          <Stat icon="clock" label="未交" value={missing} color={missing > 0 ? C.accentOn : undefined} />
+          <Stat icon="family" label="总成员" value={plan.members ?? active.length} />
         </View>
         <Segmented
           value={tab}
           onChange={setTab}
           options={[
             { value: "tasks", label: `作业 ${list.length}` },
-            { value: "members", label: `成员 ${members.length}` },
+            { value: "members", label: `成员 ${active.length}` },
           ]}
         />
-        {tab === "tasks" && (
+        {tab === "tasks" && list.length === 0 && (
           <View className="group">
-            {list.length === 0 && <Text className="plan-empty">还没有作业</Text>}
-            {list.map((a) => {
-              const total = Math.max(1, a.members);
-              return (
-                <View key={a.id} className="plan-task" hoverClass="list-row--hover" onClick={() => go(`/pages/plan-task/index?id=${a.id}`)}>
+            <Text className="plan-empty">还没有作业</Text>
+          </View>
+        )}
+        {tab === "tasks" &&
+          list.map((a) => {
+            const files = a.files ?? [];
+            return (
+              <View key={a.id} className="group">
+                {/* 作业名一行：点开是转发 / 提醒 / 撤回；下面直接平铺这份作业的文件 */}
+                <View className="plan-task" hoverClass="list-row--hover" onClick={() => setTask(a)}>
                   <View className="plan-task__head">
-                    <Text className="t-headline ellipsis flex1">{a.title}</Text>
-                    {a.revoked && (
-                      <Tag kind="neutral" icon={null}>
-                        已撤回
-                      </Tag>
-                    )}
-                    {a.toReview > 0 && (
-                      <Tag kind="info" icon="pencil">
-                        {a.toReview}
-                      </Tag>
-                    )}
-                    <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-                  </View>
-                  <View className="plan-bar">
-                    <View className="plan-bar__seg" style={{ width: `${(a.submitted / total) * 100}%`, background: C.ok }} />
-                    <View className="plan-bar__seg" style={{ width: `${((a.missing - a.unseen) / total) * 100}%`, background: C.accent }} />
+                    <Text className="t-headline ellipsis minw0">{a.title}</Text>
+                    <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />
+                    <View className="flex1" />
+                    {a.dueAt && due(a.dueAt)}
                   </View>
                   {/* 绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的 */}
                   <View className="plan-counts">
                     {count("checkcircle", C.ok, a.submitted)}
                     {count("clock", C.accentOn, a.missing)}
                     {count("eye-off", C.tertiary, a.unseen)}
-                    <View className="flex1" />
-                    {a.dueAt && due(a.dueAt)}
                   </View>
                 </View>
-              );
-            })}
-          </View>
-        )}
+                {files.map((f) => (
+                  <View key={f.id} className="list-row" hoverClass="list-row--hover" onClick={() => void openPlanFile(f, files)}>
+                    <View className="plan-file__icon plan-file__icon--sm">
+                      <Text>{fileBadge(f.mime)}</Text>
+                    </View>
+                    <View className="flex1 col gap2 minw0">
+                      <Text className="row__title ellipsis">{f.name}</Text>
+                      <Text className="row__sub">{sizeLabel(f.size)}</Text>
+                    </View>
+                    <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+                  </View>
+                ))}
+              </View>
+            );
+          })}
         {tab === "members" && (
           <>
-            <View className="group">
-              {members.length === 0 && <Text className="plan-empty">还没有人加入</Text>}
-              {members.map((m) => (
-                <View key={m.userId} className="list-row" style={{ minHeight: "56px" }}>
-                  <Avatar name={m.name} url={m.avatar} />
-                  <Text className="row__title ellipsis flex1">{memberName(m)}</Text>
-                  {count("checkcircle", m.submitted >= m.assignments && m.assignments > 0 ? C.ok : C.tertiary, `${m.submitted}/${m.assignments}`)}
-                  <View className="plan-file__x" onClick={() => void kick(m)}>
-                    <Icon name="xmark" size={16} color={C.tertiary} stroke={2.4} />
-                  </View>
+            <View className="row-center gap8">
+              {filters.map((f) => (
+                <View key={f.value} className={`chip chip--card${filter === f.value ? " chip--on" : ""}`} onClick={() => setFilter(f.value)}>
+                  <Text>{f.label}</Text>
+                  <Text className="num">{f.n}</Text>
                 </View>
               ))}
+            </View>
+            <View className="group">
+              {shown.length === 0 && <Text className="plan-empty">{rows.length === 0 ? "还没有人加入" : filter === "missing" ? "都交了" : "还没有人交"}</Text>}
+              {shown.map((m) => {
+                const state = memberState(m);
+                return (
+                  <View key={m.userId} className="list-row" hoverClass="list-row--hover" style={{ minHeight: "56px" }} onClick={() => setMember(m)}>
+                    <Avatar name={m.name} url={m.avatar} />
+                    <Text className="row__title ellipsis flex1">
+                      {memberName(m)}
+                      {m.left ? "（已退出）" : ""}
+                    </Text>
+                    {(m.toReview ?? 0) > 0 && (
+                      <Tag kind="info" icon="pencil">
+                        待阅
+                      </Tag>
+                    )}
+                    {state === "submitted" ? (
+                      <Tag kind="correct">已交</Tag>
+                    ) : state === "missing" ? (
+                      <Tag kind="pending" icon="clock">
+                        未交
+                      </Tag>
+                    ) : null}
+                    <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+                  </View>
+                );
+              })}
             </View>
           </>
         )}
@@ -317,6 +387,66 @@ export default function PlanDetail() {
             {owner ? "解散学习计划" : "退出学习计划"}
           </Text>
         </View>
+      </Sheet>
+
+      {/* 点一个成员：他每份作业交没交，交了的点进去批阅；最下面是移出 */}
+      <Sheet open={Boolean(member)} onClose={() => setMember(null)} title={member ? memberName(member) : ""}>
+        {member && (member.items ?? []).length > 0 && (
+          <View className="group group--fill">
+            {(member.items ?? []).map((it) => (
+              <View
+                key={it.assignmentId}
+                className="list-row"
+                hoverClass={it.submissionId ? "list-row--hover" : "none"}
+                onClick={() => {
+                  if (!it.submissionId) return;
+                  setMember(null);
+                  void go(`/pages/plan-review/index?id=${it.submissionId}`);
+                }}
+              >
+                <View className="flex1 col gap2 minw0">
+                  <Text className="row__title ellipsis">{data.assignments.find((a) => a.id === it.assignmentId)?.title ?? "作业"}</Text>
+                  {(it.status === "submitted" || it.status === "reviewed") && (it.score ? <ScoreCounts score={it.score} /> : <Text className="row__sub">批改中</Text>)}
+                </View>
+                {it.late && (
+                  <Tag kind="neutral" icon={null}>
+                    迟交
+                  </Tag>
+                )}
+                {itemTag(it)}
+                {it.submissionId && <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />}
+              </View>
+            ))}
+          </View>
+        )}
+        {member && !member.left && (
+          <View className="plan-quiet plan-quiet--only">
+            <Text className="plan-quiet__item c-wrong" onClick={() => void kick(member)}>
+              移出学习计划
+            </Text>
+          </View>
+        )}
+      </Sheet>
+
+      {/* 点作业名：这份作业的转发、提醒、撤回 */}
+      <Sheet open={Boolean(task)} onClose={() => setTask(null)} title={task?.title}>
+        {task && (
+          <>
+            <ShareButton variant="outline" assignmentId={task.id} onTap={() => setTask(null)}>
+              转发这份作业
+            </ShareButton>
+            {task.missing > 0 && (
+              <ShareButton variant="outline" icon="bell" remind assignmentId={task.id} onTap={() => setTask(null)}>
+                提醒没交的同学
+              </ShareButton>
+            )}
+            <View className="plan-quiet plan-quiet--only">
+              <Text className="plan-quiet__item c-wrong" onClick={() => void revoke(task)}>
+                撤回这份作业
+              </Text>
+            </View>
+          </>
+        )}
       </Sheet>
     </View>
   );

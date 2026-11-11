@@ -388,3 +388,48 @@ def test_create_plan_without_files_then_assign_later(client):
     _upload(client, teacher, r.get_json()["uploads"])
     got = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
     assert [a["id"] for a in got] == [r.get_json()["assignment"]["id"]]
+
+
+def test_owner_plan_page_has_files_and_member_status(client, auth):
+    """计划页合并了作业情况：作业带文件列表，成员带已交 / 未交，顶部有未交人数"""
+    out = _create(client, auth)
+    pid, aid, code = out["plan"]["id"], out["assignment"]["id"], out["invite"]["code"]
+    _upload(client, auth, out["uploads"])
+    s1, u1 = _login(client, "13800000011", "小明")
+    s2, u2 = _login(client, "13800000012", "小红")
+    _join(client, s1, code)
+    _join(client, s2, code)
+    sid = _submit(client, s1, aid)
+
+    body = client.get(f"/api/plans/{pid}", headers=auth).get_json()
+    assert [f["name"] for f in body["assignments"][0]["files"]] == ["第 1 页.jpg", "第三单元练习.pdf"]
+    assert all(f["url"] for f in body["assignments"][0]["files"])
+    assert (body["plan"]["members"], body["plan"]["missing"], body["plan"]["submittedToday"]) == (2, 1, 1)
+    rows = {m["userId"]: m for m in body["members"]}
+    assert (rows[u1]["status"], rows[u1]["toReview"], rows[u1]["items"][0]["submissionId"]) == ("submitted", 1, sid)
+    assert rows[u1]["items"][0]["score"]["wrong"] == 1
+    assert (rows[u2]["status"], rows[u2]["items"][0]["status"], rows[u2]["items"][0]["viewed"]) == ("missing", "todo", False)
+
+    # 退回重做算未交；再布置一份，交过第一份的也变成未交
+    client.patch(f"/api/plans/submissions/{sid}", json={"status": "returned", "comment": "重做"}, headers=auth)
+    body = client.get(f"/api/plans/{pid}", headers=auth).get_json()
+    assert body["plan"]["missing"] == 2 and {m["status"] for m in body["members"]} == {"missing"}
+    _submit(client, s1, aid)
+    r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF], "title": "第二份"}, headers=auth)
+    assert r.status_code == 201
+    body = client.get(f"/api/plans/{pid}", headers=auth).get_json()
+    rows = {m["userId"]: m for m in body["members"]}
+    assert rows[u1]["status"] == "missing" and [i["status"] for i in rows[u1]["items"]] == ["todo", "submitted"]
+
+    # 退出的人：交过的还列着（待阅有入口），不算人数和未交；没交过的不列
+    client.delete(f"/api/plans/{pid}/members/me", headers=s1)
+    client.delete(f"/api/plans/{pid}/members/me", headers=s2)
+    body = client.get(f"/api/plans/{pid}", headers=auth).get_json()
+    assert [(m["userId"], m["left"]) for m in body["members"]] == [(u1, True)]
+    assert (body["plan"]["members"], body["plan"]["missing"]) == (0, 0)
+
+    # 成员看不到这些
+    s3, _ = _login(client, "13800000013", "小刚")
+    _join(client, s3, code)
+    mine = client.get(f"/api/plans/{pid}", headers=s3).get_json()
+    assert "members" not in mine and "missing" not in mine["plan"] and all("files" not in a for a in mine["assignments"])
