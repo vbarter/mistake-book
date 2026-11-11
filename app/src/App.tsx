@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./store/auth";
 import { startJobPoller } from "./lib/jobs";
@@ -75,6 +75,9 @@ function EdgeSwipeBack() {
   return null;
 }
 
+/** 唤起 App 的那条链接（getLaunchUrl）是否已经处理过 */
+let launchUrlHandled = false;
+
 export default function App() {
   const bootstrap = useAuth((s) => s.bootstrap);
   const ready = useAuth((s) => s.ready);
@@ -112,14 +115,18 @@ export default function App() {
     if (!token) return;
     return startPlanSync();
   }, [token]);
-  // 学习计划：点开微信里的卡片（shangyike://plans/join?code=…）唤起 App 后自动加入；还没登录就先记下，登录 / 注册完再加入
+  // 学习计划：点开微信里的卡片（shangyike://plans/join?code=…）唤起 App 后自动加入；还没登录就先记下，登录 / 注册完再加入。
+  // useNavigate 返回的函数每换一个页面就是新的，这里不能依赖它：否则每次跳转都会重新读一遍「启动链接」，
+  // 加入成功跳走后又被带回加入页，来回循环（iOS 上最后报 history.replaceState 超过 100 次）。
+  const navRef = useRef(nav);
+  navRef.current = nav;
   useEffect(() => {
     if (!ready) return;
     const go = (url: string | undefined | null) => {
       const target = url ? parseJoinUrl(url) : null;
       if (!target) return;
       rememberJoin(target);
-      if (useAuth.getState().token) nav(joinPath(target));
+      if (useAuth.getState().token) navRef.current(joinPath(target));
     };
     // 网页：没登录时直接打开了加入链接，会被带去欢迎页，先把邀请码记下
     if (!useAuth.getState().token && window.location.pathname.endsWith("/plans/join")) go(window.location.href);
@@ -130,18 +137,22 @@ export default function App() {
       const handle = await CapApp.addListener("appUrlOpen", ({ url }) => go(url));
       if (active) remove = () => void handle.remove();
       else void handle.remove();
-      go((await CapApp.getLaunchUrl())?.url);
+      // 启动链接在 App 这次运行期间一直不变，只处理一次
+      if (!launchUrlHandled) {
+        launchUrlHandled = true;
+        go((await CapApp.getLaunchUrl())?.url);
+      }
     });
     return () => {
       active = false;
       remove?.();
     };
-  }, [ready, nav]);
+  }, [ready]);
   useEffect(() => {
     if (!token || startup) return;
     const target = pendingJoin();
-    if (target) nav(joinPath(target), { replace: true });
-  }, [token, startup, nav]);
+    if (target) navRef.current(joinPath(target), { replace: true });
+  }, [token, startup]);
   // 安卓：拍照时 App 被系统回收，重启后把那张照片放回原来的试卷，打开录入页接着扫
   useEffect(() => {
     if (!token) return;
