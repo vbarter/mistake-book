@@ -92,7 +92,9 @@
 .pc:active { transform: scale(0.97); }
 .pc__h { display: flex; align-items: center; gap: 6px; }
 .pc__t { flex: 1; white-space: nowrap; font-size: 17px; font-weight: 700; color: var(--label); }
-.pc__go { width: 20px; height: 20px; border-radius: 10px; border: 1.5px solid var(--tertiary); color: var(--tertiary); display: flex; align-items: center; justify-content: center; }
+.pc__add { flex-shrink: 0; position: relative; display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 9px 0 7px; border-radius: 12px; background: var(--brand-solid); color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 2px 6px var(--brand-glow); transition: transform 0.2s var(--spring); }
+.pc__add::after { content: ""; position: absolute; inset: -10px -8px; } /* 按钮小，把可点范围放大到 40px 高 */
+.pc__add:active { transform: scale(0.92); }
 .pc__big { display: flex; align-items: baseline; gap: 4px; font-size: 13px; color: var(--secondary); }
 .pc__num { font-size: 24px; line-height: 28px; font-weight: 800; color: var(--brand); font-variant-numeric: tabular-nums; }
 .pc__empty { font-size: 15px; line-height: 28px; font-weight: 600; color: var(--label); }

@@ -83,7 +83,10 @@ export default function Home() {
           <div className="plan__top"><span className="plan__title">今日安排</span><span className="plan__sub">计划和作业，一眼看清</span></div>
           <div className="plan__cards">
             <button className="pc" onClick={() => nav("/plans")}>
-              <span className="pc__h"><span className="pc__t">学习计划</span><span className="pc__go"><Icon name="chevron-right" size={11} stroke={3} /></span></span>
+              <span className="pc__h"><span className="pc__t">学习计划</span>
+                {/* 右上角直接新建；卡片其余地方点了还是进计划列表。外层已经是 button，这里只能用 span */}
+                <span className="pc__add" role="button" aria-label="新建学习计划" onClick={(e) => { e.stopPropagation(); nav("/plans/new"); }}><Icon name="plus" size={12} stroke={3} />新建</span>
+              </span>
               {hasPlans && plans ? (
                 <>
                   <span className="pc__big"><b className="pc__num">{planCount}</b>{planUnit}</span>
