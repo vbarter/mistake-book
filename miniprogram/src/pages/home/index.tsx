@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh } from "@tarojs/taro";
+import { AvatarPrompt } from "../../components/AvatarPrompt";
 import { Buddy } from "../../components/Buddy";
 import { Icon } from "../../components/Icon";
 import { Progress, SubjectTile, TopBar } from "../../components/ui";
@@ -100,6 +101,7 @@ export default function Home() {
 
   return (
     <View className="home2">
+      <AvatarPrompt version={version} />
       <TopBar>
         <View className="home2__logo">
           <Icon name="check" size={18} color="#ffffff" stroke={3} />
