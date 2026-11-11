@@ -102,7 +102,10 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
     throw new ApiError(401, "unauthorized", "登录已过期，请重新登录");
   }
   if (!res.ok) {
-    throw new ApiError(res.status, String(data.error || "error"), String(data.message || data.msg || "请求失败"));
+    const message = String(data.message || data.msg || "");
+    // 服务器内部出错时给的可能是一段英文，不直接给用户看
+    if (res.status >= 500 && !/[\u4e00-\u9fa5]/.test(message)) throw new ApiError(res.status, String(data.error || "server_error"), "服务器开小差了，请稍后再试");
+    throw new ApiError(res.status, String(data.error || "error"), message || "请求失败");
   }
   return data as T;
 }

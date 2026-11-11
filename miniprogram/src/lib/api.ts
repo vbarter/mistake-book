@@ -66,7 +66,10 @@ function fail(status: number, data: unknown): never {
     throw new ApiError(401, "unauthorized", "登录已过期，请重新登录");
   }
   const d = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
-  throw new ApiError(status, String(d.error || "error"), String(d.message || d.msg || "请求失败"));
+  const message = String(d.message || d.msg || "");
+  // 服务器内部出错时给的可能是一段英文，不直接给用户看
+  if (status >= 500 && !/[\u4e00-\u9fa5]/.test(message)) throw new ApiError(status, String(d.error || "server_error"), "服务器开小差了，请稍后再试");
+  throw new ApiError(status, String(d.error || "error"), message || "请求失败");
 }
 
 export async function api<T>(path: string, opts: Options = {}): Promise<T> {

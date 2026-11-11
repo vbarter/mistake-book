@@ -17,6 +17,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, abort, current_app, jsonify, request
+from sqlalchemy.exc import IntegrityError
 
 from ..auth_utils import current_user, login_required
 from ..constants import SUBJECT_LABELS, SUBJECTS
@@ -477,7 +478,11 @@ def join_plan():
         else:
             member.removed, member.joined_at = False, datetime.now()
         joined = True
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:  # 同一个人的两个请求同时加入：另一个已经写进去了
+            db.session.rollback()
+            joined = False
     return jsonify({"plan": _plan_view(plan, "member"), "joined": joined, "me": info})
 
 
@@ -605,8 +610,13 @@ def get_assignment(assignment_id: str):
         if a.revoked and not PlanSubmission.query.filter_by(assignment_id=a.id, user_id=user.id).first():
             abort(404, "老师撤回了这份作业")
         if not PlanView.query.filter_by(assignment_id=a.id, user_id=user.id).first():
+            # 客户端刚进页面会连着请求两次，两个请求可能同时发现「还没看过」都去写，后写的撞唯一约束。
+            # 撞了说明已经记上了，当成功处理，不能让整个请求 500。
             db.session.add(PlanView(assignment_id=a.id, user_id=user.id))
-            db.session.commit()
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
         sub = PlanSubmission.query.filter_by(assignment_id=a.id, user_id=user.id).first()
         body["submission"] = _submission_view(sub, store) if sub else None
     return jsonify(body)
