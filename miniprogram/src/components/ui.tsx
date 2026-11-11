@@ -198,12 +198,24 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   useEffect(() => {
     if (!open) return;
     // 自定义 Tab 栏盖在页面上面：在 Tab 页打开面板时先把它藏起来，关掉再放出来（不是 Tab 页时这两个调用会失败，忽略）
+    // 微信的 hideTabBar 对自定义 Tab 栏不一定管用（真机上见过没藏住、盖住面板最下面的按钮），所以再直接告诉 Tab 栏实例
     void Taro.hideTabBar({ animation: false }).catch(() => undefined);
+    const page = Taro.getCurrentInstance().page;
+    const setBar = (hidden: boolean) => {
+      try {
+        Taro.getTabBar<{ setHidden?: (h: boolean) => void }>(page)?.setHidden?.(hidden);
+      } catch {
+        /* 不是 Tab 页 */
+      }
+    };
+    setBar(true);
+    Taro.nextTick(() => setBar(true)); // 页面刚打开就弹面板时 Tab 栏可能还没准备好，再说一次
     const onChange = (res: { height: number }) => setKb(Math.max(0, res.height || 0));
     Taro.onKeyboardHeightChange(onChange);
     return () => {
       Taro.offKeyboardHeightChange?.(onChange);
       setKb(0);
+      setBar(false);
       void Taro.showTabBar({ animation: false }).catch(() => undefined);
     };
   }, [open]);
