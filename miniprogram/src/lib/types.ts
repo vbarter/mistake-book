@@ -9,6 +9,7 @@ export interface User {
   phone: string | null;
   loginMethod: "apple" | "phone" | "guest" | "wechat";
   nickname: string;
+  avatar?: string | null; // 头像地址（临时链接，每次拉资料都会换新的）
   grade: string;
   subjects: Subject[];
   weeklyGoal: number;

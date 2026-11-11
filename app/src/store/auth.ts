@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, loadSession, setToken, setUnauthorizedHandler } from "../api/client";
+import { ApiError, api, assetUrl, loadSession, setToken, setUnauthorizedHandler } from "../api/client";
 import type { User } from "../api/types";
 
 interface AuthState {
@@ -10,6 +10,8 @@ interface AuthState {
   setSession: (token: string, user: User) => Promise<void>;
   refreshUser: () => Promise<void>;
   updateProfile: (patch: Record<string, unknown>) => Promise<User>;
+  /** 换头像：直传到对象存储，再让服务器设成当前头像 */
+  uploadAvatar: (image: Blob) => Promise<User>;
   logout: () => Promise<void>;
 }
 
@@ -50,6 +52,18 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   async updateProfile(patch) {
     const { user } = await api<{ user: User }>("/api/auth/me", { method: "PATCH", body: patch });
+    set({ user });
+    return user;
+  },
+
+  async uploadAvatar(image) {
+    const up = await api<{ version: string; url: string; method: string; headers?: Record<string, string> }>("/api/auth/avatar/upload-url", { method: "POST", body: {} });
+    let ok = false;
+    try {
+      ok = (await fetch(assetUrl(up.url)!, { method: up.method || "PUT", body: image, headers: { "Content-Type": "image/jpeg", ...(up.headers ?? {}) } })).ok;
+    } catch { /* 网络断了 */ }
+    if (!ok) throw new ApiError(0, "upload_failed", "头像没传上去，请重试");
+    const { user } = await api<{ user: User }>("/api/auth/avatar", { method: "POST", body: { version: up.version } });
     set({ user });
     return user;
   },

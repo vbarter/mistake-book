@@ -181,6 +181,13 @@ CREATE TABLE IF NOT EXISTS usage_events (
   KEY ix_usage_events_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='使用记录';
 
+CREATE TABLE IF NOT EXISTS user_avatars (
+  user_id    VARCHAR(32) NOT NULL,
+  version    VARCHAR(16) NOT NULL COMMENT '当前头像的版本号，图片在对象存储 u/<user_id>/avatar-<version>.jpg',
+  updated_at DATETIME    NULL,
+  PRIMARY KEY (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户头像';
+
 -- 已有库升级：微信小程序登录（用 root 执行）
 -- ALTER TABLE users ADD COLUMN wx_openid VARCHAR(64) NULL COMMENT '微信小程序 openid' AFTER apple_sub, ADD UNIQUE KEY uk_users_wx_openid (wx_openid);
 -- 已有库升级：手机号注册的登录密码（用 root 执行）

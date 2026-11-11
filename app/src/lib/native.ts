@@ -132,6 +132,20 @@ export async function downscale(source: File | string, maxSide: number, quality 
   return out;
 }
 
+/** 选一张图当头像：从相册选，居中裁成正方形，缩到 400 像素的 JPG。没选返回 null */
+export async function pickAvatar(): Promise<Blob | null> {
+  const [src] = await pickImages(1);
+  if (!src) return null;
+  const img = await loadImage(src);
+  const side = Math.min(img.naturalWidth, img.naturalHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = Math.min(400, side);
+  canvas.getContext("2d")!.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+  releaseCanvas(canvas);
+  return blob;
+}
+
 /** 模型会把图片压到最长边约 1568px；两页并排的宽幅照片直接上传等于每页只剩七八百像素，手写就糊了 */
 export const UPLOAD_MAX_SIDE = 1568;
 /** 宽高比超过这个值视为左右两页拍在一张照片里 */

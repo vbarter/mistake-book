@@ -3,7 +3,7 @@ import { Input, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon, type IconName } from "../../components/Icon";
 import { LoginGate, PageState, PlanTile, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
-import { Button, Segmented, Sheet, Stat, Tag, type TagKind } from "../../components/ui";
+import { Avatar, Button, Segmented, Sheet, Stat, Tag, type TagKind } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
@@ -129,7 +129,7 @@ export default function PlanDetail() {
           <Text className="t-headline ellipsis">{plan.name}</Text>
           <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />
         </View>
-        <Text className="t-foot c-sec ellipsis">{owner ? (PLAN_SUBJECT_LABEL[plan.subject] ?? "综合") : `${PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"} · ${plan.teacher}`}</Text>
+        <Text className="t-foot c-sec ellipsis">{PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}</Text>
       </View>
       {owner && data.invite && <ShareButton pill>转发</ShareButton>}
     </View>
@@ -213,9 +213,7 @@ export default function PlanDetail() {
               {members.length === 0 && <Text className="plan-empty">还没有人加入</Text>}
               {members.map((m) => (
                 <View key={m.userId} className="list-row" style={{ minHeight: "56px" }}>
-                  <View className="plan-avatar">
-                    <Text>{m.name.slice(-1)}</Text>
-                  </View>
+                  <Avatar name={m.name} url={m.avatar} />
                   <Text className="row__title ellipsis flex1">{memberName(m)}</Text>
                   {count("checkcircle", m.submitted >= m.assignments && m.assignments > 0 ? C.ok : C.tertiary, `${m.submitted}/${m.assignments}`)}
                   <View className="plan-file__x" onClick={() => void kick(m)}>
@@ -241,13 +239,6 @@ export default function PlanDetail() {
     const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
     return (
       <>
-        {data.me?.defaultName && (
-          <View className="plan-banner" onClick={openPanel}>
-            <Icon name="person" size={18} color={C.accentOn} stroke={2.2} />
-            <Text className="flex1">老师看到的名字是「{data.me.name}」</Text>
-            <Text className="plan-banner__act">改名</Text>
-          </View>
-        )}
         <View className="stats">
           <Stat icon="clock" label="待交" value={todo} color={todo ? C.accentOn : undefined} />
           <Stat icon="checkcircle" label="已交" value={handed} />
@@ -271,7 +262,7 @@ export default function PlanDetail() {
                   )}
                   <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
                 </View>
-                <View className="plan-counts">
+                <View className="plan-counts" style={open && !a.dueAt ? { display: "none" } : undefined}>
                   {open ? (
                     a.dueAt && due(a.dueAt, isOverdue(a.dueAt))
                   ) : a.score ? (

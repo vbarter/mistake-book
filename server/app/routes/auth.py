@@ -521,6 +521,40 @@ def update_me():
     return jsonify({"user": user.to_dict()})
 
 
+@bp.post("/auth/avatar/upload-url")
+@login_required
+def avatar_upload_url():
+    """换头像第一步：要一个上传地址。客户端把缩好的 JPG 直接 PUT 上去，再调 POST /auth/avatar 确认"""
+    from .. import avatars, storage
+
+    user = current_user()
+    version = avatars.new_version()
+    url = storage.get_storage().presign(avatars.avatar_key(user.id, version), "PUT")
+    return jsonify({"version": version, "method": "PUT", "url": url, "headers": {"Content-Type": "image/jpeg"}})
+
+
+@bp.post("/auth/avatar")
+@login_required
+def avatar_confirm():
+    """换头像第二步：图片传上去了，把它设成当前头像"""
+    from .. import avatars, storage
+
+    user = current_user()
+    version = str((request.get_json(silent=True) or {}).get("version") or "")
+    if not version.isalnum() or len(version) > 16:
+        abort(400, "头像没传上去，请重试")
+    key = avatars.avatar_key(user.id, version)
+    store = storage.get_storage()
+    size = store.exists(key)
+    if not size:
+        abort(400, "头像没传上去，请重试")
+    if size > avatars.MAX_AVATAR_BYTES:
+        store.delete([key])
+        abort(413, "图片太大了，换一张小一点的")
+    avatars.set_avatar(user.id, version)
+    return jsonify({"user": user.to_dict()})
+
+
 @bp.delete("/auth/me")
 @login_required
 def delete_me():
@@ -538,6 +572,9 @@ def delete_me():
     from .plans import delete_user_plans
 
     delete_user_plans(user.id)
+    from ..avatars import delete_avatar
+
+    delete_avatar(user.id)
     for model in (ReviewLog, PracticeSession, DigitizeJob, UsageEvent):
         model.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     db.session.delete(user)
