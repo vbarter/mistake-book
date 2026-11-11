@@ -1,5 +1,5 @@
 {
-  "_note": "知错本自己维护的补充知识点，并进对应学科的候选池；id 用 zcb_ 前缀，和 cn-math-taxonomy 的 id 不冲突，数据归知错本所有。英语按上海中考英语考纲的语法类别和题型拆，图谱里的初中英语是按教材单元拆的，缺这些大类（评测见 reports/标注评测-嘉定英语二模.md）。chapter 就是类别本身，错题榜按它归并。stages 写这条点在哪些学段的候选池里出现。",
+  "_note": "上壹课自己维护的补充知识点，并进对应学科的候选池；id 用 zcb_ 前缀，和 cn-math-taxonomy 的 id 不冲突，数据归上壹课所有。英语按上海中考英语考纲的语法类别和题型拆，图谱里的初中英语是按教材单元拆的，缺这些大类（评测见 reports/标注评测-嘉定英语二模.md）。chapter 就是类别本身，错题榜按它归并。stages 写这条点在哪些学段的候选池里出现。",
   "topics": [
     {"id": "zcb_e001", "name": "名词（单复数、所有格、可数与不可数）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "名词", "stages": ["junior", "senior"]},
     {"id": "zcb_e002", "name": "代词（人称、物主、反身、不定代词）", "subject": "english", "domain": "语法", "grade": 9, "chapter": "代词", "stages": ["junior", "senior"]},
