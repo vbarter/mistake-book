@@ -2,23 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import { Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
-import { NameSheet, PageState, PlanTile } from "../../components/plan";
-import { Button } from "../../components/ui";
+import { NameSheet, PageState, confirm } from "../../components/plan";
+import { Avatar, Button } from "../../components/ui";
 import { api, errorText } from "../../lib/api";
-import { LOGIN_CLOSED_EVENT, LOGIN_PAGE, isLoggedIn } from "../../lib/auth";
+import { LOGIN_CLOSED_EVENT, LOGIN_PAGE, currentUser, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLAN_SUBJECT_LABEL, bumpPlans, joinPlan, startPlanSync, type AssignmentBrief, type PlanInfo, type PlanSubject } from "../../lib/plans";
+import { DEFAULT_NICKNAME, PLAN_SUBJECT_LABEL, bumpPlans, joinPlan, joinedText, startPlanSync, type AssignmentBrief, type JoinedPreview, type PlanInfo, type PlanSubject } from "../../lib/plans";
 import { useShare } from "../../lib/share";
 import { C } from "../../lib/theme";
 
 interface Preview {
-  plan: { id: string; name: string; subject: PlanSubject; teacher: string };
+  plan: { id: string; name: string; subject: PlanSubject; teacher: string; teacherAvatar?: string | null };
   assignment: AssignmentBrief | null;
+  members: JoinedPreview;
+  /** 登录后才有：owner = 自己建的，member = 已经在里面，null = 还没加入 */
+  role: "owner" | "member" | null;
 }
 
 /**
  * 点开微信里的卡片后落到这里（相当于 App 的落地页 + 加入页合成一步）：
- * 已经登录的直接自动加入、跳到这份作业；还没登录的看到是谁邀请、哪份作业，只有一个按钮「加入学习计划」，微信一键登录后自动加入。
+ * 先看到是谁建的（头像 + 称呼）、哪个计划、哪份作业、已经有谁加入了；点「加入学习计划」再确认一次才加入，没登录的确认后微信一键登录。
+ * 已经在里面的同学不用再点，直接进到这份作业。创建人点开自己的卡片也停在这一页，看到的和同学一样，只多一个「进入学习计划」。
  * 不用老师批准。刚注册的新用户先起名字；已经在用的直接用自己的名字加入。
  */
 export default function PlanJoin() {
@@ -26,11 +30,11 @@ export default function PlanJoin() {
   const { code = "", a = "" } = useRouter().params;
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState("");
-  const [joining, setJoining] = useState(isLoggedIn());
+  const [joining, setJoining] = useState(false);
   const [naming, setNaming] = useState<PlanInfo | null>(null);
   const started = useRef(false);
 
-  const enter = (plan: PlanInfo) => Taro.redirectTo({ url: a && plan.role === "member" ? `/pages/plan-task/index?id=${a}` : `/pages/plan/index?id=${plan.id}` });
+  const enter = (plan: Pick<PlanInfo, "id" | "role">) => Taro.redirectTo({ url: a && plan.role === "member" ? `/pages/plan-task/index?id=${a}` : `/pages/plan/index?id=${plan.id}` });
 
   const join = async () => {
     if (started.current) return;
@@ -52,13 +56,16 @@ export default function PlanJoin() {
 
   useEffect(() => {
     if (!code) return setError("这张卡片不完整，请让老师重新转发一次");
-    if (isLoggedIn()) return void join();
-    api<Preview>(`/api/plans/invite/${encodeURIComponent(code)}${a ? `?a=${encodeURIComponent(a)}` : ""}`, { auth: false })
-      .then(setPreview)
+    api<Preview>(`/api/plans/invite/${encodeURIComponent(code)}${a ? `?a=${encodeURIComponent(a)}` : ""}`, { auth: isLoggedIn() })
+      .then((p) => {
+        // 已经在里面的同学：不用再确认，直接进到这份作业
+        if (p.role === "member") return void enter({ id: p.plan.id, role: "member" });
+        setPreview(p);
+      })
       .catch((e) => setError(errorText(e) || "打不开这张卡片"));
   }, [code, a]);
 
-  /** 没登录：打开登录页，登录成功回来就自动加入 */
+  /** 没登录：打开登录页，登录成功回来就加入（已经确认过了，不再问第二遍） */
   const loginThenJoin = () => {
     if (isLoggedIn()) return void join();
     const done = () => {
@@ -69,11 +76,20 @@ export default function PlanJoin() {
     Taro.navigateTo({ url: LOGIN_PAGE }).catch(done);
   };
 
+  /** 点「加入学习计划」：先确认一次，免得手滑点开卡片就进了别人的计划 */
+  const askJoin = async () => {
+    if (!preview) return;
+    const nick = currentUser()?.nickname ?? "";
+    const as = isLoggedIn() && nick && nick !== DEFAULT_NICKNAME ? `你会用「${nick}」加入，` : "加入后，";
+    if (await confirm(`加入「${preview.plan.name}」？`, `${as}${preview.plan.teacher}能看到你的名字和你交的作业。`, "加入")) loginThenJoin();
+  };
+
   const mine = (
     <Button size="sm" onClick={() => void Taro.redirectTo({ url: "/pages/plans/index" })}>
       看看我的学习计划
     </Button>
   );
+  const owner = preview?.role === "owner";
   if (error) return <PageState error={error} action={isLoggedIn() ? mine : undefined} />;
 
   return (
@@ -86,7 +102,7 @@ export default function PlanJoin() {
       ) : (
         <>
           <View className="card plan-join" style={{ width: "100%", boxSizing: "border-box" }}>
-            <PlanTile subject={preview.plan.subject} size="lg" />
+            <Avatar name={preview.plan.teacher} url={preview.plan.teacherAvatar} size={64} />
             <Text className="t-foot c-sec" style={{ marginTop: "8px" }}>
               {preview.plan.teacher} · {PLAN_SUBJECT_LABEL[preview.plan.subject] ?? "综合"}
             </Text>
@@ -99,10 +115,28 @@ export default function PlanJoin() {
                 <Text className="t-sub c-sec">{preview.assignment.title}</Text>
               </View>
             )}
+            <View className="plan-join__members">
+              {preview.members.count > 0 && (
+                <View className="avatar-stack">
+                  {preview.members.list.slice(0, 5).map((m, i) => (
+                    <View key={i} className="avatar-stack__item">
+                      <Avatar name={m.name} url={m.avatar} size={28} />
+                    </View>
+                  ))}
+                </View>
+              )}
+              <Text className="t-foot c-sec">{joinedText(preview.members, owner)}</Text>
+            </View>
           </View>
-          <Button onClick={loginThenJoin} style={{ width: "100%" }}>
-            加入学习计划
-          </Button>
+          {owner ? (
+            <Button onClick={() => void enter({ id: preview.plan.id, role: "owner" })} style={{ width: "100%" }}>
+              进入学习计划
+            </Button>
+          ) : (
+            <Button onClick={() => void askJoin()} style={{ width: "100%" }}>
+              加入学习计划
+            </Button>
+          )}
         </>
       )}
       <NameSheet
