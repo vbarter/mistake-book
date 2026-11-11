@@ -8,7 +8,7 @@ import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
 import { toast } from "../lib/hooks";
-import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
+import { STATUS_LABEL, canHandIn, createdLabel, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
 import { C } from "../lib/theme";
 
 type Look = "done" | "returned" | "todo" | "revoked";
@@ -17,7 +17,7 @@ const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.sta
 const LOOK_ICON: Record<Look, [IconName, string]> = { done: ["checkcircle", C.ok], returned: ["refresh", C.wrong], todo: ["clock", C.accentOn], revoked: ["minus", C.tertiary] };
 
 /**
- * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，每份作业一块（作业名 + 状态，下面直接平铺它的文件，点文件打开），
+ * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面每份作业一段（作业名 + 状态，下面直接平铺它的文件，点文件打开），
  * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
  * 交完页面跟着刷新，交了的作业整块标成绿色。交过的作业点作业名看自己那份的批改结果。
  */
@@ -48,6 +48,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       await reload();
     } catch (e) {
       await Taro.showModal({ title: "没交上去", content: errorText(e), showCancel: false });
+      if (planGone(e)) return void reload(); // 计划被解散 / 自己被移出了：重新拉一次，页面换成提示
       setHanding(true);
     } finally {
       setStage(null);
@@ -66,6 +67,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     } catch (e) {
       Taro.hideLoading();
       toast(errorText(e));
+      if (planGone(e)) void reload();
     }
   };
 
@@ -91,18 +93,20 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         <Stat icon="clock" label="待交" value={todo.length} color={todo.length ? C.accentOn : undefined} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? C.ok : undefined} />
       </View>
-      {list.length === 0 && (
-        <View className="group">
-          <Text className="plan-empty">还没有作业</Text>
+      {/* 一张卡片：最上面是计划名 + 创建时间（只出现一次），下面一份份作业 */}
+      <View className="group">
+        <View className="plan-task">
+          <Text className="t-headline ellipsis">{data.plan.name}</Text>
+          <Text className="t-foot c-sec">{createdLabel(data.plan.createdAt)}</Text>
         </View>
-      )}
-      {list.map((a) => {
+        {list.length === 0 && <Text className="plan-empty">还没有作业</Text>}
+        {list.map((a) => {
         const look = lookOf(a);
         const waiting = a.status === "todo" || a.status === "returned";
         const files = a.files ?? [];
         const mine = a.status !== "todo"; // 交过：点作业名看自己那份和批改结果
         return (
-          <View key={a.id} className="group">
+          <View key={a.id} className="plan-hw">
             <View
               className={`plan-task plan-task--${look}`}
               hoverClass={mine ? "list-row--hover" : "none"}
@@ -162,6 +166,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
           </View>
         );
       })}
+      </View>
 
       <View className="bottom-bar">
         <Button variant="outline" icon="printer" className={open.length ? undefined : "flex1"} disabled={exportable.length === 0} onClick={() => setExporting(true)}>

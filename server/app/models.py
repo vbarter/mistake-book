@@ -522,6 +522,17 @@ class PlanSubmission(db.Model):
     reviewed_at = db.Column(db.DateTime, nullable=True)
 
 
+class PlanTombstone(db.Model):
+    """解散过的学习计划留下的记号：计划 id、邀请码、每份作业的 id 各一行。
+    计划本身和里面的东西都删了，只靠它在有人再点进来（旧卡片、还停在页面上的成员）时说清「已被创建人解散」"""
+
+    __tablename__ = "plan_tombstones"
+
+    ref = db.Column(db.String(32), primary_key=True)
+    plan_id = db.Column(db.String(32), index=True, nullable=False)
+    dissolved_at = db.Column(db.DateTime, default=datetime.now)
+
+
 class UserAvatar(db.Model):
     """用户头像：图片在对象存储，这里只记当前是哪一版（见 avatars.py）"""
 

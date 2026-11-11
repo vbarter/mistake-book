@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon, type IconName } from "../../components/Icon";
@@ -8,7 +8,7 @@ import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui
 import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLAN_SUBJECT_LABEL, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
 const leave = () => {
@@ -55,16 +55,27 @@ export default function PlanDetail() {
   const [panel, setPanel] = useState(false);
   const [name, setName] = useState("");
   const logged = loggedIn();
+  const shown = useRef(false);
 
   const load = async () => {
     if (!loggedIn()) return;
     try {
       const r = await fetchPlan(id);
+      shown.current = true;
       setData(r);
       setError("");
       void Taro.setNavigationBarTitle({ title: r.plan.name });
     } catch (e) {
-      if (!data) setError(errorText(e) || "打不开");
+      const gone = planGone(e);
+      // 已经显示出来了，一次没拉到（没网）不换成报错页；但计划被解散 / 自己被移出了，就不能再留着旧内容
+      if (shown.current && !gone) return;
+      setError(errorText(e) || "打不开");
+      if (shown.current) {
+        shown.current = false;
+        setData(null);
+        void Taro.setNavigationBarTitle({ title: "学习计划" });
+        bumpPlans(); // 首页和列表里也把它去掉
+      }
     }
   };
   useEffect(() => {
@@ -162,15 +173,11 @@ export default function PlanDetail() {
       {/* 点计划名弹出面板：改名，下面是不常用的操作（和 iOS 的标题菜单一个意思） */}
       <View className="flex1 col minw0" onClick={openPanel}>
         <View className="row-center gap6">
-          <Text className="t-headline ellipsis">{plan.name}</Text>
+          {/* 成员：头像旁边只有创建人的名字，计划名 + 创建时间在下面作业卡片的最上面；创建人自己看到的还是计划名 + 学科 */}
+          <Text className="t-headline ellipsis">{owner ? plan.name : plan.teacher}</Text>
           <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />
         </View>
-        {/* 成员：是谁建的、什么时候建的（创建人自己不用看这些） */}
-        <Text className="t-foot c-sec ellipsis">
-          {owner ? "" : `${plan.teacher} · `}
-          {PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}
-        </Text>
-        {!owner && <Text className="t-foot c-sec">{createdLabel(plan.createdAt)}</Text>}
+        {owner && <Text className="t-foot c-sec ellipsis">{PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}</Text>}
       </View>
       {owner && data.invite && <ShareButton pill>转发</ShareButton>}
     </View>

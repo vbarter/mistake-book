@@ -8,7 +8,7 @@ import { Button, Segmented, Sheet, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { submitExport } from "../../lib/export";
 import { toast } from "../../lib/hooks";
-import { STATUS_LABEL, absoluteUrl, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, openPlanFile, sizeLabel, submitHomework, type AssignmentRes } from "../../lib/plans";
+import { STATUS_LABEL, absoluteUrl, bumpPlans, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, openPlanFile, planGone, sizeLabel, submitHomework, type AssignmentRes } from "../../lib/plans";
 import type { Paper } from "../../lib/store";
 import { C } from "../../lib/theme";
 
@@ -41,7 +41,15 @@ export default function PlanTask() {
       void Taro.setNavigationBarTitle({ title: "作业" });
     } catch (e) {
       // 已经显示出来了就不换成报错页：进页面时会连着请求两次，后到的那次失败不该盖掉已有的内容
-      if (!loaded.current) setError(errorText(e) || "打不开");
+      // 但计划被解散 / 自己被移出了，就不能再留着旧内容
+      const gone = planGone(e);
+      if (loaded.current && !gone) return;
+      setError(errorText(e) || "打不开");
+      if (loaded.current) {
+        loaded.current = false;
+        setData(null);
+        bumpPlans();
+      }
     }
   };
   useEffect(() => {
@@ -76,7 +84,8 @@ export default function PlanTask() {
       toast("交上去了", "success");
       await load();
     } catch (e) {
-      void Taro.showModal({ title: "没交上去", content: errorText(e), showCancel: false });
+      await Taro.showModal({ title: "没交上去", content: errorText(e), showCancel: false });
+      if (planGone(e)) void load();
     } finally {
       setStage(null);
     }

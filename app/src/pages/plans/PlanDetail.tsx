@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Avatar, Stat, Tag } from "../../components/v2";
-import { PLAN_SUBJECT_LABEL, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
 import { openFile } from "./Assignment";
@@ -47,7 +47,17 @@ export default function PlanDetail() {
   const version = usePlans((s) => s.version);
   useEffect(() => { remembered = { planId, tab, filter }; }, [planId, tab, filter]);
 
-  const load = useCallback(() => fetchPlan(planId).then(setData).catch((e) => setError((e as Error).message || "打不开")), [planId]);
+  // 已经显示出来了，一次没拉到（没网）不换成报错页；但计划被解散 / 自己被移出了，就不能再留着旧内容
+  const shown = useRef(false);
+  const load = useCallback(() => fetchPlan(planId).then((r) => { shown.current = true; setData(r); setError(""); }).catch((e) => {
+    if (shown.current && !planGone(e)) return;
+    setError((e as Error).message || "打不开");
+    if (shown.current) {
+      shown.current = false;
+      setData(null);
+      usePlans.getState().bump(); // 首页和列表里也把它去掉
+    }
+  }), [planId]);
   useEffect(() => { void load(); }, [load, version]);
 
   if (error) return <div className="screen"><InlineNav title="学习计划" back /><Empty icon="warning" title={error} action={<Button size="sm" onClick={() => nav("/plans", { replace: true })}>回到学习计划</Button>} /></div>;
@@ -170,7 +180,7 @@ export default function PlanDetail() {
           })()
         ) : (
           <>
-            <PlanCreator plan={plan} />
+            <PlanCreator plan={plan} brief />
             <PlanMember data={data} reload={load} />
           </>
         )}

@@ -4,7 +4,7 @@ import { Icon, type IconName } from "../../components/Icon";
 import { Button, Sheet } from "../../components/ui";
 import { Stat, Tag } from "../../components/v2";
 import { haptic, pickImages, takePhoto } from "../../lib/native";
-import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../../lib/plans";
+import { STATUS_LABEL, canHandIn, createdLabel, dueLabel, fetchAssignment, fileBadge, isOverdue, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../../lib/plans";
 import { canUseLiveCamera } from "../../lib/scanCamera";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
@@ -19,7 +19,7 @@ const LOOK_ICON: Record<Look, [IconName, string]> = { done: ["checkcircle", "var
 
 /**
  * 成员看到的学习计划页（和小程序的 components/PlanMember 对应）。成员不再有单独的「作业」页，全在这一页：
- * 待交 / 已交两个数，每份作业一块（作业名 + 状态，下面直接平铺它的文件，点文件打开），底部「导出」「扫描上传」。
+ * 待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面每份作业一段（作业名 + 状态，下面直接平铺它的文件，点文件打开），底部「导出」「扫描上传」。
  * 扫描上传：连拍扫描（pages/scan，拍完回到这里）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
  * 交完页面跟着刷新，交了的作业整块标成绿色。交过的作业点作业名看自己那份的批改结果。
  * 拍好还没交的照片放在连拍扫描的那一批里（store/scan，plan = 这个计划），App 被杀也还在。
@@ -89,6 +89,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       await reload();
     } catch (e) {
       toastError(e);
+      if (planGone(e)) return void reload(); // 计划被解散 / 自己被移出了：重新拉一次，页面换成提示
       setHanding(true);
     } finally {
       setStage(null);
@@ -104,6 +105,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       toast(job ? (job.status === "done" ? "已生成" : "正在生成，好了会提醒你") : "服务器暂时不支持导出");
     } catch (e) {
       toastError(e);
+      if (planGone(e)) void reload();
     }
   };
 
@@ -122,8 +124,14 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         <Stat icon="clock" label="待交" value={todo.length} color={todo.length ? "var(--due)" : undefined} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? "var(--mastered)" : undefined} />
       </div>
-      {list.length === 0 && <div className="group"><div className="plan-files__empty">还没有作业</div></div>}
-      {list.map((a) => {
+      {/* 一张卡片：最上面是计划名 + 创建时间（只出现一次），下面一份份作业 */}
+      <div className="group">
+        <div className="plan-task plan-task--static">
+          <span className="t-headline ellipsis">{plan.name}</span>
+          <span className="t-foot c-sec">{createdLabel(plan.createdAt)}</span>
+        </div>
+        {list.length === 0 && <div className="plan-files__empty">还没有作业</div>}
+        {list.map((a) => {
         const look = lookOf(a);
         const waiting = a.status === "todo" || a.status === "returned";
         const mine = a.status !== "todo"; // 交过：点作业名看自己那份和批改结果
@@ -154,7 +162,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
           </>
         );
         return (
-          <div key={a.id} className="group">
+          <div key={a.id} className="plan-hw">
             {mine
               ? <button className={`plan-task plan-task--${look}`} onClick={() => nav(`/plans/a/${a.id}`)}>{head}</button>
               : <div className={`plan-task plan-task--${look} plan-task--static`}>{head}</div>}
@@ -168,6 +176,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
           </div>
         );
       })}
+      </div>
 
       <div className="bottom-bar" style={{ marginTop: "auto" }}>
         <Button variant="outline" icon="printer" disabled={exportable.length === 0} onClick={() => setExporting(true)}>导出</Button>
