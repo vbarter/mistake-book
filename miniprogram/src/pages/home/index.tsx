@@ -134,8 +134,10 @@ export default function Home() {
           <View className="pc" hoverClass="pc--hover" onClick={() => go("/pages/plans/index")}>
             <View className="pc__h">
               <Text className="pc__t">学习计划</Text>
-              <View className="pc__go">
-                <Icon name="chevron-right" size={11} color={C.tertiary} stroke={3} />
+              {/* 右上角直接新建；卡片其余地方点了还是进计划列表（和 App 一致） */}
+              <View className="pc__add" hoverClass="pc__add--hover" hoverStopPropagation onClick={(e) => (e.stopPropagation(), go("/pages/plan-new/index"))}>
+                <Icon name="plus" size={12} color="#ffffff" stroke={3} />
+                <Text>新建</Text>
               </View>
             </View>
             {hasPlans && plans ? (
