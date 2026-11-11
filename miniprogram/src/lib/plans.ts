@@ -65,7 +65,7 @@ export interface PlanDetailRes { plan: PlanInfo; assignments: (OwnerAssignment |
 export interface AssignmentRes { plan: PlanInfo; assignment: AssignmentDetail; board?: Board; invite?: Invite; submission?: SubmissionView | null }
 export interface SubmissionRes { plan: PlanInfo; assignment: AssignmentBrief | null; submission: SubmissionView; student?: { name: string; tail: string }; nav?: { index: number; total: number; prev: string | null; next: string | null } }
 interface Upload { id: string; clientId: string; method: string; url: string; headers?: Record<string, string> }
-export interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief; uploads: Upload[]; invite: Invite }
+export interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief | null; uploads: Upload[]; invite: Invite }
 
 /** 学习计划的数据有变化（回填完成、交了作业、批阅了）时通知页面重新拉 */
 export const PLANS_EVENT = "plans";
@@ -161,23 +161,26 @@ async function uploadAll(uploads: Upload[], drafts: DraftFile[], onStage?: (text
 const filesBody = (drafts: DraftFile[]) => drafts.map(({ clientId, kind, name, mime, size }) => ({ clientId, kind, name, mime, size }));
 
 /**
- * 确定布置：planId 为空 = 新建学习计划并布置第一份作业；否则在已有计划里布置一份。
+ * 确定布置：planId 为空 = 新建学习计划（带了文件就同时布置第一份作业，没带就只建计划，以后再布置）；否则在已有计划里布置一份。
  * 文件传完后，扫描件在后台识别成电子版（学生那边先看到照片，识别完自动换成电子版）。
  */
 export async function publishAssignment(planId: string | null, form: { name?: string; subject?: PlanSubject; dueAt: string | null; title?: string }, drafts: DraftFile[], onStage?: (text: string) => void): Promise<PublishRes> {
   onStage?.("正在创建");
   const res = await api<PublishRes>(planId ? `/api/plans/${planId}/assignments` : "/api/plans", { method: "POST", body: { ...form, files: filesBody(drafts) } });
-  try {
-    await uploadAll(res.uploads, drafts, onStage);
-  } catch (e) {
-    // 文件没传全就不留半份作业：新建的计划整个撤掉，已有计划里只撤这份
-    await (planId ? revokeAssignment(res.assignment.id) : deletePlan(res.plan.id)).catch(() => undefined);
-    throw e;
-  }
-  const scans = drafts.filter((d) => d.kind === "scan" && d.width && d.height);
-  if (scans.length) {
-    onStage?.("正在提交识别");
-    await startAssignmentScan(res.assignment.id, scans).catch(() => undefined); // 识别失败不影响布置：学生照样能看照片
+  const assignment = res.assignment;
+  if (assignment) {
+    try {
+      await uploadAll(res.uploads, drafts, onStage);
+    } catch (e) {
+      // 文件没传全就不留半份作业：新建的计划整个撤掉，已有计划里只撤这份
+      await (planId ? revokeAssignment(assignment.id) : deletePlan(res.plan.id)).catch(() => undefined);
+      throw e;
+    }
+    const scans = drafts.filter((d) => d.kind === "scan" && d.width && d.height);
+    if (scans.length) {
+      onStage?.("正在提交识别");
+      await startAssignmentScan(assignment.id, scans).catch(() => undefined); // 识别失败不影响布置：学生照样能看照片
+    }
   }
   bumpPlans();
   return res;

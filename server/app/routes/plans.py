@@ -292,7 +292,7 @@ def _invite(plan: Plan, assignment: PlanAssignment | None = None) -> dict:
 @bp.post("/plans")
 @login_required
 def create_plan():
-    """新建学习计划，同时布置第一份作业。返回文件的上传链接和转发用的邀请链接"""
+    """新建学习计划；带了文件就同时布置第一份作业，没带就只建计划。返回文件的上传链接和转发用的邀请链接"""
     user = current_user()
     data = request.get_json(silent=True) or {}
     name = str(data.get("name") or "").strip()[:60]
@@ -301,14 +301,14 @@ def create_plan():
     subject = data.get("subject") if data.get("subject") in PLAN_SUBJECTS else None
     if subject is None:
         abort(400, "选一个学科")
-    if not _clean_files(data.get("files"), ("scan", "attachment")):  # 先验完再建，免得留下半个计划
-        abort(400, "先扫描或上传一个附件")
+    # 可以先不放作业：建好就转发让大家加入，之后再布置（成员都能看到）
+    has_files = bool(_clean_files(data.get("files"), ("scan", "attachment")))  # 先验完再建，免得留下半个计划
     plan = Plan(owner_id=user.id, name=name, subject=subject, invite_code=_new_code())
     db.session.add(plan)
     db.session.flush()
-    assignment, uploads = _create_assignment(plan, data)
+    assignment, uploads = _create_assignment(plan, data) if has_files else (None, [])
     db.session.commit()
-    return jsonify({"plan": _plan_view(plan, "owner"), "assignment": _assignment_brief(assignment), "uploads": uploads, "invite": _invite(plan, assignment)}), 201
+    return jsonify({"plan": _plan_view(plan, "owner"), "assignment": _assignment_brief(assignment) if assignment else None, "uploads": uploads, "invite": _invite(plan, assignment)}), 201
 
 
 @bp.get("/plans")
