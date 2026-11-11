@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Icon, WechatIcon } from "../../components/Icon";
 import { Button, InlineNav } from "../../components/ui";
-import { SUBJECTS } from "../../lib/format";
-import { PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, publishAssignment, scanDraft, shareInvite, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject } from "../../lib/plans";
+import { attachmentDraft, fetchPlan, publishAssignment, scanDraft, shareInvite, sizeLabel, type DraftFile, type PlanInfo } from "../../lib/plans";
 import { haptic, isAndroid } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
 import { Busy, useScanPick } from "./shared";
@@ -28,7 +27,6 @@ export default function PlanNew() {
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState<PlanSubject | null>(null);
   const [files, setFiles] = useState<DraftFile[]>([]);
   const [stage, setStage] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -62,11 +60,10 @@ export default function PlanNew() {
 
   const submit = async () => {
     if (!planId && !name.trim()) return toast("给学习计划起个名字");
-    if (!planId && !subject) return toast("选一个学科");
     // 新建计划可以先不放作业：建好就转发让大家加入，之后再布置；在已有计划里布置就必须有内容
     if (planId && !files.length) return toast("先扫描或上传一个文件");
     try {
-      const res = await publishAssignment(planId ?? null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt: null, title: title.trim() }, files, setStage);
+      const res = await publishAssignment(planId ?? null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), dueAt: null, title: title.trim() }, files, setStage);
       setStage(null);
       void haptic.success();
       // 直接转发到微信；取消了也没关系，计划页还能再转发
@@ -96,16 +93,6 @@ export default function PlanNew() {
             <span className="plan-field__label"><span>作业名称</span><span style={{ fontWeight: 400 }}>选填</span></span>
             <input className="input input--card" value={title} maxLength={120} placeholder="例如：第三单元练习" onChange={(e) => setTitle(e.target.value)} />
           </label>
-        )}
-        {!planId && (
-          <div className="plan-field">
-            <span className="plan-field__label">学科</span>
-            <div className="plan-subjects">
-              {([...SUBJECTS, "mixed"] as PlanSubject[]).map((s) => (
-                <button key={s} className={`chip chip--select${subject === s ? " on" : ""}`} style={subject === s ? undefined : { background: "var(--card)" }} onClick={() => setSubject(s)} aria-pressed={subject === s}>{PLAN_SUBJECT_LABEL[s]}</button>
-              ))}
-            </div>
-          </div>
         )}
 
         <div className="plan-field">

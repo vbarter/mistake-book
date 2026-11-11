@@ -95,6 +95,11 @@ def test_create_validation(client, auth):
     assert client.post("/api/plans", json={"name": "x", "subject": "math", "files": [big]}, headers=auth).status_code == 413
     assert Plan.query.count() == 1  # 只有上面没放作业的那个
     assert client.post("/api/plans", json={"name": "x", "subject": "mixed", "files": [SCAN]}, headers=auth).status_code == 201
+    # 新建不再选学科：不带学科也能建，学科留空；转发落地页不显示学科这一行
+    r = client.post("/api/plans", json={"name": "寒假计划", "files": []}, headers=auth)
+    assert r.status_code == 201 and r.get_json()["plan"]["subject"] is None
+    page = client.get(f"/api/plans/j/{r.get_json()['invite']['code']}").get_data(as_text=True)
+    assert "<span>学科</span>" not in page and "还没有布置" in page
 
 
 def test_invite_preview_and_landing_page(client, auth):

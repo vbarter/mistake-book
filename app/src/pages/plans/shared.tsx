@@ -4,7 +4,7 @@ import { Button, Sheet } from "../../components/ui";
 import { Avatar, SubjectTile } from "../../components/v2";
 import { toPage, type FullPage } from "../../lib/folders";
 import { pickImages, takePhoto } from "../../lib/native";
-import { PLAN_SUBJECT_LABEL, createdLabel, type PlanInfo, type PlanSubject } from "../../lib/plans";
+import { teacherLine, createdLabel, type PlanInfo, type PlanSubject } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
 import "../../styles/plans.css";
@@ -25,7 +25,7 @@ export function PlanCreator({ plan, more, brief, onClick }: { plan: PlanInfo; mo
       <Avatar name={plan.teacher} url={plan.teacherAvatar} size={44} />
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, textAlign: "left" }}>
         <span className="t-headline ellipsis">{brief ? plan.teacher : plan.name}</span>
-        {!brief && <span className="t-foot c-sec ellipsis">{plan.teacher} · {PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}</span>}
+        {!brief && <span className="t-foot c-sec ellipsis">{teacherLine(plan.teacher, plan.subject)}</span>}
         {!brief && <span className="t-foot c-sec">{createdLabel(plan.createdAt)}</span>}
       </span>
       {onClick && (

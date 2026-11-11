@@ -8,7 +8,7 @@ import { errorText } from "../lib/api";
 import { currentUser, ensureLogin, isLoggedIn, updateProfile } from "../lib/auth";
 import { pickPhotos, type Source } from "../lib/capture";
 import { toast } from "../lib/hooks";
-import { DEFAULT_NICKNAME, PLANS_EVENT, PLAN_SUBJECT_LABEL, createdLabel, sharePayload, startPlanSync, type PlanInfo, type PlanSubject, type ResultRow, type ShareInfo } from "../lib/plans";
+import { DEFAULT_NICKNAME, PLANS_EVENT, teacherLine, createdLabel, sharePayload, startPlanSync, type PlanInfo, type PlanSubject, type ResultRow, type ShareInfo } from "../lib/plans";
 import { SHARE_TITLE } from "../lib/share";
 import { C } from "../lib/theme";
 
@@ -78,7 +78,7 @@ export function PlanCreator({ plan, more, onClick }: { plan: PlanInfo; more?: st
       <View className="flex1 col gap2 minw0">
         <Text className="t-headline ellipsis">{plan.name}</Text>
         <Text className="t-foot c-sec ellipsis">
-          {plan.teacher} · {PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}
+          {teacherLine(plan.teacher, plan.subject)}
         </Text>
         <Text className="t-foot c-sec">{createdLabel(plan.createdAt)}</Text>
       </View>

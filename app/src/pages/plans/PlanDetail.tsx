@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Avatar, Stat, Tag } from "../../components/v2";
-import { PLAN_SUBJECT_LABEL, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { planSubjectText, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
 import { openFile } from "./Assignment";
@@ -91,13 +91,13 @@ export default function PlanDetail() {
   const due = (iso: string, late = false) => (
     <span className="plan-count" style={{ color: late ? "var(--wrong)" : "var(--secondary)" }}><Icon name="clock" size={14} stroke={2.2} />{dueLabel(iso)}</span>
   );
-  const subject = PLAN_SUBJECT_LABEL[plan.subject] ?? "综合";
+  const subject = planSubjectText(plan.subject);
 
   return (
     <div className="screen">
       <InlineNav
         title={plan.name}
-        subtitle={subject}
+        subtitle={subject || undefined}
         back
         onBack={() => nav("/plans")}
         onTitle={openPanel}
