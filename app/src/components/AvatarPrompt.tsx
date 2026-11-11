@@ -5,38 +5,23 @@ import { toast, toastError } from "../store/banner";
 import { Button, Sheet } from "./ui";
 import { Avatar } from "./v2";
 
-const KEY = "syk.avatarPrompt";
-
-function asked(userId: string): boolean {
-  try {
-    return (JSON.parse(localStorage.getItem(KEY) || "{}") as Record<string, number>)[userId] > 0;
-  } catch {
-    return true; // 读不了本机记录就不弹，免得每次都打扰
-  }
-}
-
-function markAsked(userId: string) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify({ ...(JSON.parse(localStorage.getItem(KEY) || "{}") as Record<string, number>), [userId]: Date.now() }));
-  } catch {
-    /* 存不上就算了 */
-  }
-}
+// 这次打开 App 期间已经问过谁（只记在内存里：点了「暂不设置」这次不再打扰，下次重新打开 App 还没有头像就再问）
+const askedThisRun = new Set<string>();
 
 /**
  * 登录后发现账号还没有头像：弹一次，点一下从相册选一张。
- * 每个账号只问一次：换好了、点了「以后再说」或关掉面板都不再弹，之后在「我的」里点头像照样能换。
+ * 点「暂不设置」或关掉面板：这次打开期间不再弹，下次重新打开 App 时如果还没有头像再提示。
  */
 export function AvatarPrompt() {
   const { user, uploadAvatar } = useAuth();
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    if (user && !user.avatar && !asked(user.id)) setOpen(true);
+    if (user && !user.avatar && !askedThisRun.has(user.id)) setOpen(true);
   }, [user?.id, user?.avatar]);
   if (!user) return null;
 
   const close = () => {
-    markAsked(user.id);
+    askedThisRun.add(user.id);
     setOpen(false);
   };
   const choose = async () => {
@@ -60,7 +45,7 @@ export function AvatarPrompt() {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <Button icon="photo" onClick={() => void choose()}>从相册选一张</Button>
-        <Button variant="plain" onClick={close}>以后再说</Button>
+        <Button variant="plain" onClick={close}>暂不设置</Button>
       </div>
     </Sheet>
   );

@@ -23,6 +23,7 @@ function currentIndex(): number {
 interface State {
   selected: number;
   open: boolean;
+  hidden: boolean;
 }
 
 /**
@@ -31,10 +32,15 @@ interface State {
  * 每个 Tab 页各有一个实例，页面显示时用 setSelected 告诉它高亮哪个（lib/hooks 的 useTabBar）。
  */
 export default class CustomTabBar extends Component<object, State> {
-  state: State = { selected: currentIndex(), open: false };
+  state: State = { selected: currentIndex(), open: false, hidden: false };
 
   setSelected(selected: number) {
     this.setState({ selected, open: false });
+  }
+
+  /** 页面弹出底部面板时把 Tab 栏藏起来，免得盖住面板最下面的按钮（components/ui 的 Sheet 调用） */
+  setHidden(hidden: boolean) {
+    this.setState({ hidden, open: false });
   }
 
   go = (i: number) => {
@@ -75,7 +81,8 @@ export default class CustomTabBar extends Component<object, State> {
   }
 
   render() {
-    const { open } = this.state;
+    const { open, hidden } = this.state;
+    if (hidden) return null;
     return (
       <View className="ctb">
         {open && <View className="ctb-scrim" catchMove onClick={() => this.setState({ open: false })} />}

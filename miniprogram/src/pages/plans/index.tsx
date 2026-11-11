@@ -40,14 +40,13 @@ export default function Plans() {
   const joined = plans?.filter((p) => p.role === "member") ?? [];
   const card = (p: PlanInfo) => (
     <View key={p.id} className="card card--row" hoverClass="card--pressed" onClick={() => Taro.navigateTo({ url: `/pages/plan/index?id=${p.id}` })}>
-      {/* 左边是创建人的头像（我创建的就是自己的），学科写在第二行 */}
+      {/* 左边是创建人的头像（我创建的就是自己的），第二行是创建人的名字和学科 */}
       <Avatar name={p.teacher} url={p.teacherAvatar} size={52} />
       <View className="flex1 col gap2 minw0">
         <Text className="t-headline ellipsis">{p.name}</Text>
         <View className="plan-counts" style={{ gap: "10px" }}>
           <Text className="t-foot c-sec ellipsis">
-            {p.role === "member" ? `${p.teacher} · ` : ""}
-            {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}
+            {p.teacher} · {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}
           </Text>
           {p.role === "owner" && (
             <Count icon="family" color={C.tertiary}>
