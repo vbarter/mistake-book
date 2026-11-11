@@ -701,6 +701,10 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-thumb { position: relative; }
 .plan-thumb__x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 11px; background: $label; display: flex; align-items: center; justify-content: center; }
 .plan-join { align-items: center; text-align: center; gap: 6px; padding: 28px 20px; }
+.plan-join__members { align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; padding-top: 14px; border-top: 1px solid $sep-light; }
+.avatar-stack { display: flex; flex-shrink: 0; }
+.avatar-stack__item { margin-left: -8px; border: 2px solid #fff; border-radius: 16px; display: flex; }
+.avatar-stack__item:first-child { margin-left: 0; }
 .group--fill { background: $fill-light; }
 .stat--ok { background: $ok-bg; }
 .stat--wrong { background: $wrong-bg; }
