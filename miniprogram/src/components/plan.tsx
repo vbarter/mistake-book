@@ -135,7 +135,7 @@ export function ScanSheet({ open, title = "扫描", onClose, onPhotos }: { open:
       if (paths.length) onPhotos(paths);
     } catch (e) {
       const msg = String((e as { errMsg?: string }).errMsg || (e as Error).message || "");
-      if (!/cancel/i.test(msg)) toast(/auth|权限/.test(msg) ? "需要相机 / 相册权限，可以在右上角「设置」里打开" : errorText(e));
+      if (!/cancel/i.test(msg)) void Taro.showModal({ title: "没选成", content: errorText(e), showCancel: false });
     }
   };
   const tile = (icon: IconName, name: string, source: Source) => (
