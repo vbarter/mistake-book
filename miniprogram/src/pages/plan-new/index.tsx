@@ -5,10 +5,9 @@ import { Icon, WechatIcon } from "../../components/Icon";
 import { Busy, LoginGate, ScanSheet, ShareButton, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { Button, Sheet } from "../../components/ui";
 import { errorText } from "../../lib/api";
-import { SUBJECTS } from "../../lib/format";
 import { pickPhotos } from "../../lib/capture";
 import { toast } from "../../lib/hooks";
-import { MAX_FILES, PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, imageAttachmentDraft, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject, type PublishRes } from "../../lib/plans";
+import { MAX_FILES, attachmentDraft, fetchPlan, imageAttachmentDraft, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PublishRes } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
 /**
@@ -22,7 +21,6 @@ export default function PlanNew() {
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState<PlanSubject | null>(null);
   const [files, setFiles] = useState<DraftFile[]>([]);
   const [scanning, setScanning] = useState(false);
   const [attaching, setAttaching] = useState(false);
@@ -122,11 +120,10 @@ export default function PlanNew() {
 
   const submit = async () => {
     if (!planId && !name.trim()) return void toast("给学习计划起个名字");
-    if (!planId && !subject) return void toast("选一个学科");
     // 新建计划可以先不放作业：建好就转发让大家加入，之后再布置；在已有计划里布置就必须有内容
     if (planId && !files.length) return void toast("先扫描或上传一个文件");
     try {
-      const res = await publishAssignment(planId || null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt: null, title: title.trim() }, files, setStage);
+      const res = await publishAssignment(planId || null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), dueAt: null, title: title.trim() }, files, setStage);
       setStage(null);
       void Taro.vibrateShort({ type: "light" }).catch(() => undefined);
       setDone(res);
@@ -162,21 +159,6 @@ export default function PlanNew() {
             <Text>计划名称</Text>
           </View>
           <Input className="input input--card" value={name} maxlength={60} placeholder="例如：五（2）班数学" onInput={(e) => setName(e.detail.value)} />
-        </View>
-      )}
-
-      {!planId && (
-        <View className="plan-field">
-          <View className="plan-field__label">
-            <Text>学科</Text>
-          </View>
-          <ScrollView scrollX className="hscroll" enhanced showScrollbar={false}>
-            {([...SUBJECTS, "mixed"] as PlanSubject[]).map((s) => (
-              <View key={s} className={`chip chip--card${subject === s ? " chip--on" : ""}`} onClick={() => setSubject(s)}>
-                {PLAN_SUBJECT_LABEL[s]}
-              </View>
-            ))}
-          </ScrollView>
         </View>
       )}
 

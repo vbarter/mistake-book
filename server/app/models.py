@@ -447,14 +447,14 @@ class SyncPage(db.Model):
 
 
 class Plan(db.Model):
-    """学习计划：一位创建人（老师）+ 一个学科 + 一组成员 + 若干份作业。成员靠点微信里的卡片（带 invite_code）加入"""
+    """学习计划：一位创建人（老师）+ 一组成员 + 若干份作业。成员靠点微信里的卡片（带 invite_code）加入"""
 
     __tablename__ = "plans"
 
     id = db.Column(db.String(32), primary_key=True, default=_uuid)
     owner_id = db.Column(db.String(32), index=True, nullable=False)
     name = db.Column(db.String(60), default="")
-    subject = db.Column(db.String(16), nullable=True)  # SUBJECTS 之一或 mixed（综合）
+    subject = db.Column(db.String(16), nullable=True)  # 新建不再选学科，留空；老计划是 SUBJECTS 之一或 mixed（综合）
     invite_code = db.Column(db.String(16), unique=True, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.now)
 

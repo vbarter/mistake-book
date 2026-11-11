@@ -292,20 +292,39 @@ def _owner_counts(plan: Plan, assignments: list[PlanAssignment]) -> dict[str, di
 # --------------------------------------------------------------------------- 计划
 
 
-def _create_assignment(plan: Plan, data: dict) -> tuple[PlanAssignment, list[dict]]:
+def _create_assignments(plan: Plan, data: dict) -> tuple[list[PlanAssignment], list[dict]]:
+    """布置：一个附件就是一份作业（同学一份一份地交、各有各的状态）；扫描件是同一份卷子的几页，合成一份。
+    返回的第一份是带扫描件的那份（有的话），客户端拿它去回填电子版、转发。"""
     files = _clean_files(data.get("files"), ("scan", "attachment"))
     if not files:
         abort(400, "先扫描或上传一个附件")
-    title = str(data.get("title") or "").strip()[:120]
-    if not title:
-        named = next((f["name"].rsplit(".", 1)[0] for f in files if f["kind"] == "attachment" and f["name"]), "")
-        now = datetime.now()
-        title = named or f"{now.month}月{now.day}日作业"
+    scans = [f for f in files if f["kind"] == "scan"]
+    units = ([scans] if scans else []) + [[f] for f in files if f["kind"] != "scan"]
+    custom = str(data.get("title") or "").strip()[:120]
+    now = datetime.now()
     due = data.get("dueAt")
-    a = PlanAssignment(plan_id=plan.id, title=title, due_at=due[:32] if isinstance(due, str) and due else None)
-    db.session.add(a)
-    db.session.flush()
-    return a, _add_files(plan, a, files)
+    due = due[:32] if isinstance(due, str) and due else None
+    out: list[PlanAssignment] = []
+    uploads: list[dict] = []
+    for i, unit in enumerate(units):
+        named = unit[0]["name"].rsplit(".", 1)[0] if unit[0]["kind"] == "attachment" and unit[0]["name"] else ""
+        # 起的名字只在只有一份时用；一次布置了几份就各用各的文件名
+        title = (custom if len(units) == 1 else "") or named or custom or f"{now.month}月{now.day}日作业"
+        # 列表按创建时间倒序：往前错开一秒，页面上就和选文件的顺序一致
+        a = PlanAssignment(plan_id=plan.id, title=title[:120], due_at=due, created_at=now - timedelta(seconds=i))
+        db.session.add(a)
+        db.session.flush()
+        out.append(a)
+        uploads += _add_files(plan, a, unit)
+    return out, uploads
+
+
+def _created_body(plan: Plan, assignments: list[PlanAssignment], uploads: list[dict]) -> dict:
+    first = assignments[0] if assignments else None
+    return {
+        "plan": _plan_view(plan, "owner"), "assignment": _assignment_brief(first) if first else None,
+        "assignments": [_assignment_brief(a) for a in assignments], "uploads": uploads, "invite": _invite(plan, first),
+    }
 
 
 def _invite(plan: Plan, assignment: PlanAssignment | None = None) -> dict:
@@ -323,17 +342,18 @@ def create_plan():
     name = str(data.get("name") or "").strip()[:60]
     if not name:
         abort(400, "给学习计划起个名字")
-    subject = data.get("subject") if data.get("subject") in PLAN_SUBJECTS else None
-    if subject is None:
-        abort(400, "选一个学科")
+    # 新建不再选学科：不带就留空；老版本客户端带了合法学科的照存，带了不认识的仍然报错
+    subject = data.get("subject") or None
+    if subject is not None and subject not in PLAN_SUBJECTS:
+        abort(400, "学科不对")
     # 可以先不放作业：建好就转发让大家加入，之后再布置（成员都能看到）
     has_files = bool(_clean_files(data.get("files"), ("scan", "attachment")))  # 先验完再建，免得留下半个计划
     plan = Plan(owner_id=user.id, name=name, subject=subject, invite_code=_new_code())
     db.session.add(plan)
     db.session.flush()
-    assignment, uploads = _create_assignment(plan, data) if has_files else (None, [])
+    assignments, uploads = _create_assignments(plan, data) if has_files else ([], [])
     db.session.commit()
-    return jsonify({"plan": _plan_view(plan, "owner"), "assignment": _assignment_brief(assignment) if assignment else None, "uploads": uploads, "invite": _invite(plan, assignment)}), 201
+    return jsonify(_created_body(plan, assignments, uploads)), 201
 
 
 @bp.get("/plans")
@@ -634,9 +654,9 @@ def remove_member(plan_id: str, user_id: str):
 def create_assignment(plan_id: str):
     plan = _plan_or_404(plan_id)
     _require_role(plan, "owner")
-    assignment, uploads = _create_assignment(plan, request.get_json(silent=True) or {})
+    assignments, uploads = _create_assignments(plan, request.get_json(silent=True) or {})
     db.session.commit()
-    return jsonify({"plan": _plan_view(plan, "owner"), "assignment": _assignment_brief(assignment), "uploads": uploads, "invite": _invite(plan, assignment)}), 201
+    return jsonify(_created_body(plan, assignments, uploads)), 201
 
 
 @bp.post("/plans/files/uploaded")
@@ -932,8 +952,6 @@ def merge_user_plans(source_id: str, target_id: str) -> None:
 # --------------------------------------------------------------------------- 转发出去的链接落地页
 
 
-_SUBJECT_NAMES = {**SUBJECT_LABELS, "mixed": "综合"}
-
 _LANDING = """<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -956,7 +974,7 @@ h1{{margin:6px 0 0;font-size:24px;line-height:1.35}}
 .mask.on{{display:block}}.mask b{{font-size:30px}}
 </style></head><body>
 <div class="top"><div class="brand">上壹课 · 学习计划</div><div class="who">{avatar}<span>{teacher} 邀请你加入</span></div><h1>{name}</h1></div>
-<div class="card"><div class="row"><span>学科</span><span class="tag">{subject}</span></div>{assignment}{joined}</div>
+<div class="card">{subject}{assignment}{joined}</div>
 <div class="grow"></div>
 <div class="bar"><a class="btn" id="open" href="{deeplink}">打开上壹课，加入学习计划</a>
 <div class="tip" id="tip">{download}</div></div>
@@ -1011,9 +1029,13 @@ def landing(code: str):
         joined = f'<div class="joined"><div class="stack">{stack}</div><span>已有 {people["count"]} 人加入</span></div>'
     dl = current_app.config.get("APP_DOWNLOAD_URL") or ""
     download = f'还没装上壹课？<a href="{escape(dl)}">去下载</a>，装好后再点一次这张卡片' if dl else "还没装上壹课？先在应用商店搜索「上壹课」安装，再点一次这张卡片"
+    # 没有学科（新建不再选）或老的「综合」就不显示学科这一行
+    subject_row = f'<div class="row"><span>学科</span><span class="tag">{SUBJECT_LABELS[plan.subject]}</span></div>' if plan.subject in SUBJECT_LABELS else ""
+    if not (subject_row or rows or joined):
+        rows = '<div class="row"><span>作业</span><span>还没有布置</span></div>'  # 卡片不能是空的
     html = _LANDING.format(
         title=escape(f"{_teacher_name(plan)}邀请你加入「{plan.name}」"), desc=escape(a.title if a else "打开上壹课加入学习计划"),
-        teacher=escape(_teacher_name(plan)), name=escape(plan.name), subject=_SUBJECT_NAMES.get(plan.subject, "综合"),
+        teacher=escape(_teacher_name(plan)), name=escape(plan.name), subject=subject_row,
         assignment=rows, joined=joined, avatar=ava(_teacher_name(plan), avatar_url(plan.owner_id)), deeplink=escape(deeplink), deeplink_js=json.dumps(deeplink), download=download,
     )
     return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"}

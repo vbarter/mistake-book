@@ -31,7 +31,7 @@ RESULTS = [
 
 
 def _create(client, teacher, **over):
-    body = {"name": "五年级数学", "subject": "math", "dueAt": "2099-01-01T20:00:00", "files": [SCAN, PDF], **over}
+    body = {"name": "五年级数学", "subject": "math", "dueAt": "2099-01-01T20:00:00", "files": [SCAN], **over}
     r = client.post("/api/plans", json=body, headers=teacher)
     assert r.status_code == 201, r.get_json()
     return r.get_json()
@@ -62,9 +62,9 @@ def _submit(client, headers, aid, results=RESULTS):
 
 
 def test_create_plan_with_first_assignment(client, auth):
-    out = _create(client, auth)
+    out = _create(client, auth, files=[SCAN, {**SCAN, "clientId": "c2", "name": "第 2 页.jpg"}])
     assert out["plan"]["role"] == "owner" and out["plan"]["subject"] == "math"
-    assert out["assignment"]["title"] == "第三单元练习"  # 没填标题，取附件名
+    assert len(out["assignments"]) == 1  # 扫描件是同一份卷子的几页，合成一份
     assert [u["clientId"] for u in out["uploads"]] == ["c1", "c2"]
     assert f"/api/plans/j/{out['invite']['code']}?a={out['assignment']['id']}" in out["invite"]["url"]
 
@@ -77,9 +77,9 @@ def test_create_plan_with_first_assignment(client, auth):
     assert client.post("/api/plans/files/uploaded", json={"ids": [out["uploads"][0]["id"]]}, headers=other).get_json()["done"] == []
     _upload(client, auth, out["uploads"])
     a = client.get(f"/api/plans/assignments/{out['assignment']['id']}", headers=auth).get_json()["assignment"]
-    assert all(f["url"] for f in a["files"]) and [f["kind"] for f in a["files"]] == ["scan", "attachment"]
+    assert all(f["url"] for f in a["files"]) and [f["kind"] for f in a["files"]] == ["scan", "scan"]
     got = client.get(a["files"][1]["url"])
-    assert got.status_code == 200 and got.mimetype == "application/pdf"
+    assert got.status_code == 200 and got.mimetype == "image/jpeg"
 
     listing = client.get("/api/plans", headers=auth).get_json()
     assert listing["plans"][0]["members"] == 0 and listing["summary"]["owned"] == 1
@@ -95,6 +95,11 @@ def test_create_validation(client, auth):
     assert client.post("/api/plans", json={"name": "x", "subject": "math", "files": [big]}, headers=auth).status_code == 413
     assert Plan.query.count() == 1  # 只有上面没放作业的那个
     assert client.post("/api/plans", json={"name": "x", "subject": "mixed", "files": [SCAN]}, headers=auth).status_code == 201
+    # 新建不再选学科：不带学科也能建，学科留空；转发落地页不显示学科这一行
+    r = client.post("/api/plans", json={"name": "寒假计划", "files": []}, headers=auth)
+    assert r.status_code == 201 and r.get_json()["plan"]["subject"] is None
+    page = client.get(f"/api/plans/j/{r.get_json()['invite']['code']}").get_data(as_text=True)
+    assert "<span>学科</span>" not in page and "还没有布置" in page
 
 
 def test_invite_preview_and_landing_page(client, auth):
@@ -291,7 +296,7 @@ def test_dissolve_deletes_everything(client, auth, app):
     with app.app_context():
         store = storage.get_storage()
         keys = [f.key for f in PlanFile.query.all()]
-        assert len(keys) == 3 and all(store.exists(k) for k in keys)
+        assert len(keys) == 2 and all(store.exists(k) for k in keys)
     assert client.delete(f"/api/plans/{pid}", headers=stu).status_code == 403
     assert client.delete(f"/api/plans/{pid}", headers=auth).status_code == 200
     with app.app_context():
@@ -436,7 +441,7 @@ def test_owner_plan_page_has_files_and_member_status(client, auth):
     sid = _submit(client, s1, aid)
 
     body = client.get(f"/api/plans/{pid}", headers=auth).get_json()
-    assert [f["name"] for f in body["assignments"][0]["files"]] == ["第 1 页.jpg", "第三单元练习.pdf"]
+    assert [f["name"] for f in body["assignments"][0]["files"]] == ["第 1 页.jpg"]
     assert all(f["url"] for f in body["assignments"][0]["files"])
     assert (body["plan"]["members"], body["plan"]["missing"], body["plan"]["submittedToday"]) == (2, 1, 1)
     rows = {m["userId"]: m for m in body["members"]}
@@ -480,7 +485,7 @@ def test_member_plan_page_has_files_and_marks_viewed(client, auth):
     assert before[uid]["items"][0]["viewed"] is False
 
     mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
-    assert [f["name"] for f in mine[0]["files"]] == ["第 1 页.jpg", "第三单元练习.pdf"]
+    assert [f["name"] for f in mine[0]["files"]] == ["第 1 页.jpg"]
     assert all(f["url"] for f in mine[0]["files"]) and mine[0]["digitized"] is False and mine[0]["status"] == "todo"
     assert client.get(f"/api/plans/{pid}", headers=student).status_code == 200  # 再打开一次不会重复记
     after = {m["userId"]: m for m in client.get(f"/api/plans/{pid}", headers=auth).get_json()["members"]}
@@ -489,7 +494,7 @@ def test_member_plan_page_has_files_and_marks_viewed(client, auth):
     # 交了以后状态跟着变；带的是作业的文件，不是自己交的那几页
     _submit(client, student, aid)
     mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
-    assert mine[0]["status"] == "submitted" and len(mine[0]["files"]) == 2
+    assert mine[0]["status"] == "submitted" and len(mine[0]["files"]) == 1
 
 
 def test_dissolve_still_works_without_tombstone_table(client, auth):
@@ -509,3 +514,61 @@ def test_dissolve_still_works_without_tombstone_table(client, auth):
         assert client.get(f"/api/plans/invite/{code}").status_code == 404
     finally:
         PlanTombstone.__table__.create(db.engine)
+
+
+def test_each_attachment_is_its_own_assignment(client, auth):
+    """一次布置几个附件：每个附件是一份作业，同学一份一份地交、各有各的状态；扫描件合成一份"""
+    pdf2 = {**PDF, "clientId": "c3", "name": "物理一模.pdf"}
+    out = _create(client, auth, files=[PDF, SCAN, pdf2], title="随便起的名字")
+    pid, code = out["plan"]["id"], out["invite"]["code"]
+    # 第一份是带扫描件的那份（客户端拿它回填电子版），附件各用各的文件名
+    assert [a["title"] for a in out["assignments"]] == ["随便起的名字", "第三单元练习", "物理一模"]
+    assert out["assignment"]["id"] == out["assignments"][0]["id"]
+    assert sorted(u["clientId"] for u in out["uploads"]) == ["c1", "c2", "c3"]
+    _upload(client, auth, out["uploads"])
+
+    student, _ = _login(client, "13800000031", "小明")
+    _join(client, student, code)
+    mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
+    assert [(a["title"], [f["name"] for f in a["files"]], a["status"]) for a in mine] == [
+        ("随便起的名字", ["第 1 页.jpg"], "todo"), ("第三单元练习", ["第三单元练习.pdf"], "todo"), ("物理一模", ["物理一模.pdf"], "todo"),
+    ]
+    # 只交其中一份，另外两份还是待交
+    _submit(client, student, mine[1]["id"])
+    mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
+    assert [a["status"] for a in mine] == ["todo", "submitted", "todo"]
+
+    # 只有一个附件时，起的名字照用；以后再布置也是一个附件一份
+    r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF], "title": "周末练习"}, headers=auth).get_json()
+    assert [a["title"] for a in r["assignments"]] == ["周末练习"]
+    r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF, pdf2]}, headers=auth).get_json()
+    assert [a["title"] for a in r["assignments"]] == ["第三单元练习", "物理一模"]
+
+
+def test_split_script_for_old_multi_attachment_assignments(client, auth, app):
+    """以前一份作业带几个附件：脚本拆成一个附件一份，原来那份和已交的不动"""
+    from app.extensions import db
+    from app.models import PlanAssignment, PlanFile
+
+    from scripts.split_plan_assignments import split
+
+    out = _create(client, auth, files=[PDF])
+    pid, aid, code = out["plan"]["id"], out["assignment"]["id"], out["invite"]["code"]
+    _upload(client, auth, out["uploads"])
+    with app.app_context():  # 造一份老数据：同一份作业下再挂两个附件
+        for i, name in enumerate(["物理一模.pdf", "英语一模.pdf"], 1):
+            db.session.add(PlanFile(plan_id=pid, assignment_id=aid, kind="attachment", name=name, mime="application/pdf", ext="pdf", size=10, position=i, uploaded=True))
+        db.session.commit()
+    student, _ = _login(client, "13800000041", "小明")
+    _join(client, student, code)
+    _submit(client, student, aid)
+
+    with app.app_context():
+        assert [r["split"] for r in split()] == [["物理一模.pdf", "英语一模.pdf"]]
+        assert PlanAssignment.query.count() == 1  # 不加 apply 不改
+        split(apply=True)
+        assert split() == []  # 拆过了，再跑什么都不做
+    mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
+    assert [(a["title"], [f["name"] for f in a["files"]], a["status"]) for a in mine] == [
+        ("第三单元练习", ["第三单元练习.pdf"], "submitted"), ("物理一模", ["物理一模.pdf"], "todo"), ("英语一模", ["英语一模.pdf"], "todo"),
+    ]

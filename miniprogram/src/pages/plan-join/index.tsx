@@ -7,12 +7,12 @@ import { Avatar, Button } from "../../components/ui";
 import { api, errorText } from "../../lib/api";
 import { LOGIN_CLOSED_EVENT, LOGIN_PAGE, currentUser, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { DEFAULT_NICKNAME, PLAN_SUBJECT_LABEL, bumpPlans, joinPlan, joinedText, startPlanSync, type AssignmentBrief, type JoinedPreview, type PlanInfo, type PlanSubject } from "../../lib/plans";
+import { DEFAULT_NICKNAME, teacherLine, bumpPlans, joinPlan, joinedText, startPlanSync, type AssignmentBrief, type JoinedPreview, type PlanInfo, type PlanSubject } from "../../lib/plans";
 import { useShare } from "../../lib/share";
 import { C } from "../../lib/theme";
 
 interface Preview {
-  plan: { id: string; name: string; subject: PlanSubject; teacher: string; teacherAvatar?: string | null };
+  plan: { id: string; name: string; subject: PlanSubject | null; teacher: string; teacherAvatar?: string | null };
   assignment: AssignmentBrief | null;
   /** 旧版本的服务器不给这一项 */
   members?: JoinedPreview;
@@ -110,7 +110,7 @@ export default function PlanJoin() {
           <View className="card plan-join" style={{ width: "100%", boxSizing: "border-box" }}>
             <Avatar name={preview.plan.teacher} url={preview.plan.teacherAvatar} size={64} />
             <Text className="t-foot c-sec" style={{ marginTop: "8px" }}>
-              {preview.plan.teacher} · {PLAN_SUBJECT_LABEL[preview.plan.subject] ?? "综合"}
+              {teacherLine(preview.plan.teacher, preview.plan.subject)}
             </Text>
             <Text className="t-title2" style={{ fontWeight: 800 }}>
               {preview.plan.name}
