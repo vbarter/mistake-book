@@ -4,13 +4,13 @@ import { ApiError, api } from "../../api/client";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, InlineNav, Spinner } from "../../components/ui";
 import { Avatar } from "../../components/v2";
-import { DEFAULT_NICKNAME, PLAN_SUBJECT_LABEL, joinPlan, joinedText, rememberJoin, usePlans, type AssignmentBrief, type JoinedPreview, type PlanInfo, type PlanSubject } from "../../lib/plans";
+import { DEFAULT_NICKNAME, teacherLine, joinPlan, joinedText, rememberJoin, usePlans, type AssignmentBrief, type JoinedPreview, type PlanInfo, type PlanSubject } from "../../lib/plans";
 import { useAuth } from "../../store/auth";
 import { toast } from "../../store/banner";
 import { ConfirmSheet, NameSheet } from "./shared";
 
 interface Preview {
-  plan: { id: string; name: string; subject: PlanSubject; teacher: string; teacherAvatar?: string | null };
+  plan: { id: string; name: string; subject: PlanSubject | null; teacher: string; teacherAvatar?: string | null };
   assignment: AssignmentBrief | null;
   /** 旧版本的服务器不给这一项 */
   members?: JoinedPreview;
@@ -87,7 +87,7 @@ export default function PlanJoin() {
         <div className="screen__content screen__content--modal" style={{ paddingTop: 24, gap: 16 }}>
           <div className="card" style={{ alignItems: "center", textAlign: "center", gap: 6, padding: "28px 20px" }}>
             <Avatar name={preview.plan.teacher} url={preview.plan.teacherAvatar} size={64} />
-            <span className="t-foot c-sec" style={{ marginTop: 8 }}>{preview.plan.teacher} · {PLAN_SUBJECT_LABEL[preview.plan.subject] ?? "综合"}</span>
+            <span className="t-foot c-sec" style={{ marginTop: 8 }}>{teacherLine(preview.plan.teacher, preview.plan.subject)}</span>
             <span className="t-title2" style={{ fontWeight: 800 }}>{preview.plan.name}</span>
             {preview.assignment && (
               <span className="t-sub c-sec" style={{ display: "flex", alignItems: "center", gap: 4 }}>

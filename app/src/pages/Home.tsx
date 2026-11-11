@@ -10,7 +10,7 @@ import { allErrors } from "../lib/errors";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
 import { analyze, inRange } from "../lib/insights";
 import { scanStageText, useJobs } from "../lib/jobs";
-import { PLAN_SUBJECT_LABEL, dueLabel, fetchPlans, joinPath, pendingJoin, planIdleLabel, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
+import { teacherLine, dueLabel, fetchPlans, joinPath, pendingJoin, planIdleLabel, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/banner";
 
@@ -117,7 +117,7 @@ export default function Home() {
                   <Avatar name={p.teacher} url={p.teacherAvatar} size={36} />
                   <span className="plist__main">
                     <span className="plist__name ellipsis">{p.name}</span>
-                    <span className="plist__sub ellipsis">{p.teacher} · {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}</span>
+                    <span className="plist__sub ellipsis">{teacherLine(p.teacher, p.subject)}</span>
                   </span>
                   {pending(p) > 0
                     ? <Tag kind={p.role === "owner" ? "info" : "pending"}>{p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}</Tag>
@@ -176,7 +176,7 @@ export default function Home() {
                   <Avatar name={p.teacher} url={p.teacherAvatar} size={36} />
                   <span className="plist__main">
                     <span className="plist__name ellipsis">{p.name}</span>
-                    <span className="plist__sub ellipsis">{p.teacher} · {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}</span>
+                    <span className="plist__sub ellipsis">{teacherLine(p.teacher, p.subject)}</span>
                   </span>
                   {pending(p) > 0
                     ? <Tag kind={p.role === "owner" ? "info" : "pending"}>{p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}</Tag>

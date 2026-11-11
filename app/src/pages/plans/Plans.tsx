@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Icon } from "../../components/Icon";
 import { Button, InlineNav, Spinner } from "../../components/ui";
 import { Avatar, Tag } from "../../components/v2";
-import { PLAN_SUBJECT_LABEL, byNewest, createdLabel, fetchPlans, usePlans, type PlanInfo } from "../../lib/plans";
+import { teacherLine, byNewest, createdLabel, fetchPlans, usePlans, type PlanInfo } from "../../lib/plans";
 import { toastError } from "../../store/banner";
 import { Count } from "./shared";
 
@@ -27,7 +27,7 @@ export default function Plans() {
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span className="t-headline ellipsis">{p.name}</span>
         <span className="plan-counts" style={{ gap: 10 }}>
-          <span className="t-foot c-sec ellipsis">{p.teacher} · {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}</span>
+          <span className="t-foot c-sec ellipsis">{teacherLine(p.teacher, p.subject)}</span>
           {p.role === "owner" && <Count icon="family" color="var(--tertiary)">{p.members ?? 0}</Count>}
           <Count icon="document" color="var(--tertiary)">{p.assignments ?? 0}</Count>
         </span>

@@ -16,7 +16,10 @@ import { getCity } from "./prefs";
 import { SUBJECT_LABEL } from "./format";
 
 export type PlanSubject = Subject | "mixed";
-export const PLAN_SUBJECT_LABEL: Record<PlanSubject, string> = { ...SUBJECT_LABEL, mixed: "综合" };
+/** 新建学习计划不再选学科：没有学科（或老的「综合」）就不显示学科，老计划选过的具体学科照旧显示 */
+export const planSubjectText = (subject: PlanSubject | null | undefined): string => (subject && subject !== "mixed" ? SUBJECT_LABEL[subject] ?? "" : "");
+/** 「小同学 · 数学」；没有学科时只有名字 */
+export const teacherLine = (teacher: string, subject: PlanSubject | null | undefined): string => [teacher, planSubjectText(subject)].filter(Boolean).join(" · ");
 export const DEFAULT_NICKNAME = "小同学";
 export const MAX_PLAN_FILE_BYTES = 20 * 1024 * 1024;
 export const ATTACHMENT_MIMES = [
@@ -33,7 +36,7 @@ export interface Score { total: number; correct: number; wrong: number; blank: n
 export interface PlanInfo {
   id: string;
   name: string;
-  subject: PlanSubject;
+  subject: PlanSubject | null;
   role: "owner" | "member";
   teacher: string;
   teacherAvatar?: string | null;

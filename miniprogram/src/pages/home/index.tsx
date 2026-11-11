@@ -12,7 +12,7 @@ import { analyze, inRange } from "../../lib/insights";
 import { pollPendingJobs, scanStageText } from "../../lib/jobs";
 import { currentUser, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLANS_EVENT, PLAN_SUBJECT_LABEL, dueLabel, fetchPlans, planIdleLabel, type PlanInfo, type PlanSummary } from "../../lib/plans";
+import { PLANS_EVENT, teacherLine, dueLabel, fetchPlans, planIdleLabel, type PlanInfo, type PlanSummary } from "../../lib/plans";
 import { listFolders } from "../../lib/store";
 import { C } from "../../lib/theme";
 import { useShare, useShareTimelineToo } from "../../lib/share";
@@ -177,7 +177,7 @@ export default function Home() {
                 <View className="plist__main">
                   <Text className="plist__name ellipsis">{p.name}</Text>
                   <Text className="plist__sub ellipsis">
-                    {p.teacher} · {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}
+                    {teacherLine(p.teacher, p.subject)}
                   </Text>
                 </View>
                 {pending(p) > 0 ? (

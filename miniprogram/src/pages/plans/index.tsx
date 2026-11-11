@@ -6,7 +6,7 @@ import { Count, LoginGate, loggedIn, usePlansVersion } from "../../components/pl
 import { Avatar, Button, Empty, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { PLAN_SUBJECT_LABEL, byNewest, createdLabel, fetchPlans, type PlanInfo } from "../../lib/plans";
+import { teacherLine, byNewest, createdLabel, fetchPlans, type PlanInfo } from "../../lib/plans";
 import { useShare } from "../../lib/share";
 import { C } from "../../lib/theme";
 
@@ -47,7 +47,7 @@ export default function Plans() {
         <Text className="t-headline ellipsis">{p.name}</Text>
         <View className="plan-counts" style={{ gap: "10px" }}>
           <Text className="t-foot c-sec ellipsis">
-            {p.teacher} · {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}
+            {teacherLine(p.teacher, p.subject)}
           </Text>
           {p.role === "owner" && (
             <Count icon="family" color={C.tertiary}>

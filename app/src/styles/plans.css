@@ -2,9 +2,6 @@
 
 .plan-field { display: flex; flex-direction: column; gap: 8px; }
 .plan-field__label { font-size: 13px; line-height: 18px; font-weight: 600; color: var(--secondary); padding: 0 4px; display: flex; justify-content: space-between; }
-.plan-subjects { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-.plan-subjects::-webkit-scrollbar { display: none; }
-.plan-subjects .chip { flex-shrink: 0; }
 .input--card { background: var(--card); }
 
 /* 作业内容：文件列表自己滚，扫描 / 上传文件两个按钮固定在列表下面 */
