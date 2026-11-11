@@ -29,5 +29,7 @@ export function useTabBar(index: number) {
   useDidShow(() => {
     const bar = Taro.getTabBar<{ setSelected?: (i: number) => void }>(page);
     bar?.setSelected?.(index);
+    // 原生 Tab 栏本来就不该出现；万一之前被显示出来了（旧版本调过 showTabBar），每次回到 Tab 页都再藏一次
+    void Taro.hideTabBar({ animation: false }).catch(() => undefined);
   });
 }
