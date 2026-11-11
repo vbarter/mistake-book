@@ -3,12 +3,12 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Taro, { useDidShow, useShareAppMessage } from "@tarojs/taro";
 import { Button as NativeButton, Input, Text, View } from "@tarojs/components";
 import { Icon, WechatIcon, type IconName } from "./Icon";
-import { Button, Empty, Sheet, SubjectTile } from "./ui";
+import { Avatar, Button, Empty, Sheet, SubjectTile } from "./ui";
 import { errorText } from "../lib/api";
 import { currentUser, ensureLogin, isLoggedIn, updateProfile } from "../lib/auth";
 import { pickPhotos, type Source } from "../lib/capture";
 import { toast } from "../lib/hooks";
-import { DEFAULT_NICKNAME, PLANS_EVENT, sharePayload, startPlanSync, type PlanSubject, type ResultRow, type ShareInfo } from "../lib/plans";
+import { DEFAULT_NICKNAME, PLANS_EVENT, PLAN_SUBJECT_LABEL, createdLabel, sharePayload, startPlanSync, type PlanInfo, type PlanSubject, type ResultRow, type ShareInfo } from "../lib/plans";
 import { SHARE_TITLE } from "../lib/share";
 import { C } from "../lib/theme";
 
@@ -65,6 +65,31 @@ export function ScoreStats({ score }: { score: Score }) {
 /** 学科方块：综合用中性色 */
 export function PlanTile({ subject, size = "md" }: { subject: PlanSubject | null | undefined; size?: "lg" | "md" | "sm" | "xs" }) {
   return <SubjectTile subject={subject && subject !== "mixed" ? subject : null} size={size} />;
+}
+
+/**
+ * 成员看到的「这是谁的哪个学习计划」：创建人头像、计划名、创建人称呼 · 学科、创建时间。
+ * 作业页上用它，点一下去学习计划页看全部作业（more 是右边那句话）。
+ */
+export function PlanCreator({ plan, more, onClick }: { plan: PlanInfo; more?: string; onClick?: () => void }) {
+  return (
+    <View className="card plan-creator" hoverClass={onClick ? "card--pressed" : "none"} onClick={onClick}>
+      <Avatar name={plan.teacher} url={plan.teacherAvatar} size={44} />
+      <View className="flex1 col gap2 minw0">
+        <Text className="t-headline ellipsis">{plan.name}</Text>
+        <Text className="t-foot c-sec ellipsis">
+          {plan.teacher} · {PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}
+        </Text>
+        <Text className="t-foot c-sec">{createdLabel(plan.createdAt)}</Text>
+      </View>
+      {onClick && (
+        <View className="row-center gap2">
+          {more && <Text className="t-foot c-sec">{more}</Text>}
+          <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+        </View>
+      )}
+    </View>
+  );
 }
 
 /** 回到页面、登录状态变了、学习计划的数据有变化时 +1，页面据此重新拉 */

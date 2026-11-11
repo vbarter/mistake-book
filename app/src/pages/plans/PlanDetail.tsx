@@ -6,7 +6,7 @@ import { Avatar, Stat, Tag } from "../../components/v2";
 import { PLAN_SUBJECT_LABEL, STATUS_LABEL, deletePlan, dueLabel, fetchPlan, isOverdue, memberName, removeMember, shareInvite, updatePlan, usePlans, type MemberAssignment, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
-import { ConfirmSheet } from "./shared";
+import { ConfirmSheet, PlanCreator } from "./shared";
 
 const STATUS_TAG: Record<MemberAssignment["status"], "pending" | "info" | "correct" | "wrong"> = { todo: "pending", submitted: "info", reviewed: "correct", returned: "wrong" };
 
@@ -141,6 +141,7 @@ export default function PlanDetail() {
             const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
             return (
               <>
+                <PlanCreator plan={plan} />
                 <div className="plan-stats">
                   <Stat icon="clock" label="待交" value={todo} color={todo ? "var(--due)" : undefined} />
                   <Stat icon="checkcircle" label="已交" value={handed} />

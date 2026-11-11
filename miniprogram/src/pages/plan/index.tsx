@@ -7,7 +7,7 @@ import { Avatar, Button, Segmented, Sheet, Stat, Tag, type TagKind } from "../..
 import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLAN_SUBJECT_LABEL, STATUS_LABEL, bumpPlans, deletePlan, dueLabel, fetchPlan, isOverdue, memberName, removeMember, updatePlan, type MemberAssignment, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, STATUS_LABEL, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, isOverdue, memberName, removeMember, updatePlan, type MemberAssignment, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
 const STATUS_TAG: Record<MemberAssignment["status"], TagKind> = { todo: "pending", submitted: "info", reviewed: "correct", returned: "wrong" };
@@ -122,14 +122,19 @@ export default function PlanDetail() {
 
   const head = (
     <View className="plan-head">
-      <Avatar name={plan.teacher} url={plan.teacherAvatar} size={38} />
+      <Avatar name={plan.teacher} url={plan.teacherAvatar} size={owner ? 38 : 44} />
       {/* 点计划名弹出面板：改名，下面是不常用的操作（和 iOS 的标题菜单一个意思） */}
       <View className="flex1 col minw0" onClick={openPanel}>
         <View className="row-center gap6">
           <Text className="t-headline ellipsis">{plan.name}</Text>
           <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />
         </View>
-        <Text className="t-foot c-sec ellipsis">{PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}</Text>
+        {/* 成员：是谁建的、什么时候建的（创建人自己不用看这些） */}
+        <Text className="t-foot c-sec ellipsis">
+          {owner ? "" : `${plan.teacher} · `}
+          {PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}
+        </Text>
+        {!owner && <Text className="t-foot c-sec">{createdLabel(plan.createdAt)}</Text>}
       </View>
       {owner && data.invite && <ShareButton pill>转发</ShareButton>}
     </View>

@@ -3,7 +3,7 @@ import { Image, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
 import { PrintSheets } from "../../components/PrintSheets";
-import { Busy, Count, LoginGate, PageState, QuestionGrid, ScanSheet, ScoreCounts, ScoreStats, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
+import { Busy, Count, LoginGate, PageState, PlanCreator, QuestionGrid, ScanSheet, ScoreCounts, ScoreStats, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { submitExport } from "../../lib/export";
@@ -108,13 +108,23 @@ export default function PlanTask() {
     }
   };
 
+  /** 去学习计划页看全部作业：本来就是从那一页点进来的就退回去，从卡片直接进来的就打开它 */
+  const toPlan = () => {
+    const pages = Taro.getCurrentPages();
+    if (pages.length > 1 && pages[pages.length - 2]?.route === "pages/plan/index") void Taro.navigateBack();
+    else void Taro.navigateTo({ url: `/pages/plan/index?id=${plan.id}` });
+  };
+
   const content = (
     <>
+      {/* 成员：先看到是谁的哪个学习计划，点一下去看这个计划的全部作业 */}
+      {!owner && <PlanCreator plan={plan} more="全部作业" onClick={toPlan} />}
       <View className="card" style={{ gap: "6px" }}>
         <View className="row-center gap8">
           {/* 创建人点作业名：不常用的「撤回」收在面板里，和学习计划页点计划名一个习惯 */}
           <View className="flex1 row-center gap4 minw0" onClick={() => canRevoke && setMenu(true)}>
-            <Text className="t-title3 ellipsis" style={{ fontWeight: 800 }}>
+            {/* 成员这边作业名最多两行，长名字不截成一行 */}
+            <Text className={`t-title3 ${owner ? "ellipsis" : "clamp2"}`} style={{ fontWeight: 800 }}>
               {a.title}
             </Text>
             {canRevoke && <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />}
@@ -126,11 +136,8 @@ export default function PlanTask() {
           )}
           {canRevoke && <ShareButton pill>转发</ShareButton>}
         </View>
-        <View className="plan-counts">
-          <Text className="t-foot c-sec ellipsis">
-            {plan.name}
-            {owner ? "" : ` · ${plan.teacher}`}
-          </Text>
+        <View className="plan-counts" style={owner || a.dueAt || a.questionCount ? undefined : { display: "none" }}>
+          {owner && <Text className="t-foot c-sec ellipsis">{plan.name}</Text>}
           {a.dueAt && (
             <Count icon="clock" color={isOverdue(a.dueAt) ? C.wrong : C.secondary}>
               {dueLabel(a.dueAt)}
