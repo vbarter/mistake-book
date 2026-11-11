@@ -479,12 +479,13 @@ export function dueLabel(iso: string | null | undefined): string {
   return `${date} ${hm}`;
 }
 export const isOverdue = (iso: string | null | undefined) => Boolean(iso) && new Date(iso!).getTime() < Date.now();
-/** 创建时间：创建于 11月12日；不是今年的带上年份。只取日期部分，不受时区影响 */
+/** 创建时间：创建于 11月12日 21:03；不是今年的带上年份。直接取服务器给的北京时间，不受手机时区影响 */
 export function createdLabel(iso: string | null | undefined): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(iso ?? "");
   if (!m) return "";
   const year = Number(m[1]) === new Date().getFullYear() ? "" : `${m[1]}年`;
-  return `创建于 ${year}${Number(m[2])}月${Number(m[3])}日`;
+  const hm = m[4] ? ` ${m[4]}:${m[5]}` : "";
+  return `创建于 ${year}${Number(m[2])}月${Number(m[3])}日${hm}`;
 }
 /** 最新创建的排最前 */
 export const byNewest = <T extends { createdAt?: string | null }>(list: T[]): T[] =>
