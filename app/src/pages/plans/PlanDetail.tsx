@@ -7,7 +7,7 @@ import { PLAN_SUBJECT_LABEL, STATUS_LABEL, deletePlan, dueLabel, fetchPlan, file
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
 import { openFile } from "./Assignment";
-import { ConfirmSheet, ScoreCounts } from "./shared";
+import { ConfirmSheet, PlanCreator, ScoreCounts } from "./shared";
 
 const STATUS_TAG: Record<MemberAssignment["status"], "pending" | "info" | "correct" | "wrong"> = { todo: "pending", submitted: "info", reviewed: "correct", returned: "wrong" };
 
@@ -176,6 +176,7 @@ export default function PlanDetail() {
             const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
             return (
               <>
+                <PlanCreator plan={plan} />
                 <div className="plan-stats">
                   <Stat icon="clock" label="待交" value={todo} color={todo ? "var(--due)" : undefined} />
                   <Stat icon="checkcircle" label="已交" value={handed} />

@@ -3,7 +3,7 @@ import { Image, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
 import { PrintSheets } from "../../components/PrintSheets";
-import { Busy, Count, LoginGate, PageState, QuestionGrid, ScanSheet, ScoreStats, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
+import { Busy, Count, LoginGate, PageState, PlanCreator, QuestionGrid, ScanSheet, ScoreStats, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { Button, Segmented, Sheet, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { submitExport } from "../../lib/export";
@@ -94,11 +94,22 @@ export default function PlanTask() {
       toast(errorText(e));
     }
   };
+
+  /** 去学习计划页看全部作业：本来就是从那一页点进来的就退回去，从卡片直接进来的就打开它 */
+  const toPlan = () => {
+    const pages = Taro.getCurrentPages();
+    if (pages.length > 1 && pages[pages.length - 2]?.route === "pages/plan/index") void Taro.navigateBack();
+    else void Taro.navigateTo({ url: `/pages/plan/index?id=${plan.id}` });
+  };
+
   const content = (
     <>
+      {/* 成员：先看到是谁的哪个学习计划，点一下去看这个计划的全部作业 */}
+      {!owner && <PlanCreator plan={plan} more="全部作业" onClick={toPlan} />}
       <View className="card" style={{ gap: "6px" }}>
         <View className="row-center gap8">
-          <Text className="t-title3 ellipsis flex1" style={{ fontWeight: 800 }}>
+          {/* 作业名最多两行，长名字不截成一行 */}
+          <Text className="t-title3 clamp2 flex1" style={{ fontWeight: 800 }}>
             {a.title}
           </Text>
           {a.revoked && (
@@ -107,11 +118,8 @@ export default function PlanTask() {
             </Tag>
           )}
         </View>
-        <View className="plan-counts">
-          <Text className="t-foot c-sec ellipsis">
-            {plan.name}
-            {owner ? "" : ` · ${plan.teacher}`}
-          </Text>
+        <View className="plan-counts" style={owner || a.dueAt || a.questionCount ? undefined : { display: "none" }}>
+          {owner && <Text className="t-foot c-sec ellipsis">{plan.name}</Text>}
           {a.dueAt && (
             <Count icon="clock" color={isOverdue(a.dueAt) ? C.wrong : C.secondary}>
               {dueLabel(a.dueAt)}

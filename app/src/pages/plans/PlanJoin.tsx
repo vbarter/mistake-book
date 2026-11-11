@@ -21,7 +21,7 @@ interface Preview {
 /**
  * 点开微信里的卡片后落到这里（和小程序的加入页一致）：
  * 先看到是谁建的（头像 + 称呼）、哪个计划、哪份作业、已经有谁加入了；点「加入学习计划」再确认一次才加入，不用老师批准。
- * 已经在里面的同学不用再点，直接进到这份作业。创建人点开自己的卡片也停在这一页，只多一个「进入学习计划」。
+ * 加入后先到学习计划页（创建人、计划名、创建时间、全部作业）。已经在里面的同学不用再点，直接进到这份作业。创建人点开自己的卡片也停在这一页，只多一个「进入学习计划」。
  * 刚注册的新用户先起名字；已经在用上壹课的直接用 App 里的名字加入。
  */
 export default function PlanJoin() {
@@ -65,7 +65,9 @@ export default function PlanJoin() {
         if (res.plan.role === "owner") return enter(res.plan);
         if (res.me.needsName) return setNaming({ plan: res.plan });
         if (res.joined) toast(`已用「${res.me.name}」加入「${res.plan.name}」`, "success");
-        enter(res.plan);
+        // 刚加入的先到学习计划页：是谁的计划、有哪些作业一眼看全；本来就在里面的直接进这份作业
+        if (res.joined) nav(`/plans/${res.plan.id}`, { replace: true });
+        else enter(res.plan);
       })
       .catch((e) => fail(e, "加入失败，请稍后再试"));
   };
@@ -117,7 +119,7 @@ export default function PlanJoin() {
           const plan = naming!.plan;
           setNaming(null);
           toast(`已用「${name}」加入「${plan.name}」`, "success");
-          nav(a ? `/plans/a/${a}` : `/plans/${plan.id}`, { replace: true });
+          nav(`/plans/${plan.id}`, { replace: true });
         }}
       />
     </div>
