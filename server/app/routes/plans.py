@@ -17,7 +17,6 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, abort, current_app, jsonify, request
-from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy.exc import IntegrityError
 
 from ..auth_utils import current_user, login_required
@@ -110,25 +109,6 @@ def _plan_view(plan: Plan, role: str) -> dict:
     }
 
 
-PICK_TTL = 2 * 3600  # 选文件网页的链接、选好的文件都只在这段时间内有效
-_PICK_MIME = {v: k for k, v in _EXT.items() if not k.startswith("image/")}  # 扩展名 → 类型，只收 PDF / Word
-
-
-def _pick_signer(salt: str) -> URLSafeTimedSerializer:
-    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=salt)
-
-
-def _read_pick(token) -> dict:
-    """校验选文件网页交回来的文件凭证：必须是当前账号自己传的、还没过期"""
-    try:
-        data = _pick_signer("plan-pick-file").loads(str(token), max_age=PICK_TTL)
-    except BadSignature:
-        abort(400, "选的文件已经过期，请重新选一次")
-    if data.get("u") != current_user().id:
-        abort(403, "这个文件不是你选的")
-    return data
-
-
 def _clean_files(raw, kinds: tuple[str, ...]) -> list[dict]:
     if raw is None:
         return []
@@ -138,9 +118,6 @@ def _clean_files(raw, kinds: tuple[str, ...]) -> list[dict]:
     for i, f in enumerate(raw):
         if not isinstance(f, dict):
             abort(400, "文件格式不对")
-        picked = _read_pick(f["picked"]) if f.get("picked") else None  # 小程序在选文件网页里先传上来的
-        if picked:
-            f = {**f, "kind": "attachment", "name": picked["n"], "mime": picked["m"], "size": picked["s"]}
         mime = str(f.get("mime") or "image/jpeg").lower()
         if mime not in _EXT:
             abort(400, "只支持图片、PDF 和 Word 文件")
@@ -153,14 +130,14 @@ def _clean_files(raw, kinds: tuple[str, ...]) -> list[dict]:
             size = 0
         if size > storage.MAX_PLAN_FILE_BYTES:
             abort(413, "单个文件不能超过 20 MB")
-        out.append({"kind": kind, "name": str(f.get("name") or "")[:120], "mime": mime, "ext": _EXT[mime], "size": size, "position": i, "clientId": str(f.get("clientId") or "")[:40], "src": picked["k"] if picked else None})
+        out.append({"kind": kind, "name": str(f.get("name") or "")[:120], "mime": mime, "ext": _EXT[mime], "size": size, "position": i, "clientId": str(f.get("clientId") or "")[:40]})
     return out
 
 
 def _add_files(plan: Plan, assignment: PlanAssignment, files: list[dict], submission: PlanSubmission | None = None) -> list[dict]:
     """建文件记录，返回带上传链接的列表（clientId 让客户端对上是哪个本地文件）"""
     store = storage.get_storage()
-    out, moved = [], []
+    out = []
     for f in files:
         row = PlanFile(
             plan_id=plan.id, assignment_id=assignment.id, submission_id=submission.id if submission else None,
@@ -168,21 +145,7 @@ def _add_files(plan: Plan, assignment: PlanAssignment, files: list[dict], submis
         )
         db.session.add(row)
         db.session.flush()
-        if f.get("src"):  # 已经在暂存区了：搬到计划目录，不用客户端再传
-            try:
-                store.copy(f["src"], row.key)
-            except Exception:  # noqa: BLE001
-                log.exception("copy picked file failed")
-                abort(400, f"「{row.name}」已经失效，请重新选一次")
-            row.uploaded = True
-            moved.append(f["src"])
-            continue
         out.append({"id": row.id, "clientId": f["clientId"], "method": "PUT", "url": store.presign(row.key, "PUT"), "headers": {"Content-Type": row.mime}})
-    if moved:
-        try:
-            store.delete(moved)
-        except Exception:  # noqa: BLE001  暂存件删不掉不影响布置
-            log.exception("delete picked files failed")
     return out
 
 
@@ -589,62 +552,6 @@ def files_uploaded():
     return jsonify({"done": done, "missing": missing})
 
 
-# --------------------------------------------------------------------------- 小程序选手机里的文件
-#
-# 小程序自己的接口只能从微信聊天记录里选文件，读不到手机目录。能打开系统文件选择器的只有网页，
-# 所以做一个只给小程序 web-view 打开的小网页：选文件 → 直接传到服务器暂存 → 把凭证交回小程序 → 布置时凭证换成正式文件。
-# 不建表：链接和文件凭证都是签名串，暂存件放在 u/<用户>/picks/ 下（注销账号时跟着整目录删掉）。
-
-
-@bp.post("/plans/picks")
-@login_required
-def create_pick():
-    """小程序要选文件时先来拿一个网页地址（带签名，2 小时内有效）"""
-    ticket = _pick_signer("plan-pick").dumps({"u": current_user().id})
-    base = (current_app.config.get("PUBLIC_BASE_URL") or request.host_url).rstrip("/")
-    return jsonify({"url": f"{base}/api/plans/pick/{ticket}"})
-
-
-def _pick_user(ticket: str) -> str | None:
-    try:
-        data = _pick_signer("plan-pick").loads(ticket, max_age=PICK_TTL)
-    except BadSignature:
-        return None
-    return data.get("u") if isinstance(data, dict) else None
-
-
-@bp.get("/plans/pick/<ticket>")
-def pick_page(ticket: str):
-    headers = {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"}
-    if _pick_user(ticket) is None:
-        return "<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><body style='font-family:sans-serif;padding:48px 24px;text-align:center;color:#1B2A4A'><h3>页面已经过期</h3><p style='color:#7A869F'>请返回后重新点一次「上传文件」</p>", 410, headers
-    return _PICK_PAGE.replace("__MAX__", str(storage.MAX_PLAN_FILE_BYTES)), 200, headers
-
-
-@bp.post("/plans/pick/<ticket>/files")
-def pick_upload(ticket: str):
-    """选文件网页传一个文件上来：放进暂存区，返回布置作业时用的凭证"""
-    uid = _pick_user(ticket)
-    if uid is None:
-        abort(410, "页面已经过期，请返回后重新点一次「上传文件」")
-    f = request.files.get("file")
-    if f is None:
-        abort(400, "没有收到文件")
-    name = (f.filename or "").replace("\\", "/").rsplit("/", 1)[-1].strip()[:120]
-    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-    if ext not in _PICK_MIME:
-        abort(400, "只能选 PDF 或 Word 文件")
-    data = f.read(storage.MAX_PLAN_FILE_BYTES + 1)
-    if len(data) > storage.MAX_PLAN_FILE_BYTES:
-        abort(413, "单个文件不能超过 20 MB")
-    if not data:
-        abort(400, "这个文件是空的")
-    key = f"{storage.user_prefix(uid)}picks/{secrets.token_hex(12)}.{ext}"
-    storage.get_storage().write(key, data, _PICK_MIME[ext])
-    token = _pick_signer("plan-pick-file").dumps({"u": uid, "k": key, "n": name, "m": _PICK_MIME[ext], "s": len(data)})
-    return jsonify({"picked": token, "name": name, "mime": _PICK_MIME[ext], "size": len(data)})
-
-
 def _hardest(subs: list[PlanSubmission], top: int = 5) -> list[dict]:
     """全班错得最多的题：按题号把各人的结果对齐"""
     stats: dict[str, dict] = {}
@@ -941,80 +848,6 @@ h1{{margin:6px 0 0;font-size:24px;line-height:1.35}}
   if(!wx){{setTimeout(function(){{location.href={deeplink_js};}},300);}}
 }})();
 </script></body></html>"""
-
-
-_PICK_PAGE = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><title>上传文件</title>
-<style>
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:#f3f4f8;color:#1B2A4A;font:16px/1.4 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;padding:20px 20px 120px}
-.pick{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;height:168px;border:2px dashed #b9c3d8;border-radius:20px;background:#fff;color:#1f3b73;font-weight:600;font-size:17px;overflow:hidden}
-.pick:active{background:#eef1f8}
-.pick svg{width:44px;height:44px}
-.pick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:200px}
-.types{margin:12px 0 20px;text-align:center;color:#7A869F;font-size:13px}
-.row{display:flex;align-items:center;gap:12px;background:#fff;border-radius:16px;padding:12px 14px;margin-bottom:10px}
-.badge{flex:none;width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;background:#2f6fde}
-.badge.pdf{background:#e5484d}
-.badge.no{background:#b9c3d8}
-.meta{flex:1;min-width:0}
-.name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px;font-weight:600}
-.sub{color:#7A869F;font-size:12px;margin-top:2px}
-.sub.err{color:#e5484d}
-.bar{height:3px;background:#e6e9f0;border-radius:2px;margin-top:6px;overflow:hidden}
-.bar i{display:block;height:100%;width:0;background:#1f3b73;transition:width .15s}
-.x{flex:none;width:32px;height:32px;border:0;background:none;color:#9aa4b8;font-size:22px;line-height:32px;padding:0}
-.ok{flex:none;color:#1faa6b;font-size:20px}
-.foot{position:fixed;left:0;right:0;bottom:0;padding:12px 20px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(#f3f4f800,#f3f4f8 30%)}
-.done{width:100%;height:54px;border:0;border-radius:27px;background:#1f3b73;color:#fff;font-size:17px;font-weight:600}
-.done:disabled{opacity:.4}
-</style></head><body>
-<label class="pick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg>选择手机里的文件<input id="f" type="file"></label>
-<div class="types">PDF · Word · 单个不超过 20 MB</div>
-<div id="list"></div>
-<div class="foot"><button id="done" class="done" disabled>完成</button></div>
-<script>
-(function(){
-var MAX=__MAX__,items=[],busy=0,input=document.getElementById('f'),list=document.getElementById('list'),done=document.getElementById('done');
-// iPhone 上限定类型后直接进「文件」；安卓微信里限定类型常常整个选不了，改成选完再判断
-if(/iphone|ipad|ipod/i.test(navigator.userAgent))input.setAttribute('accept','.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-function size(n){return n<1024*1024?Math.max(1,Math.round(n/1024))+' KB':(n/1024/1024).toFixed(1)+' MB'}
-function refresh(){var n=items.filter(function(i){return i.picked}).length;done.disabled=busy>0||n===0;done.textContent=busy>0?'正在上传…':n?'完成（'+n+'）':'完成'}
-function add(file){
-  var ext=(file.name.split('.').pop()||'').toLowerCase(),it={name:file.name,size:file.size};
-  var row=document.createElement('div');row.className='row';
-  var badge=document.createElement('div');badge.className='badge'+(ext==='pdf'?' pdf':/^docx?$/.test(ext)?'':' no');badge.textContent=ext==='pdf'?'PDF':/^docx?$/.test(ext)?'W':'?';
-  var meta=document.createElement('div');meta.className='meta';
-  var name=document.createElement('div');name.className='name';name.textContent=file.name;
-  var sub=document.createElement('div');sub.className='sub';sub.textContent=size(file.size);
-  var bar=document.createElement('div');bar.className='bar';var fill=document.createElement('i');bar.appendChild(fill);
-  var x=document.createElement('button');x.className='x';x.textContent='×';
-  meta.appendChild(name);meta.appendChild(sub);meta.appendChild(bar);row.appendChild(badge);row.appendChild(meta);row.appendChild(x);list.appendChild(row);
-  function fail(text){sub.className='sub err';sub.textContent=text;bar.style.display='none'}
-  x.onclick=function(){if(it.xhr)it.xhr.abort();items.splice(items.indexOf(it),1);list.removeChild(row);refresh()};
-  items.push(it);
-  if(['pdf','doc','docx'].indexOf(ext)<0)return fail('不是 PDF 或 Word');
-  if(file.size>MAX)return fail('超过 20 MB 了');
-  var xhr=it.xhr=new XMLHttpRequest(),fd=new FormData();fd.append('file',file,file.name);
-  busy++;refresh();
-  xhr.upload.onprogress=function(e){if(e.lengthComputable)fill.style.width=Math.round(e.loaded/e.total*100)+'%'};
-  xhr.onloadend=function(){
-    busy--;it.xhr=null;var res=null;try{res=JSON.parse(xhr.responseText)}catch(e){}
-    if(xhr.status===200&&res&&res.picked){it.picked=res.picked;it.mime=res.mime;it.size=res.size;bar.style.display='none';var ok=document.createElement('div');ok.className='ok';ok.textContent='✓';row.insertBefore(ok,x)}
-    else if(xhr.status!==0||items.indexOf(it)>=0)fail(res&&res.message&&/[\u4e00-\u9fa5]/.test(res.message)?res.message:'没传上去，请删掉重选');
-    refresh();
-  };
-  xhr.open('POST',location.pathname+'/files');xhr.send(fd);
-}
-input.onchange=function(){for(var i=0;i<input.files.length;i++)add(input.files[i]);input.value=''};
-done.onclick=function(){
-  var files=items.filter(function(i){return i.picked}).map(function(i){return{picked:i.picked,name:i.name,mime:i.mime,size:i.size}});
-  if(!window.wx||!wx.miniProgram)return alert('请在「上壹课」小程序里打开这个页面');
-  wx.miniProgram.postMessage({data:{files:files}});wx.miniProgram.navigateBack();
-};
-})();
-</script>
-<script async src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script></body></html>"""
 
 
 def _due_text(due_at: str) -> str:

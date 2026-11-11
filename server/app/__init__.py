@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-from flask import Flask, abort, jsonify
+from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
@@ -52,15 +52,6 @@ def create_app(test_config: dict | None = None) -> Flask:
         from . import storage
 
         return jsonify({"ok": True, "aiProvider": provider_name(), "ocr": ocr.health(), "sync": bool(app.config.get("SYNC_ENABLED")), "storage": storage.health()})
-
-    @app.get("/<name>.txt")
-    def wechat_verify(name: str):
-        """小程序后台校验业务域名用的文件（选文件网页要在 web-view 里打开，域名得先过校验）"""
-        for item in (app.config.get("WECHAT_VERIFY_FILES") or "").split(","):
-            fname, _, content = item.strip().partition(":")
-            if fname == f"{name}.txt" and content:
-                return content, 200, {"Content-Type": "text/plain; charset=utf-8"}
-        abort(404)
 
     @app.errorhandler(404)
     def not_found(e):

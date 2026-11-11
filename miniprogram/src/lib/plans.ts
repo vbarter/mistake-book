@@ -87,9 +87,8 @@ export const joinPlan = (code: string) => api<{ plan: PlanInfo; joined: boolean;
 
 // ---------------------------------------------------------------- 文件直传
 
-/** 新建 / 布置页里还没传上去的一个文件：path 是本机文件；扫描件另带尺寸（提交识别时切图用）；picked 是选文件网页已经传到服务器后给的凭证（这种没有本机文件） */
+/** 新建 / 布置页里还没传上去的一个文件：path 是本机文件；扫描件另带尺寸（提交识别时切图用） */
 export interface DraftFile {
-  picked?: string;
   clientId: string;
   kind: "scan" | "attachment";
   name: string;
@@ -116,24 +115,14 @@ export async function scanDraft(path: string, index: number): Promise<DraftFile>
   return { clientId: newId(), kind: "scan", name: `扫描件 第 ${index + 1} 页.jpg`, mime: "image/jpeg", size: fileSize(path), path, width: info.width, height: info.height };
 }
 
-/**
- * 选手机里的文件。小程序自己的接口只能从微信聊天记录里选，读不到手机目录；能打开系统文件选择器的只有网页，
- * 所以「上传文件」打开 plan-pick 页（web-view 里是服务器的选文件网页），文件在网页里直接传到服务器，回来的是凭证。
- */
-export interface PickedFile { picked: string; name: string; mime: string; size: number }
-let pickHandler: ((files: DraftFile[]) => void) | null = null;
-/** 新建页登记「选好了交给我」，返回取消登记 */
-export function onFilesPicked(fn: (files: DraftFile[]) => void): () => void {
-  pickHandler = fn;
-  return () => {
-    if (pickHandler === fn) pickHandler = null;
-  };
+/** 从微信聊天记录里选的一个文件 → 附件草稿；不支持的类型、太大的返回一句原因 */
+export function attachmentDraft(file: { path: string; name: string; size: number }): DraftFile | string {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const mime = EXT_MIME[ext];
+  if (!mime || mime.startsWith("image/")) return `「${file.name}」不是 PDF 或 Word`;
+  if (file.size > MAX_PLAN_FILE_BYTES) return `「${file.name}」超过 20 MB 了`;
+  return { clientId: newId(), kind: "attachment", name: file.name, mime, size: file.size, path: file.path };
 }
-export function deliverPicked(files: PickedFile[]): void {
-  const drafts = files.filter((f) => f && f.picked && EXT_MIME[f.name.split(".").pop()?.toLowerCase() ?? ""]).map((f): DraftFile => ({ clientId: newId(), kind: "attachment", name: f.name, mime: f.mime, size: f.size, path: "", picked: f.picked }));
-  if (drafts.length) pickHandler?.(drafts);
-}
-export const pickPageUrl = () => api<{ url: string }>("/api/plans/picks", { method: "POST" }).then((r) => r.url);
 
 async function uploadAll(uploads: Upload[], drafts: DraftFile[], onStage?: (text: string) => void): Promise<void> {
   const byId = new Map(drafts.map((d) => [d.clientId, d]));
@@ -157,7 +146,7 @@ async function uploadAll(uploads: Upload[], drafts: DraftFile[], onStage?: (text
   if (done.missing.length) throw new Error("有文件没传上去，请重试");
 }
 
-const filesBody = (drafts: DraftFile[]) => drafts.map(({ clientId, kind, name, mime, size, picked }) => ({ clientId, kind, name, mime, size, ...(picked ? { picked } : {}) }));
+const filesBody = (drafts: DraftFile[]) => drafts.map(({ clientId, kind, name, mime, size }) => ({ clientId, kind, name, mime, size }));
 
 /**
  * 确定布置：planId 为空 = 新建学习计划并布置第一份作业；否则在已有计划里布置一份。
