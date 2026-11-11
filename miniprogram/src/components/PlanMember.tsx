@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Image, Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
-import { Icon, type IconName } from "./Icon";
+import { Icon } from "./Icon";
 import { Busy, Count, ScanSheet } from "./plan";
 import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
@@ -14,12 +14,11 @@ import { C } from "../lib/theme";
 type Look = "done" | "returned" | "todo" | "revoked";
 /** 一份作业的样子：交了 = 绿，退回重做 = 红，待交 = 橙 */
 const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
-const LOOK_ICON: Record<Look, [IconName, string]> = { done: ["checkcircle", C.ok], returned: ["refresh", C.wrong], todo: ["clock", C.accentOn], revoked: ["minus", C.tertiary] };
 
 /**
- * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面每份作业一段（作业名 + 状态，下面直接平铺它的文件，点文件打开），
+ * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），
  * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
- * 交完页面跟着刷新，交了的作业整块标成绿色。交过的作业点作业名看自己那份的批改结果。
+ * 交完页面跟着刷新，交了的作业那几行标成绿色，下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  */
 export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () => Promise<void> }) {
   const list = data.assignments as MemberAssignment[];
@@ -104,65 +103,67 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         const look = lookOf(a);
         const waiting = a.status === "todo" || a.status === "returned";
         const files = a.files ?? [];
-        const mine = a.status !== "todo"; // 交过：点作业名看自己那份和批改结果
+        const mine = a.status !== "todo";
         return (
           <View key={a.id} className="plan-hw">
-            <View
-              className={`plan-task plan-task--${look}`}
-              hoverClass={mine ? "list-row--hover" : "none"}
-              onClick={() => mine && void Taro.navigateTo({ url: `/pages/plan-task/index?id=${a.id}` })}
-            >
-              <View className="plan-task__head">
-                <Icon name={LOOK_ICON[look][0]} size={18} color={LOOK_ICON[look][1]} stroke={2.4} />
-                <Text className="t-headline ellipsis flex1">{a.title}</Text>
-                {statusTag(a, true)}
-                {mine && <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />}
-              </View>
-              <View className="plan-counts" style={waiting && !a.dueAt ? { display: "none" } : undefined}>
-                {waiting ? (
-                  a.dueAt && (
-                    <Count icon="clock" color={isOverdue(a.dueAt) ? C.wrong : C.secondary}>
-                      {dueLabel(a.dueAt)}
-                    </Count>
-                  )
-                ) : a.score ? (
-                  <>
-                    <Count icon="checkcircle" color={C.ok}>
-                      {a.score.correct}
-                    </Count>
-                    <Count icon="xcircle" color={C.wrong}>
-                      {a.score.wrong}
-                    </Count>
-                    <Count icon="minus" color={C.tertiary}>
-                      {a.score.blank}
-                    </Count>
-                  </>
-                ) : (
-                  <Text className="t-foot c-sec">批改中</Text>
-                )}
-                {!waiting && a.late && <Text className="t-foot c-sec">迟交</Text>}
-              </View>
-              {a.comment && (
-                <View className="plan-count" style={{ alignItems: "flex-start" }}>
-                  <Icon name="bubble" size={14} color={a.status === "returned" ? C.wrong : C.tertiary} stroke={2.2} style={{ marginTop: "2px" }} />
-                  <Text className="t-foot flex1" style={{ color: a.status === "returned" ? C.wrong : C.secondary, fontWeight: 400 }}>
-                    {a.comment}
-                  </Text>
-                </View>
-              )}
-            </View>
+            {/* 没有作业名那一行了：状态标在每个文件上（交了的整行标绿，退回的标红） */}
             {files.map((f) => (
-              <View key={f.id} className="list-row" hoverClass="list-row--hover" onClick={() => void openPlanFile(f, files)}>
+              <View key={f.id} className={`list-row plan-row--${look}`} hoverClass="list-row--hover" onClick={() => void openPlanFile(f, files)}>
                 <View className="plan-file__icon plan-file__icon--sm">
                   <Text>{fileBadge(f.mime)}</Text>
                 </View>
                 <View className="flex1 col gap2 minw0">
                   <Text className="row__title ellipsis">{f.name}</Text>
-                  <Text className="row__sub">{sizeLabel(f.size)}</Text>
+                  <Text className="row__sub" style={waiting && isOverdue(a.dueAt) ? { color: C.wrong } : undefined}>
+                    {sizeLabel(f.size)}
+                    {waiting && a.dueAt ? ` · ${dueLabel(a.dueAt)}截止` : ""}
+                  </Text>
                 </View>
+                {statusTag(a, true)}
                 <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
               </View>
             ))}
+            {files.length === 0 && (
+              <View className={`list-row plan-row--${look}`}>
+                <Text className="row__title ellipsis flex1">{a.title}</Text>
+                {statusTag(a, true)}
+              </View>
+            )}
+            {/* 交过：一行小字是对 / 错 / 没做和老师的话，点进去看自己那份的批改结果 */}
+            {mine && (
+              <View className={`plan-task plan-task--${look}`} hoverClass="list-row--hover" onClick={() => void Taro.navigateTo({ url: `/pages/plan-task/index?id=${a.id}` })}>
+                <View className="plan-task__head">
+                  <View className="plan-counts flex1">
+                    {a.score ? (
+                      <>
+                        <Count icon="checkcircle" color={C.ok}>
+                          {a.score.correct}
+                        </Count>
+                        <Count icon="xcircle" color={C.wrong}>
+                          {a.score.wrong}
+                        </Count>
+                        <Count icon="minus" color={C.tertiary}>
+                          {a.score.blank}
+                        </Count>
+                      </>
+                    ) : (
+                      <Text className="t-foot c-sec">{a.status === "returned" ? "老师退回了，重新交一次" : "批改中"}</Text>
+                    )}
+                    {a.late && <Text className="t-foot c-sec">迟交</Text>}
+                  </View>
+                  <Text className="t-foot c-sec">批改结果</Text>
+                  <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+                </View>
+                {a.comment && (
+                  <View className="plan-count" style={{ alignItems: "flex-start" }}>
+                    <Icon name="bubble" size={14} color={a.status === "returned" ? C.wrong : C.tertiary} stroke={2.2} style={{ marginTop: "2px" }} />
+                    <Text className="t-foot flex1" style={{ color: a.status === "returned" ? C.wrong : C.secondary, fontWeight: 400 }}>
+                      {a.comment}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         );
       })}
