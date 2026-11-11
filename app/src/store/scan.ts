@@ -31,6 +31,8 @@ interface ScanState {
   mode: ScanMode;
   folderId: string | null;
   from: string;
+  /** 这批是在学习计划里拍来交作业的（计划 id）：拍完不去整理页，回计划页选交哪一份作业 */
+  plan: string | null;
   enhance: boolean;
   autoShoot: boolean;
   restored: boolean; // 已经试过读本机草稿
@@ -42,6 +44,7 @@ export const useScan = create<ScanState>(() => ({
   mode: "one",
   folderId: null,
   from: "/home",
+  plan: null,
   enhance: true,
   autoShoot: false,
   restored: false,
@@ -82,6 +85,7 @@ export function setEnhance(on: boolean) {
 interface DraftManifest {
   folderId: string | null;
   from: string;
+  plan?: string | null;
   cuts: string[];
   mode: ScanMode;
   shots: (Omit<ScanShot, "raw" | "page" | "status"> & { page?: Omit<FullPage, "src"> })[];
@@ -100,6 +104,7 @@ function saveManifest() {
     const m: DraftManifest = {
       folderId: s.folderId,
       from: s.from,
+      plan: s.plan,
       cuts: s.cuts,
       mode: s.mode,
       shots: s.shots.map(({ raw: _raw, page, status: _st, ...rest }) => {
@@ -136,7 +141,7 @@ export async function restoreDraft(): Promise<number> {
     }
     if (!shots.length) return 0;
     const ids = new Set(shots.map((s) => s.id));
-    useScan.setState({ shots, cuts: m.cuts.filter((c) => ids.has(c)), mode: m.mode, folderId: m.folderId, from: m.from });
+    useScan.setState({ shots, cuts: m.cuts.filter((c) => ids.has(c)), mode: m.mode, folderId: m.folderId, from: m.from, plan: m.plan ?? null });
     for (const s of shots) if (s.status !== "ok") reprocess(s.id);
     return shots.length;
   } catch {
@@ -192,11 +197,17 @@ export function reprocess(id: string) {
 
 // ---------------------------------------------------------------- 增删改
 
-export function startScan(folderId: string | null, from: string) {
+export function startScan(folderId: string | null, from: string, plan: string | null = null) {
   const s = useScan.getState();
-  // 已有没提交的照片：接着用原来那批（放进的文件夹以原来的为准）
-  if (s.shots.length) return;
-  useScan.setState({ folderId, from, cuts: [], mode: "one" });
+  // 已有没提交的照片：接着用原来那批（放进的文件夹以原来的为准），这次是从哪进来的就跟着哪边走
+  if (s.shots.length) {
+    if (s.plan !== plan) {
+      useScan.setState({ plan, from });
+      saveManifest();
+    }
+    return;
+  }
+  useScan.setState({ folderId, from, plan, cuts: [], mode: "one" });
 }
 
 /** 拍下一张：先放进来（显示「调正中」），后台拉正 */
@@ -307,7 +318,7 @@ export function unitsOf(shots: ScanShot[], cuts: string[]): number[][] {
 export function clearScan() {
   queue.length = 0;
   version.clear();
-  useScan.setState({ shots: [], cuts: [], mode: "one", restored: true });
+  useScan.setState({ shots: [], cuts: [], mode: "one", plan: null, restored: true });
   if (saveTimer) clearTimeout(saveTimer);
   void clearDraftRows().catch(() => undefined);
 }

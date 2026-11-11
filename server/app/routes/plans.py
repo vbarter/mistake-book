@@ -409,12 +409,29 @@ def get_plan(plan_id: str):
         )
     else:
         mine = {s.assignment_id: s for s in PlanSubmission.query.filter_by(plan_id=plan.id, user_id=user.id).all()}
+        shown = [a for a in assignments if not (a.revoked and mine.get(a.id) is None)]
+        ids = [a.id for a in shown]
+        # 成员的计划页也直接平铺每份作业的文件（不再点进作业页），所以打开计划页就算看过这些作业了
+        store = storage.get_storage()
+        files: dict[str, list[dict]] = {i: [] for i in ids}
+        if ids:
+            for f in PlanFile.query.filter(PlanFile.assignment_id.in_(ids), PlanFile.submission_id.is_(None)).order_by(PlanFile.position, PlanFile.created_at).all():
+                files[f.assignment_id].append(_file_view(f, store))
+            seen = {v.assignment_id for v in PlanView.query.filter(PlanView.assignment_id.in_(ids), PlanView.user_id == user.id).all()}
+            fresh = [a.id for a in shown if not a.revoked and a.id not in seen]
+            if fresh:
+                db.session.add_all([PlanView(assignment_id=i, user_id=user.id) for i in fresh])
+                try:
+                    db.session.commit()
+                except IntegrityError:  # 同时来的另一个请求已经记上了
+                    db.session.rollback()
         rows = []
-        for a in assignments:
+        for a in shown:
             sub = mine.get(a.id)
-            if a.revoked and sub is None:
-                continue
-            rows.append({**_assignment_brief(a), "status": _my_status(sub), "score": _score(sub.results) if sub else None, "comment": sub.comment if sub else "", "late": bool(sub.late) if sub else False})
+            rows.append({
+                **_assignment_brief(a), "status": _my_status(sub), "score": _score(sub.results) if sub else None, "comment": sub.comment if sub else "",
+                "late": bool(sub.late) if sub else False, "files": files[a.id], "digitized": bool(a.digitized),
+            })
         body["assignments"] = rows
         body["me"] = {"name": user.nickname or DEFAULT_NICKNAME, "defaultName": (user.nickname or DEFAULT_NICKNAME) == DEFAULT_NICKNAME}
     return jsonify(body)

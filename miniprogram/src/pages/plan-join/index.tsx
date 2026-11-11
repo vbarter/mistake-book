@@ -35,7 +35,7 @@ export default function PlanJoin() {
   const [naming, setNaming] = useState<PlanInfo | null>(null);
   const started = useRef(false);
 
-  const enter = (plan: Pick<PlanInfo, "id" | "role">) => Taro.redirectTo({ url: a && plan.role === "member" ? `/pages/plan-task/index?id=${a}` : `/pages/plan/index?id=${plan.id}` });
+  const enter = (plan: Pick<PlanInfo, "id" | "role">) => Taro.redirectTo({ url: `/pages/plan/index?id=${plan.id}` });
 
   const toPlan = (plan: Pick<PlanInfo, "id">) => Taro.redirectTo({ url: `/pages/plan/index?id=${plan.id}` });
 

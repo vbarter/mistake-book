@@ -37,7 +37,7 @@ export default function PlanJoin() {
   const [naming, setNaming] = useState<{ plan: PlanInfo } | null>(null);
   const started = useRef(false);
 
-  const enter = (plan: Pick<PlanInfo, "id" | "role">) => nav(a && plan.role === "member" ? `/plans/a/${a}` : `/plans/${plan.id}`, { replace: true });
+  const enter = (plan: Pick<PlanInfo, "id" | "role">) => nav(`/plans/${plan.id}`, { replace: true });
   // 只把服务器给的中文提示显示出来；别的异常（比如浏览器内部报错）不直接给用户看
   const fail = (e: unknown, fallback: string) => setError(e instanceof ApiError && e.message ? e.message : fallback);
 

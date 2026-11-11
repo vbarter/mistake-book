@@ -3,14 +3,14 @@ import { Input, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon, type IconName } from "../../components/Icon";
 import { LoginGate, PageState, ScoreCounts, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
-import { Avatar, Button, Segmented, Sheet, Stat, Tag, type TagKind } from "../../components/ui";
+import { PlanMember } from "../../components/PlanMember";
+import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLAN_SUBJECT_LABEL, STATUS_LABEL, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, isOverdue, memberName, memberState, openPlanFile, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberAssignment, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
-const STATUS_TAG: Record<MemberAssignment["status"], TagKind> = { todo: "pending", submitted: "info", reviewed: "correct", returned: "wrong" };
 const leave = () => {
   if (Taro.getCurrentPages().length > 1) void Taro.navigateBack();
   else void Taro.redirectTo({ url: "/pages/plans/index" });
@@ -39,7 +39,7 @@ const itemTag = (it: MemberItem) =>
 /**
  * 学习计划页（和 App 一致）。创建人在这一页看完所有东西，不再有单独的「作业情况」页：顶部今日已交 / 未交 / 总成员；
  * 「作业」平铺每份作业的文件（点文件直接打开，点作业名：转发、提醒没交的、撤回）；「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，
- * 点一个人看他每份作业的情况并进去批阅、移出。成员：只有自己的待交 / 已交和作业列表，
+ * 点一个人看他每份作业的情况并进去批阅、移出。成员：只有自己的待交 / 已交和作业（见 components/PlanMember），
  * 看不到其他成员、人数和别人交没交。点计划名弹出面板：创建人改计划名、让旧卡片失效、解散；成员改老师看到的名字、退出。
  * 页面上只留内容，不放这些不常用的操作。页面上能用图标 + 数字说清的就不写字。
  */
@@ -308,69 +308,10 @@ export default function PlanDetail() {
     );
   };
 
-  const memberBody = () => {
-    const list = data.assignments as MemberAssignment[];
-    const todo = list.filter((a) => !a.revoked && (a.status === "todo" || a.status === "returned")).length;
-    const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
-    return (
-      <>
-        <View className="stats">
-          <Stat icon="clock" label="待交" value={todo} color={todo ? C.accentOn : undefined} />
-          <Stat icon="checkcircle" label="已交" value={handed} />
-        </View>
-        <View className="group">
-          {list.length === 0 && <Text className="plan-empty">还没有作业</Text>}
-          {list.map((a) => {
-            const open = a.status === "todo" || a.status === "returned";
-            return (
-              <View key={a.id} className="plan-task" hoverClass="list-row--hover" onClick={() => go(`/pages/plan-task/index?id=${a.id}`)}>
-                <View className="plan-task__head">
-                  <Text className="t-headline ellipsis flex1">{a.title}</Text>
-                  {a.revoked ? (
-                    <Tag kind="neutral" icon={null}>
-                      已撤回
-                    </Tag>
-                  ) : (
-                    <Tag kind={STATUS_TAG[a.status]} icon={a.status === "todo" ? "clock" : a.status === "returned" ? "refresh" : a.status === "submitted" ? null : undefined}>
-                      {STATUS_LABEL[a.status]}
-                    </Tag>
-                  )}
-                  <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-                </View>
-                <View className="plan-counts" style={open && !a.dueAt ? { display: "none" } : undefined}>
-                  {open ? (
-                    a.dueAt && due(a.dueAt, isOverdue(a.dueAt))
-                  ) : a.score ? (
-                    <>
-                      {count("checkcircle", C.ok, a.score.correct)}
-                      {count("xcircle", C.wrong, a.score.wrong)}
-                      {count("minus", C.tertiary, a.score.blank)}
-                    </>
-                  ) : (
-                    <Text className="t-foot c-sec">批改中</Text>
-                  )}
-                  {!open && a.late && <Text className="t-foot c-sec">迟交</Text>}
-                </View>
-                {a.comment && (
-                  <View className="plan-count" style={{ alignItems: "flex-start" }}>
-                    <Icon name="bubble" size={14} color={a.status === "returned" ? C.wrong : C.tertiary} stroke={2.2} style={{ marginTop: "2px" }} />
-                    <Text className="t-foot flex1" style={{ color: a.status === "returned" ? C.wrong : C.secondary }}>
-                      {a.comment}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      </>
-    );
-  };
-
   return (
     <View className="page">
       {head}
-      {owner ? ownerBody() : memberBody()}
+      {owner ? ownerBody() : <PlanMember data={data} reload={load} />}
 
       <Sheet open={panel} onClose={() => setPanel(false)} title={owner ? "学习计划" : plan.name}>
         <View className="plan-field">

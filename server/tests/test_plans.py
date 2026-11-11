@@ -432,4 +432,27 @@ def test_owner_plan_page_has_files_and_member_status(client, auth):
     s3, _ = _login(client, "13800000013", "小刚")
     _join(client, s3, code)
     mine = client.get(f"/api/plans/{pid}", headers=s3).get_json()
-    assert "members" not in mine and "missing" not in mine["plan"] and all("files" not in a for a in mine["assignments"])
+    assert "members" not in mine and "missing" not in mine["plan"]
+
+
+def test_member_plan_page_has_files_and_marks_viewed(client, auth):
+    """成员的计划页合并了作业页：每份作业带文件列表和有没有电子版；打开计划页就算看过"""
+    out = _create(client, auth)
+    pid, aid, code = out["plan"]["id"], out["assignment"]["id"], out["invite"]["code"]
+    _upload(client, auth, out["uploads"])
+    student, uid = _login(client, "13800000021", "小明")
+    _join(client, student, code)
+    before = {m["userId"]: m for m in client.get(f"/api/plans/{pid}", headers=auth).get_json()["members"]}
+    assert before[uid]["items"][0]["viewed"] is False
+
+    mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
+    assert [f["name"] for f in mine[0]["files"]] == ["第 1 页.jpg", "第三单元练习.pdf"]
+    assert all(f["url"] for f in mine[0]["files"]) and mine[0]["digitized"] is False and mine[0]["status"] == "todo"
+    assert client.get(f"/api/plans/{pid}", headers=student).status_code == 200  # 再打开一次不会重复记
+    after = {m["userId"]: m for m in client.get(f"/api/plans/{pid}", headers=auth).get_json()["members"]}
+    assert after[uid]["items"][0]["viewed"] is True
+
+    # 交了以后状态跟着变；带的是作业的文件，不是自己交的那几页
+    _submit(client, student, aid)
+    mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
+    assert mine[0]["status"] == "submitted" and len(mine[0]["files"]) == 2

@@ -682,6 +682,13 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-task { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-top: 1px solid $sep-light; }
 .plan-task:first-child, .group__header + .plan-task { border-top: 0; }
 .plan-task__head { display: flex; align-items: center; gap: 8px; }
+/* 成员的计划页：交了的作业整块标绿，退回重做的标红 */
+.plan-task--done { background: $ok-bg; }
+.plan-task--returned { background: $wrong-bg; }
+.plan-task--done + .list-row, .plan-task--returned + .list-row { border-top: 0; }
+.thumb.plan-thumb__add { display: flex; align-items: center; justify-content: center; border: 1.5px dashed $brand; background: $brand-tint; box-shadow: none; }
+.plan-radio { width: 22px; height: 22px; border-radius: 11px; border: 2px solid $tertiary; box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.plan-radio--on { border-color: $brand; background: $brand; }
 .plan-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: $fill-light; }
 .plan-bar__seg { height: 100%; }
 .plan-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: $secondary; }

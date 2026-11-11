@@ -26,6 +26,17 @@
 .plan-task:first-child { border-top: 0; }
 .plan-task:active { background: var(--fill-light); }
 .plan-task__head { display: flex; align-items: center; gap: 8px; }
+/* 成员的计划页：交了的作业整块标绿，退回重做的标红 */
+.plan-task--done, .plan-task--done:active { background: var(--mastered-bg); }
+.plan-task--returned, .plan-task--returned:active { background: var(--wrong-bg); }
+.plan-task--static:active { background: transparent; }
+.plan-task--done + .row, .plan-task--returned + .row { border-top: 0; }
+.plan-thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
+.plan-thumb { position: relative; display: flex; }
+.plan-thumb__x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 11px; background: var(--label); color: var(--card); display: flex; align-items: center; justify-content: center; }
+.thumb.plan-thumb__add { display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--brand); background: var(--brand-tint); color: var(--brand); box-shadow: none; }
+.plan-radio { width: 22px; height: 22px; border-radius: 11px; border: 2px solid var(--tertiary); box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
+.plan-radio--on { border-color: var(--brand); background: var(--brand); }
 .plan-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--fill-light); }
 .plan-bar > span { display: block; height: 100%; }
 .plan-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--secondary); }

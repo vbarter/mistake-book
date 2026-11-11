@@ -3,13 +3,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Avatar, Stat, Tag } from "../../components/v2";
-import { PLAN_SUBJECT_LABEL, STATUS_LABEL, deletePlan, dueLabel, fetchPlan, fileBadge, isOverdue, memberName, memberState, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberAssignment, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
 import { openFile } from "./Assignment";
+import { PlanMember } from "./PlanMember";
 import { ConfirmSheet, PlanCreator, ScoreCounts } from "./shared";
-
-const STATUS_TAG: Record<MemberAssignment["status"], "pending" | "info" | "correct" | "wrong"> = { todo: "pending", submitted: "info", reviewed: "correct", returned: "wrong" };
 
 type Filter = "all" | Exclude<MemberState, "none">;
 /** 从批阅页回来还停在刚才的页签和筛选上 */
@@ -21,7 +20,7 @@ let remembered: { planId: string; tab: "tasks" | "members"; filter: Filter } | n
  * 「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，点一个人看他每份作业的情况并进去批阅、移出。
  * 点标题弹出面板：改名，下面是「让旧卡片失效」「解散」。
  * 成员点标题：改老师看到的名字、退出。页面上只留内容，不放这些不常用的操作。能用图标 + 数字说清的就不写字。
- * 成员：只有自己的待交 / 已交和作业列表，看不到其他成员、人数和别人交没交。
+ * 成员：只有自己的待交 / 已交和作业（见 PlanMember），看不到其他成员、人数和别人交没交。
  */
 /** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅 */
 const itemTag = (it: MemberItem) =>
@@ -170,51 +169,10 @@ export default function PlanDetail() {
             );
           })()
         ) : (
-          (() => {
-            const list = data.assignments as MemberAssignment[];
-            const todo = list.filter((a) => !a.revoked && (a.status === "todo" || a.status === "returned")).length;
-            const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
-            return (
-              <>
-                <PlanCreator plan={plan} />
-                <div className="plan-stats">
-                  <Stat icon="clock" label="待交" value={todo} color={todo ? "var(--due)" : undefined} />
-                  <Stat icon="checkcircle" label="已交" value={handed} />
-                </div>
-                <div className="group">
-                  {list.length === 0 && <div className="plan-files__empty">还没有作业</div>}
-                  {list.map((a) => {
-                    const open = a.status === "todo" || a.status === "returned";
-                    return (
-                      <button key={a.id} className="plan-task" onClick={() => nav(`/plans/a/${a.id}`)}>
-                        <span className="plan-task__head">
-                          <span className="t-headline ellipsis" style={{ flex: 1 }}>{a.title}</span>
-                          {a.revoked ? <Tag kind="neutral">已撤回</Tag> : <Tag kind={STATUS_TAG[a.status]} icon={a.status === "todo" ? "clock" : undefined}>{STATUS_LABEL[a.status]}</Tag>}
-                          <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-                        </span>
-                        <span className="plan-counts" style={open && !a.dueAt ? { display: "none" } : undefined}>
-                          {open ? (a.dueAt && due(a.dueAt, isOverdue(a.dueAt))) : a.score ? (
-                            <>
-                              {count("checkcircle", "var(--mastered)", a.score.correct)}
-                              {count("xcircle", "var(--wrong)", a.score.wrong)}
-                              {count("minus", "var(--tertiary)", a.score.blank)}
-                            </>
-                          ) : <span className="t-foot c-sec">批改中</span>}
-                          {!open && a.late && <span className="t-foot c-sec">迟交</span>}
-                        </span>
-                        {a.comment && (
-                          <span className="plan-count" style={{ alignItems: "flex-start", fontWeight: 400, color: a.status === "returned" ? "var(--wrong)" : "var(--secondary)" }}>
-                            <Icon name="bubble" size={14} stroke={2.2} style={{ marginTop: 2, flexShrink: 0 }} />
-                            <span style={{ flex: 1, textAlign: "left" }}>{a.comment}</span>
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()
+          <>
+            <PlanCreator plan={plan} />
+            <PlanMember data={data} reload={load} />
+          </>
         )}
       </div>
 
