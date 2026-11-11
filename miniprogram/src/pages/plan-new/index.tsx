@@ -41,7 +41,7 @@ export default function PlanNew() {
         .catch((e) => toast(errorText(e)));
   }, [planId, logged, version]);
 
-  usePlanShare(() => (done ? { plan: done.plan, invite: done.invite, title: done.assignment.title, assignmentId: done.assignment.id } : null));
+  usePlanShare(() => (done ? { plan: done.plan, invite: done.invite, title: done.assignment?.title, assignmentId: done.assignment?.id } : null));
 
   if (!logged) return <LoginGate what="新建学习计划" />;
 
@@ -123,7 +123,8 @@ export default function PlanNew() {
   const submit = async () => {
     if (!planId && !name.trim()) return void toast("给学习计划起个名字");
     if (!planId && !subject) return void toast("选一个学科");
-    if (!files.length) return void toast("先扫描或上传一个文件");
+    // 新建计划可以先不放作业：建好就转发让大家加入，之后再布置；在已有计划里布置就必须有内容
+    if (planId && !files.length) return void toast("先扫描或上传一个文件");
     try {
       const res = await publishAssignment(planId || null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt: null, title: title.trim() }, files, setStage);
       setStage(null);
@@ -136,7 +137,7 @@ export default function PlanNew() {
   };
 
   const finish = () => {
-    if (done) void Taro.redirectTo({ url: `/pages/plan-task/index?id=${done.assignment.id}` });
+    if (done) void Taro.redirectTo({ url: done.assignment ? `/pages/plan-task/index?id=${done.assignment.id}` : `/pages/plan/index?id=${done.plan.id}` });
   };
 
   return (
@@ -179,6 +180,7 @@ export default function PlanNew() {
       <View className="plan-field">
         <View className="plan-field__label">
           <Text>作业内容</Text>
+          {!planId && files.length === 0 && <Text className="plan-field__note">选填</Text>}
           {files.length > 0 && <Text className="plan-field__note">{files.length}</Text>}
         </View>
         <ScrollView scrollY className="plan-files" enhanced showScrollbar={false} scrollIntoView={bottom} scrollWithAnimation>
@@ -244,7 +246,7 @@ export default function PlanNew() {
           </View>
         </View>
       </Sheet>
-      <Sheet open={Boolean(done)} onClose={finish} title="已布置">
+      <Sheet open={Boolean(done)} onClose={finish} title={done && !done.assignment ? "已创建" : "已布置"}>
         <Text className="t-foot c-sec">同学点开卡片就自动加入</Text>
         <ShareButton>转发到微信</ShareButton>
         <Button variant="plain" onClick={finish}>

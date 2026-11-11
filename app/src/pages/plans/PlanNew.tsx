@@ -63,15 +63,18 @@ export default function PlanNew() {
   const submit = async () => {
     if (!planId && !name.trim()) return toast("给学习计划起个名字");
     if (!planId && !subject) return toast("选一个学科");
-    if (!files.length) return toast("先扫描或上传一个文件");
+    // 新建计划可以先不放作业：建好就转发让大家加入，之后再布置；在已有计划里布置就必须有内容
+    if (planId && !files.length) return toast("先扫描或上传一个文件");
     try {
       const res = await publishAssignment(planId ?? null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt: null, title: title.trim() }, files, setStage);
       setStage(null);
       void haptic.success();
       // 直接转发到微信；取消了也没关系，作业页右上角还能再转发
-      const shared = await shareInvite({ plan: res.plan, title: res.assignment.title, invite: res.invite, assignmentId: res.assignment.id }).catch(() => false);
-      toast(shared ? "已布置" : "已布置，可以在作业页右上角再转发", "success");
-      nav(`/plans/a/${res.assignment.id}`, { replace: true });
+      const a = res.assignment;
+      const shared = await shareInvite({ plan: res.plan, title: a?.title, invite: res.invite, assignmentId: a?.id }).catch(() => false);
+      const what = a ? "已布置" : "已创建";
+      toast(shared ? what : `${what}，可以在${a ? "作业页" : "计划页"}再转发`, "success");
+      nav(a ? `/plans/a/${a.id}` : `/plans/${res.plan.id}`, { replace: true });
     } catch (e) {
       setStage(null);
       toastError(e);
@@ -106,7 +109,7 @@ export default function PlanNew() {
         )}
 
         <div className="plan-field">
-          <span className="plan-field__label"><span>作业内容</span>{files.length > 0 && <span style={{ fontWeight: 400 }}>{files.length}</span>}</span>
+          <span className="plan-field__label"><span>作业内容</span>{!planId && files.length === 0 && <span style={{ fontWeight: 400 }}>选填</span>}{files.length > 0 && <span style={{ fontWeight: 400 }}>{files.length}</span>}</span>
           <div className="plan-files" ref={list}>
             {files.length === 0 && <div className="plan-files__empty"><Icon name="document" size={32} stroke={1.6} style={{ color: "var(--tertiary)" }} /></div>}
             {files.map((f) => (
