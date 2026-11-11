@@ -119,5 +119,10 @@ function decodeUtf8(buf: ArrayBuffer): string {
 }
 
 export function errorText(e: unknown): string {
-  return e instanceof ApiError ? e.message : String((e as Error)?.message || "出错了，请稍后再试");
+  if (e instanceof ApiError) return e.message;
+  // 微信接口失败抛的是 { errMsg }，没有 message；常见的几种说清原因，别只说「出错了」
+  const msg = String((e as Error)?.message || (e as { errMsg?: string })?.errMsg || "");
+  if (/privacy|scope is not declared/i.test(msg)) return "小程序后台的隐私保护指引还没声明这项权限，暂时用不了";
+  if (/auth deny|auth denied|authorize:fail|permission/i.test(msg)) return "没有权限，可以在右上角「设置」里打开";
+  return msg || "出错了，请稍后再试";
 }

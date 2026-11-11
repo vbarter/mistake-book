@@ -115,6 +115,18 @@ export async function scanDraft(path: string, index: number): Promise<DraftFile>
   return { clientId: newId(), kind: "scan", name: `扫描件 第 ${index + 1} 页.jpg`, mime: "image/jpeg", size: fileSize(path), path, width: info.width, height: info.height };
 }
 
+/** 从手机相册选的一张图片 → 附件草稿（不识别成题目，同学直接看图）；格式不支持、太大的返回一句原因 */
+export async function imageAttachmentDraft(path: string, index: number): Promise<DraftFile | string> {
+  const info = await Taro.getImageInfo({ src: path });
+  const type = String(info.type || "").toLowerCase();
+  const ext = type === "jpg" || type === "jpeg" ? "jpg" : type === "png" || type === "webp" ? type : "";
+  const name = `图片 ${index + 1}.${ext || "jpg"}`;
+  if (!ext) return `「${name}」的格式不支持，换一张 JPG 或 PNG`;
+  const size = fileSize(path);
+  if (size > MAX_PLAN_FILE_BYTES) return `「${name}」超过 20 MB 了`;
+  return { clientId: newId(), kind: "attachment", name, mime: EXT_MIME[ext], size, path, width: info.width, height: info.height };
+}
+
 /** 从微信聊天记录里选的一个文件 → 附件草稿；不支持的类型、太大的返回一句原因 */
 export function attachmentDraft(file: { path: string; name: string; size: number }): DraftFile | string {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
