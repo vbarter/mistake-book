@@ -26,6 +26,8 @@
 .plan-task:first-child { border-top: 0; }
 .plan-task:active { background: var(--fill-light); }
 .plan-task__head { display: flex; align-items: center; gap: 8px; }
+.plan-hw { border-top: 1px solid var(--separator-light); }
+.plan-hw > .row:first-child { border-top: 1px solid var(--separator-light); }
 /* 成员的计划页：交了的作业整块标绿，退回重做的标红 */
 .plan-task--done, .plan-task--done:active { background: var(--mastered-bg); }
 .plan-task--returned, .plan-task--returned:active { background: var(--wrong-bg); }

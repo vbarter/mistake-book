@@ -16,15 +16,8 @@ type Look = "done" | "returned" | "todo" | "revoked";
 const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
 const LOOK_ICON: Record<Look, [IconName, string]> = { done: ["checkcircle", C.ok], returned: ["refresh", C.wrong], todo: ["clock", C.accentOn], revoked: ["minus", C.tertiary] };
 
-/** 作业块的标题是计划名；老师另外起了作业名（不是文件名带出来的）才在下面一行带上 */
-const customTitle = (a: MemberAssignment, planName: string): string => {
-  const t = a.title.trim();
-  if (!t || t === planName) return "";
-  return (a.files ?? []).some((f) => f.name === t || f.name.replace(/\.[^.]+$/, "") === t) ? "" : t;
-};
-
 /**
- * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，每份作业一块（计划名 + 状态 + 这份作业的创建时间，下面直接平铺它的文件，点文件打开），
+ * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面每份作业一段（作业名 + 状态，下面直接平铺它的文件，点文件打开），
  * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
  * 交完页面跟着刷新，交了的作业整块标成绿色。交过的作业点作业名看自己那份的批改结果。
  */
@@ -98,18 +91,20 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         <Stat icon="clock" label="待交" value={todo.length} color={todo.length ? C.accentOn : undefined} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? C.ok : undefined} />
       </View>
-      {list.length === 0 && (
-        <View className="group">
-          <Text className="plan-empty">还没有作业</Text>
+      {/* 一张卡片：最上面是计划名 + 创建时间（只出现一次），下面一份份作业 */}
+      <View className="group">
+        <View className="plan-task">
+          <Text className="t-headline ellipsis">{data.plan.name}</Text>
+          <Text className="t-foot c-sec">{createdLabel(data.plan.createdAt)}</Text>
         </View>
-      )}
-      {list.map((a) => {
+        {list.length === 0 && <Text className="plan-empty">还没有作业</Text>}
+        {list.map((a) => {
         const look = lookOf(a);
         const waiting = a.status === "todo" || a.status === "returned";
         const files = a.files ?? [];
         const mine = a.status !== "todo"; // 交过：点作业名看自己那份和批改结果
         return (
-          <View key={a.id} className="group">
+          <View key={a.id} className="plan-hw">
             <View
               className={`plan-task plan-task--${look}`}
               hoverClass={mine ? "list-row--hover" : "none"}
@@ -117,11 +112,10 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
             >
               <View className="plan-task__head">
                 <Icon name={LOOK_ICON[look][0]} size={18} color={LOOK_ICON[look][1]} stroke={2.4} />
-                <Text className="t-headline ellipsis flex1">{data.plan.name}</Text>
+                <Text className="t-headline ellipsis flex1">{a.title}</Text>
                 {statusTag(a, true)}
                 {mine && <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />}
               </View>
-              <Text className="t-foot c-sec ellipsis">{[customTitle(a, data.plan.name), createdLabel(a.createdAt)].filter(Boolean).join(" · ")}</Text>
               <View className="plan-counts" style={waiting && !a.dueAt ? { display: "none" } : undefined}>
                 {waiting ? (
                   a.dueAt && (
@@ -170,6 +164,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
           </View>
         );
       })}
+      </View>
 
       <View className="bottom-bar">
         <Button variant="outline" icon="printer" className={open.length ? undefined : "flex1"} disabled={exportable.length === 0} onClick={() => setExporting(true)}>

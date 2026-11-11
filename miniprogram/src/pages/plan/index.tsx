@@ -8,7 +8,7 @@ import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui
 import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLAN_SUBJECT_LABEL, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
 const leave = () => {
@@ -162,11 +162,11 @@ export default function PlanDetail() {
       {/* 点计划名弹出面板：改名，下面是不常用的操作（和 iOS 的标题菜单一个意思） */}
       <View className="flex1 col minw0" onClick={openPanel}>
         <View className="row-center gap6">
-          {/* 成员：头像旁边是创建人的名字 + 计划的创建时间，计划名在下面每份作业的标题上；创建人自己看到的还是计划名 + 学科 */}
+          {/* 成员：头像旁边只有创建人的名字，计划名 + 创建时间在下面作业卡片的最上面；创建人自己看到的还是计划名 + 学科 */}
           <Text className="t-headline ellipsis">{owner ? plan.name : plan.teacher}</Text>
           <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />
         </View>
-        <Text className="t-foot c-sec ellipsis">{owner ? (PLAN_SUBJECT_LABEL[plan.subject] ?? "综合") : createdLabel(plan.createdAt)}</Text>
+        {owner && <Text className="t-foot c-sec ellipsis">{PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}</Text>}
       </View>
       {owner && data.invite && <ShareButton pill>转发</ShareButton>}
     </View>

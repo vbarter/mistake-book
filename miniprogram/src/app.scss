@@ -682,6 +682,8 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-task { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-top: 1px solid $sep-light; }
 .plan-task:first-child, .group__header + .plan-task { border-top: 0; }
 .plan-task__head { display: flex; align-items: center; gap: 8px; }
+.plan-hw { border-top: 1px solid $sep-light; }
+.plan-hw > .list-row:first-child { border-top: 1px solid $sep-light; }
 /* 成员的计划页：交了的作业整块标绿，退回重做的标红 */
 .plan-task--done { background: $ok-bg; }
 .plan-task--returned { background: $wrong-bg; }
