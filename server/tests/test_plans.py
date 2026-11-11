@@ -88,12 +88,12 @@ def test_create_plan_with_first_assignment(client, auth):
 def test_create_validation(client, auth):
     assert client.post("/api/plans", json={"name": "", "subject": "math", "files": [SCAN]}, headers=auth).status_code == 400
     assert client.post("/api/plans", json={"name": "x", "subject": "nope", "files": [SCAN]}, headers=auth).status_code == 400
-    assert client.post("/api/plans", json={"name": "x", "subject": "math", "files": []}, headers=auth).status_code == 400
+    assert client.post("/api/plans", json={"name": "x", "subject": "math", "files": []}, headers=auth).status_code == 201  # 可以先不放作业
     bad = {**PDF, "mime": "application/zip"}
     assert client.post("/api/plans", json={"name": "x", "subject": "math", "files": [bad]}, headers=auth).status_code == 400
     big = {**PDF, "size": 21 * 1024 * 1024}
     assert client.post("/api/plans", json={"name": "x", "subject": "math", "files": [big]}, headers=auth).status_code == 413
-    assert Plan.query.count() == 0
+    assert Plan.query.count() == 1  # 只有上面没放作业的那个
     assert client.post("/api/plans", json={"name": "x", "subject": "mixed", "files": [SCAN]}, headers=auth).status_code == 201
 
 
@@ -359,3 +359,23 @@ def test_avatar_upload_and_shown_to_plan_members(client, auth):
     # 注销后头像记录和图片都没了
     assert client.delete("/api/auth/me", headers=teacher).status_code == 200
     assert client.get(second).status_code == 404
+
+
+def test_create_plan_without_files_then_assign_later(client):
+    """先不放作业也能建计划、转发、加入；之后布置的作业，早加入的成员照样能看到"""
+    teacher, _ = _login(client, "13800003001", "王老师")
+    student, _ = _login(client, "13800003002", "小明")
+    r = client.post("/api/plans", json={"name": "五年级数学", "subject": "math", "files": []}, headers=teacher)
+    assert r.status_code == 201, r.get_json()
+    res = r.get_json()
+    assert res["assignment"] is None and res["uploads"] == [] and "?a=" not in res["invite"]["url"]
+    assert client.get(f"/api/plans/j/{res['invite']['code']}").status_code == 200  # 落地页没有作业也能开
+    assert client.post("/api/plans/join", json={"code": res["invite"]["code"]}, headers=student).status_code == 200
+    pid = res["plan"]["id"]
+    assert client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"] == []
+
+    r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF]}, headers=teacher)
+    assert r.status_code == 201
+    _upload(client, teacher, r.get_json()["uploads"])
+    got = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
+    assert [a["id"] for a in got] == [r.get_json()["assignment"]["id"]]
