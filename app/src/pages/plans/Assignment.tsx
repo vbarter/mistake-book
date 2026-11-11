@@ -5,7 +5,7 @@ import { PrintSheets } from "../../components/PrintPaper";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Stat, Tag } from "../../components/v2";
 import type { FullPage, Paper } from "../../lib/folders";
-import { haptic } from "../../lib/native";
+import { haptic, openRemoteFile } from "../../lib/native";
 import { STATUS_LABEL, dueLabel, fetchAssignment, isAssignmentScanning, isOverdue, isSubmissionPending, memberName, revokeAssignment, shareInvite, sizeLabel, submitHomework, usePlans, type AssignmentRes, type PlanFileView, type ResultRow } from "../../lib/plans";
 import { assetUrl } from "../../api/client";
 import { toast, toastError } from "../../store/banner";
@@ -14,7 +14,22 @@ import { Busy, ConfirmSheet, Count, ScoreCounts, ScoreStats, useScanPick } from 
 import "../../styles/paper.css";
 
 const fileUrl = (f: PlanFileView) => assetUrl(f.url) ?? "";
-const openFile = (f: PlanFileView) => { if (f.url) window.open(fileUrl(f), "_blank"); else toast("文件还在上传，稍后再试"); };
+/** 打开附件 / 扫描件：原生端用系统预览（能返回），见 openRemoteFile */
+let opening = false;
+export const openFile = async (f: { id: string; name: string; url: string | null }) => {
+  if (!f.url) return toast("文件还在上传，稍后再试");
+  if (opening) return;
+  opening = true;
+  const slow = setTimeout(() => toast("正在打开…"), 600); // 大文件要先下载，给个反应
+  try {
+    await openRemoteFile(assetUrl(f.url) ?? "", f.name, f.id);
+  } catch (e) {
+    toastError(e);
+  } finally {
+    clearTimeout(slow);
+    opening = false;
+  }
+};
 const badge = (f: PlanFileView) => (f.mime === "application/pdf" ? "PDF" : f.mime.includes("word") ? "DOC" : "图片");
 
 export function QuestionGrid({ results, onPick }: { results: ResultRow[]; onPick?: (i: number) => void }) {

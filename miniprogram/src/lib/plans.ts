@@ -118,21 +118,9 @@ export async function scanDraft(path: string, index: number): Promise<DraftFile>
 export function attachmentDraft(file: { path: string; name: string; size: number }): DraftFile | string {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   const mime = EXT_MIME[ext];
-  if (!mime) return `「${file.name}」不是 PDF、Word 或图片`;
+  if (!mime || mime.startsWith("image/")) return `「${file.name}」不是 PDF 或 Word`;
   if (file.size > MAX_PLAN_FILE_BYTES) return `「${file.name}」超过 20 MB 了`;
   return { clientId: newId(), kind: "attachment", name: file.name, mime, size: file.size, path: file.path };
-}
-
-/** 从相册选的一张图片 → 附件草稿（不识别成题目，同学直接看图）；不是 JPG / PNG / WebP、太大的返回一句原因 */
-export async function imageAttachmentDraft(path: string, index: number): Promise<DraftFile | string> {
-  const info = await Taro.getImageInfo({ src: path });
-  const type = String(info.type || "").toLowerCase();
-  const ext = type === "jpg" || type === "jpeg" ? "jpg" : type === "png" || type === "webp" ? type : "";
-  const name = `图片 ${index + 1}.${ext || "jpg"}`;
-  if (!ext) return `「${name}」的格式不支持，换一张 JPG 或 PNG`;
-  const size = fileSize(path);
-  if (size > MAX_PLAN_FILE_BYTES) return `「${name}」超过 20 MB 了`;
-  return { clientId: newId(), kind: "attachment", name, mime: EXT_MIME[ext], size, path, width: info.width, height: info.height };
 }
 
 async function uploadAll(uploads: Upload[], drafts: DraftFile[], onStage?: (text: string) => void): Promise<void> {
