@@ -6,8 +6,9 @@ import { Busy, LoginGate, ScanSheet, ShareButton, loggedIn, usePlanShare, usePla
 import { Button, Sheet } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { SUBJECTS } from "../../lib/format";
+import { pickPhotos } from "../../lib/capture";
 import { toast } from "../../lib/hooks";
-import { MAX_FILES, PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject, type PublishRes } from "../../lib/plans";
+import { MAX_FILES, PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, imageAttachmentDraft, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject, type PublishRes } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
 /**
@@ -24,6 +25,7 @@ export default function PlanNew() {
   const [subject, setSubject] = useState<PlanSubject | null>(null);
   const [files, setFiles] = useState<DraftFile[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [attaching, setAttaching] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
   const [done, setDone] = useState<PublishRes | null>(null);
   const [bottom, setBottom] = useState("");
@@ -66,11 +68,35 @@ export default function PlanNew() {
     }
   };
 
-  /**
-   * 上传文件：只选 PDF、Word，图片和拍照都归「扫描」，两个按钮不重复。
-   * 小程序读不到手机里的文件，只能从微信聊天记录里选（先把文件发给「文件传输助手」或任意一个聊天）。
-   */
-  const attach = async () => {
+  /** 上传文件 · 手机相册：选图片原样当附件（不识别成题目，要识别的用「扫描」） */
+  const fromAlbum = async () => {
+    setAttaching(false);
+    if (files.length >= MAX_FILES) return void toast(`一份作业最多 ${MAX_FILES} 个文件`);
+    try {
+      const paths = await pickPhotos("album");
+      if (!paths.length) return;
+      setStage("正在读取照片");
+      const base = files.filter((f) => f.kind === "attachment" && f.mime.startsWith("image/")).length;
+      const ok: DraftFile[] = [];
+      let bad = "";
+      for (const path of paths) {
+        const d = await imageAttachmentDraft(path, base + ok.length);
+        if (typeof d === "string") bad = d;
+        else ok.push(d);
+      }
+      if (ok.length) add(ok);
+      if (bad) toast(bad);
+    } catch (e) {
+      const msg = String((e as { errMsg?: string }).errMsg || (e as Error).message || "");
+      if (!/cancel/i.test(msg)) void Taro.showModal({ title: "没选成", content: errorText(e), showCancel: false });
+    } finally {
+      setStage(null);
+    }
+  };
+
+  /** 上传文件 · 微信聊天：PDF、Word。小程序读不到手机目录里的文件，微信只让从聊天记录里选（先把文件发给「文件传输助手」或任意一个聊天） */
+  const fromChat = async () => {
+    setAttaching(false);
     if (files.length >= MAX_FILES) return void toast(`一份作业最多 ${MAX_FILES} 个文件`);
     let res: Taro.chooseMessageFile.SuccessCallbackResult;
     try {
@@ -186,7 +212,7 @@ export default function PlanNew() {
           <Button variant="outline" icon="camera" onClick={() => setScanning(true)}>
             扫描
           </Button>
-          <Button variant="outline" icon="document" onClick={() => void attach()}>
+          <Button variant="outline" icon="document" onClick={() => setAttaching(true)}>
             上传文件
           </Button>
         </View>
@@ -200,6 +226,24 @@ export default function PlanNew() {
       </View>
 
       <ScanSheet open={scanning} onClose={() => setScanning(false)} onPhotos={(p) => void onPhotos(p)} />
+      <Sheet open={attaching} onClose={() => setAttaching(false)} title="上传文件">
+        <View className="add-grid">
+          <View className="add-tile" hoverClass="card--pressed" onClick={() => void fromAlbum()}>
+            <View className="add-tile__icon">
+              <Icon name="photo" size={28} color="#ffffff" stroke={2} />
+            </View>
+            <Text className="t-headline">手机相册</Text>
+            <Text className="t-cap c-sec">图片</Text>
+          </View>
+          <View className="add-tile" hoverClass="card--pressed" onClick={() => void fromChat()}>
+            <View className="add-tile__icon" style={{ background: "#07c160" }}>
+              <WechatIcon size={28} color="#ffffff" />
+            </View>
+            <Text className="t-headline">微信聊天</Text>
+            <Text className="t-cap c-sec">PDF · Word</Text>
+          </View>
+        </View>
+      </Sheet>
       <Sheet open={Boolean(done)} onClose={finish} title="已布置">
         <Text className="t-foot c-sec">同学点开卡片就自动加入</Text>
         <ShareButton>转发到微信</ShareButton>
