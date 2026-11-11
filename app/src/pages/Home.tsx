@@ -5,12 +5,12 @@ import { AvatarPrompt } from "../components/AvatarPrompt";
 import { Icon } from "../components/Icon";
 import { Buddy } from "../components/Illustration";
 import { Sheet } from "../components/ui";
-import { SubjectTile } from "../components/v2";
+import { Avatar, SubjectTile, Tag } from "../components/v2";
 import { allErrors } from "../lib/errors";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
 import { analyze, inRange } from "../lib/insights";
 import { scanStageText, useJobs } from "../lib/jobs";
-import { dueLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanSummary } from "../lib/plans";
+import { PLAN_SUBJECT_LABEL, dueLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/banner";
 
@@ -28,6 +28,7 @@ export default function Home() {
   const jobsVersion = useJobs((s) => s.version);
   const nickname = useAuth((s) => s.user?.nickname) ?? "";
   const [plans, setPlans] = useState<PlanSummary | null>(null);
+  const [planList, setPlanList] = useState<PlanInfo[]>([]);
   const plansVersion = usePlans((s) => s.version);
   // 点开了老师的卡片、刚登录 / 注册完落到首页：接着去加入
   useEffect(() => {
@@ -35,10 +36,13 @@ export default function Home() {
     if (target) nav(joinPath(target), { replace: true });
   }, [nav]);
   useEffect(() => {
-    fetchPlans().then((r) => setPlans(r.summary)).catch(() => undefined); // 没网时卡片照样在，只是不带数字
+    fetchPlans().then((r) => { setPlans(r.summary); setPlanList(r.plans); }).catch(() => undefined); // 没网时卡片照样在，只是不带数字
   }, [plansVersion]);
   const hasPlans = !!plans && plans.owned + plans.joined > 0;
-  const planCount = plans ? plans.todo + plans.toReview : 0;
+  const planCount = plans ? (plans.todo > 0 ? plans.todo : plans.toReview) : 0; // 有待交先说待交，没有再说待批阅
+  // 首页直接列几个学习计划：有作业待交 / 待批阅的排前面，其余按新旧，最多 3 个
+  const pending = (p: PlanInfo) => (p.role === "owner" ? p.toReview ?? 0 : p.todo ?? 0);
+  const topPlans = [...planList].sort((a, b) => Number(pending(b) > 0) - Number(pending(a) > 0) || (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 3);
 
   useEffect(() => {
     listFolders().then(setFolders).catch(() => setFolders([]));
@@ -99,6 +103,24 @@ export default function Home() {
               <span className="pc__m pc__m--wrap">拍一张作业单，自动列成待办</span>
             </button>
           </div>
+          {topPlans.length > 0 && (
+            <div className="plist">
+              {topPlans.map((p) => (
+                <button key={p.id} className="plist__row" onClick={() => nav(`/plans/${p.id}`)}>
+                  <Avatar name={p.teacher} url={p.teacherAvatar} size={36} />
+                  <span className="plist__main">
+                    <span className="plist__name ellipsis">{p.name}</span>
+                    <span className="plist__sub ellipsis">{p.teacher} · {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}</span>
+                  </span>
+                  {pending(p) > 0
+                    ? <Tag kind={p.role === "owner" ? "info" : "pending"}>{p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}</Tag>
+                    : <span className="plist__ok">{p.role === "owner" ? "都批完了" : "都交了"}</span>}
+                  <Icon name="chevron-right" size={13} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+                </button>
+              ))}
+              {planList.length > topPlans.length && <button className="plist__more" onClick={() => nav("/plans")}>全部 {planList.length} 个学习计划 ›</button>}
+            </div>
+          )}
         </section>
 
         <section className="hero2 rise" style={{ ["--i" as string]: 2 }}>
@@ -140,6 +162,24 @@ export default function Home() {
               <span className="bt__t">试卷擦除</span><span className="bt__s">擦掉手写，空白卷重练</span>
             </button>
           </div>
+          {topPlans.length > 0 && (
+            <div className="plist">
+              {topPlans.map((p) => (
+                <button key={p.id} className="plist__row" onClick={() => nav(`/plans/${p.id}`)}>
+                  <Avatar name={p.teacher} url={p.teacherAvatar} size={36} />
+                  <span className="plist__main">
+                    <span className="plist__name ellipsis">{p.name}</span>
+                    <span className="plist__sub ellipsis">{p.teacher} · {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}</span>
+                  </span>
+                  {pending(p) > 0
+                    ? <Tag kind={p.role === "owner" ? "info" : "pending"}>{p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}</Tag>
+                    : <span className="plist__ok">{p.role === "owner" ? "都批完了" : "都交了"}</span>}
+                  <Icon name="chevron-right" size={13} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+                </button>
+              ))}
+              {planList.length > topPlans.length && <button className="plist__more" onClick={() => nav("/plans")}>全部 {planList.length} 个学习计划 ›</button>}
+            </div>
+          )}
         </section>
       </div>
       {add.sheet}
