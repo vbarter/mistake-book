@@ -39,7 +39,11 @@ export default function Home() {
     fetchPlans().then((r) => { setPlans(r.summary); setPlanList(r.plans); }).catch(() => undefined); // 没网时卡片照样在，只是不带数字
   }, [plansVersion]);
   const hasPlans = !!plans && plans.owned + plans.joined > 0;
-  const planCount = plans ? (plans.todo > 0 ? plans.todo : plans.toReview) : 0; // 有待交先说待交，没有再说待批阅
+  // 卡片上的大数字：有待交先说待交，没有再说待批阅；两样都没有就说一共有多少份作业
+  // （扫描的和上传文件的都算）。以前这时一直显示「0 份作业待交」，自己创建的计划里明明有作业也是 0。
+  const planMode = plans && plans.todo > 0 ? "todo" : plans && plans.toReview > 0 ? "review" : "all";
+  const planCount = !plans ? 0 : planMode === "todo" ? plans.todo : planMode === "review" ? plans.toReview : planList.reduce((n, p) => n + (p.assignments ?? 0), 0);
+  const planUnit = planMode === "todo" ? "份 作业待交" : planMode === "review" ? "份 等你批阅" : "份 作业";
   // 首页直接列几个学习计划：有作业待交 / 待批阅的排前面，其余按新旧，最多 3 个
   const pending = (p: PlanInfo) => (p.role === "owner" ? p.toReview ?? 0 : p.todo ?? 0);
   const topPlans = [...planList].sort((a, b) => Number(pending(b) > 0) - Number(pending(a) > 0) || (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 3);
@@ -82,7 +86,7 @@ export default function Home() {
               <span className="pc__h"><span className="pc__t">学习计划</span><span className="pc__go"><Icon name="chevron-right" size={11} stroke={3} /></span></span>
               {hasPlans && plans ? (
                 <>
-                  <span className="pc__big"><b className="pc__num">{planCount}</b>{plans.todo > 0 || plans.toReview === 0 ? "份 作业待交" : "份 等你批阅"}</span>
+                  <span className="pc__big"><b className="pc__num">{planCount}</b>{planUnit}</span>
                   <span className="pc__m">
                     {plans.todo > 0 && plans.nextSubject && plans.nextSubject !== "mixed" && <SubjectTile subject={plans.nextSubject} size="xs" style={{ width: 16, height: 16, borderRadius: 5, fontSize: 10 }} />}
                     <span className="ellipsis">{plans.todo > 0 ? plans.nextTitle ?? "作业" : plans.owned > 0 ? `今天已交 ${plans.submittedToday} 份` : "作业都交了"}</span>
