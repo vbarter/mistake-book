@@ -10,7 +10,7 @@ import { STATUS_LABEL, dueLabel, fetchAssignment, isAssignmentScanning, isOverdu
 import { assetUrl } from "../../api/client";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
-import { Busy, ConfirmSheet, Count, ScoreCounts, ScoreStats, useScanPick } from "./shared";
+import { Busy, ConfirmSheet, Count, PlanCreator, ScoreCounts, ScoreStats, useScanPick } from "./shared";
 import "../../styles/paper.css";
 
 const fileUrl = (f: PlanFileView) => assetUrl(f.url) ?? "";
@@ -107,13 +107,16 @@ export default function Assignment() {
 
   const content = (
     <>
+      {/* 成员：先看到是谁的哪个学习计划，点一下去看这个计划的全部作业 */}
+      {!owner && <PlanCreator plan={plan} more="全部作业" onClick={() => nav(`/plans/${plan.id}`)} />}
       <div className="card" style={{ gap: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="t-title3 ellipsis" style={{ fontWeight: 800, flex: 1 }}>{a.title}</span>
+          {/* 成员这边作业名最多两行，长名字不截成一行 */}
+          <span className={`t-title3 ${owner ? "ellipsis" : "clamp2"}`} style={{ fontWeight: 800, flex: 1 }}>{a.title}</span>
           {a.revoked && <Tag kind="neutral">已撤回</Tag>}
         </div>
-        <div className="plan-counts">
-          <span className="t-foot c-sec ellipsis">{plan.name}{owner ? "" : ` · ${plan.teacher}`}</span>
+        <div className="plan-counts" style={owner || a.dueAt || a.questionCount ? undefined : { display: "none" }}>
+          {owner && <span className="t-foot c-sec ellipsis">{plan.name}</span>}
           {a.dueAt && <Count icon="clock" color={isOverdue(a.dueAt) ? "var(--wrong)" : undefined}>{dueLabel(a.dueAt)}</Count>}
           {a.questionCount ? <Count icon="list">{a.questionCount} 题</Count> : null}
         </div>

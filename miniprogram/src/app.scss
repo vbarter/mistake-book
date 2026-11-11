@@ -678,6 +678,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-add .btn { flex: 1; min-width: 0; }
 .plan-pill { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px 0 11px; border-radius: 17px; background: $card; border: 1px solid $sep-light; color: $label; font-size: 14px; font-weight: 600; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; }
 .plan-head { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+.plan-creator { flex-direction: row; align-items: center; gap: 12px; }
 .plan-task { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-top: 1px solid $sep-light; }
 .plan-task:first-child, .group__header + .plan-task { border-top: 0; }
 .plan-task__head { display: flex; align-items: center; gap: 8px; }
