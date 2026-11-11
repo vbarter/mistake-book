@@ -331,3 +331,39 @@ export function setupEdgeSwipeBack(onBack: () => void, isRoot: () => boolean): (
 }
 
 export const isTabRoot = (pathname: string) => TAB_ROOTS.has(pathname);
+
+/**
+ * 打开服务器上的一个文件（学习计划的附件、扫描件、同学交的照片）。
+ * 原生端不能用 window.open：WKWebView 会把整个 App 页面换成那个文件，没有返回按钮，只能杀掉 App。
+ * 所以先下到缓存目录，再交给系统的预览（iOS 是「快速查看」，左上角有「完成」；安卓交给能打开它的 App，按返回键回来）。
+ * 系统预览打不开时退回分享面板，至少能存到「文件」或用别的 App 打开。网页端照旧开新标签。
+ */
+export async function openRemoteFile(url: string, filename: string, cacheKey: string): Promise<void> {
+  if (!isNative) {
+    window.open(url, "_blank");
+    return;
+  }
+  const { Filesystem, Directory } = await import("@capacitor/filesystem");
+  const ext = filename.includes(".") ? filename.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
+  const path = `plan-files/${cacheKey.replace(/[^A-Za-z0-9_-]/g, "")}${ext ? `.${ext}` : ""}`;
+  let uri = "";
+  try {
+    const st = await Filesystem.stat({ path, directory: Directory.Cache });
+    if (st.size > 0) uri = st.uri; // 下过的直接用
+  } catch { /* 还没下过 */ }
+  if (!uri) {
+    await Filesystem.downloadFile({ url, path, directory: Directory.Cache, recursive: true });
+    uri = (await Filesystem.getUri({ path, directory: Directory.Cache })).uri;
+  }
+  const { FileViewer } = await import("@capacitor/file-viewer");
+  try {
+    await FileViewer.openDocumentFromLocalPath({ path: uri });
+  } catch {
+    try {
+      await FileViewer.openDocumentFromLocalPath({ path: decodeURI(uri.replace(/^file:\/\//, "")) });
+    } catch {
+      const { Share } = await import("@capacitor/share");
+      await Share.share({ title: filename, files: [uri] });
+    }
+  }
+}
