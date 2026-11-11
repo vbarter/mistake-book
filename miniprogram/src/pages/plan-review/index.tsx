@@ -57,6 +57,7 @@ export default function PlanReview() {
   const open = (sid: string) => Taro.redirectTo({ url: `/pages/plan-review/index?id=${sid}` });
   const back = () => {
     if (Taro.getCurrentPages().length > 1) void Taro.navigateBack();
+    else if (owner) void Taro.redirectTo({ url: `/pages/plan/index?id=${plan.id}` });
     else if (assignment) void Taro.redirectTo({ url: `/pages/plan-task/index?id=${assignment.id}` });
   };
 

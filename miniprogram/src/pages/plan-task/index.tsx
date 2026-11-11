@@ -3,18 +3,18 @@ import { Image, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
 import { PrintSheets } from "../../components/PrintSheets";
-import { Busy, Count, LoginGate, PageState, PlanCreator, QuestionGrid, ScanSheet, ScoreCounts, ScoreStats, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
-import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui";
+import { Busy, Count, LoginGate, PageState, PlanCreator, QuestionGrid, ScanSheet, ScoreStats, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
+import { Button, Segmented, Sheet, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { submitExport } from "../../lib/export";
 import { toast } from "../../lib/hooks";
-import { STATUS_LABEL, absoluteUrl, bumpPlans, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, memberName, openPlanFile, revokeAssignment, sizeLabel, submitHomework, type AssignmentRes } from "../../lib/plans";
+import { STATUS_LABEL, absoluteUrl, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, openPlanFile, sizeLabel, submitHomework, type AssignmentRes } from "../../lib/plans";
 import type { Paper } from "../../lib/store";
 import { C } from "../../lib/theme";
 
 /**
- * 作业页（和 App 一致）。成员：作业内容 + 底部「导出」「扫描上传」，交了以后看自己的对 / 错 / 没做。
- * 创建人：谁交了、谁没交、谁没看，错得最多的题，提醒没交的同学。成员这边不会拿到任何别人的信息。
+ * 作业页（和 App 一致，成员用）：作业内容 + 底部「导出」「扫描上传」，交了以后看自己的对 / 错 / 没做，不会拿到任何别人的信息。
+ * 创建人不进这一页，直接回学习计划页（文件、谁交了谁没交都在那边）。
  */
 export default function PlanTask() {
   const id = useRouter().params.id || "";
@@ -26,7 +26,6 @@ export default function PlanTask() {
   const [scanning, setScanning] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [menu, setMenu] = useState(false);
   const logged = loggedIn();
   const loaded = useRef(false);
 
@@ -34,10 +33,12 @@ export default function PlanTask() {
     if (!loggedIn()) return;
     try {
       const r = await fetchAssignment(id);
+      // 创建人没有单独的作业页了：文件、谁交了谁没交都在学习计划页
+      if (r.plan.role === "owner") return void Taro.redirectTo({ url: `/pages/plan/index?id=${r.plan.id}` });
       loaded.current = true;
       setData(r);
       setError("");
-      void Taro.setNavigationBarTitle({ title: r.plan.role === "owner" ? "作业情况" : "作业" });
+      void Taro.setNavigationBarTitle({ title: "作业" });
     } catch (e) {
       // 已经显示出来了就不换成报错页：进页面时会连着请求两次，后到的那次失败不该盖掉已有的内容
       if (!loaded.current) setError(errorText(e) || "打不开");
@@ -51,7 +52,7 @@ export default function PlanTask() {
     Taro.stopPullDownRefresh();
   });
 
-  usePlanShare(() => (data?.invite && data.plan.role === "owner" && !data.assignment.revoked ? { plan: data.plan, invite: data.invite, title: data.assignment.title, assignmentId: data.assignment.id } : null));
+  usePlanShare(() => null); // 成员手里没有邀请码，转发出去的是首页
 
   const digitized = data?.assignment.digitized ?? null;
   // 电子版用现成的打印版排版；手边没有原照片，插图在「照片」里看
@@ -61,11 +62,10 @@ export default function PlanTask() {
   if (error) return <PageState error={error} action={<Button size="sm" onClick={() => void Taro.redirectTo({ url: "/pages/plans/index" })}>看看我的学习计划</Button>} />;
   if (!data) return <PageState />;
 
-  const { plan, assignment: a, board, submission: sub } = data;
+  const { plan, assignment: a, submission: sub } = data;
   const owner = plan.role === "owner";
   const scans = a.files.filter((f) => f.kind === "scan");
   const attachments = a.files.filter((f) => f.kind === "attachment");
-  const canRevoke = owner && !a.revoked;
   const canSubmit = !owner && !a.revoked && (!sub || sub.status !== "reviewed");
 
   const hand = async () => {
@@ -94,19 +94,6 @@ export default function PlanTask() {
       toast(errorText(e));
     }
   };
-  const revoke = async () => {
-    setMenu(false);
-    if (!(await confirm("撤回这份作业？", "没交的同学不会再看到；交过的同学还能看到自己那份。", "撤回", true))) return;
-    try {
-      await revokeAssignment(a.id);
-      bumpPlans();
-      toast("已撤回", "success");
-      if (Taro.getCurrentPages().length > 1) void Taro.navigateBack();
-      else void Taro.redirectTo({ url: `/pages/plan/index?id=${plan.id}` });
-    } catch (e) {
-      toast(errorText(e));
-    }
-  };
 
   /** 去学习计划页看全部作业：本来就是从那一页点进来的就退回去，从卡片直接进来的就打开它 */
   const toPlan = () => {
@@ -121,20 +108,15 @@ export default function PlanTask() {
       {!owner && <PlanCreator plan={plan} more="全部作业" onClick={toPlan} />}
       <View className="card" style={{ gap: "6px" }}>
         <View className="row-center gap8">
-          {/* 创建人点作业名：不常用的「撤回」收在面板里，和学习计划页点计划名一个习惯 */}
-          <View className="flex1 row-center gap4 minw0" onClick={() => canRevoke && setMenu(true)}>
-            {/* 成员这边作业名最多两行，长名字不截成一行 */}
-            <Text className={`t-title3 ${owner ? "ellipsis" : "clamp2"}`} style={{ fontWeight: 800 }}>
-              {a.title}
-            </Text>
-            {canRevoke && <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />}
-          </View>
+          {/* 作业名最多两行，长名字不截成一行 */}
+          <Text className="t-title3 clamp2 flex1" style={{ fontWeight: 800 }}>
+            {a.title}
+          </Text>
           {a.revoked && (
             <Tag kind="neutral" icon={null}>
               已撤回
             </Tag>
           )}
-          {canRevoke && <ShareButton pill>转发</ShareButton>}
         </View>
         <View className="plan-counts" style={owner || a.dueAt || a.questionCount ? undefined : { display: "none" }}>
           {owner && <Text className="t-foot c-sec ellipsis">{plan.name}</Text>}
@@ -202,91 +184,6 @@ export default function PlanTask() {
 
   return (
     <View className="page">
-      {owner && board && (
-        <>
-          <View className="stats">
-            <Stat icon="checkcircle" label="已交" value={`${board.submitted.length}/${board.members}`} color={board.submitted.length ? C.ok : undefined} />
-            <Stat icon="clock" label="没交" value={board.missing.length} color={board.missing.length ? C.accentOn : undefined} />
-            <Stat icon="eye-off" label="没看" value={board.unseen} />
-          </View>
-          {board.hardest.length > 0 && (
-            <View className="group">
-              <View className="group__header">
-                <Text>错得最多</Text>
-              </View>
-              {board.hardest.map((h) => (
-                <View key={h.number} className="list-row" style={{ alignItems: "flex-start" }}>
-                  <View className="plan-q plan-q--wrong">
-                    <Text>{h.number}</Text>
-                  </View>
-                  <View className="flex1 col gap2 minw0">
-                    <Text className="t-body clamp2">{h.stem || `第 ${h.number} 题`}</Text>
-                    {h.knowledge && <Text className="row__sub">{h.knowledge}</Text>}
-                  </View>
-                  <Count icon="person" color={C.wrong}>
-                    {h.wrong}
-                  </Count>
-                </View>
-              ))}
-            </View>
-          )}
-          {board.missing.length > 0 && (
-            <View className="group">
-              <View className="group__header">
-                <Text>没交 {board.missing.length}</Text>
-              </View>
-              {board.missing.map((m) => (
-                <View key={m.userId} className="list-row">
-                  <Avatar name={m.name} url={m.avatar} />
-                  <Text className="row__title ellipsis flex1">{memberName(m)}</Text>
-                  {m.returned ? (
-                    <Tag kind="wrong" icon="refresh">
-                      退回
-                    </Tag>
-                  ) : (
-                    <Icon name={m.viewed ? "eye" : "eye-off"} size={18} color={m.viewed ? C.tertiary : C.accentOn} stroke={2.2} />
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
-          <View className="group">
-            <View className="group__header">
-              <Text>已交 {board.submitted.length}</Text>
-            </View>
-            {board.submitted.length === 0 && <Text className="plan-empty">{board.members === 0 ? "还没有人加入" : "还没有人交"}</Text>}
-            {board.submitted.map((s) => (
-              <View key={s.submissionId} className="list-row" hoverClass="list-row--hover" onClick={() => Taro.navigateTo({ url: `/pages/plan-review/index?id=${s.submissionId}` })}>
-                <Avatar name={s.name} url={s.avatar} />
-                <View className="flex1 col gap2 minw0">
-                  <Text className="row__title ellipsis">
-                    {memberName(s)}
-                    {s.left ? "（已退出）" : ""}
-                  </Text>
-                  {s.score ? <ScoreCounts score={s.score} /> : <Text className="row__sub">批改中</Text>}
-                </View>
-                {s.late && (
-                  <Tag kind="neutral" icon={null}>
-                    迟交
-                  </Tag>
-                )}
-                {s.status === "reviewed" ? (
-                  <Icon name="checkcircle" size={20} color={C.ok} stroke={2.2} />
-                ) : (
-                  <Tag kind="info" icon="pencil">
-                    待阅
-                  </Tag>
-                )}
-                <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-              </View>
-            ))}
-          </View>
-          <View className="plan-field__label" style={{ paddingTop: "4px" }}>
-            <Text>作业内容</Text>
-          </View>
-        </>
-      )}
-
       {!owner && sub && (
         <View className="card" style={{ gap: "12px" }}>
           <View className="row-center gap8">
@@ -335,13 +232,6 @@ export default function PlanTask() {
         </View>
       )}
 
-      {owner && !a.revoked && board && board.missing.length > 0 && (
-        <View className="bottom-bar">
-          <ShareButton icon="bell" remind style={{ flex: 1 }}>
-            提醒没交的同学
-          </ShareButton>
-        </View>
-      )}
       {!owner && (
         <View className="bottom-bar">
           {shots.length > 0 ? (
@@ -399,13 +289,6 @@ export default function PlanTask() {
               </View>
             </View>
           ))}
-        </View>
-      </Sheet>
-      <Sheet open={menu} onClose={() => setMenu(false)} title={a.title}>
-        <View className="plan-quiet plan-quiet--only">
-          <Text className="plan-quiet__item c-wrong" onClick={() => void revoke()}>
-            撤回这份作业
-          </Text>
         </View>
       </Sheet>
       <ScanSheet open={scanning} title={owner ? "扫描" : "拍下做完的作业"} onClose={() => setScanning(false)} onPhotos={(p) => setShots((cur) => [...cur, ...p])} />

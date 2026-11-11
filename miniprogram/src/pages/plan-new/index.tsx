@@ -137,7 +137,10 @@ export default function PlanNew() {
   };
 
   const finish = () => {
-    if (done) void Taro.redirectTo({ url: done.assignment ? `/pages/plan-task/index?id=${done.assignment.id}` : `/pages/plan/index?id=${done.plan.id}` });
+    if (!done) return;
+    // 从计划页进来布置的：退回去就是那一页（回到页面会自己刷新），不再叠一层
+    if (planId && Taro.getCurrentPages().length > 1) void Taro.navigateBack();
+    else void Taro.redirectTo({ url: `/pages/plan/index?id=${done.plan.id}` });
   };
 
   return (

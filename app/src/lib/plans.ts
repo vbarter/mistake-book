@@ -41,14 +41,20 @@ export interface PlanInfo {
   members?: number;
   toReview?: number;
   submittedToday?: number;
+  /** 创建人：还有作业没交的成员数 */
+  missing?: number;
   assignments?: number;
   todo?: number;
 }
 export interface PlanSummary { todo: number; nextDue: string | null; nextTitle: string | null; nextSubject: PlanSubject | null; toReview: number; submittedToday: number; owned: number; joined: number }
 export interface AssignmentBrief { id: string; title: string; dueAt: string | null; questionCount: number; createdAt: string; revoked: boolean }
-export interface OwnerAssignment extends AssignmentBrief { members: number; submitted: number; missing: number; unseen: number; toReview: number }
-export interface MemberAssignment extends AssignmentBrief { status: MyStatus; score: Score | null; comment: string; late: boolean }
-export interface PlanMemberRow { userId: string; name: string; tail: string; avatar?: string | null; joinedAt: string; submitted: number; assignments: number }
+export interface OwnerAssignment extends AssignmentBrief { members: number; submitted: number; missing: number; unseen: number; toReview: number; files?: PlanFileView[] }
+/** files / digitized：成员的计划页直接平铺作业文件、导出电子版用（老服务器不带，fetchPlan 里补上） */
+export interface MemberAssignment extends AssignmentBrief { status: MyStatus; score: Score | null; comment: string; late: boolean; files?: PlanFileView[]; digitized?: boolean }
+/** 一个成员在一份作业上的状态（创建人的计划页用） */
+export interface MemberItem { assignmentId: string; status: MyStatus; submissionId: string | null; late: boolean; score: Score | null; viewed: boolean }
+export type MemberState = "submitted" | "missing" | "none";
+export interface PlanMemberRow { userId: string; name: string; tail: string; avatar?: string | null; joinedAt: string; submitted: number; assignments: number; status?: MemberState; toReview?: number; left?: boolean; items?: MemberItem[] }
 export interface Invite { code: string; url: string }
 export interface Me { name: string; defaultName: boolean; needsName?: boolean }
 export interface PlanFileView { id: string; kind: "scan" | "attachment"; name: string; mime: string; size: number; url: string | null }
@@ -71,7 +77,27 @@ export const usePlans = create<{ version: number; bump: () => void }>((set) => (
 // ---------------------------------------------------------------- 接口
 
 export const fetchPlans = () => api<{ plans: PlanInfo[]; summary: PlanSummary }>("/api/plans");
-export const fetchPlan = (id: string) => api<PlanDetailRes>(`/api/plans/${id}`);
+const fetchPlanRaw = (id: string) => api<PlanDetailRes>(`/api/plans/${id}`);
+/** 学习计划页。成员这边每份作业要带文件列表：还没升级的服务器不带，就逐份去作业接口取一次 */
+export async function fetchPlan(id: string): Promise<PlanDetailRes> {
+  const r = await fetchPlanRaw(id);
+  if (r.plan.role !== "member") return r;
+  const bare = (r.assignments as MemberAssignment[]).filter((a) => !a.files);
+  await Promise.all(
+    bare.map(async (a) => {
+      try {
+        const d = await fetchAssignment(a.id);
+        a.files = d.assignment.files;
+        a.digitized = Boolean(d.assignment.digitized);
+      } catch {
+        a.files = [];
+      }
+    }),
+  );
+  return r;
+}
+/** 这份作业现在还能不能交：没撤回、老师还没批阅（交过没批阅的可以重交，退回的要重交） */
+export const canHandIn = (a: MemberAssignment) => !a.revoked && a.status !== "reviewed";
 export const fetchAssignment = (id: string) => api<AssignmentRes>(`/api/plans/assignments/${id}`);
 export const fetchSubmission = (id: string) => api<SubmissionRes>(`/api/plans/submissions/${id}`);
 export const reviewSubmission = (id: string, body: { marks?: Record<number, Mark>; status?: "reviewed" | "returned"; comment?: string }) =>
@@ -423,5 +449,8 @@ export function createdLabel(iso: string | null | undefined): string {
 export const byNewest = <T extends { createdAt?: string | null }>(list: T[]): T[] =>
   [...list].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 export const sizeLabel = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+/** 成员的状态：没撤回的作业都交了 = 已交，还有没交的 = 未交，一份作业都没有 = none。老服务器不带 status 时按份数算 */
+export const memberState = (m: PlanMemberRow): MemberState => m.status ?? (m.assignments === 0 ? "none" : m.submitted >= m.assignments ? "submitted" : "missing");
 export const memberName = (m: { name: string; tail: string }) => (m.tail ? `${m.name}（尾号 ${m.tail}）` : m.name);
 export const STATUS_LABEL: Record<MyStatus, string> = { todo: "待交", submitted: "已交", reviewed: "已阅", returned: "退回重做" };
+export const fileBadge = (mime: string) => (mime === "application/pdf" ? "PDF" : mime.includes("word") ? "DOC" : "图片");
