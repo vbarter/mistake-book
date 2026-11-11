@@ -10,11 +10,11 @@ import { Busy, useScanPick } from "./shared";
 
 const MAX_FILES = 30;
 /**
- * 「上传文件」只选 PDF、Word：图片和拍照都归「扫描」，两个按钮不重复。
- * 类型里只要带图片，iOS 就会先弹「照片图库 / 拍照 / 选取文件」三选一；只写文档类型才直接打开「文件」。
- * 安卓不限类型：带上类型时系统按第一个类型（PDF）起文件选择器，不少国产手机的选择器不认后面的类型，Word 点不了。选完再在 attachmentDraft 里按扩展名把关。
+ * 「上传文件」能选 PDF、Word 和相册里的图片（图片原样发给同学，不当题目识别）。
+ * 类型里带了图片，iOS 会先弹「照片图库 / 拍照 / 选取文件」，从「照片图库」进相册；相册里的 HEIC 会自动转成 JPG。
+ * 安卓不限类型：带上类型时系统按第一个类型（PDF）起文件选择器，不少国产手机的选择器不认后面的类型，图片和 Word 点不了。选完再在 attachmentDraft 里按扩展名把关。
  */
-const ATTACH_ACCEPT = isAndroid ? undefined : ".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const ATTACH_ACCEPT = isAndroid ? undefined : ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp";
 
 const fileBadge = (f: DraftFile) => (f.mime === "application/pdf" ? "PDF" : f.mime.includes("word") ? "DOC" : "图片");
 
