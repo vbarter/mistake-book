@@ -56,7 +56,11 @@ export default function Home() {
       .catch(() => undefined);
   }, [version, plansVersion]);
   const hasPlans = !!plans && plans.owned + plans.joined > 0;
-  const planCount = plans ? (plans.todo > 0 ? plans.todo : plans.toReview) : 0; // 有待交先说待交，没有再说待批阅
+  // 卡片上的大数字：有待交先说待交，没有再说待批阅；两样都没有就说一共有多少份作业
+  // （扫描的和上传文件的都算）。以前这时一直显示「0 份作业待交」，自己创建的计划里明明有作业也是 0。
+  const planMode = plans && plans.todo > 0 ? "todo" : plans && plans.toReview > 0 ? "review" : "all";
+  const planCount = !plans ? 0 : planMode === "todo" ? plans.todo : planMode === "review" ? plans.toReview : planList.reduce((n, p) => n + (p.assignments ?? 0), 0);
+  const planUnit = planMode === "todo" ? "份 作业待交" : planMode === "review" ? "份 等你批阅" : "份 作业";
   // 首页直接列几个学习计划：有作业待交 / 待批阅的排前面，其余按新旧，最多 3 个（和 App 一致）
   const pending = (p: PlanInfo) => (p.role === "owner" ? p.toReview ?? 0 : p.todo ?? 0);
   const topPlans = [...planList].sort((a, b) => Number(pending(b) > 0) - Number(pending(a) > 0) || (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 3);
@@ -138,7 +142,7 @@ export default function Home() {
               <>
                 <View className="pc__big">
                   <Text className="pc__num">{planCount}</Text>
-                  <Text>{plans.todo > 0 || plans.toReview === 0 ? "份 作业待交" : "份 等你批阅"}</Text>
+                  <Text>{planUnit}</Text>
                 </View>
                 <View className="pc__m">
                   {plans.todo > 0 && plans.nextSubject && plans.nextSubject !== "mixed" && <SubjectTile subject={plans.nextSubject} size="xs" className="pc__tile" />}
