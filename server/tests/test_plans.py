@@ -295,6 +295,35 @@ def test_dissolve_deletes_everything(client, auth, app):
     assert client.get(f"/api/plans/{pid}", headers=stu).status_code == 404
 
 
+def test_dissolve_removes_members_and_says_so(client, auth):
+    """解散后加入者自动退出：列表里没有了，再打开计划 / 作业、再交、再点旧卡片，都明说「已被创建人解散」"""
+    out = _create(client, auth)
+    pid, aid, code = out["plan"]["id"], out["assignment"]["id"], out["invite"]["code"]
+    stu, _ = _login(client, "13800000001", "王小明")
+    _join(client, stu, code)
+    other = _create(client, auth, name="另一个计划")
+    _join(client, stu, other["invite"]["code"])
+    assert len(client.get("/api/plans", headers=stu).get_json()["plans"]) == 2
+    assert client.delete(f"/api/plans/{pid}", headers=auth).status_code == 200
+
+    r = client.get("/api/plans", headers=stu).get_json()
+    assert [p["id"] for p in r["plans"]] == [other["plan"]["id"]] and r["summary"]["joined"] == 1
+    for resp in (
+        client.get(f"/api/plans/{pid}", headers=stu),
+        client.get(f"/api/plans/assignments/{aid}", headers=stu),
+        client.post(f"/api/plans/assignments/{aid}/submission", json={"files": [SCAN]}, headers=stu),
+        client.get(f"/api/plans/invite/{code}"),
+        client.post("/api/plans/join", json={"code": code}, headers=stu),
+    ):
+        assert resp.status_code == 404 and resp.get_json()["error"] == "plan_dissolved", resp.get_json()
+        assert "解散" in resp.get_json()["message"]
+    # 没存在过的照旧
+    assert client.get("/api/plans/nope", headers=stu).get_json()["error"] == "not_found"
+    assert client.get("/api/plans/invite/nope").get_json()["error"] == "not_found"
+    # 没解散的那个不受影响
+    assert client.get(f"/api/plans/{other['plan']['id']}", headers=stu).status_code == 200
+
+
 def test_delete_account_cleans_plans(client, auth):
     out = _create(client, auth)
     aid, code = out["assignment"]["id"], out["invite"]["code"]
@@ -456,3 +485,22 @@ def test_member_plan_page_has_files_and_marks_viewed(client, auth):
     _submit(client, student, aid)
     mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
     assert mine[0]["status"] == "submitted" and len(mine[0]["files"]) == 2
+
+
+def test_dissolve_still_works_without_tombstone_table(client, auth):
+    """线上数据库账号建不了表：记号表还没手动建时，解散照常成功，只是退回到「不存在」的提示"""
+    from app.models import PlanTombstone
+
+    out = _create(client, auth)
+    pid, code = out["plan"]["id"], out["invite"]["code"]
+    stu, _ = _login(client, "13800000001", "王小明")
+    _join(client, stu, code)
+    PlanTombstone.__table__.drop(db.engine)
+    try:
+        assert client.delete(f"/api/plans/{pid}", headers=auth).status_code == 200
+        assert Plan.query.count() == PlanMember.query.count() == 0
+        assert client.get("/api/plans", headers=stu).get_json()["plans"] == []
+        assert client.get(f"/api/plans/{pid}", headers=stu).get_json()["error"] == "not_found"
+        assert client.get(f"/api/plans/invite/{code}").status_code == 404
+    finally:
+        PlanTombstone.__table__.create(db.engine)

@@ -6,7 +6,7 @@ import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../compo
 import { Tag } from "../../components/v2";
 import type { FullPage, Paper } from "../../lib/folders";
 import { haptic, openRemoteFile } from "../../lib/native";
-import { STATUS_LABEL, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, sizeLabel, submitHomework, usePlans, type AssignmentRes, type PlanFileView, type ResultRow } from "../../lib/plans";
+import { STATUS_LABEL, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, planGone, sizeLabel, submitHomework, usePlans, type AssignmentRes, type PlanFileView, type ResultRow } from "../../lib/plans";
 import { assetUrl } from "../../api/client";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
@@ -59,7 +59,16 @@ export default function Assignment() {
 
   // 已经显示出来了就不换成报错页：刷新失败不该盖掉已有的内容
   const loaded = useRef(false);
-  const load = useCallback(() => fetchAssignment(assignmentId).then((r) => { loaded.current = true; setData(r); setError(""); }).catch((e) => { if (!loaded.current) setError((e as Error).message || "打不开"); }), [assignmentId]);
+  const load = useCallback(() => fetchAssignment(assignmentId).then((r) => { loaded.current = true; setData(r); setError(""); }).catch((e) => {
+    // 但计划被解散 / 自己被移出了，就不能再留着旧内容
+    if (loaded.current && !planGone(e)) return;
+    setError((e as Error).message || "打不开");
+    if (loaded.current) {
+      loaded.current = false;
+      setData(null);
+      usePlans.getState().bump();
+    }
+  }), [assignmentId]);
   useEffect(() => { void load(); }, [load, version]);
   const scan = useScanPick((more) => setPages((cur) => [...cur, ...more]), "拍下做完的作业");
 
@@ -87,6 +96,7 @@ export default function Assignment() {
       await load();
     } catch (e) {
       toastError(e);
+      if (planGone(e)) void load();
     } finally {
       setStage(null);
     }
