@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon } from "../../components/Icon";
@@ -28,16 +28,19 @@ export default function PlanTask() {
   const [exporting, setExporting] = useState(false);
   const [menu, setMenu] = useState(false);
   const logged = loggedIn();
+  const loaded = useRef(false);
 
   const load = async () => {
     if (!loggedIn()) return;
     try {
       const r = await fetchAssignment(id);
+      loaded.current = true;
       setData(r);
       setError("");
       void Taro.setNavigationBarTitle({ title: r.plan.role === "owner" ? "作业情况" : "作业" });
     } catch (e) {
-      if (!data) setError(errorText(e) || "打不开");
+      // 已经显示出来了就不换成报错页：进页面时会连着请求两次，后到的那次失败不该盖掉已有的内容
+      if (!loaded.current) setError(errorText(e) || "打不开");
     }
   };
   useEffect(() => {

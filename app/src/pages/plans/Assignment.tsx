@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Icon, WechatIcon } from "../../components/Icon";
 import { PrintSheets } from "../../components/PrintPaper";
@@ -60,7 +60,9 @@ export default function Assignment() {
   const version = usePlans((s) => s.version);
   const submitExport = useExports((s) => s.submit);
 
-  const load = useCallback(() => fetchAssignment(assignmentId).then(setData).catch((e) => setError((e as Error).message || "打不开")), [assignmentId]);
+  // 已经显示出来了就不换成报错页：刷新失败不该盖掉已有的内容
+  const loaded = useRef(false);
+  const load = useCallback(() => fetchAssignment(assignmentId).then((r) => { loaded.current = true; setData(r); setError(""); }).catch((e) => { if (!loaded.current) setError((e as Error).message || "打不开"); }), [assignmentId]);
   useEffect(() => { void load(); }, [load, version]);
   const scan = useScanPick((more) => setPages((cur) => [...cur, ...more]), "拍下做完的作业");
 

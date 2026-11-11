@@ -71,7 +71,10 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.errorhandler(HTTPException)
     def http_error(e: HTTPException):
-        return jsonify({"error": (e.name or "error").lower().replace(" ", "_"), "message": e.description or "请求失败"}), e.code or 500
+        code = e.code or 500
+        # 5xx 的默认说明是一段英文（「The server encountered an internal error…」），客户端会原样显示给用户，换成中文
+        message = "服务器开小差了，请稍后再试" if code >= 500 and e.description == type(e).description else (e.description or "请求失败")
+        return jsonify({"error": (e.name or "error").lower().replace(" ", "_"), "message": message}), code
 
     # gunicorn 下把应用与各模块的日志接到 gunicorn 的 error log，后台任务里的异常才看得到
     import logging
