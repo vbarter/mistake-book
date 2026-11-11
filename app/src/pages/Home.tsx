@@ -10,7 +10,7 @@ import { allErrors } from "../lib/errors";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
 import { analyze, inRange } from "../lib/insights";
 import { scanStageText, useJobs } from "../lib/jobs";
-import { PLAN_SUBJECT_LABEL, dueLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
+import { PLAN_SUBJECT_LABEL, dueLabel, fetchPlans, joinPath, pendingJoin, planIdleLabel, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/banner";
 
@@ -83,7 +83,10 @@ export default function Home() {
           <div className="plan__top"><span className="plan__title">今日安排</span><span className="plan__sub">计划和作业，一眼看清</span></div>
           <div className="plan__cards">
             <button className="pc" onClick={() => nav("/plans")}>
-              <span className="pc__h"><span className="pc__t">学习计划</span><span className="pc__go"><Icon name="chevron-right" size={11} stroke={3} /></span></span>
+              <span className="pc__h"><span className="pc__t">学习计划</span>
+                {/* 右上角直接新建；卡片其余地方点了还是进计划列表。外层已经是 button，这里只能用 span */}
+                <span className="pc__add" role="button" aria-label="新建学习计划" onClick={(e) => { e.stopPropagation(); nav("/plans/new"); }}><Icon name="plus" size={12} stroke={3} />新建</span>
+              </span>
               {hasPlans && plans ? (
                 <>
                   <span className="pc__big"><b className="pc__num">{planCount}</b>{planUnit}</span>
@@ -118,7 +121,7 @@ export default function Home() {
                   </span>
                   {pending(p) > 0
                     ? <Tag kind={p.role === "owner" ? "info" : "pending"}>{p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}</Tag>
-                    : <span className="plist__ok">{p.role === "owner" ? "都批完了" : "都交了"}</span>}
+                    : <span className="plist__ok">{planIdleLabel(p)}</span>}
                   <Icon name="chevron-right" size={13} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                 </button>
               ))}
@@ -177,7 +180,7 @@ export default function Home() {
                   </span>
                   {pending(p) > 0
                     ? <Tag kind={p.role === "owner" ? "info" : "pending"}>{p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}</Tag>
-                    : <span className="plist__ok">{p.role === "owner" ? "都批完了" : "都交了"}</span>}
+                    : <span className="plist__ok">{planIdleLabel(p)}</span>}
                   <Icon name="chevron-right" size={13} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                 </button>
               ))}

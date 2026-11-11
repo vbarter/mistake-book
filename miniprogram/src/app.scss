@@ -509,7 +509,9 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .pc--hover { background: #ffffff; transform: scale(0.98); }
 .pc__h { display: flex; align-items: center; gap: 6px; }
 .pc__t { flex: 1; white-space: nowrap; font-size: 17px; font-weight: 700; color: $label; }
-.pc__go { width: 20px; height: 20px; border-radius: 10px; border: 1.5px solid $tertiary; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.pc__add { flex-shrink: 0; position: relative; display: flex; align-items: center; gap: 2px; height: 24px; padding: 0 9px 0 7px; border-radius: 12px; background: $brand; color: #ffffff; font-size: 12px; font-weight: 700; box-shadow: 0 2px 6px $brand-glow; box-sizing: border-box; }
+.pc__add::after { content: ""; position: absolute; top: -10px; bottom: -10px; left: -8px; right: -8px; } /* 按钮小，把可点范围放大到 40px 高 */
+.pc__add--hover { background: $brand-pressed; transform: scale(0.94); }
 .pc__big { display: flex; align-items: baseline; gap: 4px; font-size: 13px; color: $secondary; }
 .pc__num { font-size: 24px; line-height: 28px; font-weight: 800; color: $brand; }
 .pc__empty { font-size: 15px; line-height: 28px; font-weight: 600; color: $label; }
@@ -682,6 +684,9 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-task { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-top: 1px solid $sep-light; }
 .plan-task:first-child, .group__header + .plan-task { border-top: 0; }
 .plan-task__head { display: flex; align-items: center; gap: 8px; }
+.list-row.plan-row--done { background: $ok-bg; }
+.list-row.plan-row--returned { background: $wrong-bg; }
+.plan-hw > .plan-task { border-top: 0; padding-top: 6px; }
 .plan-hw { border-top: 1px solid $sep-light; }
 .plan-hw > .list-row:first-child { border-top: 1px solid $sep-light; }
 /* 成员的计划页：交了的作业整块标绿，退回重做的标红 */
