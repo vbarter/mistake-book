@@ -40,6 +40,7 @@
 .plan-thumb { position: relative; display: flex; }
 .plan-thumb__x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 11px; background: var(--label); color: var(--card); display: flex; align-items: center; justify-content: center; }
 .thumb.plan-thumb__add { display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--brand); background: var(--brand-tint); color: var(--brand); box-shadow: none; }
+.input.plan-select { width: 100%; appearance: none; -webkit-appearance: none; padding-right: 36px; text-overflow: ellipsis; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
 .plan-radio { width: 22px; height: 22px; border-radius: 11px; border: 2px solid var(--tertiary); box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
 .plan-radio--on { border-color: var(--brand); background: var(--brand); }
 .plan-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--fill-light); }

@@ -83,7 +83,7 @@ export interface PlanDetailRes { plan: PlanInfo; assignments: (OwnerAssignment |
 export interface AssignmentRes { plan: PlanInfo; assignment: AssignmentDetail; board?: Board; invite?: Invite; submission?: SubmissionView | null }
 export interface SubmissionRes { plan: PlanInfo; assignment: AssignmentBrief | null; submission: SubmissionView; student?: { name: string; tail: string }; nav?: { index: number; total: number; prev: string | null; next: string | null } }
 interface Upload { id: string; clientId: string; method: string; url: string; headers?: Record<string, string> }
-export interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief | null; uploads: Upload[]; invite: Invite }
+export interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief | null; /** 一个附件一份作业，一次可能建出几份（老服务器没有这个字段） */ assignments?: AssignmentBrief[]; uploads: Upload[]; invite: Invite }
 
 /**
  * 这个计划对我来说已经没有了：创建人解散了（服务器回 plan_dissolved），或者不存在了（404）、我已经不在里面（403）。
@@ -225,8 +225,8 @@ export async function publishAssignment(planId: string | null, form: { name?: st
     try {
       await uploadAll(res.uploads, drafts, onStage);
     } catch (e) {
-      // 文件没传全就不留半份作业：新建的计划整个撤掉，已有计划里只撤这份
-      await (planId ? revokeAssignment(assignment.id) : deletePlan(res.plan.id)).catch(() => undefined);
+      // 文件没传全就不留半份作业：新建的计划整个撤掉，已有计划里撤掉这次建的几份
+      await (planId ? Promise.all((res.assignments ?? [assignment]).map((a) => revokeAssignment(a.id))) : deletePlan(res.plan.id)).catch(() => undefined);
       throw e;
     }
     const scans = drafts.filter((d) => d.kind === "scan" && d.width && d.height);
