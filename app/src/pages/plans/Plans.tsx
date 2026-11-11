@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Icon } from "../../components/Icon";
 import { Button, InlineNav, Spinner } from "../../components/ui";
 import { Avatar, Tag } from "../../components/v2";
-import { PLAN_SUBJECT_LABEL, fetchPlans, usePlans, type PlanInfo } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, byNewest, createdLabel, fetchPlans, usePlans, type PlanInfo } from "../../lib/plans";
 import { toastError } from "../../store/banner";
 import { Count } from "./shared";
 
@@ -16,8 +16,9 @@ export default function Plans() {
     fetchPlans().then((r) => setPlans(r.plans)).catch((e) => { toastError(e); setPlans((p) => p ?? []); });
   }, [version]);
 
-  const owned = plans?.filter((p) => p.role === "owner") ?? [];
-  const joined = plans?.filter((p) => p.role === "member") ?? [];
+  // 每个分类里最新创建的排最上面
+  const owned = byNewest(plans?.filter((p) => p.role === "owner") ?? []);
+  const joined = byNewest(plans?.filter((p) => p.role === "member") ?? []);
 
   const card = (p: PlanInfo) => (
     <button key={p.id} className="card card--row press" onClick={() => nav(`/plans/${p.id}`)}>
@@ -30,6 +31,7 @@ export default function Plans() {
           {p.role === "owner" && <Count icon="family" color="var(--tertiary)">{p.members ?? 0}</Count>}
           <Count icon="document" color="var(--tertiary)">{p.assignments ?? 0}</Count>
         </span>
+        {createdLabel(p.createdAt) && <span className="t-cap" style={{ color: "var(--tertiary)" }}>{createdLabel(p.createdAt)}</span>}
       </span>
       {p.role === "owner" && (p.toReview ?? 0) > 0 && <Tag kind="info" icon="pencil">{p.toReview}</Tag>}
       {p.role === "member" && (p.todo ?? 0) > 0 && <Tag kind="pending" icon="clock">{p.todo}</Tag>}
