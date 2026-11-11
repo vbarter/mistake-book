@@ -457,6 +457,10 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .pill-mute { flex-shrink: 0; font-size: 11px; font-weight: 600; line-height: 16px; color: $secondary; background: $fill-light; border-radius: 8px; padding: 1px 7px; }
 .avatar-wrap { position: relative; flex-shrink: 0; }
 .avatar { width: 60px; height: 60px; border-radius: 30px; background: $tie-bg; color: $tie; font-size: 24px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.avatar-img { flex-shrink: 0; display: block; background: $fill-light; }
+.avatar-btn { position: relative; padding: 0; width: 60px; height: 60px; border-radius: 30px; background: transparent; display: block; }
+.avatar-btn .plan-avatar { background: $tie-bg; color: $tie; }
+.avatar__cam { position: absolute; left: -2px; bottom: -2px; width: 20px; height: 20px; border-radius: 10px; background: rgba(0, 0, 0, 0.55); border: 2px solid #fff; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 .avatar__badge { position: absolute; right: -4px; bottom: -2px; font-size: 10px; font-weight: 800; color: #fff; background: $brand; border: 2px solid #fff; border-radius: 9px; padding: 1px 6px; line-height: 1.4; }
 
 /* ---------- 插画「试卷小人」 ---------- */
@@ -653,9 +657,6 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-field__label { display: flex; justify-content: space-between; font-size: 13px; line-height: 18px; font-weight: 600; color: $secondary; padding: 0 4px; }
 .plan-field__label .plan-field__note { font-weight: 400; }
 .input--card { background: $card; }
-.plan-due { display: flex; gap: 10px; }
-.plan-due picker { flex: 1; min-width: 0; }
-.plan-due .field { background: $card; font-size: 17px; }
 /* 作业内容：文件列表自己滚，扫描 / 上传文件两个按钮固定在列表下面 */
 .plan-files { background: $card; border-radius: $radius-list; max-height: 38vh; box-sizing: border-box; }
 .plan-empty { display: block; padding: 28px 16px; text-align: center; color: $secondary; font-size: 14px; line-height: 20px; }
@@ -668,8 +669,6 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-add .btn { flex: 1; min-width: 0; }
 .plan-pill { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px 0 11px; border-radius: 17px; background: $card; border: 1px solid $sep-light; color: $label; font-size: 14px; font-weight: 600; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; }
 .plan-head { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
-.plan-banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: $accent-bg; color: $accent-on; font-size: 14px; line-height: 20px; }
-.plan-banner__act { font-weight: 700; white-space: nowrap; text-decoration: underline; }
 .plan-task { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-top: 1px solid $sep-light; }
 .plan-task:first-child, .group__header + .plan-task { border-top: 0; }
 .plan-task__head { display: flex; align-items: center; gap: 8px; }

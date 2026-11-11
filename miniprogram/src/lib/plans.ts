@@ -38,6 +38,7 @@ export interface PlanInfo {
   subject: PlanSubject;
   role: "owner" | "member";
   teacher: string;
+  teacherAvatar?: string | null;
   createdAt: string;
   members?: number;
   toReview?: number;
@@ -49,14 +50,14 @@ export interface PlanSummary { todo: number; nextDue: string | null; nextTitle: 
 export interface AssignmentBrief { id: string; title: string; dueAt: string | null; questionCount: number; createdAt: string; revoked: boolean }
 export interface OwnerAssignment extends AssignmentBrief { members: number; submitted: number; missing: number; unseen: number; toReview: number }
 export interface MemberAssignment extends AssignmentBrief { status: MyStatus; score: Score | null; comment: string; late: boolean }
-export interface PlanMemberRow { userId: string; name: string; tail: string; joinedAt: string; submitted: number; assignments: number }
+export interface PlanMemberRow { userId: string; name: string; tail: string; avatar?: string | null; joinedAt: string; submitted: number; assignments: number }
 export interface Invite { code: string; url: string }
 export interface Me { name: string; defaultName: boolean; needsName?: boolean }
 export interface PlanFileView { id: string; kind: "scan" | "attachment"; name: string; mime: string; size: number; url: string | null }
 export interface ResultRow { n: string; m: Mark; s: string; a: string; t: string; k: string; o?: boolean }
 export interface SubmissionView { id: string; status: Exclude<MyStatus, "todo">; comment: string; late: boolean; submittedAt: string; reviewedAt: string | null; score: Score | null; files: PlanFileView[]; results?: ResultRow[] | null }
-export interface BoardSubmitted { submissionId: string; userId: string; name: string; tail: string; status: "submitted" | "reviewed"; late: boolean; submittedAt: string; score: Score | null; left: boolean }
-export interface BoardMissing { userId: string; name: string; tail: string; viewed: boolean; returned: boolean }
+export interface BoardSubmitted { submissionId: string; userId: string; name: string; tail: string; avatar?: string | null; status: "submitted" | "reviewed"; late: boolean; submittedAt: string; score: Score | null; left: boolean }
+export interface BoardMissing { userId: string; name: string; tail: string; avatar?: string | null; viewed: boolean; returned: boolean }
 export interface Board { members: number; submitted: BoardSubmitted[]; missing: BoardMissing[]; unseen: number; hardest: { number: string; wrong: number; knowledge: string; stem: string; graded: number }[] }
 export interface AssignmentDetail extends AssignmentBrief { digitized: DigitizedResult | null; files: PlanFileView[] }
 

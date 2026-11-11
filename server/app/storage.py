@@ -29,6 +29,8 @@ MAX_PLAN_FILE_BYTES = 20 * 1024 * 1024  # 学习计划的附件（PDF / Word / �
 
 
 def max_bytes(key: str) -> int:
+    if "/avatar-" in key:
+        return 2 * 1024 * 1024  # 头像，和 avatars.MAX_AVATAR_BYTES 一致
     return MAX_PLAN_FILE_BYTES if key.startswith("plans/") else MAX_BLOB_BYTES
 
 

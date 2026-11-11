@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image, Input, Picker, ScrollView, Text, View } from "@tarojs/components";
+import { Image, Input, ScrollView, Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
 import { Icon, WechatIcon } from "../../components/Icon";
 import { Busy, LoginGate, ScanSheet, ShareButton, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
@@ -10,31 +10,9 @@ import { toast } from "../../lib/hooks";
 import { MAX_FILES, PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject, type PublishRes } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-/** 默认截止时间：今晚 21:00，已经过了 20 点就明晚 */
-function defaultDue(): { date: string; time: string } {
-  const d = new Date();
-  if (d.getHours() >= 20) d.setDate(d.getDate() + 1);
-  return { date: ymd(d), time: "21:00" };
-}
-function dueIso(date: string, time: string): string | null {
-  const [y, m, d] = date.split("-").map(Number);
-  const [hh, mm] = time.split(":").map(Number);
-  const at = new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0);
-  return Number.isNaN(at.getTime()) ? null : at.toISOString();
-}
-const dateLabel = (date: string) => {
-  const today = ymd(new Date());
-  const tomorrow = ymd(new Date(Date.now() + 86400000));
-  const [, m, d] = date.split("-").map(Number);
-  return date === today ? "今天" : date === tomorrow ? "明天" : `${m}月${d}日`;
-};
-
 /**
  * 新建学习计划（同时布置第一份作业），以及在已有计划里布置新作业（带 planId），是同一个页面（和 App 一致）：
- * 名称、截止时间、学科、作业内容（文件列表自己滚动，下面固定「扫描」「上传文件」两个按钮）。
+ * 名称、学科、作业内容（不设截止时间）（文件列表自己滚动，下面固定「扫描」「上传文件」两个按钮）。
  * 和 App 不同的一点：小程序里转发必须由用户亲手点一下原生的转发按钮，所以布置好以后弹出一块「转发到微信群」，点了才拉起微信的选人页。
  */
 export default function PlanNew() {
@@ -43,7 +21,6 @@ export default function PlanNew() {
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
-  const [due, setDue] = useState(defaultDue);
   const [subject, setSubject] = useState<PlanSubject | null>(null);
   const [files, setFiles] = useState<DraftFile[]>([]);
   const [scanning, setScanning] = useState(false);
@@ -122,8 +99,7 @@ export default function PlanNew() {
     if (!planId && !subject) return void toast("选一个学科");
     if (!files.length) return void toast("先扫描或上传一个文件");
     try {
-      const dueAt = dueIso(due.date, due.time);
-      const res = await publishAssignment(planId || null, planId ? { dueAt, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt, title: title.trim() }, files, setStage);
+      const res = await publishAssignment(planId || null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt: null, title: title.trim() }, files, setStage);
       setStage(null);
       void Taro.vibrateShort({ type: "light" }).catch(() => undefined);
       setDone(res);
@@ -158,26 +134,6 @@ export default function PlanNew() {
           <Input className="input input--card" value={name} maxlength={60} placeholder="例如：五（2）班数学" onInput={(e) => setName(e.detail.value)} />
         </View>
       )}
-
-      <View className="plan-field">
-        <View className="plan-field__label">
-          <Text>截止时间</Text>
-        </View>
-        <View className="plan-due">
-          <Picker mode="date" value={due.date} start={ymd(new Date())} onChange={(e) => setDue((d) => ({ ...d, date: e.detail.value }))}>
-            <View className="field">
-              <Text>{dateLabel(due.date)}</Text>
-              <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.4} />
-            </View>
-          </Picker>
-          <Picker mode="time" value={due.time} onChange={(e) => setDue((d) => ({ ...d, time: e.detail.value }))}>
-            <View className="field">
-              <Text>{due.time}</Text>
-              <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.4} />
-            </View>
-          </Picker>
-        </View>
-      </View>
 
       {!planId && (
         <View className="plan-field">

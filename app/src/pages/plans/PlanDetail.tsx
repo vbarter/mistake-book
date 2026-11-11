@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
-import { Stat, Tag } from "../../components/v2";
+import { Avatar, Stat, Tag } from "../../components/v2";
 import { PLAN_SUBJECT_LABEL, STATUS_LABEL, deletePlan, dueLabel, fetchPlan, isOverdue, memberName, removeMember, shareInvite, updatePlan, usePlans, type MemberAssignment, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
@@ -70,7 +70,7 @@ export default function PlanDetail() {
     <div className="screen">
       <InlineNav
         title={plan.name}
-        subtitle={owner ? subject : `${subject} · ${plan.teacher}`}
+        subtitle={subject}
         back
         onBack={() => nav("/plans")}
         onTitle={openPanel}
@@ -121,7 +121,7 @@ export default function PlanDetail() {
                   {(data.members ?? []).length === 0 && <div className="plan-files__empty">还没有人加入</div>}
                   {(data.members ?? []).map((m) => (
                     <div key={m.userId} className="row" style={{ minHeight: 56 }}>
-                      <span className="plan-avatar" aria-hidden="true">{m.name.slice(-1)}</span>
+                      <Avatar name={m.name} url={m.avatar} />
                       <span className="row__main"><span className="row__title ellipsis">{memberName(m)}</span></span>
                       {count("checkcircle", m.assignments > 0 && m.submitted >= m.assignments ? "var(--mastered)" : "var(--tertiary)", `${m.submitted}/${m.assignments}`)}
                       <button className="plan-file__x" aria-label={`移除 ${m.name}`} onClick={() => setRemoving(m)}><Icon name="xmark" size={16} stroke={2.4} /></button>
@@ -141,13 +141,6 @@ export default function PlanDetail() {
             const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
             return (
               <>
-                {data.me?.defaultName && (
-                  <button className="plan-banner" onClick={openPanel}>
-                    <Icon name="person" size={18} stroke={2.2} />
-                    <span style={{ flex: 1, textAlign: "left" }}>老师看到的名字是「{data.me.name}」</span>
-                    <b>改名</b>
-                  </button>
-                )}
                 <div className="plan-stats">
                   <Stat icon="clock" label="待交" value={todo} color={todo ? "var(--due)" : undefined} />
                   <Stat icon="checkcircle" label="已交" value={handed} />
@@ -163,7 +156,7 @@ export default function PlanDetail() {
                           {a.revoked ? <Tag kind="neutral">已撤回</Tag> : <Tag kind={STATUS_TAG[a.status]} icon={a.status === "todo" ? "clock" : undefined}>{STATUS_LABEL[a.status]}</Tag>}
                           <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                         </span>
-                        <span className="plan-counts">
+                        <span className="plan-counts" style={open && !a.dueAt ? { display: "none" } : undefined}>
                           {open ? (a.dueAt && due(a.dueAt, isOverdue(a.dueAt))) : a.score ? (
                             <>
                               {count("checkcircle", "var(--mastered)", a.score.correct)}

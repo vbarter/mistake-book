@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { Button, Row, Sheet } from "../components/ui";
-import { SubjectTile } from "../components/v2";
+import { Avatar, SubjectTile } from "../components/v2";
+import { pickAvatar } from "../lib/native";
 import { allErrors } from "../lib/errors";
 import { listFolders, photoBytes, type Folder } from "../lib/folders";
 import { GRADE_LABEL } from "../lib/format";
@@ -15,7 +16,7 @@ import { toast, toastError } from "../store/banner";
 /** 我的：账号、年级与城市（决定知识点按哪套考纲归类）、学科、本机数据与隐私、关于。只留图标和短标题，解释性的话放到各自的子页里。 */
 export default function Profile() {
   const nav = useNavigate();
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, uploadAvatar } = useAuth();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [bytes, setBytes] = useState(0);
   const [city, setCityState] = useState("");
@@ -51,12 +52,28 @@ export default function Profile() {
     }
   };
 
+  const changeAvatar = async () => {
+    try {
+      const image = await pickAvatar();
+      if (!image) return;
+      await uploadAvatar(image);
+      toast("头像换好了", "success");
+    } catch (e) {
+      if ((e as Error).message === "permission_denied") toast("需要相册权限，请在系统设置里打开");
+      else toastError(e);
+    }
+  };
+
   return (
     <div className="screen">
       <div className="screen__content" style={{ gap: 14, paddingTop: "calc(var(--safe-top) + 16px)" }}>
         <button className="card card--row" style={{ padding: 16 }} onClick={() => { setName(user.nickname); setEditName(true); }}>
           <span style={{ position: "relative", flexShrink: 0 }}>
-            <span aria-hidden="true" style={{ width: 60, height: 60, borderRadius: 30, background: "var(--avatar-bg)", color: "var(--avatar-fg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800 }}>{user.nickname.slice(-1)}</span>
+            {/* 点头像换头像（外层整张卡片是改名字的按钮，这里不再往外传） */}
+            <span role="button" tabIndex={0} aria-label="换头像" style={{ display: "block", position: "relative" }} onClick={(e) => { e.stopPropagation(); void changeAvatar(); }}>
+              <Avatar name={user.nickname} url={user.avatar} size={60} />
+              <span aria-hidden="true" style={{ position: "absolute", left: -2, bottom: -2, width: 20, height: 20, borderRadius: 10, background: "rgba(0,0,0,.55)", border: "2px solid var(--card)", boxSizing: "border-box", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="camera" size={11} stroke={2.4} /></span>
+            </span>
             {gradeShort && <span style={{ position: "absolute", right: -4, bottom: -2, fontSize: 10, fontWeight: 800, color: "#fff", background: "var(--brand)", border: "2px solid var(--card)", borderRadius: 9, padding: "1px 6px" }}>{gradeShort}</span>}
           </span>
           <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>

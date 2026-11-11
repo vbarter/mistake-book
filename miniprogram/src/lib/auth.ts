@@ -110,6 +110,31 @@ export async function updateProfile(patch: Record<string, unknown>): Promise<Use
   return u;
 }
 
+/**
+ * 换头像：path 是本机的一张图（微信「选择头像」给的临时文件）。缩小后直传到对象存储，再让服务器设成当前头像。
+ * 小程序拿不到微信头像的地址，只能让用户自己点一下选，再由我们存一份。
+ */
+export async function uploadAvatar(path: string): Promise<User> {
+  let src = path;
+  try {
+    src = (await Taro.compressImage({ src: path, quality: 80, compressedWidth: 400 } as Taro.compressImage.Option)).tempFilePath || path;
+  } catch {
+    /* 压不了就传原图 */
+  }
+  const up = await api<{ version: string; url: string; method: string; headers?: Record<string, string> }>("/api/auth/avatar/upload-url", { method: "POST", body: {} });
+  const data = Taro.getFileSystemManager().readFileSync(src) as ArrayBuffer;
+  let status = 0;
+  try {
+    status = (await Taro.request({ url: up.url.startsWith("/") ? `${API_BASE}${up.url}` : up.url, method: "PUT", data, header: { "Content-Type": "image/jpeg", ...(up.headers ?? {}) }, timeout: 60000 })).statusCode;
+  } catch {
+    status = 0;
+  }
+  if (status < 200 || status >= 300) throw new ApiError(0, "upload_failed", "头像没传上去，请重试");
+  const { user: u } = await api<{ user: User }>("/api/auth/avatar", { method: "POST", body: { version: up.version } });
+  setUser(u);
+  return u;
+}
+
 /** 绑定手机号：先发验证码。registered = 这个号码已经有账号（比如在 App 里注册过），绑定时要合并 */
 export async function sendBindCode(phone: string): Promise<{ registered: boolean; devCode?: string }> {
   const r = await api<{ registered?: boolean; devCode?: string }>("/api/auth/code", { method: "POST", body: { phone, purpose: "bind", allowMerge: true } });

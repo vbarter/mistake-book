@@ -323,3 +323,39 @@ def test_merge_accounts_moves_plans(client, auth):
     merge_user_plans(owner_id, b_id)  # 老师并进成员账号：计划归 b，b 不再是自己计划的成员
     db.session.commit()
     assert Plan.query.first().owner_id == b_id and PlanMember.query.count() == 0
+
+
+def test_avatar_upload_and_shown_to_plan_members(client, auth):
+    """换头像：要上传地址 → 直传 → 确认；自己的资料、成员看到的创建人、创建人看到的成员都带上头像"""
+    teacher, _ = _login(client, "13900000071", "陈老师")
+    student, student_id = _login(client, "13700000071", "王小明")
+    assert client.get("/api/auth/me", headers=teacher).get_json()["user"]["avatar"] is None
+
+    def upload(headers, data=b"\xff\xd8fakejpeg"):
+        up = client.post("/api/auth/avatar/upload-url", headers=headers).get_json()
+        assert client.put(up["url"], data=data, headers=up["headers"]).status_code == 200
+        return client.post("/api/auth/avatar", headers=headers, json={"version": up["version"]})
+
+    r = upload(teacher)
+    assert r.status_code == 200
+    first = r.get_json()["user"]["avatar"]
+    assert first and client.get(first).data == b"\xff\xd8fakejpeg"
+    # 没传文件就确认、乱填版本号都不行
+    up = client.post("/api/auth/avatar/upload-url", headers=teacher).get_json()
+    assert client.post("/api/auth/avatar", headers=teacher, json={"version": up["version"]}).status_code == 400
+    assert client.post("/api/auth/avatar", headers=teacher, json={"version": "../x"}).status_code == 400
+    # 再换一张：地址变了，旧图删掉
+    second = upload(teacher, b"\xff\xd8another").get_json()["user"]["avatar"]
+    assert second != first and client.get(second).data == b"\xff\xd8another"
+    assert client.get(first).status_code == 404
+
+    p = client.post("/api/plans", headers=teacher, json={"name": "五（2）班数学", "subject": "math", "title": "作业", "files": [PDF]}).get_json()
+    client.post("/api/plans/join", headers=student, json={"code": p["invite"]["code"]})
+    mine = client.get("/api/plans", headers=student).get_json()["plans"][0]
+    assert mine["teacher"] == "陈老师" and client.get(mine["teacherAvatar"]).data == b"\xff\xd8another"
+    upload(student)
+    members = client.get(f"/api/plans/{p['plan']['id']}", headers=teacher).get_json()["members"]
+    assert members[0]["userId"] == student_id and members[0]["avatar"]
+    # 注销后头像记录和图片都没了
+    assert client.delete("/api/auth/me", headers=teacher).status_code == 200
+    assert client.get(second).status_code == 404

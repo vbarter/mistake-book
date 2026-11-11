@@ -15,20 +15,12 @@ const MAX_FILES = 30;
  * 安卓不限类型：带上类型时系统按第一个类型（PDF）起文件选择器，不少国产手机的选择器不认后面的类型，Word 点不了。选完再在 attachmentDraft 里按扩展名把关。
  */
 const ATTACH_ACCEPT = isAndroid ? undefined : ".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const pad = (n: number) => String(n).padStart(2, "0");
-
-/** 默认截止时间：今晚 21:00，已经过了就明晚 */
-function defaultDue(): string {
-  const d = new Date();
-  if (d.getHours() >= 20) d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T21:00`;
-}
 
 const fileBadge = (f: DraftFile) => (f.mime === "application/pdf" ? "PDF" : f.mime.includes("word") ? "DOC" : "图片");
 
 /**
  * 新建学习计划（同时布置第一份作业），以及在已有计划里布置新作业，是同一个页面：
- * 名称、截止时间、学科、作业内容（文件列表自己滚动，下面固定「扫描」「上传文件」两个按钮），确定后直接拉起转发。
+ * 名称、学科、作业内容（不设截止时间）（文件列表自己滚动，下面固定「扫描」「上传文件」两个按钮），确定后直接拉起转发。
  */
 export default function PlanNew() {
   const nav = useNavigate();
@@ -36,7 +28,6 @@ export default function PlanNew() {
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
-  const [due, setDue] = useState(defaultDue);
   const [subject, setSubject] = useState<PlanSubject | null>(null);
   const [files, setFiles] = useState<DraftFile[]>([]);
   const [stage, setStage] = useState<string | null>(null);
@@ -74,8 +65,7 @@ export default function PlanNew() {
     if (!planId && !subject) return toast("选一个学科");
     if (!files.length) return toast("先扫描或上传一个文件");
     try {
-      const dueAt = due ? new Date(due).toISOString() : null;
-      const res = await publishAssignment(planId ?? null, planId ? { dueAt, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt, title: title.trim() }, files, setStage);
+      const res = await publishAssignment(planId ?? null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt: null, title: title.trim() }, files, setStage);
       setStage(null);
       void haptic.success();
       // 直接转发到微信；取消了也没关系，作业页右上角还能再转发
@@ -104,10 +94,6 @@ export default function PlanNew() {
             <input className="input input--card" value={title} maxLength={120} placeholder="例如：第三单元练习" onChange={(e) => setTitle(e.target.value)} />
           </label>
         )}
-        <label className="plan-field">
-          <span className="plan-field__label">截止时间</span>
-          <input className="input input--card" type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} />
-        </label>
         {!planId && (
           <div className="plan-field">
             <span className="plan-field__label">学科</span>
