@@ -82,6 +82,15 @@ export const removeMember = (planId: string, userId: string) => api(`/api/plans/
 export const revokeAssignment = (id: string) => api(`/api/plans/assignments/${id}`, { method: "DELETE" });
 export const joinPlan = (code: string) => api<{ plan: PlanInfo; joined: boolean; me: Me }>("/api/plans/join", { method: "POST", body: { code } });
 
+/** 加入页上「已经有谁加入了」：人数 + 最早加入的几个人 */
+export interface JoinedPreview { count: number; list: { name: string; avatar?: string | null }[] }
+/** 「小明、小红、小刚等 12 人已加入」；还没人时，对同学说「你是第一个」，对创建人说「还没有人加入」 */
+export function joinedText(m: JoinedPreview, owner = false): string {
+  if (!m.count) return owner ? "还没有人加入" : "还没有人加入，你是第一个";
+  const names = m.list.slice(0, 3).map((x) => x.name).join("、");
+  return m.count > 3 ? `${names}等 ${m.count} 人已加入` : `${names} 已加入`;
+}
+
 // ---------------------------------------------------------------- 文件直传
 
 /** 新建 / 布置页里还没传上去的一个文件：扫描件带 src（dataURL），附件带 file */

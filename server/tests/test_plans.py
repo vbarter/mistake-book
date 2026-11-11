@@ -102,11 +102,20 @@ def test_invite_preview_and_landing_page(client, auth):
     code = out["invite"]["code"]
     r = client.get(f"/api/plans/invite/{code}").get_json()  # 不用登录
     assert r["plan"]["name"] == "五年级数学" and r["plan"]["teacher"] == "小雨" and r["assignment"]["id"] == out["assignment"]["id"]
+    assert r["role"] is None and r["members"] == {"count": 0, "list": []} and r["plan"]["teacherAvatar"] is None
     assert client.get("/api/plans/invite/nope").status_code == 404
+    # 带登录信息：创建人 / 还没加入 / 已加入各不一样；加入后落地页上能看到已经有谁
+    assert client.get(f"/api/plans/invite/{code}", headers=auth).get_json()["role"] == "owner"
+    stu, _ = _login(client, "13900000077", "小明")
+    assert client.get(f"/api/plans/invite/{code}", headers=stu).get_json()["role"] is None
+    assert _join(client, stu, code)["joined"] is True
+    r = client.get(f"/api/plans/invite/{code}", headers=stu).get_json()
+    assert r["role"] == "member" and r["members"] == {"count": 1, "list": [{"name": "小明", "avatar": None}]}
+    assert client.get(f"/api/plans/invite/{code}", headers={"Authorization": "Bearer bad"}).get_json()["role"] is None  # 登录过期当成没登录
     page = client.get(f"/api/plans/j/{code}?a={out['assignment']['id']}")
     html = page.get_data(as_text=True)
     assert page.status_code == 200 and "打开上壹课，加入学习计划" in html and f"shangyike://plans/join?code={code}" in html
-    assert "先看作业" not in html
+    assert "先看作业" not in html and "已有 1 人加入" in html and '<span class="ava">雨</span>' in html
     assert client.get("/api/plans/j/nope").status_code == 404
 
 

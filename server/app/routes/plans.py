@@ -1,7 +1,7 @@
 """学习计划：老师扫描 / 上传作业 → 转发到微信 → 学生点开自动加入 → 看作业、导出、拍照交回 → 老师看谁交了、错在哪。
 
 - 一个计划 = 创建人（老师）+ 学科 + 成员 + 若干份作业。成员只能靠邀请码（卡片 / 链接里带着）加入，没有手输邀请码的入口。
-- 成员名单只有创建人能看；成员之间互相看不到，也看不到人数和别人的提交。
+- 完整的成员名单（谁交了没交）只有创建人能看；成员之间看不到别人的提交。加入页（卡片落地页）上会露出人数和最早加入的几个人，让点开的人知道有谁在里面。
 - 计划里不单独存名字：显示时取账号当前的称呼，用户改名后这里跟着变。创建人看到重名的成员时带手机尾号区分。
 - 作业内容：扫描件（客户端识别成电子版后回填 digitized，成员看原题、能导出）和附件（PDF / Word / 图片，原样查看）。
   文件走对象存储签名链接直传直下，key 为 plans/<planId>/<fileId>.<ext>。
@@ -17,6 +17,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, abort, current_app, jsonify, request
+from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from sqlalchemy.exc import IntegrityError
 
 from ..auth_utils import current_user, login_required
@@ -446,23 +447,53 @@ def _invite_plan(code: str) -> Plan:
     return plan
 
 
+PREVIEW_MEMBERS = 8  # 加入页上最多露出几个已加入的人，其余只算在人数里
+
+
+def _viewer_id() -> str | None:
+    """加入页不用登录也能看；带了登录信息就认一下是谁（登录过期的当成没登录，不报错）"""
+    try:
+        verify_jwt_in_request(optional=True)
+        return get_jwt_identity()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _joined_preview(plan: Plan) -> dict:
+    """加入页上「已经有谁加入了」：人数 + 最早加入的几个人的名字和头像"""
+    members = _members(plan)
+    shown = [u for _, u in members[:PREVIEW_MEMBERS]]
+    avatars = avatar_urls([u.id for u in shown])
+    return {"count": len(members), "list": [{"name": u.nickname or DEFAULT_NICKNAME, "avatar": avatars.get(u.id)} for u in shown]}
+
+
 @bp.get("/plans/invite/<code>")
 def invite_preview(code: str):
-    """卡片落地页用：不用登录，只给计划名、老师称呼、学科和这份作业的名字"""
+    """
+    卡片落地页用：不用登录，给计划名、创建人的称呼和头像、学科、这份作业的名字、已经加入的人。
+    带了登录信息时多给 role：owner = 自己建的，member = 已经在里面，null = 还没加入（要点一下确认才加入）。
+    """
     plan = _invite_plan(code)
     a = db.session.get(PlanAssignment, request.args.get("a") or "")
     if a is None or a.plan_id != plan.id or a.revoked:
         a = PlanAssignment.query.filter_by(plan_id=plan.id, revoked=False).order_by(PlanAssignment.created_at.desc()).first()
+    viewer, role = _viewer_id(), None
+    if viewer and viewer == plan.owner_id:
+        role = "owner"
+    elif viewer and PlanMember.query.filter_by(plan_id=plan.id, user_id=viewer, removed=False).first():
+        role = "member"
     return jsonify({
-        "plan": {"id": plan.id, "name": plan.name, "subject": plan.subject, "teacher": _teacher_name(plan)},
+        "plan": {"id": plan.id, "name": plan.name, "subject": plan.subject, "teacher": _teacher_name(plan), "teacherAvatar": avatar_url(plan.owner_id)},
         "assignment": _assignment_brief(a) if a else None,
+        "members": _joined_preview(plan),
+        "role": role,
     })
 
 
 @bp.post("/plans/join")
 @login_required
 def join_plan():
-    """点开卡片后自动加入，不用创建人批准。已经在里面的直接返回。名字用账号当前的称呼"""
+    """加入（客户端在加入页上让人确认过才调），不用创建人批准。已经在里面的直接返回。名字用账号当前的称呼"""
     user = current_user()
     data = request.get_json(silent=True) or {}
     plan = _invite_plan(data.get("code"))
@@ -827,6 +858,9 @@ _LANDING = """<!doctype html>
 h1{{margin:6px 0 0;font-size:24px;line-height:1.35}}
 .card{{margin:-32px 16px 0;background:#fff;border-radius:16px;padding:20px;box-shadow:0 6px 24px rgba(31,59,115,.08)}}
 .row{{display:flex;justify-content:space-between;padding:8px 0;font-size:15px}}.row span:first-child{{color:#7A869F}}
+.who{{display:flex;align-items:center;gap:10px}}.ava{{width:36px;height:36px;border-radius:18px;flex-shrink:0;object-fit:cover;background:#E8EEFB;color:#1F3B73;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}}
+.who .ava{{border:2px solid rgba(255,255,255,.7)}}.joined{{display:flex;align-items:center;gap:10px;padding:12px 0 2px;margin-top:6px;border-top:1px solid #EEF1F7;font-size:14px;color:#7A869F}}
+.stack{{display:flex;flex-shrink:0}}.stack .ava{{width:28px;height:28px;border-radius:14px;font-size:12px;border:2px solid #fff;margin-left:-8px}}.stack .ava:first-child{{margin-left:0}}
 .tag{{display:inline-block;background:#E8EEFB;color:#1F3B73;border-radius:6px;padding:2px 8px;font-size:13px}}
 .grow{{flex:1}}.bar{{padding:16px 16px calc(16px + env(safe-area-inset-bottom))}}
 .btn{{display:block;width:100%;border:0;border-radius:14px;background:#1F3B73;color:#fff;font-size:17px;font-weight:600;padding:16px;text-align:center;text-decoration:none}}
@@ -834,8 +868,8 @@ h1{{margin:6px 0 0;font-size:24px;line-height:1.35}}
 .mask{{display:none;position:fixed;inset:0;background:rgba(10,20,45,.82);color:#fff;padding:28px;font-size:17px;line-height:1.7;text-align:right}}
 .mask.on{{display:block}}.mask b{{font-size:30px}}
 </style></head><body>
-<div class="top"><div class="brand">上壹课 · 学习计划</div><div class="who">{teacher} 邀请你加入</div><h1>{name}</h1></div>
-<div class="card"><div class="row"><span>学科</span><span class="tag">{subject}</span></div>{assignment}</div>
+<div class="top"><div class="brand">上壹课 · 学习计划</div><div class="who">{avatar}<span>{teacher} 邀请你加入</span></div><h1>{name}</h1></div>
+<div class="card"><div class="row"><span>学科</span><span class="tag">{subject}</span></div>{assignment}{joined}</div>
 <div class="grow"></div>
 <div class="bar"><a class="btn" id="open" href="{deeplink}">打开上壹课，加入学习计划</a>
 <div class="tip" id="tip">{download}</div></div>
@@ -879,11 +913,20 @@ def landing(code: str):
         rows = f'<div class="row"><span>作业</span><span>{escape(a.title)}</span></div>'
         if a.due_at:
             rows += f'<div class="row"><span>截止</span><span>{escape(_due_text(a.due_at))}</span></div>'
+
+    def ava(name: str, url: str | None) -> str:
+        return f'<img class="ava" src="{escape(url)}" alt="">' if url else f'<span class="ava">{escape(name[-1:])}</span>'
+
+    people = _joined_preview(plan)
+    joined = ""
+    if people["count"]:
+        stack = "".join(ava(m["name"], m["avatar"]) for m in people["list"][:5])
+        joined = f'<div class="joined"><div class="stack">{stack}</div><span>已有 {people["count"]} 人加入</span></div>'
     dl = current_app.config.get("APP_DOWNLOAD_URL") or ""
     download = f'还没装上壹课？<a href="{escape(dl)}">去下载</a>，装好后再点一次这张卡片' if dl else "还没装上壹课？先在应用商店搜索「上壹课」安装，再点一次这张卡片"
     html = _LANDING.format(
         title=escape(f"{_teacher_name(plan)}邀请你加入「{plan.name}」"), desc=escape(a.title if a else "打开上壹课加入学习计划"),
         teacher=escape(_teacher_name(plan)), name=escape(plan.name), subject=_SUBJECT_NAMES.get(plan.subject, "综合"),
-        assignment=rows, deeplink=escape(deeplink), deeplink_js=json.dumps(deeplink), download=download,
+        assignment=rows, joined=joined, avatar=ava(_teacher_name(plan), avatar_url(plan.owner_id)), deeplink=escape(deeplink), deeplink_js=json.dumps(deeplink), download=download,
     )
     return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"}
