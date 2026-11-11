@@ -14,7 +14,8 @@ import { C } from "../../lib/theme";
 interface Preview {
   plan: { id: string; name: string; subject: PlanSubject; teacher: string; teacherAvatar?: string | null };
   assignment: AssignmentBrief | null;
-  members: JoinedPreview;
+  /** 旧版本的服务器不给这一项 */
+  members?: JoinedPreview;
   /** 登录后才有：owner = 自己建的，member = 已经在里面，null = 还没加入 */
   role: "owner" | "member" | null;
 }
@@ -60,7 +61,8 @@ export default function PlanJoin() {
       .then((p) => {
         // 已经在里面的同学：不用再确认，直接进到这份作业
         if (p.role === "member") return void enter({ id: p.plan.id, role: "member" });
-        setPreview(p);
+        // 服务器还是旧版本时没有 members / role：不显示「已加入的人」那一行、按还没加入处理，不能让页面卡在转圈
+        setPreview({ ...p, role: p.role ?? null });
       })
       .catch((e) => setError(errorText(e) || "打不开这张卡片"));
   }, [code, a]);
@@ -90,6 +92,7 @@ export default function PlanJoin() {
     </Button>
   );
   const owner = preview?.role === "owner";
+  const members = preview?.members;
   if (error) return <PageState error={error} action={isLoggedIn() ? mine : undefined} />;
 
   return (
@@ -115,18 +118,20 @@ export default function PlanJoin() {
                 <Text className="t-sub c-sec">{preview.assignment.title}</Text>
               </View>
             )}
-            <View className="plan-join__members">
-              {preview.members.count > 0 && (
-                <View className="avatar-stack">
-                  {preview.members.list.slice(0, 5).map((m, i) => (
-                    <View key={i} className="avatar-stack__item">
-                      <Avatar name={m.name} url={m.avatar} size={28} />
-                    </View>
-                  ))}
-                </View>
-              )}
-              <Text className="t-foot c-sec">{joinedText(preview.members, owner)}</Text>
-            </View>
+            {members && (
+              <View className="plan-join__members">
+                {members.count > 0 && (
+                  <View className="avatar-stack">
+                    {members.list.slice(0, 5).map((m, i) => (
+                      <View key={i} className="avatar-stack__item">
+                        <Avatar name={m.name} url={m.avatar} size={28} />
+                      </View>
+                    ))}
+                  </View>
+                )}
+                <Text className="t-foot c-sec">{joinedText(members, owner)}</Text>
+              </View>
+            )}
           </View>
           {owner ? (
             <Button onClick={() => void enter({ id: preview.plan.id, role: "owner" })} style={{ width: "100%" }}>

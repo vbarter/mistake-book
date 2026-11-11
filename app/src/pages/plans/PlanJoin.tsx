@@ -12,7 +12,8 @@ import { ConfirmSheet, NameSheet } from "./shared";
 interface Preview {
   plan: { id: string; name: string; subject: PlanSubject; teacher: string; teacherAvatar?: string | null };
   assignment: AssignmentBrief | null;
-  members: JoinedPreview;
+  /** 旧版本的服务器不给这一项 */
+  members?: JoinedPreview;
   /** owner = 自己建的，member = 已经在里面，null = 还没加入 */
   role: "owner" | "member" | null;
 }
@@ -49,7 +50,8 @@ export default function PlanJoin() {
       .then((p) => {
         // 已经在里面的同学：不用再确认，直接进到这份作业
         if (p.role === "member") return enter({ id: p.plan.id, role: "member" });
-        setPreview(p);
+        // 服务器还是旧版本时没有 members / role：不显示「已加入的人」那一行、按还没加入处理，不能让页面卡在转圈
+        setPreview({ ...p, role: p.role ?? null });
       })
       .catch((e) => fail(e, "打不开这张卡片"));
   }, [code, a]);
@@ -69,6 +71,7 @@ export default function PlanJoin() {
   };
 
   const owner = preview?.role === "owner";
+  const members = preview?.members;
   const as = nickname && nickname !== DEFAULT_NICKNAME ? `你会用「${nickname}」加入，` : "加入后，";
 
   return (
@@ -89,16 +92,18 @@ export default function PlanJoin() {
                 <Icon name="document" size={14} stroke={2.2} />{preview.assignment.title}
               </span>
             )}
-            <div style={{ alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 12, paddingTop: 14, borderTop: "1px solid var(--separator-light)" }}>
-              {preview.members.count > 0 && (
-                <span style={{ display: "flex", flexShrink: 0 }}>
-                  {preview.members.list.slice(0, 5).map((m, i) => (
-                    <Avatar key={i} name={m.name} url={m.avatar} size={28} style={{ marginLeft: i ? -8 : 0, boxShadow: "0 0 0 2px var(--card)" }} />
-                  ))}
-                </span>
-              )}
-              <span className="t-foot c-sec">{joinedText(preview.members, owner)}</span>
-            </div>
+            {members && (
+              <div style={{ alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 12, paddingTop: 14, borderTop: "1px solid var(--separator-light)" }}>
+                {members.count > 0 && (
+                  <span style={{ display: "flex", flexShrink: 0 }}>
+                    {members.list.slice(0, 5).map((m, i) => (
+                      <Avatar key={i} name={m.name} url={m.avatar} size={28} style={{ marginLeft: i ? -8 : 0, boxShadow: "0 0 0 2px var(--card)" }} />
+                    ))}
+                  </span>
+                )}
+                <span className="t-foot c-sec">{joinedText(members, owner)}</span>
+              </div>
+            )}
           </div>
           {owner ? <Button onClick={() => enter({ id: preview.plan.id, role: "owner" })}>进入学习计划</Button> : <Button onClick={() => setAsking(true)}>加入学习计划</Button>}
         </div>
