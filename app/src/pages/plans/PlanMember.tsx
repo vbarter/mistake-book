@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Icon, type IconName } from "../../components/Icon";
+import { Icon } from "../../components/Icon";
 import { Button, Sheet } from "../../components/ui";
 import { Stat, Tag } from "../../components/v2";
 import { haptic, pickImages, takePhoto } from "../../lib/native";
@@ -15,13 +15,12 @@ import { Busy, Count } from "./shared";
 type Look = "done" | "returned" | "todo" | "revoked";
 /** 一份作业的样子：交了 = 绿，退回重做 = 红，待交 = 橙 */
 const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
-const LOOK_ICON: Record<Look, [IconName, string]> = { done: ["checkcircle", "var(--mastered)"], returned: ["refresh", "var(--wrong)"], todo: ["clock", "var(--due)"], revoked: ["minus", "var(--tertiary)"] };
 
 /**
  * 成员看到的学习计划页（和小程序的 components/PlanMember 对应）。成员不再有单独的「作业」页，全在这一页：
- * 待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面每份作业一段（作业名 + 状态，下面直接平铺它的文件，点文件打开），底部「导出」「扫描上传」。
+ * 待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），底部「导出」「扫描上传」。
  * 扫描上传：连拍扫描（pages/scan，拍完回到这里）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
- * 交完页面跟着刷新，交了的作业整块标成绿色。交过的作业点作业名看自己那份的批改结果。
+ * 交完页面跟着刷新，交了的作业那几行标成绿色，下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  * 拍好还没交的照片放在连拍扫描的那一批里（store/scan，plan = 这个计划），App 被杀也还在。
  */
 export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () => Promise<unknown> }) {
@@ -134,45 +133,53 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         {list.map((a) => {
         const look = lookOf(a);
         const waiting = a.status === "todo" || a.status === "returned";
-        const mine = a.status !== "todo"; // 交过：点作业名看自己那份和批改结果
-        const head = (
-          <>
-            <span className="plan-task__head">
-              <Icon name={LOOK_ICON[look][0]} size={18} stroke={2.4} style={{ color: LOOK_ICON[look][1], flexShrink: 0 }} />
-              <span className="t-headline ellipsis" style={{ flex: 1 }}>{a.title}</span>
-              {statusTag(a, true)}
-              {mine && <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)", flexShrink: 0 }} />}
-            </span>
-            <span className="plan-counts" style={waiting && !a.dueAt ? { display: "none" } : undefined}>
-              {waiting ? (a.dueAt && <Count icon="clock" color={isOverdue(a.dueAt) ? "var(--wrong)" : undefined}>{dueLabel(a.dueAt)}</Count>) : a.score ? (
-                <>
-                  <Count icon="checkcircle" color="var(--mastered)">{a.score.correct}</Count>
-                  <Count icon="xcircle" color="var(--wrong)">{a.score.wrong}</Count>
-                  <Count icon="minus" color="var(--tertiary)">{a.score.blank}</Count>
-                </>
-              ) : <span className="t-foot c-sec">批改中</span>}
-              {!waiting && a.late && <span className="t-foot c-sec">迟交</span>}
-            </span>
-            {a.comment && (
-              <span className="plan-count" style={{ alignItems: "flex-start", fontWeight: 400, color: a.status === "returned" ? "var(--wrong)" : "var(--secondary)" }}>
-                <Icon name="bubble" size={14} stroke={2.2} style={{ marginTop: 2, flexShrink: 0 }} />
-                <span style={{ flex: 1, textAlign: "left" }}>{a.comment}</span>
-              </span>
-            )}
-          </>
-        );
+        const mine = a.status !== "todo";
+        const files = a.files ?? [];
         return (
           <div key={a.id} className="plan-hw">
-            {mine
-              ? <button className={`plan-task plan-task--${look}`} onClick={() => nav(`/plans/a/${a.id}`)}>{head}</button>
-              : <div className={`plan-task plan-task--${look} plan-task--static`}>{head}</div>}
-            {(a.files ?? []).map((f) => (
-              <button key={f.id} className="row" onClick={() => openFile(f)}>
+            {/* 没有作业名那一行了：状态标在每个文件上（交了的整行标绿，退回的标红） */}
+            {files.map((f) => (
+              <button key={f.id} className={`row plan-row--${look}`} onClick={() => openFile(f)}>
                 <span className="plan-file__icon" style={{ width: 34, height: 40 }}>{fileBadge(f.mime)}</span>
-                <span className="row__main"><span className="row__title ellipsis">{f.name}</span><span className="row__sub">{sizeLabel(f.size)}</span></span>
+                <span className="row__main">
+                  <span className="row__title ellipsis">{f.name}</span>
+                  <span className="row__sub" style={waiting && isOverdue(a.dueAt) ? { color: "var(--wrong)" } : undefined}>{sizeLabel(f.size)}{waiting && a.dueAt ? ` · ${dueLabel(a.dueAt)}截止` : ""}</span>
+                </span>
+                {statusTag(a, true)}
                 <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
               </button>
             ))}
+            {files.length === 0 && (
+              <div className={`row plan-row--${look}`}>
+                <span className="row__main"><span className="row__title ellipsis">{a.title}</span></span>
+                {statusTag(a, true)}
+              </div>
+            )}
+            {/* 交过：一行小字是对 / 错 / 没做和老师的话，点进去看自己那份的批改结果 */}
+            {mine && (
+              <button className={`plan-task plan-task--${look}`} onClick={() => nav(`/plans/a/${a.id}`)}>
+                <span className="plan-task__head">
+                  <span className="plan-counts" style={{ flex: 1 }}>
+                    {a.score ? (
+                      <>
+                        <Count icon="checkcircle" color="var(--mastered)">{a.score.correct}</Count>
+                        <Count icon="xcircle" color="var(--wrong)">{a.score.wrong}</Count>
+                        <Count icon="minus" color="var(--tertiary)">{a.score.blank}</Count>
+                      </>
+                    ) : <span className="t-foot c-sec">{a.status === "returned" ? "老师退回了，重新交一次" : "批改中"}</span>}
+                    {a.late && <span className="t-foot c-sec">迟交</span>}
+                  </span>
+                  <span className="t-foot c-sec">批改结果</span>
+                  <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
+                </span>
+                {a.comment && (
+                  <span className="plan-count" style={{ alignItems: "flex-start", fontWeight: 400, color: a.status === "returned" ? "var(--wrong)" : "var(--secondary)" }}>
+                    <Icon name="bubble" size={14} stroke={2.2} style={{ marginTop: 2, flexShrink: 0 }} />
+                    <span style={{ flex: 1, textAlign: "left" }}>{a.comment}</span>
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         );
       })}
