@@ -38,7 +38,7 @@ export default function Submission() {
   const owner = plan.role === "owner";
   const results = sub.results ?? null;
   const q = picked !== null && results ? results[picked] : null;
-  const back = () => (assignment ? nav(`/plans/a/${assignment.id}`) : nav(-1));
+  const back = () => (owner ? nav(`/plans/${plan.id}`) : assignment ? nav(`/plans/a/${assignment.id}`) : nav(-1));
 
   const remark = async (mark: Mark) => {
     if (picked === null) return;

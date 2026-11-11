@@ -3,12 +3,12 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Taro, { useDidShow, useShareAppMessage } from "@tarojs/taro";
 import { Button as NativeButton, Input, Text, View } from "@tarojs/components";
 import { Icon, WechatIcon, type IconName } from "./Icon";
-import { Button, Empty, Sheet, SubjectTile } from "./ui";
+import { Avatar, Button, Empty, Sheet, SubjectTile } from "./ui";
 import { errorText } from "../lib/api";
 import { currentUser, ensureLogin, isLoggedIn, updateProfile } from "../lib/auth";
 import { pickPhotos, type Source } from "../lib/capture";
 import { toast } from "../lib/hooks";
-import { DEFAULT_NICKNAME, PLANS_EVENT, sharePayload, startPlanSync, type PlanSubject, type ResultRow, type ShareInfo } from "../lib/plans";
+import { DEFAULT_NICKNAME, PLANS_EVENT, PLAN_SUBJECT_LABEL, createdLabel, sharePayload, startPlanSync, type PlanInfo, type PlanSubject, type ResultRow, type ShareInfo } from "../lib/plans";
 import { SHARE_TITLE } from "../lib/share";
 import { C } from "../lib/theme";
 
@@ -65,6 +65,31 @@ export function ScoreStats({ score }: { score: Score }) {
 /** 学科方块：综合用中性色 */
 export function PlanTile({ subject, size = "md" }: { subject: PlanSubject | null | undefined; size?: "lg" | "md" | "sm" | "xs" }) {
   return <SubjectTile subject={subject && subject !== "mixed" ? subject : null} size={size} />;
+}
+
+/**
+ * 成员看到的「这是谁的哪个学习计划」：创建人头像、计划名、创建人称呼 · 学科、创建时间。
+ * 作业页上用它，点一下去学习计划页看全部作业（more 是右边那句话）。
+ */
+export function PlanCreator({ plan, more, onClick }: { plan: PlanInfo; more?: string; onClick?: () => void }) {
+  return (
+    <View className="card plan-creator" hoverClass={onClick ? "card--pressed" : "none"} onClick={onClick}>
+      <Avatar name={plan.teacher} url={plan.teacherAvatar} size={44} />
+      <View className="flex1 col gap2 minw0">
+        <Text className="t-headline ellipsis">{plan.name}</Text>
+        <Text className="t-foot c-sec ellipsis">
+          {plan.teacher} · {PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}
+        </Text>
+        <Text className="t-foot c-sec">{createdLabel(plan.createdAt)}</Text>
+      </View>
+      {onClick && (
+        <View className="row-center gap2">
+          {more && <Text className="t-foot c-sec">{more}</Text>}
+          <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+        </View>
+      )}
+    </View>
+  );
 }
 
 /** 回到页面、登录状态变了、学习计划的数据有变化时 +1，页面据此重新拉 */
@@ -208,13 +233,13 @@ export function QuestionGrid({ results, onPick }: { results: ResultRow[]; onPick
 
 /**
  * 转发按钮：小程序里只有用户亲手点原生的 <button open-type="share"> 才能拉起转发，
- * 所以所有「转发到微信」都是这个按钮；卡片的内容由页面的 useShareAppMessage 决定（remind = 提醒没交的同学）。
+ * 所以所有「转发到微信」都是这个按钮；卡片的内容由页面的 useShareAppMessage 决定（remind = 提醒没交的同学，assignmentId = 一页有多份作业时转发哪一份）。
  */
-export function ShareButton({ children, variant = "primary", pill, icon, remind, style, onTap }: { children: ReactNode; variant?: "primary" | "outline" | "tinted"; pill?: boolean; icon?: IconName; remind?: boolean; style?: CSSProperties; onTap?: () => void }) {
+export function ShareButton({ children, variant = "primary", pill, icon, remind, assignmentId, style, onTap }: { children: ReactNode; variant?: "primary" | "outline" | "tinted"; pill?: boolean; icon?: IconName; remind?: boolean; assignmentId?: string; style?: CSSProperties; onTap?: () => void }) {
   const cls = pill ? "plan-pill btn-native" : ["btn", "btn-native", variant !== "primary" && `btn--${variant}`].filter(Boolean).join(" ");
   const light = pill || variant !== "primary";
   return (
-    <NativeButton className={cls} hoverClass={pill ? "none" : "btn--hover"} openType="share" data-remind={remind ? "1" : ""} style={style} onClick={onTap}>
+    <NativeButton className={cls} hoverClass={pill ? "none" : "btn--hover"} openType="share" data-remind={remind ? "1" : ""} data-aid={assignmentId ?? ""} style={style} onClick={onTap}>
       {/* 没指定图标就是微信图标：让人一眼知道是发到微信 */}
       {icon ? <Icon name={icon} size={pill ? 15 : 20} color={light ? C.brand : "#ffffff"} stroke={2.2} /> : <WechatIcon size={pill ? 18 : 22} color={light ? "#07c160" : "#ffffff"} />}
       <Text>{children}</Text>
@@ -244,10 +269,11 @@ export async function confirm(title: string, content: string, action: string, da
  * 页面的转发内容：get 返回要转发的学习计划（创建人才有邀请码）就发加入卡片，返回 null 就和别的页面一样落到首页。
  * 成员手里没有邀请码，转发出去的永远是首页，不会把计划带出去。
  */
-export function usePlanShare(get: (remind: boolean) => ShareInfo | null) {
+export function usePlanShare(get: (remind: boolean, assignmentId?: string) => ShareInfo | null) {
   useShareAppMessage((res) => {
-    const remind = res.from === "button" && Boolean((res.target as { dataset?: { remind?: string } } | undefined)?.dataset?.remind);
-    const info = get(remind);
+    const dataset = res.from === "button" ? (res.target as { dataset?: { remind?: string; aid?: string } } | undefined)?.dataset : undefined;
+    const remind = Boolean(dataset?.remind);
+    const info = get(remind, dataset?.aid || undefined);
     return info ? sharePayload({ ...info, remind: remind || info.remind }) : { title: SHARE_TITLE, path: "/pages/home/index" };
   });
 }

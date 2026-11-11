@@ -363,15 +363,43 @@ def get_plan(plan_id: str):
         live = [a for a in assignments if not a.revoked]
         counts = _owner_counts(plan, live)
         body["assignments"] = [{**_assignment_brief(a), **counts[a.id]} for a in live]
-        members = _members(plan)
-        names = _display_names([u for _, u in members])
-        handed: dict[str, int] = {}
+        # 作业文件直接平铺在计划页：不用再点进每份作业
+        store = storage.get_storage()
+        files: dict[str, list[dict]] = {a.id: [] for a in live}
+        live_ids = [a.id for a in live]
+        subs: dict[tuple[str, str], PlanSubmission] = {}
+        viewed: set[tuple[str, str]] = set()
         if live:
-            for s in PlanSubmission.query.filter(PlanSubmission.assignment_id.in_([a.id for a in live]), PlanSubmission.status != "returned").all():
-                handed[s.user_id] = handed.get(s.user_id, 0) + 1
-        body["members"] = [
-            {"userId": u.id, **names[u.id], "joinedAt": _iso(m.joined_at), "submitted": handed.get(u.id, 0), "assignments": len(live)} for m, u in members
-        ]
+            for f in PlanFile.query.filter(PlanFile.assignment_id.in_(live_ids), PlanFile.submission_id.is_(None)).order_by(PlanFile.position, PlanFile.created_at).all():
+                files[f.assignment_id].append(_file_view(f, store))
+            for s in PlanSubmission.query.filter(PlanSubmission.assignment_id.in_(live_ids)).all():
+                subs[(s.assignment_id, s.user_id)] = s
+            viewed = {(v.assignment_id, v.user_id) for v in PlanView.query.filter(PlanView.assignment_id.in_(live_ids)).all()}
+        body["assignments"] = [{**row, "files": files[row["id"]]} for row in body["assignments"]]
+        # 成员名单带每份作业的状态。已交 = 没撤回的作业都交了；未交 = 还有没交的（退回重做的也算）。
+        # 已经退出但交过作业的人也列出来（left），不然他那份待阅的没有入口；人数和未交都不算他。
+        everyone = _members(plan, include_removed=True)
+        names = _display_names([u for _, u in everyone])
+        rows = []
+        for m, u in everyone:
+            items = []
+            for a in live:
+                sub = subs.get((a.id, u.id))
+                items.append({
+                    "assignmentId": a.id, "status": _my_status(sub), "submissionId": sub.id if sub else None,
+                    "late": bool(sub.late) if sub else False, "score": _score(sub.results) if sub else None, "viewed": (a.id, u.id) in viewed,
+                })
+            handed = sum(1 for i in items if i["status"] in ("submitted", "reviewed"))
+            if m.removed and not handed:
+                continue
+            rows.append({
+                "userId": u.id, **names[u.id], "joinedAt": _iso(m.joined_at), "submitted": handed, "assignments": len(live),
+                "status": "none" if not live else "submitted" if handed == len(live) else "missing",
+                "toReview": sum(1 for i in items if i["status"] == "submitted"), "left": bool(m.removed), "items": items,
+            })
+        body["members"] = rows
+        members = [r for r in rows if not r["left"]]
+        body["plan"]["missing"] = sum(1 for r in members if r["status"] == "missing")
         body["invite"] = _invite(plan, live[0] if live else None)
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         body["plan"]["members"] = len(members)
@@ -381,12 +409,29 @@ def get_plan(plan_id: str):
         )
     else:
         mine = {s.assignment_id: s for s in PlanSubmission.query.filter_by(plan_id=plan.id, user_id=user.id).all()}
+        shown = [a for a in assignments if not (a.revoked and mine.get(a.id) is None)]
+        ids = [a.id for a in shown]
+        # 成员的计划页也直接平铺每份作业的文件（不再点进作业页），所以打开计划页就算看过这些作业了
+        store = storage.get_storage()
+        files: dict[str, list[dict]] = {i: [] for i in ids}
+        if ids:
+            for f in PlanFile.query.filter(PlanFile.assignment_id.in_(ids), PlanFile.submission_id.is_(None)).order_by(PlanFile.position, PlanFile.created_at).all():
+                files[f.assignment_id].append(_file_view(f, store))
+            seen = {v.assignment_id for v in PlanView.query.filter(PlanView.assignment_id.in_(ids), PlanView.user_id == user.id).all()}
+            fresh = [a.id for a in shown if not a.revoked and a.id not in seen]
+            if fresh:
+                db.session.add_all([PlanView(assignment_id=i, user_id=user.id) for i in fresh])
+                try:
+                    db.session.commit()
+                except IntegrityError:  # 同时来的另一个请求已经记上了
+                    db.session.rollback()
         rows = []
-        for a in assignments:
+        for a in shown:
             sub = mine.get(a.id)
-            if a.revoked and sub is None:
-                continue
-            rows.append({**_assignment_brief(a), "status": _my_status(sub), "score": _score(sub.results) if sub else None, "comment": sub.comment if sub else "", "late": bool(sub.late) if sub else False})
+            rows.append({
+                **_assignment_brief(a), "status": _my_status(sub), "score": _score(sub.results) if sub else None, "comment": sub.comment if sub else "",
+                "late": bool(sub.late) if sub else False, "files": files[a.id], "digitized": bool(a.digitized),
+            })
         body["assignments"] = rows
         body["me"] = {"name": user.nickname or DEFAULT_NICKNAME, "defaultName": (user.nickname or DEFAULT_NICKNAME) == DEFAULT_NICKNAME}
     return jsonify(body)

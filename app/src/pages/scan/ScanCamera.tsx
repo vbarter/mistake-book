@@ -4,13 +4,14 @@ import { Icon } from "../../components/Icon";
 import { ScanViewer } from "../../components/ScanViewer";
 import { Button, Sheet } from "../../components/ui";
 import { DETECT_SIDE, detectQuad, QuadTracker, type Quad } from "../../lib/docDetect";
-import { haptic, pickImages, releaseCanvas } from "../../lib/native";
+import { finishFlow } from "../../lib/flow";
+import { haptic, pickImages, releaseCanvas, takePhoto } from "../../lib/native";
 import { canUseLiveCamera, coverMapping, openCamera, setTorch, stopCamera, torchSupported } from "../../lib/scanCamera";
 import { toastError } from "../../store/banner";
 import { useCapture } from "../../store/capture";
 import { addAlbumPages, addShot, clearScan, loadScanPrefs, removeShot, restoreDraft, setAutoShoot, setEnhance, startScan, useScan } from "../../store/scan";
 
-type EntryState = { folderId?: string | null; from?: string } | null;
+type EntryState = { folderId?: string | null; from?: string; plan?: string | null } | null;
 
 /** 检测间隔（毫秒）：每秒约 8 次，够跟手，也不太费电 */
 const DETECT_MS = 120;
@@ -31,6 +32,7 @@ export default function ScanCamera() {
   const shots = useScan((s) => s.shots);
   const autoShoot = useScan((s) => s.autoShoot);
   const enhance = useScan((s) => s.enhance);
+  const plan = useScan((s) => s.plan);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const viewRef = useRef<HTMLDivElement>(null);
@@ -61,7 +63,7 @@ export default function ScanCamera() {
   useEffect(() => {
     void loadScanPrefs();
     void restoreDraft().then((n) => { if (n) showToast(`上次拍的 ${n} 张还在`); });
-    startScan(entry?.folderId ?? null, entry?.from || "/home");
+    startScan(entry?.folderId ?? null, entry?.from || "/home", entry?.plan ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -231,9 +233,15 @@ export default function ScanCamera() {
     else exit();
   };
 
+  /** 拍完去哪：平时去整理页；学习计划里拍作业的回计划页，在那边选交哪一份 */
+  const next = () => {
+    const { plan, from } = useScan.getState();
+    if (plan) finishFlow(nav, from, `/plans/${plan}`);
+    else nav("/scan/arrange", { replace: true });
+  };
   const finish = () => {
     if (!useScan.getState().shots.length) return;
-    nav("/scan/arrange", { replace: true });
+    next();
   };
 
   const fromAlbum = async () => {
@@ -242,15 +250,28 @@ export default function ScanCamera() {
       const list = await pickImages(0);
       if (!list.length) return;
       await addAlbumPages(list);
-      nav("/scan/arrange", { replace: true });
+      next();
     } catch (e) {
       toastError((e as Error).message === "permission_denied" ? new Error("需要相册权限，可以在系统设置里打开") : e);
     }
   };
 
+  /** 学习计划里拍作业：系统相机拍一张，和这批照片放一起，回计划页 */
+  const planSystemCamera = async () => {
+    try {
+      const src = await takePhoto();
+      if (src) await addAlbumPages([src]);
+    } catch (e) {
+      toastError((e as Error).message === "permission_denied" ? new Error("需要相机权限，可以在系统设置里打开") : e);
+    }
+    if (useScan.getState().shots.length) next();
+    else exit();
+  };
+
   /** 退回系统相机的旧流程（录入页） */
   const systemCamera = () => {
     setMore(false);
+    if (useScan.getState().plan) return void planSystemCamera();
     const cap = useCapture.getState();
     cap.reset();
     cap.setReturnTo(useScan.getState().from || "/home");
@@ -349,7 +370,7 @@ export default function ScanCamera() {
       </div>
 
       <div className="scan__bottom">
-        <div className="scan__mode">扫描试卷</div>
+        <div className="scan__mode">{plan ? "拍作业" : "扫描试卷"}</div>
         <div className="scan__ctl">
           <button className="scan-undo" disabled={!n} onClick={undo} aria-label="撤回上一张">
             <Icon name="undo" size={26} stroke={2} /><span>撤回</span>
@@ -384,8 +405,8 @@ export default function ScanCamera() {
         </div>
       </Sheet>
 
-      <Sheet open={leaving} onClose={() => setLeaving(false)} title={`已拍 ${n} 张，还没识别`}>
-        <Button onClick={() => { setLeaving(false); finish(); }}>去整理、开始识别</Button>
+      <Sheet open={leaving} onClose={() => setLeaving(false)} title={plan ? `已拍 ${n} 张，还没交` : `已拍 ${n} 张，还没识别`}>
+        <Button onClick={() => { setLeaving(false); finish(); }}>{plan ? "去选作业、交给老师" : "去整理、开始识别"}</Button>
         <Button variant="tinted" onClick={() => { setLeaving(false); exit(); }}>先留着，下次接着拍</Button>
         <Button variant="danger" onClick={() => { setLeaving(false); clearScan(); exit(); }}>全部不要</Button>
       </Sheet>

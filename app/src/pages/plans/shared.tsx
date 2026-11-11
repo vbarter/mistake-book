@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "../../components/Icon";
 import { Button, Sheet } from "../../components/ui";
-import { SubjectTile } from "../../components/v2";
+import { Avatar, SubjectTile } from "../../components/v2";
 import { toPage, type FullPage } from "../../lib/folders";
 import { pickImages, takePhoto } from "../../lib/native";
-import type { PlanSubject } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, createdLabel, type PlanInfo, type PlanSubject } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { useAuth } from "../../store/auth";
 import "../../styles/plans.css";
@@ -12,6 +12,30 @@ import "../../styles/plans.css";
 /** 图标 + 数字的一小格：人数、份数、对 / 错 / 没做都用它，代替「已交 3」这类文字 */
 export function Count({ icon, color = "var(--secondary)", children }: { icon: IconName; color?: string; children: ReactNode }) {
   return <span className="plan-count" style={{ color }}><Icon name={icon} size={14} stroke={2.4} /><span className="num">{children}</span></span>;
+}
+
+/**
+ * 成员看到的「这是谁的哪个学习计划」：创建人头像、计划名、创建人称呼 · 学科、创建时间。
+ * 作业页上用它，点一下去学习计划页看全部作业（more 是右边那句话）。
+ */
+export function PlanCreator({ plan, more, onClick }: { plan: PlanInfo; more?: string; onClick?: () => void }) {
+  const body = (
+    <>
+      <Avatar name={plan.teacher} url={plan.teacherAvatar} size={44} />
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, textAlign: "left" }}>
+        <span className="t-headline ellipsis">{plan.name}</span>
+        <span className="t-foot c-sec ellipsis">{plan.teacher} · {PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}</span>
+        <span className="t-foot c-sec">{createdLabel(plan.createdAt)}</span>
+      </span>
+      {onClick && (
+        <span className="t-foot c-sec" style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+          {more}<Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+        </span>
+      )}
+    </>
+  );
+  const style = { flexDirection: "row", alignItems: "center", gap: 12 } as const;
+  return onClick ? <button className="card" style={style} onClick={onClick}>{body}</button> : <div className="card" style={style}>{body}</div>;
 }
 
 type Score = { correct: number; wrong: number; blank: number };

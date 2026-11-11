@@ -69,12 +69,12 @@ export default function PlanNew() {
       const res = await publishAssignment(planId ?? null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt: null, title: title.trim() }, files, setStage);
       setStage(null);
       void haptic.success();
-      // 直接转发到微信；取消了也没关系，作业页右上角还能再转发
+      // 直接转发到微信；取消了也没关系，计划页还能再转发
       const a = res.assignment;
       const shared = await shareInvite({ plan: res.plan, title: a?.title, invite: res.invite, assignmentId: a?.id }).catch(() => false);
       const what = a ? "已布置" : "已创建";
-      toast(shared ? what : `${what}，可以在${a ? "作业页" : "计划页"}再转发`, "success");
-      nav(a ? `/plans/a/${a.id}` : `/plans/${res.plan.id}`, { replace: true });
+      toast(shared ? what : `${what}，可以在计划页再转发`, "success");
+      nav(`/plans/${res.plan.id}`, { replace: true });
     } catch (e) {
       setStage(null);
       toastError(e);

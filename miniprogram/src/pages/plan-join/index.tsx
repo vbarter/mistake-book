@@ -23,7 +23,7 @@ interface Preview {
 /**
  * 点开微信里的卡片后落到这里（相当于 App 的落地页 + 加入页合成一步）：
  * 先看到是谁建的（头像 + 称呼）、哪个计划、哪份作业、已经有谁加入了；点「加入学习计划」再确认一次才加入，没登录的确认后微信一键登录。
- * 已经在里面的同学不用再点，直接进到这份作业。创建人点开自己的卡片也停在这一页，看到的和同学一样，只多一个「进入学习计划」。
+ * 加入后先到学习计划页（创建人、计划名、创建时间、全部作业）。已经在里面的同学不用再点，直接进到这份作业。创建人点开自己的卡片也停在这一页，看到的和同学一样，只多一个「进入学习计划」。
  * 不用老师批准。刚注册的新用户先起名字；已经在用的直接用自己的名字加入。
  */
 export default function PlanJoin() {
@@ -35,7 +35,9 @@ export default function PlanJoin() {
   const [naming, setNaming] = useState<PlanInfo | null>(null);
   const started = useRef(false);
 
-  const enter = (plan: Pick<PlanInfo, "id" | "role">) => Taro.redirectTo({ url: a && plan.role === "member" ? `/pages/plan-task/index?id=${a}` : `/pages/plan/index?id=${plan.id}` });
+  const enter = (plan: Pick<PlanInfo, "id" | "role">) => Taro.redirectTo({ url: `/pages/plan/index?id=${plan.id}` });
+
+  const toPlan = (plan: Pick<PlanInfo, "id">) => Taro.redirectTo({ url: `/pages/plan/index?id=${plan.id}` });
 
   const join = async () => {
     if (started.current) return;
@@ -47,7 +49,8 @@ export default function PlanJoin() {
       bumpPlans();
       if (res.plan.role !== "owner" && res.me.needsName) return setNaming(res.plan);
       if (res.joined) toast(`已用「${res.me.name}」加入「${res.plan.name}」`);
-      void enter(res.plan);
+      // 刚加入的先到学习计划页：是谁的计划、有哪些作业一眼看全；本来就在里面的直接进这份作业
+      void (res.joined ? toPlan(res.plan) : enter(res.plan));
     } catch (e) {
       started.current = false;
       setJoining(false);
@@ -152,7 +155,7 @@ export default function PlanJoin() {
           const plan = naming!;
           setNaming(null);
           toast(`已用「${name}」加入「${plan.name}」`);
-          void enter(plan);
+          void toPlan(plan);
         }}
       />
     </View>
