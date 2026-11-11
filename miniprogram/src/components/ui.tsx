@@ -7,6 +7,7 @@ import type { Mark, Subject } from "../lib/types";
 import { toSegments } from "../lib/math";
 import { SUBJECT_LABEL } from "../lib/format";
 import { C } from "../lib/theme";
+import { avatarFallback, avatarId, avatarSrc } from "../lib/avatarCache";
 
 export const SUBJECT_COLOR: Record<Subject, { color: string; bg: string }> = {
   math: { color: "#2f6fed", bg: "#e6eefb" },
@@ -107,9 +108,19 @@ const TAG_ICON: Partial<Record<TagKind, IconName>> = { wrong: "xmark", correct: 
 
 /** 头像：有图用图，没有（或图加载失败）用名字最后一个字 */
 export function Avatar({ name, url, size = 36 }: { name: string; url?: string | null; size?: number }) {
-  const [bad, setBad] = useState("");
+  // 同一版头像记一下试到哪一步：0 用缓存，1 缓存显示不出来改用最新地址，2 都不行用名字
+  const id = url ? avatarId(url) : "";
+  const [fail, setFail] = useState<{ id: string; step: number; src: string }>({ id: "", step: 0, src: "" });
+  const step = fail.id === id ? fail.step : 0;
   const box: CSSProperties = { width: `${size}px`, height: `${size}px`, borderRadius: `${size / 2}px` };
-  if (url && bad !== url) return <Image className="avatar-img" src={url.startsWith("/") ? `${API_BASE}${url}` : url} mode="aspectFill" style={box} onError={() => setBad(url)} />;
+  if (url && step < 2) {
+    const src = step === 1 ? fail.src : avatarSrc(url);
+    const onError = () => {
+      const fresh = step === 0 ? avatarFallback(url) : "";
+      setFail(fresh && fresh !== src ? { id, step: 1, src: fresh } : { id, step: 2, src: "" });
+    };
+    return <Image className="avatar-img" src={src} mode="aspectFill" style={box} onError={onError} />;
+  }
   return (
     <View className="plan-avatar" style={{ ...box, fontSize: `${Math.round(size * 0.42)}px` }}>
       <Text>{name.slice(-1)}</Text>

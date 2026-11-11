@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAddPaper } from "../components/AddSheet";
+import { AvatarPrompt } from "../components/AvatarPrompt";
 import { Icon } from "../components/Icon";
 import { Buddy } from "../components/Illustration";
 import { Sheet } from "../components/ui";
@@ -63,6 +64,7 @@ export default function Home() {
 
   return (
     <div className="screen home2">
+      <AvatarPrompt />
       <header className="topbar home2__head">
         <span className="home2__logo"><Icon name="check" size={18} stroke={3} /></span>
         <span className="home2__name">上壹课</span>

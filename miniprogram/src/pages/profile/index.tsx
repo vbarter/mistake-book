@@ -1,10 +1,11 @@
-import { useEffect, useMemo } from "react";
-import { Button as NativeButton, Text, View } from "@tarojs/components";
+import { useEffect, useMemo, useState } from "react";
+import { Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
+import { AvatarSheet } from "../../components/AvatarPrompt";
 import { Icon } from "../../components/Icon";
 import { Avatar, Row, Stat, SubjectTile, TopBar } from "../../components/ui";
 import { errorText } from "../../lib/api";
-import { LOGIN_PAGE, currentUser, ensureLogin, isLoggedIn, loginLabel, refreshUser, updateProfile, uploadAvatar } from "../../lib/auth";
+import { LOGIN_PAGE, currentUser, ensureLogin, isLoggedIn, loginLabel, refreshUser, updateProfile } from "../../lib/auth";
 import { allErrors } from "../../lib/errors";
 import { GRADE_LABEL } from "../../lib/format";
 import { toast, useDataVersion, useTabBar } from "../../lib/hooks";
@@ -63,18 +64,7 @@ export default function Profile() {
     }
   };
 
-  const changeAvatar = async (path: string) => {
-    if (!path) return;
-    Taro.showLoading({ title: "正在上传…", mask: true });
-    try {
-      await uploadAvatar(path);
-      Taro.hideLoading();
-      toast("头像换好了", "success");
-    } catch (e) {
-      Taro.hideLoading();
-      toast(errorText(e));
-    }
-  };
+  const [avatarOpen, setAvatarOpen] = useState(false);
 
   return (
     <View className="page page--tab" style={{ gap: "14px", paddingTop: 0 }}>
@@ -82,13 +72,13 @@ export default function Profile() {
       <View className="card card--row profile-card" hoverClass="card--pressed" onClick={editName}>
         <View className="avatar-wrap">
           {user ? (
-            // 小程序拿不到微信头像，只能用这个原生按钮让用户自己点一下选（可以直接用微信头像，也可以从相册选）
-            <NativeButton className="avatar-btn btn-native" hoverClass="none" openType="chooseAvatar" onChooseAvatar={(e) => void changeAvatar(e.detail.avatarUrl)} onClick={(e) => e.stopPropagation()}>
+            // 点头像先弹自己的面板（用微信头像 / 从相册选）：原生的选头像按钮被微信禁用时点了没有任何反应，不能直接盖在头像上
+            <View className="avatar-btn" onClick={(e) => (e.stopPropagation(), setAvatarOpen(true))}>
               <Avatar name={user.nickname} url={user.avatar} size={60} />
               <View className="avatar__cam">
                 <Icon name="camera" size={11} color="#ffffff" stroke={2.4} />
               </View>
-            </NativeButton>
+            </View>
           ) : (
             <View className="avatar">
               <Icon name="person" size={26} color="#ffffff" stroke={2} />
@@ -151,6 +141,7 @@ export default function Profile() {
         <Row icon="bubble" iconBg={C.ok} title="客服" contact sessionFrom={`profile|${user?.id ?? "guest"}|${VERSION}`} />
         <Row icon="info" iconBg={C.secondary} title="关于" value={VERSION} chevron={false} />
       </View>
+      {user && <AvatarSheet open={avatarOpen} user={user} onClose={() => setAvatarOpen(false)} />}
     </View>
   );
 }
