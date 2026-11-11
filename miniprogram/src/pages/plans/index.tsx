@@ -6,7 +6,7 @@ import { Count, LoginGate, loggedIn, usePlansVersion } from "../../components/pl
 import { Avatar, Button, Empty, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { PLAN_SUBJECT_LABEL, fetchPlans, type PlanInfo } from "../../lib/plans";
+import { PLAN_SUBJECT_LABEL, byNewest, createdLabel, fetchPlans, type PlanInfo } from "../../lib/plans";
 import { useShare } from "../../lib/share";
 import { C } from "../../lib/theme";
 
@@ -36,8 +36,9 @@ export default function Plans() {
 
   if (!logged) return <LoginGate />;
 
-  const owned = plans?.filter((p) => p.role === "owner") ?? [];
-  const joined = plans?.filter((p) => p.role === "member") ?? [];
+  // 每个分类里最新创建的排最上面
+  const owned = byNewest(plans?.filter((p) => p.role === "owner") ?? []);
+  const joined = byNewest(plans?.filter((p) => p.role === "member") ?? []);
   const card = (p: PlanInfo) => (
     <View key={p.id} className="card card--row" hoverClass="card--pressed" onClick={() => Taro.navigateTo({ url: `/pages/plan/index?id=${p.id}` })}>
       {/* 左边是创建人的头像（我创建的就是自己的），第二行是创建人的名字和学科 */}
@@ -57,6 +58,7 @@ export default function Plans() {
             {p.assignments ?? 0}
           </Count>
         </View>
+        {createdLabel(p.createdAt) && <Text className="t-cap c-ter">{createdLabel(p.createdAt)}</Text>}
       </View>
       {p.role === "owner" && (p.toReview ?? 0) > 0 && (
         <Tag kind="info" icon="pencil">
