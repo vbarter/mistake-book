@@ -411,6 +411,16 @@ export function dueLabel(iso: string | null | undefined): string {
   return `${date} ${hm}`;
 }
 export const isOverdue = (iso: string | null | undefined) => Boolean(iso) && new Date(iso!).getTime() < Date.now();
+/** 创建时间：创建于 11月12日；不是今年的带上年份。只取日期部分，不受时区影响 */
+export function createdLabel(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  if (!m) return "";
+  const year = Number(m[1]) === new Date().getFullYear() ? "" : `${m[1]}年`;
+  return `创建于 ${year}${Number(m[2])}月${Number(m[3])}日`;
+}
+/** 最新创建的排最前 */
+export const byNewest = <T extends { createdAt?: string | null }>(list: T[]): T[] =>
+  [...list].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 export const sizeLabel = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 export const memberName = (m: { name: string; tail: string }) => (m.tail ? `${m.name}（尾号 ${m.tail}）` : m.name);
 export const STATUS_LABEL: Record<MyStatus, string> = { todo: "待交", submitted: "已交", reviewed: "已阅", returned: "退回重做" };
