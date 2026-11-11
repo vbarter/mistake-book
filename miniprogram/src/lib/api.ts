@@ -122,7 +122,10 @@ export function errorText(e: unknown): string {
   if (e instanceof ApiError) return e.message;
   // 微信接口失败抛的是 { errMsg }，没有 message；常见的几种说清原因，别只说「出错了」
   const msg = String((e as Error)?.message || (e as { errMsg?: string })?.errMsg || "");
-  if (/privacy|scope is not declared/i.test(msg)) return "小程序后台的隐私保护指引还没声明这项权限，暂时用不了";
-  if (/auth deny|auth denied|authorize:fail|permission/i.test(msg)) return "没有权限，可以在右上角「设置」里打开";
+  // 后面带上微信的原话：这几种情况表现很像，截图里能看到原话才分得清到底是哪一种
+  const raw = msg ? `\n（${msg}）` : "";
+  if (/not declared/i.test(msg)) return `小程序后台的隐私保护指引还没声明这项权限，暂时用不了${raw}`;
+  if (/privacy/i.test(msg)) return `需要先同意隐私保护指引才能用这个功能${raw}`;
+  if (/auth deny|auth denied|authorize:fail|permission/i.test(msg)) return `没有权限，可以在右上角「设置」里打开${raw}`;
   return msg || "出错了，请稍后再试";
 }
