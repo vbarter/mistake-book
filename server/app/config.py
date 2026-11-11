@@ -66,6 +66,8 @@ class Config:
     # 学习计划转发出去的链接用的公网地址（含前缀，如 https://example.com/zhicuoben）；留空用请求的域名
     PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip()
     APP_URL_SCHEME = os.getenv("APP_URL_SCHEME", "shangyike").strip()  # App 注册的 URL scheme，落地页用它唤起 App
+    # 小程序后台配「业务域名」时要在域名根目录放一个校验文件，格式「文件名:内容」，多个用逗号分隔
+    WECHAT_VERIFY_FILES = os.getenv("WECHAT_VERIFY_FILES", "").strip()
     APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "").strip()  # 没装 App 的人去哪下载
     SYNC_URL_EXPIRES = int(os.getenv("SYNC_URL_EXPIRES", "900"))  # 上传 / 下载签名链接有效期（秒）
 

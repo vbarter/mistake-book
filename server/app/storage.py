@@ -69,13 +69,18 @@ class LocalStorage:
             return None
         return data["k"]
 
-    def write(self, key: str, data: bytes) -> None:
+    def write(self, key: str, data: bytes, mime: str = "") -> None:
         path = self._path(key)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = f"{path}.part"
         with open(tmp, "wb") as f:
             f.write(data)
         os.replace(tmp, path)
+
+    def copy(self, src: str, dst: str) -> None:
+        path = self._path(dst)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        shutil.copyfile(self._path(src), path)
 
     def file_path(self, key: str) -> str | None:
         path = self._path(key)
@@ -107,11 +112,18 @@ class CosStorage:
         from qcloud_cos import CosConfig, CosS3Client  # 只在用 COS 时才需要装 cos-python-sdk-v5
 
         self.bucket = bucket
+        self.region = region
         self.expires = expires
         self.client = CosS3Client(CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key, Scheme="https"))
 
     def presign(self, key: str, method: str) -> str:
         return self.client.get_presigned_url(Bucket=self.bucket, Key=key, Method=method, Expired=self.expires)
+
+    def write(self, key: str, data: bytes, mime: str = "application/octet-stream") -> None:
+        self.client.put_object(Bucket=self.bucket, Body=data, Key=key, ContentType=mime)
+
+    def copy(self, src: str, dst: str) -> None:
+        self.client.copy_object(Bucket=self.bucket, Key=dst, CopySource={"Bucket": self.bucket, "Key": src, "Region": self.region})
 
     def exists(self, key: str) -> int | None:
         from qcloud_cos.cos_exception import CosServiceError

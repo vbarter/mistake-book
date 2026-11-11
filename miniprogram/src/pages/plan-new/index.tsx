@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, Input, ScrollView, Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
 import { Icon, WechatIcon } from "../../components/Icon";
@@ -7,7 +7,7 @@ import { Button, Sheet } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { SUBJECTS } from "../../lib/format";
 import { toast } from "../../lib/hooks";
-import { MAX_FILES, PLAN_SUBJECT_LABEL, attachmentDraft, fetchPlan, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject, type PublishRes } from "../../lib/plans";
+import { MAX_FILES, PLAN_SUBJECT_LABEL, fetchPlan, fileBadge, onFilesPicked, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PlanSubject, type PublishRes } from "../../lib/plans";
 import { C } from "../../lib/theme";
 
 /**
@@ -39,6 +39,9 @@ export default function PlanNew() {
         .catch((e) => toast(errorText(e)));
   }, [planId, logged, version]);
 
+  const addRef = useRef<(more: DraftFile[]) => void>(() => undefined);
+  useEffect(() => onFilesPicked((more) => addRef.current(more)), []);
+
   usePlanShare(() => (done ? { plan: done.plan, invite: done.invite, title: done.assignment.title, assignmentId: done.assignment.id } : null));
 
   if (!logged) return <LoginGate what="新建学习计划" />;
@@ -51,6 +54,7 @@ export default function PlanNew() {
     // 新加的在最下面，滚过去让人看到
     if (next.length) setTimeout(() => setBottom(`pf-${next[next.length - 1].clientId}`), 80);
   };
+  addRef.current = add;
 
   const onPhotos = async (paths: string[]) => {
     setStage("正在读取照片");
@@ -66,32 +70,10 @@ export default function PlanNew() {
     }
   };
 
-  /**
-   * 上传文件：只选 PDF、Word，图片和拍照都归「扫描」，两个按钮不重复。
-   * 小程序读不到手机里的文件，只能从微信聊天记录里选（先把文件发给「文件传输助手」或任意一个聊天）。
-   */
-  const attach = async () => {
+  /** 上传文件：只收 PDF、Word（图片和拍照都归「扫描」）。打开选文件页，从手机目录里选，选好的经 onFilesPicked 交回来 */
+  const attach = () => {
     if (files.length >= MAX_FILES) return void toast(`一份作业最多 ${MAX_FILES} 个文件`);
-    let res: Taro.chooseMessageFile.SuccessCallbackResult;
-    try {
-      res = await Taro.chooseMessageFile({ count: 9, type: "file", extension: ["pdf", "doc", "docx"] });
-    } catch (e) {
-      const msg = String((e as { errMsg?: string }).errMsg || (e as Error).message || "");
-      if (/cancel/i.test(msg)) return;
-      // 小程序后台的隐私指引没勾「选中的文件」时微信直接拒绝，得把原因说清楚，不能只说「没选成」
-      if (/privacy|scope is not declared/i.test(msg)) return void Taro.showModal({ title: "暂时不能从聊天里选文件", content: "小程序后台的「用户隐私保护指引」还没有声明「选中的文件」，微信不让打开聊天文件。", showCancel: false });
-      if (/not support|is not a function|undefined/i.test(msg)) return void Taro.showModal({ title: "这个微信版本不支持", content: "电脑版微信或版本太旧时不能从聊天里选文件，请在手机上把微信升到最新版再试。", showCancel: false });
-      return void Taro.showModal({ title: "没选成", content: msg || "请再试一次", showCancel: false });
-    }
-    const ok: DraftFile[] = [];
-    let bad = "";
-    for (const f of res.tempFiles) {
-      const d = attachmentDraft({ path: f.path, name: f.name, size: f.size });
-      if (typeof d === "string") bad = d;
-      else ok.push(d);
-    }
-    if (ok.length) add(ok);
-    if (bad) toast(bad);
+    void Taro.navigateTo({ url: "/pages/plan-pick/index" });
   };
 
   const submit = async () => {
@@ -186,7 +168,7 @@ export default function PlanNew() {
           <Button variant="outline" icon="camera" onClick={() => setScanning(true)}>
             扫描
           </Button>
-          <Button variant="outline" icon="document" onClick={() => void attach()}>
+          <Button variant="outline" icon="document" onClick={attach}>
             上传文件
           </Button>
         </View>

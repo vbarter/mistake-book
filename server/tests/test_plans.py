@@ -359,3 +359,35 @@ def test_avatar_upload_and_shown_to_plan_members(client, auth):
     # 注销后头像记录和图片都没了
     assert client.delete("/api/auth/me", headers=teacher).status_code == 200
     assert client.get(second).status_code == 404
+
+
+def test_pick_phone_file_then_publish(client):
+    """小程序选手机里的文件：拿网页地址 → 网页把文件传到暂存区 → 布置时凭证换成正式文件，不用再传"""
+    import io
+
+    teacher, _ = _login(client, "13800002001", "王老师")
+    other, _ = _login(client, "13800002002")
+    url = client.post("/api/plans/picks", headers=teacher).get_json()["url"]
+    path = url[url.index("/api/") :]
+    assert "选择手机里的文件" in client.get(path).get_data(as_text=True)
+    assert client.get("/api/plans/pick/bad").status_code == 410
+
+    assert client.post(f"{path}/files", data={"file": (io.BytesIO(b"x"), "照片.jpg")}).status_code == 400
+    r = client.post(f"{path}/files", data={"file": (io.BytesIO(b"%PDF-1.4 demo"), "第三单元练习.pdf")})
+    assert r.status_code == 200, r.get_json()
+    picked = r.get_json()
+    assert picked["name"] == "第三单元练习.pdf" and picked["size"] == 13
+
+    body = {"name": "五年级数学", "subject": "math", "files": [{"clientId": "p1", "picked": picked["picked"]}]}
+    assert client.post("/api/plans", json=body, headers=other).status_code == 403  # 别人拿到凭证也用不了
+    res = client.post("/api/plans", json=body, headers=teacher)
+    assert res.status_code == 201, res.get_json()
+    assert res.get_json()["uploads"] == []
+    row = PlanFile.query.one()
+    assert row.uploaded and row.kind == "attachment" and row.mime == "application/pdf" and row.name == "第三单元练习.pdf"
+    a = client.get(f"/api/plans/assignments/{res.get_json()['assignment']['id']}", headers=teacher).get_json()
+    f = a["assignment"]["files"][0] if "assignment" in a else a["files"][0]
+    assert client.get(f["url"]).data == b"%PDF-1.4 demo"
+    assert res.get_json()["assignment"]["title"] == "第三单元练习"
+    # 暂存件已经搬走，同一个凭证不能再用第二次
+    assert client.post("/api/plans", json=body, headers=teacher).status_code == 400

@@ -17,6 +17,7 @@ export default defineAppConfig({
     "pages/bind-phone/index",
     "pages/plans/index",
     "pages/plan-new/index",
+    "pages/plan-pick/index",
     "pages/plan/index",
     "pages/plan-task/index",
     "pages/plan-review/index",
