@@ -284,6 +284,7 @@ def _owner_counts(plan: Plan, assignments: list[PlanAssignment]) -> dict[str, di
             "missing": len(missing),
             "unseen": len(missing - views[a.id]),
             "toReview": sum(1 for s in subs[a.id] if s.status == "submitted"),
+            "handed": len(subs[a.id]),
         }
     return out
 
@@ -353,6 +354,8 @@ def list_plans():
             counts = _owner_counts(plan, assignments)
             item["members"] = next(iter(counts.values()))["members"] if counts else len(_members(plan))
             item["toReview"] = sum(c["toReview"] for c in counts.values())
+            # 交上来过的份数（含已批、已打回）：首页用它区分「还没人交」和「都批完了」
+            item["handed"] = sum(c["handed"] for c in counts.values())
             summary["owned"] += 1
             summary["toReview"] += item["toReview"]
             if assignments:

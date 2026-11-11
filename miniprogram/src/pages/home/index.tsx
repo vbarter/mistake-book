@@ -12,7 +12,7 @@ import { analyze, inRange } from "../../lib/insights";
 import { pollPendingJobs, scanStageText } from "../../lib/jobs";
 import { currentUser, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLANS_EVENT, PLAN_SUBJECT_LABEL, dueLabel, fetchPlans, type PlanInfo, type PlanSummary } from "../../lib/plans";
+import { PLANS_EVENT, PLAN_SUBJECT_LABEL, dueLabel, fetchPlans, planIdleLabel, type PlanInfo, type PlanSummary } from "../../lib/plans";
 import { listFolders } from "../../lib/store";
 import { C } from "../../lib/theme";
 import { useShare, useShareTimelineToo } from "../../lib/share";
@@ -183,7 +183,7 @@ export default function Home() {
                     {p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}
                   </Tag>
                 ) : (
-                  <Text className="plist__ok">{p.role === "owner" ? "都批完了" : "都交了"}</Text>
+                  <Text className="plist__ok">{planIdleLabel(p)}</Text>
                 )}
                 <Icon name="chevron-right" size={13} color={C.tertiary} stroke={2.4} />
               </View>

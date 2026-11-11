@@ -42,6 +42,8 @@ export interface PlanInfo {
   createdAt: string;
   members?: number;
   toReview?: number;
+  /** 创建人：交上来过的份数（含已批、已打回）；老服务器不带 */
+  handed?: number;
   submittedToday?: number;
   /** 创建人：还有作业没交的成员数 */
   missing?: number;
@@ -49,6 +51,16 @@ export interface PlanInfo {
   todo?: number;
 }
 export interface PlanSummary { todo: number; nextDue: string | null; nextTitle: string | null; nextSubject: PlanSubject | null; toReview: number; submittedToday: number; owned: number; joined: number }
+/** 首页计划列表里，没有待批 / 待交时显示的状态。
+ * 刚建好的计划待批数也是 0，不能一律说「都批完了」：先看有没有作业、有没有成员、有没有人交过。
+ * handed 是老服务器不带的字段，没有时按原来的说法显示。 */
+export function planIdleLabel(p: PlanInfo): string {
+  if ((p.assignments ?? 0) === 0) return p.role === "owner" ? "还没布置作业" : "还没有作业";
+  if (p.role !== "owner") return "都交了";
+  if (p.members === 0) return "还没人加入";
+  if (p.handed === 0) return "还没人交";
+  return "都批完了";
+}
 export interface AssignmentBrief { id: string; title: string; dueAt: string | null; questionCount: number; createdAt: string; revoked: boolean }
 export interface OwnerAssignment extends AssignmentBrief { members: number; submitted: number; missing: number; unseen: number; toReview: number; files?: PlanFileView[] }
 /** files / digitized：成员的计划页直接平铺作业文件、导出电子版用（老服务器不带，fetchPlan 里补上） */
