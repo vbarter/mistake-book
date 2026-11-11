@@ -21,12 +21,12 @@ export default function Plans() {
 
   const card = (p: PlanInfo) => (
     <button key={p.id} className="card card--row press" onClick={() => nav(`/plans/${p.id}`)}>
-      {/* 左边是创建人的头像（我创建的就是自己的），学科写在第二行 */}
+      {/* 左边是创建人的头像（我创建的就是自己的），第二行是创建人的名字和学科 */}
       <Avatar name={p.teacher} url={p.teacherAvatar} size={52} />
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span className="t-headline ellipsis">{p.name}</span>
         <span className="plan-counts" style={{ gap: 10 }}>
-          <span className="t-foot c-sec ellipsis">{p.role === "member" ? `${p.teacher} · ` : ""}{PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}</span>
+          <span className="t-foot c-sec ellipsis">{p.teacher} · {PLAN_SUBJECT_LABEL[p.subject] ?? "综合"}</span>
           {p.role === "owner" && <Count icon="family" color="var(--tertiary)">{p.members ?? 0}</Count>}
           <Count icon="document" color="var(--tertiary)">{p.assignments ?? 0}</Count>
         </span>
