@@ -70,7 +70,7 @@ export default function PlanDetail() {
     <div className="screen">
       <InlineNav
         title={plan.name}
-        subtitle={owner ? subject : `${subject} · ${plan.teacher}`}
+        subtitle={subject}
         back
         onBack={() => nav("/plans")}
         onTitle={openPanel}
@@ -141,13 +141,6 @@ export default function PlanDetail() {
             const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
             return (
               <>
-                {data.me?.defaultName && (
-                  <button className="plan-banner" onClick={openPanel}>
-                    <Icon name="person" size={18} stroke={2.2} />
-                    <span style={{ flex: 1, textAlign: "left" }}>老师看到的名字是「{data.me.name}」</span>
-                    <b>改名</b>
-                  </button>
-                )}
                 <div className="plan-stats">
                   <Stat icon="clock" label="待交" value={todo} color={todo ? "var(--due)" : undefined} />
                   <Stat icon="checkcircle" label="已交" value={handed} />

@@ -22,8 +22,6 @@
 .plan-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .plan-stats--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .plan-stat--icon { flex-direction: row; align-items: center; justify-content: center; gap: 8px; padding: 12px; }
-.plan-banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--accent-bg, #fff0e3); color: var(--accent-on, #8a4b00); font-size: 14px; line-height: 20px; }
-.plan-banner button { margin-left: auto; font-weight: 700; white-space: nowrap; color: inherit; text-decoration: underline; }
 .plan-task { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-top: 1px solid var(--separator-light); width: 100%; text-align: left; color: inherit; }
 .plan-task:first-child { border-top: 0; }
 .plan-task:active { background: var(--fill-light); }
@@ -52,6 +50,4 @@
 .plan-quiet button { height: 44px; padding: 0 16px; font-size: 16px; color: var(--brand); }
 .plan-quiet .plan-quiet__danger { color: var(--wrong); }
 .plan-quiet--only { margin-top: 0; padding-top: 0; border-top: 0; }
-button.plan-banner { width: 100%; }
-button.plan-banner b { font-weight: 700; white-space: nowrap; }
 .plan-files__empty svg { display: block; margin: 0 auto; }

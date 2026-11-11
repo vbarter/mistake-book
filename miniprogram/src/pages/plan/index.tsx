@@ -129,7 +129,7 @@ export default function PlanDetail() {
           <Text className="t-headline ellipsis">{plan.name}</Text>
           <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />
         </View>
-        <Text className="t-foot c-sec ellipsis">{owner ? (PLAN_SUBJECT_LABEL[plan.subject] ?? "综合") : `${PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"} · ${plan.teacher}`}</Text>
+        <Text className="t-foot c-sec ellipsis">{PLAN_SUBJECT_LABEL[plan.subject] ?? "综合"}</Text>
       </View>
       {owner && data.invite && <ShareButton pill>转发</ShareButton>}
     </View>
@@ -241,13 +241,6 @@ export default function PlanDetail() {
     const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
     return (
       <>
-        {data.me?.defaultName && (
-          <View className="plan-banner" onClick={openPanel}>
-            <Icon name="person" size={18} color={C.accentOn} stroke={2.2} />
-            <Text className="flex1">老师看到的名字是「{data.me.name}」</Text>
-            <Text className="plan-banner__act">改名</Text>
-          </View>
-        )}
         <View className="stats">
           <Stat icon="clock" label="待交" value={todo} color={todo ? C.accentOn : undefined} />
           <Stat icon="checkcircle" label="已交" value={handed} />
