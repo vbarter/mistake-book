@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Input, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Icon, type IconName } from "../../components/Icon";
-import { LoginGate, PageState, PlanTile, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
+import { LoginGate, PageState, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { Avatar, Button, Segmented, Sheet, Stat, Tag, type TagKind } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
@@ -122,7 +122,7 @@ export default function PlanDetail() {
 
   const head = (
     <View className="plan-head">
-      <PlanTile subject={plan.subject} size="sm" />
+      <Avatar name={plan.teacher} url={plan.teacherAvatar} size={38} />
       {/* 点计划名弹出面板：改名，下面是不常用的操作（和 iOS 的标题菜单一个意思） */}
       <View className="flex1 col minw0" onClick={openPanel}>
         <View className="row-center gap6">
