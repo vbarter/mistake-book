@@ -656,7 +656,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-due { display: flex; gap: 10px; }
 .plan-due picker { flex: 1; min-width: 0; }
 .plan-due .field { background: $card; font-size: 17px; }
-/* 作业内容：文件列表自己滚，扫描 / 上传附件两个按钮固定在列表下面 */
+/* 作业内容：文件列表自己滚，扫描 / 上传文件两个按钮固定在列表下面 */
 .plan-files { background: $card; border-radius: $radius-list; max-height: 38vh; box-sizing: border-box; }
 .plan-empty { display: block; padding: 28px 16px; text-align: center; color: $secondary; font-size: 14px; line-height: 20px; }
 .plan-file { display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 14px; border-top: 1px solid $sep-light; }

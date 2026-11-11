@@ -9,7 +9,7 @@ import { Tag } from "../../components/v2";
 import { formatDateTime } from "../../lib/format";
 import { fetchSubmission, memberName, reviewSubmission, usePlans, type SubmissionRes } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
-import { QuestionGrid } from "./Assignment";
+import { QuestionGrid, openFile } from "./Assignment";
 import { ScoreStats } from "./shared";
 import "../../styles/plans.css";
 
@@ -98,7 +98,7 @@ export default function Submission() {
           )}
         </div>
 
-        {sub.files.map((f) => (f.url ? <img key={f.id} className="plan-photo" src={assetUrl(f.url)} alt={f.name} loading="lazy" onClick={() => window.open(assetUrl(f.url), "_blank")} /> : null))}
+        {sub.files.map((f) => (f.url ? <img key={f.id} className="plan-photo" src={assetUrl(f.url)} alt={f.name} loading="lazy" onClick={() => void openFile(f)} /> : null))}
 
         {owner && (
           <>

@@ -7,7 +7,7 @@
 .plan-subjects .chip { flex-shrink: 0; }
 .input--card { background: var(--card); }
 
-/* 作业内容：文件列表自己滚，扫描 / 上传附件两个按钮固定在列表下面 */
+/* 作业内容：文件列表自己滚，扫描 / 上传文件两个按钮固定在列表下面 */
 .plan-files { background: var(--card); border-radius: var(--radius-list); max-height: 38vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .plan-files__empty { padding: 28px 16px; text-align: center; color: var(--secondary); font-size: 14px; line-height: 20px; }
 .plan-file { display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 14px; border-top: 1px solid var(--separator-light); }

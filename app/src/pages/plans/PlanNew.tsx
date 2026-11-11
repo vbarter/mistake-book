@@ -10,10 +10,11 @@ import { Busy, useScanPick } from "./shared";
 
 const MAX_FILES = 30;
 /**
- * 安卓不限类型：带上类型时系统按第一个类型（PDF）起文件选择器，不少国产手机的选择器不认后面的类型，图片和 Word 点不了。
- * 选完再在 attachmentDraft 里按扩展名把关。iOS / 网页照常限制，相册里的 HEIC 也会自动转成 JPG。
+ * 「上传文件」只选 PDF、Word：图片和拍照都归「扫描」，两个按钮不重复。
+ * 类型里只要带图片，iOS 就会先弹「照片图库 / 拍照 / 选取文件」三选一；只写文档类型才直接打开「文件」。
+ * 安卓不限类型：带上类型时系统按第一个类型（PDF）起文件选择器，不少国产手机的选择器不认后面的类型，Word 点不了。选完再在 attachmentDraft 里按扩展名把关。
  */
-const ATTACH_ACCEPT = isAndroid ? undefined : ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp";
+const ATTACH_ACCEPT = isAndroid ? undefined : ".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** 默认截止时间：今晚 21:00，已经过了就明晚 */
@@ -27,7 +28,7 @@ const fileBadge = (f: DraftFile) => (f.mime === "application/pdf" ? "PDF" : f.mi
 
 /**
  * 新建学习计划（同时布置第一份作业），以及在已有计划里布置新作业，是同一个页面：
- * 名称、截止时间、学科、作业内容（文件列表自己滚动，下面固定「扫描」「上传附件」两个按钮），确定后直接拉起转发。
+ * 名称、截止时间、学科、作业内容（文件列表自己滚动，下面固定「扫描」「上传文件」两个按钮），确定后直接拉起转发。
  */
 export default function PlanNew() {
   const nav = useNavigate();
@@ -71,7 +72,7 @@ export default function PlanNew() {
   const submit = async () => {
     if (!planId && !name.trim()) return toast("给学习计划起个名字");
     if (!planId && !subject) return toast("选一个学科");
-    if (!files.length) return toast("先扫描或上传一个附件");
+    if (!files.length) return toast("先扫描或上传一个文件");
     try {
       const dueAt = due ? new Date(due).toISOString() : null;
       const res = await publishAssignment(planId ?? null, planId ? { dueAt, title: title.trim() } : { name: name.trim(), subject: subject!, dueAt, title: title.trim() }, files, setStage);
@@ -135,7 +136,7 @@ export default function PlanNew() {
           </div>
           <div className="plan-add">
             <Button variant="outline" icon="camera" onClick={scan.open}>扫描</Button>
-            <Button variant="outline" icon="document" onClick={() => input.current?.click()}>上传附件</Button>
+            <Button variant="outline" icon="document" onClick={() => input.current?.click()}>上传文件</Button>
           </div>
           <input ref={input} type="file" multiple hidden accept={ATTACH_ACCEPT} onChange={(e) => onAttach(e.target.files)} />
         </div>
