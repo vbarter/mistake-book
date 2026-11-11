@@ -264,7 +264,7 @@ export default function PlanDetail() {
                   )}
                   <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
                 </View>
-                <View className="plan-counts">
+                <View className="plan-counts" style={open && !a.dueAt ? { display: "none" } : undefined}>
                   {open ? (
                     a.dueAt && due(a.dueAt, isOverdue(a.dueAt))
                   ) : a.score ? (

@@ -156,7 +156,7 @@ export default function PlanDetail() {
                           {a.revoked ? <Tag kind="neutral">已撤回</Tag> : <Tag kind={STATUS_TAG[a.status]} icon={a.status === "todo" ? "clock" : undefined}>{STATUS_LABEL[a.status]}</Tag>}
                           <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                         </span>
-                        <span className="plan-counts">
+                        <span className="plan-counts" style={open && !a.dueAt ? { display: "none" } : undefined}>
                           {open ? (a.dueAt && due(a.dueAt, isOverdue(a.dueAt))) : a.score ? (
                             <>
                               {count("checkcircle", "var(--mastered)", a.score.correct)}
