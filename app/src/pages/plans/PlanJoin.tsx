@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { ApiError } from "../../api/client";
 import { Button, Empty, InlineNav, Spinner } from "../../components/ui";
 import { joinPlan, rememberJoin, usePlans, type PlanInfo } from "../../lib/plans";
 import { toast } from "../../store/banner";
@@ -32,7 +33,8 @@ export default function PlanJoin() {
         if (res.joined) toast(`已用「${res.me.name}」加入「${res.plan.name}」`, "success");
         enter(res.plan);
       })
-      .catch((e) => setError((e as Error).message || "加入失败，请稍后再试"));
+      // 只把服务器给的中文提示显示出来；别的异常（比如浏览器内部报错）不直接给用户看
+      .catch((e) => setError(e instanceof ApiError && e.message ? e.message : "加入失败，请稍后再试"));
   }, [code, a, nav]);
 
   return (
