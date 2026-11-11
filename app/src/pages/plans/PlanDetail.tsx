@@ -124,19 +124,16 @@ export default function PlanDetail() {
                 {tab === "tasks" && tasks.length === 0 && <div className="group"><div className="plan-files__empty">还没有作业</div></div>}
                 {tab === "tasks" && tasks.map((a) => (
                   <div key={a.id} className="group">
-                    {/* 作业名一行：点开是转发 / 提醒 / 撤回；下面直接平铺这份作业的文件 */}
-                    <button className="plan-task" onClick={() => setTask(a)}>
+                    {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的。点这一行：转发 / 提醒 / 撤回 */}
+                    <button className="plan-task" aria-label="这份作业的转发、提醒、撤回" onClick={() => setTask(a)}>
                       <span className="plan-task__head">
-                        <span className="t-headline ellipsis" style={{ minWidth: 0 }}>{a.title}</span>
-                        <Icon name="chevron-down" size={14} stroke={2.6} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
-                        <span style={{ flex: 1 }} />
+                        <span className="plan-counts" style={{ flex: 1 }} aria-label={`已交 ${a.submitted}，没交 ${a.missing}，其中没看 ${a.unseen}`}>
+                          {count("checkcircle", "var(--mastered)", a.submitted)}
+                          {count("clock", "var(--accent-on, #8a4b00)", a.missing)}
+                          {count("eye-off", "var(--tertiary)", a.unseen)}
+                        </span>
                         {a.dueAt && due(a.dueAt)}
-                      </span>
-                      {/* 绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的 */}
-                      <span className="plan-counts" aria-label={`已交 ${a.submitted}，没交 ${a.missing}，其中没看 ${a.unseen}`}>
-                        {count("checkcircle", "var(--mastered)", a.submitted)}
-                        {count("clock", "var(--accent-on, #8a4b00)", a.missing)}
-                        {count("eye-off", "var(--tertiary)", a.unseen)}
+                        <Icon name="ellipsis" size={20} stroke={2} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
                       </span>
                     </button>
                     {(a.files ?? []).map((f) => (
