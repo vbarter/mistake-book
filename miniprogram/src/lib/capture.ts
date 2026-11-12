@@ -3,6 +3,7 @@ import Taro from "@tarojs/taro";
 import { errorText } from "./api";
 import { ensureLogin } from "./auth";
 import { addPaper, autoTargetFolderId, deleteFolder, deletePaper, getFolder, listFolders, savePhoto, updatePaper, type FolderPage } from "./store";
+import { openCamera } from "./camera";
 import { confirmPhoto } from "./confirm";
 import { findPhotoMatches } from "./dedup";
 import { submitScan } from "./jobs";
@@ -36,15 +37,29 @@ async function scan(folderId: string, paperId: string, pages: FolderPage[]) {
   }
 }
 
-/** 拍照是连拍（和 App 一样）：每张拍完先全屏确认（上滑用这张 / 下滑重拍，可以左右转），确认后接着起相机，在相机里点取消才停。返回转正后的临时文件 */
-async function shootSeries(): Promise<string[]> {
+/**
+ * 拍照是连拍（和 App 一样）：在自己的拍照页（pages/camera，带对齐框、拍原图）里一张张拍，每张拍完先全屏确认
+ * （上滑用这张 / 下滑重拍，可以左右转），点「完成」才停。返回转正后的临时文件。
+ * single = 只拍一张。拍照页用不了时退回微信自带的拍照界面。
+ */
+async function shootSeries(single = false): Promise<string[]> {
+  const taken = await openCamera(single);
+  if (!taken) return shootSeriesSystem(single);
+  const shots: string[] = [];
+  for (const s of taken) shots.push(s.turns % 4 ? await rotateToTemp(s.path, s.turns) : s.path);
+  return shots;
+}
+
+/** 退路：微信自带的拍照界面（没有对齐框），每张拍完确认，在相机里点取消才停 */
+async function shootSeriesSystem(single: boolean): Promise<string[]> {
   const shots: string[] = [];
   for (;;) {
     const [path] = await choose("camera", 1);
     if (!path) break;
     const r = await confirmPhoto(path);
-    if (!r) continue; // × 不要这张：再拍一张
+    if (!r) continue; // 不要这张：再拍一张
     shots.push(r.turns % 4 ? await rotateToTemp(path, r.turns) : path);
+    if (single) break;
   }
   return shots;
 }
@@ -125,7 +140,7 @@ export async function captureInto(folderId: string | null, source: Source): Prom
 /** 重拍：用新选的照片（可多张，作为同一张试卷的几页）替换原照片并重新扫描 */
 export async function retake(folderId: string, paperId: string, source: Source): Promise<boolean> {
   if (!(await ensureLogin("重新扫描"))) return false;
-  const paths = await choose(source, source === "camera" ? 1 : 9);
+  const paths = source === "camera" ? await shootSeries(true) : await choose("album", 9);
   if (paths.length === 0) return false;
   Taro.showLoading({ title: "上传中…", mask: true });
   try {
@@ -133,6 +148,14 @@ export async function retake(folderId: string, paperId: string, source: Source):
     const pages: FolderPage[] = [];
     for (const p of paths) pages.push(await savePhoto(p));
     const fs = Taro.getFileSystemManager();
+    // 转正时写的临时文件：已经存进用户目录了，删掉
+    for (const p of paths.filter((x) => x.includes("/rotate_"))) {
+      try {
+        fs.unlinkSync(p);
+      } catch {
+        /* ignore */
+      }
+    }
     old?.pages.forEach((pg) => {
       try {
         fs.unlinkSync(pg.src);
