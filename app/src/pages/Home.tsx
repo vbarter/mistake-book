@@ -114,12 +114,14 @@ export default function Home() {
     const due = !owner && n > 0 && memberTodo.length === 1 && plans?.nextDue ? dueLabel(plans.nextDue) : "";
     const created = createdLabel(p.createdAt);
     return (
-      <button key={p.id} className="h4__plan" onClick={() => nav(`/plans/${p.id}`)}>
+      <button key={p.id} className="h4__plan" aria-label={`${p.name}，${owner ? "我建的" : `${p.teacher}建的`}`} onClick={() => nav(`/plans/${p.id}`)}>
         <Avatar name={p.teacher} url={p.teacherAvatar} size={44} />
         <span className="h4__main">
           <span className="h4__name ellipsis">{p.name}</span>
           <span className="h4__sub">
-            <span className="ellipsis">{owner ? "我建的" : p.teacher}{n === 0 ? ` · ${idle}` : ""}</span>
+            {/* 图标代替「我建的」三个字：插旗是我建的，进门是我加入的。有待批时这行没有别的可写，才把字留着 */}
+            <ColorIcon name={owner ? "plan-mine" : "plan-joined"} size={18} />
+            <span className="ellipsis">{[owner ? "" : p.teacher, n === 0 ? idle : ""].filter(Boolean).join(" · ") || "我建的"}</span>
             {due && <b><Icon name="clock" size={12} stroke={2.6} />{due} 截止</b>}
           </span>
           {created && <span className="h4__time">{created}</span>}

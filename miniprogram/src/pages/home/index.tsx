@@ -170,7 +170,9 @@ export default function Home() {
         <View className="h4__main">
           <Text className="h4__name ellipsis">{p.name}</Text>
           <View className="h4__sub">
-            <Text className="ellipsis">{owner ? "我建的" : p.teacher}{n === 0 ? ` · ${idle}` : ""}</Text>
+            {/* 图标代替「我建的」三个字：插旗是我建的，进门是我加入的。有待批时这行没有别的可写，才把字留着 */}
+            <ColorIcon name={owner ? "plan-mine" : "plan-joined"} size={18} />
+            <Text className="ellipsis">{[owner ? "" : p.teacher, n === 0 ? idle : ""].filter(Boolean).join(" · ") || "我建的"}</Text>
             {!!due && (
               <View className="h4__due">
                 <Icon name="clock" size={12} color={C.tie} stroke={2.6} />
