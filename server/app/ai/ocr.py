@@ -13,6 +13,7 @@ OCR 失败时退回让大模型直接看图，不让任务失败。只用标准�
 from __future__ import annotations
 
 import base64
+import re
 import io
 import json
 import logging
@@ -205,9 +206,35 @@ def _line_min_prob(words: dict) -> float:
         return 1.0
 
 
-def _vertical_lines(results: list) -> set[int]:
-    """行框又高又窄、明显比横排行高得多的行：竖排文字。没有坐标就不判断。"""
-    boxes = {i: _box(item) for i, item in enumerate(results)}
+def _direction(r: dict) -> int:
+    """百度判断的照片方向：逆时针转了几个 90°（0 正、1 逆时针 90°、2 倒置、3 顺时针 90°）"""
+    try:
+        return int(r.get("img_direction") or 0) % 4
+    except (TypeError, ValueError, AttributeError):
+        return 0
+
+
+def _upright(b: tuple[float, float, float, float], direction: int, size: tuple[int, int] | None) -> tuple[float, float, float, float]:
+    """照片坐标里的行框 → 把卷子转正后的 (left, top, width, height)。百度给的坐标是照片原样的，横拍的照片里每一行都又高又窄。
+    没有照片尺寸时只把宽高换过来（位置不准，只能用来比宽高）。"""
+    x, y, w, h = b
+    d = direction % 4
+    if d == 0:
+        return b
+    if not size:
+        return (y, x, h, w) if d % 2 else b
+    pw, ph = size
+    if d == 1:  # 卷子上边在照片左边、左边在照片下边
+        return ph - (y + h), x, h, w
+    if d == 2:
+        return pw - (x + w), ph - (y + h), w, h
+    return y, pw - (x + w), h, w  # d == 3：卷子上边在照片右边
+
+
+def _vertical_lines(results: list, direction: int = 0) -> set[int]:
+    """行框又高又窄、明显比横排行高得多的行：竖排文字。没有坐标就不判断。
+    先按照片方向把宽高转正：横拍的照片里正常的横排行在照片上也是又高又窄的，不能当竖排丢掉。"""
+    boxes = {i: (_upright(b, direction, None) if (b := _box(item)) else None) for i, item in enumerate(results)}
     flat = sorted(b[3] for b in boxes.values() if b and b[2] >= b[3])
     if not flat:
         return set()
@@ -331,7 +358,7 @@ def _fake_figure(lay: dict, results: list, vertical: set[int]) -> bool:
 def _figure_lines(r: dict, vertical: set[int] | None = None) -> dict[int, str]:
     """版面分析里落在插图 / 表格里的行 → 该行的前缀"""
     results = r.get("results") or []
-    vertical = _vertical_lines(results) if vertical is None else vertical
+    vertical = _vertical_lines(results, _direction(r)) if vertical is None else vertical
     out: dict[int, str] = {}
     for lay in r.get("layouts") or []:
         if lay.get("layout") in FIGURE_LAYOUTS and not _fake_figure(lay, results, vertical):
@@ -347,7 +374,7 @@ def baidu_regions(r: dict, size: tuple[int, int] | None) -> list[dict]:
         return []
     w, h = size
     results = r.get("results") or []
-    vertical = _vertical_lines(results)
+    vertical = _vertical_lines(results, _direction(r))
     out = []
     for lay in r.get("layouts") or []:
         kind = lay.get("layout")
@@ -371,30 +398,74 @@ def baidu_page(r: dict, size: tuple[int, int] | None = None, image: bytes | None
     if regions:
         listing = "\n".join(f"- {FIGURE_LAYOUTS[g['kind']]}{i + 1}：{g['bbox']}" for i, g in enumerate(regions))
         text += "\n\n【版面分析检测到的插图 / 表格区域，坐标为相对整张照片的 [x0, y0, x1, y1]】\n" + listing
-    try:
-        direction = int(r.get("img_direction") or 0) % 4
-    except (TypeError, ValueError):
-        direction = 0
-    return OcrPage(text=text, direction=direction, regions=regions)
+    return OcrPage(text=text, direction=_direction(r), regions=regions)
+
+
+# ---------- 邻页残片 ----------
+
+BODY_CHARS = 6  # 印刷行去掉空白后至少这么多字才算正文行，用来定正文的左右边界（短的多半是图上的标注、页码、题号）
+BODY_MIN_LINES = 5  # 正文行不到这么多就不判断邻页残片（只拍了一小块、几乎全是手写）
+STRIP_OUTSIDE = 0.015  # 行整个落在正文边界之外这么多（占卷面宽度）以上：题号比题干靠外一个字，但和题干是挨着的，不会被算进来
+STRIP_EDGE = 0.03  # 而且贴着照片边缘这么近（占卷面宽度）：邻页是被照片边切掉的；学生写在页边的字、图上的标注一般不贴边
+STRIP_MAX = 0.20  # 正文边界离照片边缘最多这么远；再远就是对页拍在一张里，不归这里管
+
+
+def _word(item: dict) -> str:
+    return str((item.get("words") or {}).get("word") or "").strip()
+
+
+def _text_bounds(results: list, boxes: dict, skip: set[int], page_w: float) -> tuple[float, float] | None:
+    """正文的左右边界：正文行（够长的印刷行）里最靠左的左边、最靠右的右边。正文行太少就不判断。"""
+    body = [b for i, b in boxes.items() if b and i not in skip and results[i].get("words_type") != "handwriting" and len(re.sub(r"\s", "", _word(results[i]))) >= BODY_CHARS]
+    if len(body) < BODY_MIN_LINES:
+        return None
+    return min(b[0] for b in body), max(b[0] + b[2] for b in body)
+
+
+def _neighbour_strip(results: list, boxes: dict, skip: set[int], page_w: float) -> set[int]:
+    """照片边上拍进来的邻页残片：整个落在正文左 / 右边界之外、又贴着照片边缘的行。
+    这一侧的这些行里要有印刷的字才丢（只有手写的，是学生写到页边的，留着）；正文边界离照片边缘太远（对页照片）时不动。"""
+    bounds = _text_bounds(results, boxes, skip, page_w)
+    if not bounds:
+        return set()
+    left, right = bounds
+    out: set[int] = set()
+    sides = (
+        (left <= STRIP_MAX * page_w, lambda b: b[0] + b[2] < left - STRIP_OUTSIDE * page_w and b[0] <= STRIP_EDGE * page_w),
+        (right >= (1 - STRIP_MAX) * page_w, lambda b: b[0] > right + STRIP_OUTSIDE * page_w and b[0] + b[2] >= (1 - STRIP_EDGE) * page_w),
+    )
+    for narrow, outside in sides:
+        if not narrow:
+            continue
+        side = {i for i, b in boxes.items() if b and i not in skip and outside(b)}
+        if any(results[i].get("words_type") != "handwriting" and re.search(r"\w", _word(results[i])) for i in side):
+            out |= side
+    return out
 
 
 def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
     """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]），
     印刷行置信度低的加 [存疑]，
-    落在插图 / 表格里的行加 [图中文字] 前缀；竖排的行认不出，略去并在末尾列出位置；没有 results 时退回 words_result。"""
+    落在插图 / 表格里的行加 [图中文字] 前缀；竖排的行认不出，略去并在末尾列出位置；照片边上的邻页残片去掉；没有 results 时退回 words_result。"""
     results = r.get("results") or []
-    vertical = _vertical_lines(results)
+    direction = _direction(r)
+    vertical = _vertical_lines(results, direction)
     in_figure = _figure_lines(r, vertical)
     red = _red_lines(results, rgb)
+    # 转正后的行框：邻页残片按卷子自己的左右来算；没有照片尺寸时算不了
+    strip: set[int] = set()
+    if size:
+        boxes = {i: (_upright(b, direction, size) if (b := _box(item)) else None) for i, item in enumerate(results)}
+        strip = _neighbour_strip(results, boxes, vertical, float(size[1] if direction % 2 else size[0]))
     chunks: list[str] = []
     for group in _baidu_order(r):
         lines: list[str] = []
         for i in group:
-            if i in vertical:
+            if i in vertical or i in strip:
                 continue
             item = results[i]
             words = item.get("words") or {}
-            word = str(words.get("word") or "").strip()
+            word = _word(item)
             if word:
                 if item.get("words_type") == "handwriting":
                     tag = RED_TAG if i in red else HANDWRITING_TAG
@@ -407,9 +478,9 @@ def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
         lines = [str(item.get("words") or "").strip() for item in r.get("words_result") or []]
         chunks = ["\n".join(w for w in lines if w)] if any(lines) else []
     if vertical:
-        boxes = [_box(results[i]) for i in sorted(vertical)]
-        x0, y0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
-        x1, y1 = max(b[0] + b[2] for b in boxes), max(b[1] + b[3] for b in boxes)
+        vboxes = [_box(results[i]) for i in sorted(vertical)]
+        x0, y0 = min(b[0] for b in vboxes), min(b[1] for b in vboxes)
+        x1, y1 = max(b[0] + b[2] for b in vboxes), max(b[1] + b[3] for b in vboxes)
         where = f"约 [{x0 / size[0]:.2f}, {y0 / size[1]:.2f}, {x1 / size[0]:.2f}, {y1 / size[1]:.2f}]（相对整张照片）" if size else "照片中竖排的格子里"
         chunks.append(f"{VERTICAL_NOTE}{where}，OCR 在这里检测到 {len(vertical)} 处")
     return "\n\n".join(chunks)

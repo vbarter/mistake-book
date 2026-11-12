@@ -212,6 +212,18 @@ def test_digitize_sends_only_ocr_text_to_deepseek(make, monkeypatch):
     assert all(not any(c.get("type") == "image" for c in call["content"]) for call in calls)
 
 
+def test_digitize_keeps_photo_when_ocr_skipped_vertical_text(make, monkeypatch):
+    """OCR 略去了竖排文字（竖格抄写的古诗）的页：那几列只能看图转写，这一页带照片、不走纯文字"""
+    from app.ai import claude, ocr
+
+    provider = make([])
+    calls, _ = _digitize(provider, monkeypatch, ocr_text="默写古诗\n\n" + ocr.VERTICAL_NOTE + "照片中竖排的格子里，OCR 在这里检测到 4 处")
+    page = calls[0]
+    assert any(c.get("type") == "image" for c in page["content"])
+    assert claude.TEXT_ONLY_DIGITIZE_NOTE not in "\n".join(c.get("text", "") for c in page["content"])
+    assert page["channels"] == ["anthropic"]
+
+
 def test_digitize_keeps_photo_when_ocr_has_no_text(make, monkeypatch):
     provider = make([])
     for text in (None, "  "):  # OCR 没开 / OCR 没认出字

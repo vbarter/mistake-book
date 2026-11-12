@@ -584,7 +584,7 @@ class ClaudeProvider(AIProvider):
         content: list[dict] = []
         skipped = False
         for k in page_ids:
-            if self.text_only and ocr_of.get(k):
+            if self.text_only and ocr_of.get(k) and ocr.VERTICAL_NOTE not in ocr_of[k]:  # 有竖排文字的页 OCR 不全，照旧带照片
                 skipped = True
                 continue
             content.append({"type": "text", "text": f"第 {k + 1} 张照片："})
@@ -772,7 +772,8 @@ class ClaudeProvider(AIProvider):
                 if on_page_progress:
                     on_page_progress(index, 0.08)
             # 纯文字链路：这一页 OCR 成功就不附照片（调用因此走 DeepSeek）；OCR 没结果的页照旧让大模型看图
-            text_only = self.text_only and bool(ocr_text.strip())
+            # OCR 略去了竖排文字（竖格抄写的古诗）的页也要带照片：那几列只能看图转写
+            text_only = self.text_only and bool(ocr_text.strip()) and ocr.VERTICAL_NOTE not in ocr_text
             content = [] if text_only else [
                 {
                     "type": "image",

@@ -1687,6 +1687,82 @@ def test_baidu_chinese_paper_vertical_red_and_doubt():
     assert page.regions == [] and not any(line.startswith(ocr.FIGURE_TAG + "[") for line in lines)
 
 
+def _sideways_fixture():
+    import json
+    from pathlib import Path
+
+    r = json.loads((Path(__file__).parent / "fixtures" / "baidu_math_sideways.json").read_text(encoding="utf-8"))
+    return r, tuple(r["image_size"])
+
+
+def test_baidu_sideways_photo_keeps_printed_stems():
+    """横着拍的照片（百度 img_direction=1）：每一行在照片上都又高又窄，不能当竖排文字丢掉——题干、条件、「答：」都要留着"""
+    from app.ai import ocr
+
+    r, size = _sideways_fixture()
+    assert r["img_direction"] == 1
+    page = ocr.baidu_page(r, size)
+    lines = page.text.splitlines()
+    assert page.direction == 1 and "【竖排文字】" not in page.text
+    for stem in (
+        "粉刷如下图所示的一面墙,每平方米需要0.15千克涂料。刷完这面墙",
+        "如下图,工厂要定制两块完全一样的玻璃,现有甲、乙两家店可以制作。",
+        "甲店:每平方米玻璃135元,另付运费80元。",
+        "乙店:每平方米玻璃150元,免运费。",
+        "形的面积是多少平方厘米?它的边长是多少厘米?",
+        "们也如上图那样拼成一个正方形。问:直角三角形的斜边是多少厘米?",
+        "[手写] 答:直角三角形的斜边是13cm。",
+    ):
+        assert stem in lines
+    # 没有照片尺寸时也不误判竖排（只是没法去邻页残片）
+    assert "【竖排文字】" not in ocr.baidu_lines(r)
+
+
+def test_baidu_drops_neighbour_page_strip():
+    """照片边上拍进来的邻页残片（贴着照片边、在正文边界之外、里面有印刷字）去掉；正文自己的题号和页边的手写留着"""
+    from app.ai import ocr
+
+    r, size = _sideways_fixture()
+    lines = ocr.baidu_page(r, size).text.splitlines()
+    kept = ocr.baidu_lines(r).splitlines()  # 不给尺寸就不去残片
+    assert sorted(set(kept) - set(lines) | {x for x in kept if kept.count(x) > lines.count(x)}) == sorted(["级", "[手写] 的", "[手写] 2", "[手写] 50-96=", "[手写] =354()", "[手写] 0"])
+    assert len(kept) - len(lines) == 6
+    for own in ("[手写] ④", "⑤", "1", "2", "B级", "[手写] 千克涂", "[手写] 169Bu", "。 75."):
+        assert own in lines
+
+
+def test_baidu_neighbour_strip_needs_print_and_edge():
+    from app.ai import ocr
+
+    def line(word, left, top, width=600, kind="print"):
+        return {"words_type": kind, "words": {"word": word, "words_location": {"left": left, "top": top, "width": width, "height": 30}}}
+
+    body = [line(f"第{i}行印刷的题干文字内容", 200, 100 + 40 * i) for i in range(6)]
+    # 右边贴边有印刷字：是邻页，整条去掉；左边只有手写：学生写在页边的，留着；不贴边的图上标注留着
+    r = {"results": body + [line("级", 960, 100, 40), line("3+5", 950, 200, 50, "handwriting"), line("草稿", 0, 300, 60, "handwriting"), line("10cm", 850, 400, 60)]}
+    lines = ocr.baidu_lines(r, None, (1000, 1000)).splitlines()
+    assert "级" not in lines and "[手写] 3+5" not in lines
+    assert "[手写] 草稿" in lines and "10cm" in lines
+    # 正文行太少、或正文边界离照片边很远（对页拍在一张里）：不动
+    assert "级" in ocr.baidu_lines({"results": body[:3] + [line("级", 960, 100, 40)]}, None, (1000, 1000)).splitlines()
+    assert "级" in ocr.baidu_lines({"results": body + [line("级", 1960, 100, 40)]}, None, (2000, 1000)).splitlines()
+
+
+def test_baidu_upright_photo_unchanged_by_direction_fix():
+    """竖拍（方向 0）的结果不变：真竖排的抄写区照旧略去并提示看照片"""
+    import json
+    from pathlib import Path
+
+    from app.ai import ocr
+
+    r = json.loads((Path(__file__).parent / "fixtures" / "baidu_yuwen_doc.json").read_text(encoding="utf-8"))
+    assert ocr._direction(r) == 0 and len(ocr._vertical_lines(r["results"], 0)) == 5
+    assert ocr._upright((10.0, 20.0, 30.0, 40.0), 0, (100, 200)) == (10.0, 20.0, 30.0, 40.0)
+    assert ocr._upright((10.0, 20.0, 30.0, 40.0), 1, (100, 200)) == (140.0, 10.0, 40.0, 30.0)
+    assert ocr._upright((10.0, 20.0, 30.0, 40.0), 2, (100, 200)) == (60.0, 140.0, 30.0, 40.0)
+    assert ocr._upright((10.0, 20.0, 30.0, 40.0), 3, (100, 200)) == (20.0, 60.0, 40.0, 30.0)
+
+
 def test_baidu_boxed_poem_not_tagged_as_figure():
     """版面分析把方框里的古诗标成 figure：三行以上成句的印刷字不加 [图中文字]，也不列成插图区域"""
     from app.ai import ocr
