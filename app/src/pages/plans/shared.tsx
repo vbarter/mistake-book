@@ -14,6 +14,34 @@ export function Count({ icon, color = "var(--secondary)", children }: { icon: Ic
   return <span className="plan-count" style={{ color }}><Icon name={icon} size={14} stroke={2.4} /><span className="num">{children}</span></span>;
 }
 
+/** 一个成员交了几份 / 共几份：小进度环 + 「3/4」，代替笼统的「已交 / 未交」。交齐 = 绿色实心勾，交了一部分 = 橙色弧，一份没交 = 灰色空环 */
+export function SubmitProgress({ done, total }: { done: number; total: number }) {
+  if (total <= 0) return null;
+  const n = Math.max(0, Math.min(done, total));
+  const full = n >= total;
+  const color = full ? "var(--mastered)" : n > 0 ? "var(--accent-on, #8a4b00)" : "var(--tertiary)";
+  const r = 9.5;
+  const len = 2 * Math.PI * r;
+  return (
+    <span className="plan-progress" aria-label={full ? `${total} 份都交了` : `交了 ${n} 份，共 ${total} 份`}>
+      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+        {full ? (
+          <>
+            <circle cx="12" cy="12" r="11" fill="var(--mastered)" />
+            <path d="M7 12.4l3.3 3.3L17 8.6" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        ) : (
+          <>
+            <circle cx="12" cy="12" r={r} fill="none" stroke="var(--fill)" strokeWidth="3.4" />
+            {n > 0 && <circle cx="12" cy="12" r={r} fill="none" stroke={color} strokeWidth="3.4" strokeLinecap="round" strokeDasharray={`${(len * n) / total} ${len}`} transform="rotate(-90 12 12)" />}
+          </>
+        )}
+      </svg>
+      <span className="plan-progress__frac num" style={{ color }}><b>{n}</b>/{total}</span>
+    </span>
+  );
+}
+
 /**
  * 成员看到的「这是谁的哪个学习计划」：创建人头像、计划名、创建人称呼 · 学科、创建时间。
  * 作业页上用它，点一下去学习计划页看全部作业（more 是右边那句话）。
