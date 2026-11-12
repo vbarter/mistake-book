@@ -237,7 +237,7 @@ export default function PlanDetail() {
             const files = a.files ?? [];
             return (
               <View key={a.id} className="group">
-                {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的。点这一行：转发 / 提醒 / 撤回 */}
+                {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的。点这一行：提醒 / 撤回 */}
                 <View className="plan-task" hoverClass="list-row--hover" onClick={() => setTask(a)}>
                   <View className="plan-task__head">
                     <View className="plan-counts flex1">
@@ -379,13 +379,10 @@ export default function PlanDetail() {
         )}
       </Sheet>
 
-      {/* 点作业名：这份作业的转发、提醒、撤回 */}
+      {/* 点作业名：这份作业的提醒、撤回 */}
       <Sheet open={Boolean(task)} onClose={() => setTask(null)} title={task?.title}>
         {task && (
           <>
-            <ShareButton variant="outline" assignmentId={task.id} onTap={() => setTask(null)}>
-              转发这份作业
-            </ShareButton>
             {task.missing > 0 && (
               <ShareButton variant="outline" icon="bell" remind assignmentId={task.id} onTap={() => setTask(null)}>
                 提醒没交的同学

@@ -124,8 +124,8 @@ export default function PlanDetail() {
                 {tab === "tasks" && tasks.length === 0 && <div className="group"><div className="plan-files__empty">还没有作业</div></div>}
                 {tab === "tasks" && tasks.map((a) => (
                   <div key={a.id} className="group">
-                    {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的。点这一行：转发 / 提醒 / 撤回 */}
-                    <button className="plan-task" aria-label="这份作业的转发、提醒、撤回" onClick={() => setTask(a)}>
+                    {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的。点这一行：提醒 / 撤回 */}
+                    <button className="plan-task" aria-label="这份作业的提醒、撤回" onClick={() => setTask(a)}>
                       <span className="plan-task__head">
                         <span className="plan-counts" style={{ flex: 1 }} aria-label={`已交 ${a.submitted}，没交 ${a.missing}，其中没看 ${a.unseen}`}>
                           {count("checkcircle", "var(--mastered)", a.submitted)}
@@ -224,10 +224,9 @@ export default function PlanDetail() {
           </div>
         )}
       </Sheet>
-      {/* 点作业名：这份作业的转发、提醒、撤回 */}
+      {/* 点作业名：这份作业的提醒、撤回 */}
       <Sheet open={Boolean(task)} onClose={() => setTask(null)} title={task?.title}>
         <div className="plan-quiet plan-quiet--only">
-          <button onClick={() => { const a = task!; setTask(null); void forward(a); }}>转发这份作业</button>
           {task && task.missing > 0 && <button onClick={() => { const a = task; setTask(null); void forward(a, true); }}>提醒没交的同学</button>}
           <button className="plan-quiet__danger" onClick={() => { setRevoking(task); setTask(null); }}>撤回这份作业</button>
         </div>
