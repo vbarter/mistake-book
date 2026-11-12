@@ -35,6 +35,8 @@ export interface Paper {
   corrected?: Record<string, string>; // 已停用（订正功能已去掉），老数据里可能还有，读时忽略
   scanJob?: { id: string; startedAt: string; parts: { page: number; x0: number; w: number }[]; progress: number; status: "queued" | "running"; startedPages?: number; waiting?: number; queued?: boolean }; // 服务器后台还原中
   scanError?: string; // 上次还原失败的原因
+  /** 这次失败是什么时候记下的（updatePaper 自动填）：首页的小喇叭靠它分辨「看过的那次」和「又失败的一次」 */
+  scanErrorAt?: string;
   eraseJob?: EraseJobRef; // 服务器后台擦除手写中（lib/erase.ts）
   gradedAt?: string; // 补做过 AI 阅卷的时间（避免反复请求）
   taggedAt?: string; // 补标过知识图谱知识点的时间（避免反复请求）
@@ -473,6 +475,7 @@ export function updatePaper(folderId: string, paperId: string, patch: Partial<Pa
     const folder = await getFolder(folderId);
     if (!folder) return undefined;
     const now = new Date().toISOString();
+    if ("scanError" in patch) patch = { ...patch, scanErrorAt: patch.scanError ? now : undefined };
     const before = folder.papers.find((p) => p.id === paperId);
     const next = { ...folder, papers: folder.papers.map((p) => (p.id === paperId ? { ...p, ...patch, updatedAt: now } : p)) };
     return saveFolder(next, { stored: pageIds(folder), dropped: patch.pages ? before?.pages.flatMap(photoIds) : undefined });

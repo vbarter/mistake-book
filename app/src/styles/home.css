@@ -107,18 +107,15 @@
 .h4__add:active { transform: scale(0.92); }
 .h4__plans { display: flex; flex-direction: column; gap: 10px; }
 .h4__plan, .h4__card { display: flex; align-items: center; gap: 12px; min-height: 68px; padding: 10px 14px 10px 12px; background: var(--card); border-radius: 18px; text-align: left; }
-.h4__plan:active, .h4__card:active { transform: scale(0.98); }
+.h4__plan:active, .h4__card:active, .h4__notice:active { transform: scale(0.98); }
 .h4__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .h4__name { font-size: 16px; line-height: 22px; font-weight: 700; color: var(--label); }
 .h4__sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; line-height: 18px; color: var(--secondary); }
 .h4__time { font-size: 12px; line-height: 16px; color: var(--tertiary); }
 .h4__empty { display: flex; align-items: center; gap: 12px; height: 76px; padding: 0 16px; border-radius: 18px; border: 1.5px dashed color-mix(in srgb, var(--brand) 35%, transparent); color: var(--secondary); font-size: 15px; text-align: left; }
 .h4__more { height: 36px; font-size: 13px; font-weight: 600; color: var(--brand); }
-.h4__err { min-height: 92px; padding: 0 16px; gap: 14px; }
-.h4__num { font-size: 38px; line-height: 40px; font-weight: 800; color: var(--brand); font-variant-numeric: tabular-nums; }
-.h4__numl { font-size: 14px; font-weight: 700; color: var(--label); }
-.h4__nums { font-size: 12px; color: var(--secondary); }
-.h4__bars { display: flex; align-items: flex-end; gap: 10px; height: 64px; }
-.h4__bar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 100%; font-size: 11px; font-weight: 700; }
-.h4__bar i { width: 18px; border-radius: 6px 6px 3px 3px; }
 .h4__pct { font-size: 17px; font-weight: 800; color: var(--brand); font-variant-numeric: tabular-nums; }
+/* 小喇叭通知条：比卡片矮一截，图标、一句话、右边「查看」 */
+.h4__notice { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 10px; background: var(--card); border-radius: 14px; text-align: left; }
+.h4__noticet { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--label); }
+.h4__noticea { flex-shrink: 0; font-size: 13px; font-weight: 600; color: var(--brand); }
