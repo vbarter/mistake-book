@@ -14,6 +14,7 @@ import logging
 import math
 import os
 import re
+import time
 
 import anthropic
 
@@ -465,6 +466,15 @@ MARKS_SCHEMA = {
 }
 
 
+RETRY_DELAY = 2.0  # 一时性错误重试前等几秒
+
+
+def _transient(e: anthropic.APIStatusError) -> bool:
+    """值得自动重试一次的错误：流式中途的 error 事件（状态码还是 200，如中转的 upstream_no_response）、408、5xx（含 529 过载）。"""
+    code = getattr(e, "status_code", 0) or 0
+    return code == 200 or code == 408 or code >= 500
+
+
 class ClaudeProvider(AIProvider):
     def __init__(self, model: str = "claude-opus-5-5", relay: bool | None = None):
         # 凭据与地址从环境解析：ANTHROPIC_API_KEY、ANTHROPIC_BASE_URL（中转）或 `ant auth login` 的配置
@@ -520,7 +530,15 @@ class ClaudeProvider(AIProvider):
 
     def _call(self, system: str, content: list[dict], schema: dict, max_tokens: int = 16000, on_text=None) -> dict:
         try:
-            response = self._create(system, content, schema, max_tokens, on_text=on_text)
+            try:
+                response = self._create(system, content, schema, max_tokens, on_text=on_text)
+            except anthropic.APIStatusError as e:
+                # 中转上游偶尔不响应（流式里回一个 error 事件，状态码是 200）或 5xx / 过载：多半是一时的，自动再试一次
+                if not _transient(e):
+                    raise
+                log.warning("anthropic transient error %s, retry once: %s", e.status_code, e.message)
+                time.sleep(RETRY_DELAY)
+                response = self._create(system, content, schema, max_tokens, on_text=on_text)
         except anthropic.AuthenticationError as e:
             raise AIError("AI 服务的密钥无效，请检查 ANTHROPIC_API_KEY") from e
         except anthropic.PermissionDeniedError as e:

@@ -1719,3 +1719,53 @@ def test_upscale_for_ocr_small_photos_only():
     big = jpg(1300, 2000)
     assert ocr.upscale_for_ocr(big) is big
     assert ocr.upscale_for_ocr(b"not an image") == b"not an image"
+
+
+def test_call_retries_once_on_transient_upstream_error(monkeypatch):
+    """中转上游不响应（流式里的 error 事件，状态码 200）：自动再试一次；第二次还不行才报「暂时不可用」。密钥、限流这类不重试。"""
+    import anthropic
+    from app.ai import claude
+    from app.ai.base import AIError
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
+    monkeypatch.setattr(claude, "RETRY_DELAY", 0)
+    provider = claude.ClaudeProvider(model="claude-sonnet-4-5")
+
+    def err(code):
+        # 不走构造函数：SDK 各版本的参数不一样，这里只关心异常类型和状态码
+        cls = anthropic.RateLimitError if code == 429 else anthropic.APIStatusError
+        e = cls.__new__(cls)
+        e.status_code, e.message = code, "upstream error: do request failed"
+        return e
+
+    class _Block:
+        type = "text"
+        text = '{"ok": true}'
+
+    class _Resp:
+        stop_reason = "end_turn"
+        content = [_Block()]
+
+    def run(outcomes):
+        calls = []
+
+        def fake_create(*a, **k):
+            calls.append(1)
+            o = outcomes[len(calls) - 1]
+            if isinstance(o, Exception):
+                raise o
+            return o
+
+        monkeypatch.setattr(provider, "_create", fake_create)
+        try:
+            return provider._call("s", [], {}), len(calls)
+        except AIError as e:
+            return str(e), len(calls)
+
+    assert run([err(200), _Resp()]) == ({"ok": True}, 2)
+    assert run([err(502), _Resp()]) == ({"ok": True}, 2)
+    msg, n = run([err(200), err(200)])
+    assert "暂时不可用" in msg and n == 2
+    msg, n = run([err(429), _Resp()])
+    assert "正忙" in msg and n == 1
