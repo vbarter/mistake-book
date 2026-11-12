@@ -124,7 +124,7 @@ export default function PlanTask() {
           </Text>
           {a.revoked && (
             <Tag kind="neutral" icon={null}>
-              已撤回
+              已删除
             </Tag>
           )}
         </View>

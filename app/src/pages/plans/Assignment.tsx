@@ -120,7 +120,7 @@ export default function Assignment() {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* 成员这边作业名最多两行，长名字不截成一行 */}
           <span className={`t-title3 ${owner ? "ellipsis" : "clamp2"}`} style={{ fontWeight: 800, flex: 1 }}>{a.title}</span>
-          {a.revoked && <Tag kind="neutral">已撤回</Tag>}
+          {a.revoked && <Tag kind="neutral">已删除</Tag>}
         </div>
         <div className="plan-counts" style={owner || a.dueAt || a.questionCount ? undefined : { display: "none" }}>
           {owner && <span className="t-foot c-sec ellipsis">{plan.name}</span>}

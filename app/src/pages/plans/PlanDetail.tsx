@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ColorIcon } from "../../components/ColorIcon";
+import { SwipeRow } from "../../components/SwipeRow";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Avatar, Stat, Tag } from "../../components/v2";
@@ -10,13 +11,22 @@ import { openFile } from "./Assignment";
 import { PlanMember } from "./PlanMember";
 import { ConfirmSheet, ScoreCounts } from "./shared";
 
+const SWIPE_HINT = "zcb.plan.swipeHint";
+function swipeHintPending(): boolean {
+  try {
+    return !localStorage.getItem(SWIPE_HINT);
+  } catch {
+    return false;
+  }
+}
+
 type Filter = "all" | Exclude<MemberState, "none">;
 /** 从批阅页回来还停在刚才的页签和筛选上 */
 let remembered: { planId: string; tab: "tasks" | "members"; filter: Filter } | null = null;
 
 /**
  * 学习计划页。创建人在这一页看完所有东西，不再有单独的「作业情况」页：
- * 顶部今日已交 / 未交 / 总成员；「作业」平铺每份作业的文件（点文件直接打开，点作业名：提醒没交的、撤回）；
+ * 顶部今日已交 / 未交 / 总成员；「作业」平铺每份作业的文件（点文件直接打开；把一份作业向左滑，露出「删除」）；
  * 「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，点一个人看他每份作业的情况并进去批阅、移出。
  * 头部两边一样：创建人头像 + 名字 + 创建时间（计划名在导航栏），右边一个圆图标按钮，创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。
  * 计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。「让旧卡片失效」在「成员」页签最下面。能用图标 + 数字说清的就不写字。
@@ -37,7 +47,8 @@ export default function PlanDetail() {
   const [tab, setTab] = useState<"tasks" | "members">(remembered?.planId === planId ? remembered.tab : "tasks");
   const [filter, setFilter] = useState<Filter>(remembered?.planId === planId ? remembered.filter : "all");
   const [member, setMember] = useState<PlanMemberRow | null>(null);
-  const [task, setTask] = useState<OwnerAssignment | null>(null);
+  const [swiped, setSwiped] = useState<string | null>(null); // 左滑开着的那份作业
+  const [hint, setHint] = useState(swipeHintPending); // 第一次看到作业：第一张卡片自己滑出一小截，露一下「删除」
   const [revoking, setRevoking] = useState<OwnerAssignment | null>(null);
   const [confirm, setConfirm] = useState<"dissolve" | "leave" | "reset" | null>(null);
   const [removing, setRemoving] = useState<PlanMemberRow | null>(null);
@@ -70,8 +81,8 @@ export default function PlanDetail() {
       toastError(e);
     }
   };
-  const forward = (a: { id: string; title: string } | undefined = data.assignments.find((x) => !x.revoked), remind = false) =>
-    act(() => shareInvite({ plan, invite: data.invite!, title: a?.title, assignmentId: a?.id, remind }));
+  const forward = (a: { id: string; title: string } | undefined = data.assignments.find((x) => !x.revoked)) =>
+    act(() => shareInvite({ plan, invite: data.invite!, title: a?.title, assignmentId: a?.id }));
 
   const count = (icon: IconName, color: string, n: number | string) => (
     <span className="plan-count" style={{ color }}><Icon name={icon} size={14} stroke={2.4} /><span className="num">{n}</span></span>
@@ -121,9 +132,25 @@ export default function PlanDetail() {
                 <Segmented value={tab} options={[{ value: "tasks", label: `作业 ${tasks.length}` }, { value: "members", label: `成员 ${active.length}` }]} onChange={setTab} />
                 {tab === "tasks" && tasks.length === 0 && <div className="group"><div className="plan-files__empty">还没有作业</div></div>}
                 {tab === "tasks" && tasks.map((a) => (
-                  <div key={a.id} className="group">
-                    {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的。点这一行：提醒 / 撤回 */}
-                    <button className="plan-task" aria-label="这份作业的提醒、撤回" onClick={() => setTask(a)}>
+                  // 整张卡片（进度行 + 文件行）一起左滑，露出红色「删除」
+                  <SwipeRow
+                    key={a.id}
+                    className="group"
+                    open={swiped === a.id}
+                    onOpenChange={(o) => setSwiped((cur) => (o ? a.id : cur === a.id ? null : cur))}
+                    onDelete={() => { setSwiped(null); setRevoking(a); }}
+                    hint={hint && a.id === tasks[0].id}
+                    onHintDone={() => {
+                      setHint(false);
+                      try {
+                        localStorage.setItem(SWIPE_HINT, "1");
+                      } catch {
+                        /* 存不下：下次再演示一遍 */
+                      }
+                    }}
+                  >
+                    {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的 */}
+                    <div className="plan-task plan-task--static">
                       <span className="plan-task__head">
                         <span className="plan-counts" style={{ flex: 1 }} aria-label={`已交 ${a.submitted}，没交 ${a.missing}，其中没看 ${a.unseen}`}>
                           {count("checkcircle", "var(--mastered)", a.submitted)}
@@ -131,9 +158,8 @@ export default function PlanDetail() {
                           {count("eye-off", "var(--tertiary)", a.unseen)}
                         </span>
                         {a.dueAt && due(a.dueAt)}
-                        <Icon name="ellipsis" size={20} stroke={2} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
                       </span>
-                    </button>
+                    </div>
                     {(a.files ?? []).map((f) => (
                       <button key={f.id} className="row" onClick={() => openFile(f)}>
                         <span className="plan-file__icon" style={{ width: 34, height: 40 }}>{fileBadge(f.mime)}</span>
@@ -141,7 +167,7 @@ export default function PlanDetail() {
                         <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                       </button>
                     ))}
-                  </div>
+                  </SwipeRow>
                 ))}
                 {tab === "members" && (
                   <>
@@ -208,15 +234,8 @@ export default function PlanDetail() {
           </div>
         )}
       </Sheet>
-      {/* 点作业名：这份作业的提醒、撤回 */}
-      <Sheet open={Boolean(task)} onClose={() => setTask(null)} title={task?.title}>
-        <div className="plan-quiet plan-quiet--only">
-          {task && task.missing > 0 && <button onClick={() => { const a = task; setTask(null); void forward(a, true); }}>提醒没交的同学</button>}
-          <button className="plan-quiet__danger" onClick={() => { setRevoking(task); setTask(null); }}>撤回这份作业</button>
-        </div>
-      </Sheet>
-      <ConfirmSheet open={Boolean(revoking)} danger title="撤回这份作业？" text="没交的同学不会再看到，交过的还能看到自己那份。" action="撤回" onClose={() => setRevoking(null)}
-        onConfirm={() => act(async () => { await revokeAssignment(revoking!.id); setRevoking(null); usePlans.getState().bump(); await load(); }, "已撤回")} />
+      <ConfirmSheet open={Boolean(revoking)} danger title="删除这份作业？" text="没交的同学不会再看到，交过的还能看到自己那份。" action="删除" onClose={() => setRevoking(null)}
+        onConfirm={() => act(async () => { await revokeAssignment(revoking!.id); setRevoking(null); usePlans.getState().bump(); await load(); }, "已删除")} />
       <ConfirmSheet open={Boolean(removing)} danger title={`把「${removing ? memberName(removing) : ""}」移出学习计划？`} text="移出后对方看不到这里的作业了，已经交过的你还能看到。" action="移出" onClose={() => setRemoving(null)}
         onConfirm={() => act(async () => { await removeMember(plan.id, removing!.userId); setRemoving(null); await load(); }, "已移出")} />
     </div>
