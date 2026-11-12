@@ -4,6 +4,11 @@
 - 官方 API（默认）：结构化输出（JSON Schema）+ 服务端回退。
 - 中转模式（设置 ANTHROPIC_BASE_URL 指向 api.tu-zi.com 等 new-api 中转时自动启用）：
   只用标准 Messages 接口，不带 beta 头 / output_config / fallbacks，由提示词约束 JSON 并稳健解析。
+
+配了 DEEPSEEK_API_KEY 时多一条 DeepSeek 官方通道（见 deepseek.py），每次调用在两条通道里选：
+- LLM_DEFAULT=deepseek（默认）| anthropic：优先走哪条。
+- 带图片的调用只在 DEEPSEEK_VISION=1 时才发给 DeepSeek，否则一律走 Anthropic / 中转通道。
+- LLM_FALLBACK=1（默认）：首选通道失败后换另一条再试一次（另一条得能接这次调用）；0 关闭。
 """
 from __future__ import annotations
 
@@ -21,6 +26,7 @@ import anthropic
 from .. import taxonomy
 from ..constants import QUESTION_TYPES, SUBJECT_LABELS, SUBJECTS
 from .base import BLOCK_TYPES, AIError, AIProvider, Crop, DigitizedBlank, DigitizedPage, RecognizedItem, ScannedItem, Variant
+from . import deepseek
 from . import grades
 from . import ocr
 from . import queue as page_queue
@@ -475,6 +481,17 @@ def _transient(e: anthropic.APIStatusError) -> bool:
     return code == 200 or code == 408 or code >= 500
 
 
+def _json_instruction(schema: dict) -> str:
+    return (
+        "\n\n只输出一个 JSON 对象，不要任何解释、前后缀或 Markdown 围栏。"
+        "JSON 必须符合下面的 JSON Schema：\n" + json.dumps(schema, ensure_ascii=False)
+    )
+
+
+def _has_image(content: list[dict]) -> bool:
+    return any(b.get("type") == "image" for b in content)
+
+
 class ClaudeProvider(AIProvider):
     def __init__(self, model: str = "claude-opus-5-5", relay: bool | None = None):
         # 凭据与地址从环境解析：ANTHROPIC_API_KEY、ANTHROPIC_BASE_URL（中转）或 `ant auth login` 的配置
@@ -488,6 +505,12 @@ class ClaudeProvider(AIProvider):
         else:
             self.relay = is_relay_base_url(os.getenv("ANTHROPIC_BASE_URL"))
         self.name = "claude-relay" if self.relay else "claude"
+        # 第二条通道：DeepSeek 官方接口。没配 DEEPSEEK_API_KEY 就是 None，行为和以前完全一样
+        self.deepseek = deepseek.DeepSeekClient.from_env()
+        self.default_channel = "anthropic" if os.getenv("LLM_DEFAULT", "deepseek").strip().lower() in ("anthropic", "claude", "relay", "tuzi", "tu-zi") else "deepseek"
+        self.fallback = os.getenv("LLM_FALLBACK", "1") != "0"
+        if self.deepseek is not None:
+            self.name = f"deepseek+{self.name}" if self.default_channel == "deepseek" else f"{self.name}+deepseek"
 
     # ------------------------------------------------------------------ helpers
     def _create(self, system: str, content: list[dict], schema: dict, max_tokens: int, on_text=None):
@@ -504,11 +527,7 @@ class ClaudeProvider(AIProvider):
             return stream.get_final_message()
 
         if self.relay:
-            instruction = (
-                "\n\n只输出一个 JSON 对象，不要任何解释、前后缀或 Markdown 围栏。"
-                "JSON 必须符合下面的 JSON Schema：\n" + json.dumps(schema, ensure_ascii=False)
-            )
-            content = list(content) + [{"type": "text", "text": instruction}]
+            content = list(content) + [{"type": "text", "text": _json_instruction(schema)}]
             with self.client.messages.stream(
                 model=self.model,
                 max_tokens=max_tokens,
@@ -528,7 +547,58 @@ class ClaudeProvider(AIProvider):
         ) as stream:
             return drain(stream)
 
+    def _channels(self, content: list[dict]) -> list[str]:
+        """这次调用按顺序试哪些通道：首选在前，后面是失败时的回退。DeepSeek 不开图片输入时，带图片的调用不会发给它。"""
+        if self.deepseek is None or (_has_image(content) and not self.deepseek.vision):
+            return ["anthropic"]
+        order = ["deepseek", "anthropic"] if self.default_channel == "deepseek" else ["anthropic", "deepseek"]
+        return order if self.fallback else order[:1]
+
     def _call(self, system: str, content: list[dict], schema: dict, max_tokens: int = 16000, on_text=None) -> dict:
+        channels = self._channels(content)
+        for i, channel in enumerate(channels):
+            call = self._call_deepseek if channel == "deepseek" else self._call_anthropic
+            try:
+                return call(system, content, schema, max_tokens, on_text=on_text)
+            except AIError as e:
+                if i == len(channels) - 1:
+                    raise
+                log.warning("llm channel %s failed (%s), fall back to %s", channel, e, channels[i + 1])
+        raise AIError("AI 服务暂时不可用，题目已保留，稍后可重试")  # 走不到：channels 不会是空的
+
+    def _call_deepseek(self, system: str, content: list[dict], schema: dict, max_tokens: int = 16000, on_text=None) -> dict:
+        content = list(content) + [{"type": "text", "text": _json_instruction(schema)}]
+        try:
+            try:
+                text, finish = self.deepseek.complete(system, content, max_tokens, on_text=on_text)
+            except deepseek.DeepSeekError as e:
+                if not e.transient:
+                    raise
+                log.warning("deepseek transient error %s, retry once: %s", e.status_code, e.message)
+                time.sleep(RETRY_DELAY)
+                text, finish = self.deepseek.complete(system, content, max_tokens, on_text=on_text)
+        except deepseek.DeepSeekError as e:
+            log.warning("deepseek error %s: %s", e.status_code, e.message)
+            if e.status_code == 401:
+                raise AIError("AI 服务的密钥无效，请检查 DEEPSEEK_API_KEY") from e
+            if e.status_code == 402:
+                raise AIError("AI 服务额度不足或无权限，请联系管理员充值") from e
+            if e.status_code == 429:
+                raise AIError("AI 服务正忙，请稍后再试") from e
+            if e.status_code == 0:
+                raise AIError("连不上 AI 服务，请检查网络") from e
+            raise AIError("AI 服务暂时不可用，题目已保留，稍后可重试") from e
+        if finish == "length":
+            raise AIError("AI 返回内容过长被截断，请减少一次识别的题目数量")
+        if finish == "content_filter":
+            raise AIError("这张截图 AI 无法处理，请手动填写题目")
+        try:
+            return extract_json(text)
+        except json.JSONDecodeError as e:
+            log.warning("unparseable deepseek output: %.300s", text)
+            raise AIError("AI 返回了无法解析的结果，请重试") from e
+
+    def _call_anthropic(self, system: str, content: list[dict], schema: dict, max_tokens: int = 16000, on_text=None) -> dict:
         try:
             try:
                 response = self._create(system, content, schema, max_tokens, on_text=on_text)

@@ -35,6 +35,7 @@ class Config:
     )
 
     # AI：auto = 有 ANTHROPIC_API_KEY 就用 Claude，否则用本地 Mock
+    # 第二条通道 DeepSeek（DEEPSEEK_API_KEY / LLM_DEFAULT 等）由 app/ai/deepseek.py 和 ClaudeProvider 直接读环境变量
     AI_PROVIDER = os.getenv("AI_PROVIDER", "auto")
     ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "gpt-6.1-sol")
 

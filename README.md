@@ -90,6 +90,7 @@ cd server && TEST_DATABASE_URL='mysql+pymysql://zhicuoben:zhicuoben@127.0.0.1:33
 - 开发期短信验证码固定 `123456`，接口会回显 `devCode`。
 - 接入 Claude：在 `.env` 里填 `ANTHROPIC_API_KEY`（或先 `ant auth login`），`AI_PROVIDER=auto` 会自动切换。识别模型由 `ANTHROPIC_MODEL` 指定，默认 `gpt-6.1-sol`（经 api.tu-zi.com 中转，用真卷对比过 claude-opus-5-5 / claude-haiku-5-5 / gpt-6.1-sol，gpt-6.1-sol 对铅笔手写的识别最好、答案与知识点准确），JSON Schema 结构化输出，一次完成 OCR、学科归类、知识点、答案与解析；不填 Key 时用本地 Mock，返回四道示例题，全流程可跑。
 - 走中转（线上用的是 api.tu-zi.com）：再设 `ANTHROPIC_BASE_URL=https://api.tu-zi.com`，Key 用中转的 `sk-...`。中转只提供标准 Messages 接口，Provider 会自动进入中转模式：不发 beta 头、结构化输出和服务端回退，改为提示词约束 JSON 并容错解析（`/api/health` 显示 `claude-relay`）。tu-zi 对每次请求按模型最大输出预扣额度，余额不足时返回 403，App 会提示「额度不足」。
+- DeepSeek 官方通道（可选，和上面的通道并存）：在 `.env` 里填 `DEEPSEEK_API_KEY`（`DEEPSEEK_BASE_URL` 默认 `https://api.deepseek.com`，`DEEPSEEK_MODEL` 默认 `deepseek-v4-pro`）。配了之后默认优先走 DeepSeek（`LLM_DEFAULT=deepseek`，改成 `anthropic` 切回中转），`/api/health` 显示 `deepseek+claude-relay`。带照片的调用（扫描识别、结合原卷补答案、讲解、擦除定位）只在 `DEEPSEEK_VISION=1` 时才发给 DeepSeek，否则仍走 `ANTHROPIC_*` 通道；纯文本的调用（没批改痕迹的题判对错、知识图谱标注、同类变式题、分栏选择题补答案）走 DeepSeek。首选通道失败（密钥、额度、超时、输出不是 JSON 等）会自动换另一条再试，`LLM_FALLBACK=0` 关闭。
 
 本地调试大模型：`server/.env` 里填 `ANTHROPIC_API_KEY` 与 `ANTHROPIC_BASE_URL=https://api.tu-zi.com`，重启后 `/api/health` 应显示 `claude-relay`；想临时回到不花钱的示例结果，把 `AI_PROVIDER=mock` 即可。项目 `.env` 会覆盖 shell 里同名的环境变量（`load_dotenv(override=True)`）。日志在 `server/instance/dev-server.log`（用 `python -u run.py` 启动时不缓冲）。
 

@@ -10,6 +10,7 @@ export default defineAppConfig({
     "pages/erase/index",
     "pages/rank-detail/index",
     "pages/confirm/index",
+    "pages/camera/index",
     "pages/exports/index",
     "pages/settings/index",
     "pages/privacy/index",
