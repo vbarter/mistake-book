@@ -7,7 +7,7 @@ import { SubjectPicker } from "../../components/SubjectPicker";
 import { PrintSheets } from "../../components/PrintSheets";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, ErrorFilterTags, Hint, IconSegmented, MathText, Progress, Tag, Verdict, applyErrorFilter, type ErrorFilter } from "../../components/ui";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 import { retake, rotateAndRescan } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { SUBJECT_LABEL, formatDateTime } from "../../lib/format";
@@ -22,6 +22,7 @@ type Tab = "paper" | "answers" | "errors";
 
 /** 一张试卷的电子版：「试卷」干净原题，「作答」逐空对照，「错题」按试卷顺序 */
 export default function PaperPage() {
+  const tc = useThemeClass();
   useShare();
   const { params } = useRouter();
   const folderId = params.folderId ?? "";
@@ -76,7 +77,7 @@ export default function PaperPage() {
 
   if (!digitized) {
     return (
-      <View className="page center-page">
+      <View className={"page center-page" + tc}>
         {paper.scanJob ? (
           <>
             <Icon name="sparkles" size={44} color={C.brand} />
@@ -223,7 +224,7 @@ export default function PaperPage() {
   );
 
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       <View className="row-center gap12">
         <Image className="thumb" src={paper.pages[0]?.src} mode="aspectFill" onClick={() => Taro.previewImage({ urls: paper.pages.map((p) => p.src) })} />
         <View className="flex1 col gap4 minw0">

@@ -1,4 +1,5 @@
 /** 通用小组件（和 App 的 components/ui.tsx、v2.tsx 一一对应）：学科方块、状态标签、按钮、底部面板、分段切换、统计格、顶栏… */
+import { ColorIcon, type ColorIconName } from "./ColorIcon";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import Taro from "@tarojs/taro";
 import { Button as NativeButton, Image, ScrollView, Text, View } from "@tarojs/components";
@@ -27,13 +28,15 @@ export const subjectColors = (s: Subject | null | undefined) => (s ? SUBJECT_COL
 /** 学科图标（和 App 的 SubjectTile 一致） */
 const SUBJECT_ICON: Record<Subject, IconName> = { english: "bubble", math: "calculator", chinese: "brush", science: "flask", physics: "atom", chemistry: "tube", biology: "leaf", history: "scroll", geography: "map", politics: "scales" };
 const TILE_ICON_SIZE = { lg: 28, md: 26, sm: 20, xs: 13 } as const;
+/** 彩色学科图标在方块里的大小；xs 太小，画不清，仍用细线图标 */
+const TILE_ART_SIZE = { lg: 40, md: 36, sm: 28 } as const;
 
 /** 学科方块：圆角色块 + 学科图标 */
 export function SubjectTile({ subject, size = "md", style, className }: { subject: Subject | null | undefined; size?: "lg" | "md" | "sm" | "xs"; style?: CSSProperties; className?: string }) {
   const c = subjectColors(subject);
   return (
     <View className={`tile tile--${size}${className ? ` ${className}` : ""}`} style={{ background: c.bg, ...style }}>
-      <Icon name={subject ? SUBJECT_ICON[subject] : "folder"} size={TILE_ICON_SIZE[size]} color={c.color} stroke={size === "xs" ? 2.4 : 2} />
+      {size === "xs" ? <Icon name={subject ? SUBJECT_ICON[subject] : "folder"} size={TILE_ICON_SIZE[size]} color={c.color} stroke={2.4} /> : <ColorIcon name={subject ?? "folder"} size={TILE_ART_SIZE[size]} />}
     </View>
   );
 }
@@ -75,12 +78,18 @@ export function KnowledgeIcon({ name, subject }: { name: string; subject?: Subje
  * 设置列表的一行。传 contact 时整行换成原生 <button open-type="contact">，点了直接进微信客服会话
  *（只能用原生按钮触发，View 的 onClick 不行）；sessionFrom 会随会话带给客服，用来区分从哪进来的
  */
-export function Row({ icon, iconBg, title, value, chevron = true, danger, onClick, contact, sessionFrom }: { icon: IconName; iconBg: string; title: string; value?: ReactNode; chevron?: boolean; danger?: boolean; onClick?: () => void; contact?: boolean; sessionFrom?: string }) {
+export function Row({ icon, iconBg, art, title, value, chevron = true, danger, onClick, contact, sessionFrom }: { icon?: IconName; iconBg?: string; /** 彩色图标：给了就不画 icon 的小色块 */ art?: ColorIconName; title: string; value?: ReactNode; chevron?: boolean; danger?: boolean; onClick?: () => void; contact?: boolean; sessionFrom?: string }) {
   const inner = (
     <>
-      <View className="prow__icon" style={{ background: iconBg }}>
-        <Icon name={icon} size={18} color="#ffffff" stroke={2} />
-      </View>
+      {art ? (
+        <ColorIcon name={art} size={32} />
+      ) : (
+        icon && (
+          <View className="prow__icon" style={{ background: iconBg ?? C.brand }}>
+            <Icon name={icon} size={18} color="#ffffff" stroke={2} />
+          </View>
+        )
+      )}
       <Text className={`prow__title${danger ? " c-wrong" : ""}`}>{title}</Text>
       <View className="prow__value">
         {typeof value === "string" ? <Text>{value}</Text> : value}
@@ -103,7 +112,8 @@ export function Row({ icon, iconBg, title, value, chevron = true, danger, onClic
 
 export type TagKind = "wrong" | "pending" | "correct" | "neutral" | "info" | "partial" | "accent";
 
-const TAG_COLOR: Record<TagKind, string> = { wrong: C.wrong, pending: C.accentOn, partial: C.accentOn, correct: C.ok, info: C.brand, neutral: C.secondary, accent: "#ffffff" };
+/** 标签图标的颜色。画的时候再取：品牌色跟主题走 */
+const tagColor = (k: TagKind): string => ({ wrong: C.wrong, pending: C.accentOn, partial: C.accentOn, correct: C.ok, info: C.brand, neutral: C.secondary, accent: "#ffffff" })[k];
 const TAG_ICON: Partial<Record<TagKind, IconName>> = { wrong: "xmark", correct: "check", partial: "warning", pending: "viewfinder" };
 
 /** 头像：有图用图，没有（或图加载失败）用名字最后一个字 */
@@ -133,7 +143,7 @@ export function Tag({ kind = "neutral", icon, children, style }: { kind?: TagKin
   const name = icon === null ? undefined : (icon ?? TAG_ICON[kind]);
   return (
     <View className={`tag tag--${kind}`} style={style}>
-      {name && <Icon name={name} size={11} color={TAG_COLOR[kind]} stroke={3} />}
+      {name && <Icon name={name} size={11} color={tagColor(kind)} stroke={3} />}
       <Text>{children}</Text>
     </View>
   );
@@ -169,10 +179,13 @@ export function Button({ children, variant = "primary", size, icon, disabled, on
 }
 
 /** 空状态：插画或图标 + 标题 + 说明 + 操作 */
+/** 空页面常用的几个细线图标，换成对应的彩色图标（和 App 一致） */
+const EMPTY_ART: Partial<Record<IconName, ColorIconName>> = { document: "file", folder: "folder", seal: "star", camera: "camera" };
+
 export function Empty({ icon, art, title, text, children }: { icon?: IconName; art?: ReactNode; title: string; text?: string; children?: ReactNode }) {
   return (
     <View className="empty rise">
-      {art ?? (icon && <Icon name={icon} size={44} color={C.tertiary} stroke={1.5} />)}
+      {art ?? (icon && (EMPTY_ART[icon] ? <ColorIcon name={EMPTY_ART[icon]!} size={72} /> : <Icon name={icon} size={44} color={C.tertiary} stroke={1.5} />))}
       <Text className="empty__title">{title}</Text>
       {text && <Text className="empty__text">{text}</Text>}
       {children}

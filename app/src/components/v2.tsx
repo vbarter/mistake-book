@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { avatarFallback, avatarId, avatarSrc } from "../lib/avatarCache";
 import type { Subject } from "../api/types";
 import { SUBJECT_LABEL } from "../lib/format";
+import { ColorIcon } from "./ColorIcon";
 import { Icon, type IconName } from "./Icon";
 
 /** 学科方块：圆角色块 + 一个大字符，学生一眼认出是哪一科 */
@@ -18,6 +19,8 @@ const TILE: Record<Subject, { icon: IconName; color: string; bg: string }> = {
   politics: { icon: "scales", color: "var(--politics)", bg: "var(--politics-bg)" },
 };
 const TILE_ICON_SIZE = { lg: 28, md: 26, sm: 20, xs: 13 } as const;
+/** 彩色学科图标在方块里的大小；xs 太小，画不清，仍用细线图标 */
+const TILE_ART_SIZE = { lg: 40, md: 36, sm: 28 } as const;
 
 /** 文件夹里有多科时叠放两个小方块 */
 export function SubjectStack({ subjects, size = "md" }: { subjects: Subject[]; size?: "md" | "sm" }) {
@@ -57,7 +60,7 @@ export function SubjectTile({ subject, size = "md", style }: { subject: Subject 
   const t = subject ? TILE[subject] : null;
   return (
     <span className={`tile tile--${size}`} style={{ background: t?.bg ?? "var(--fill-light)", color: t?.color ?? "var(--secondary)", ...style }} aria-label={subject ? SUBJECT_LABEL[subject] : "未分学科"}>
-      <Icon name={t ? t.icon : "folder"} size={TILE_ICON_SIZE[size]} stroke={size === "xs" ? 2.4 : 2} />
+      {size === "xs" ? <Icon name={t ? t.icon : "folder"} size={TILE_ICON_SIZE[size]} stroke={2.4} /> : <ColorIcon name={subject ?? "folder"} size={TILE_ART_SIZE[size]} />}
     </span>
   );
 }

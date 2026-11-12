@@ -6,7 +6,9 @@ import { Avatar, SubjectTile } from "../components/v2";
 import { pickAvatar } from "../lib/native";
 import { allErrors } from "../lib/errors";
 import { listFolders, photoBytes, type Folder } from "../lib/folders";
+import { colorIconInner } from "../lib/colorIcons";
 import { GRADE_LABEL } from "../lib/format";
+import { THEMES, useTheme } from "../lib/theme";
 import { getCity } from "../lib/prefs";
 import { WEB_VERSION, appVersion } from "../lib/version";
 import { useAuth } from "../store/auth";
@@ -21,6 +23,9 @@ export default function Profile() {
   const [bytes, setBytes] = useState(0);
   const [city, setCityState] = useState("");
   const [editName, setEditName] = useState(false);
+  const [pickTheme, setPickTheme] = useState(false);
+  const theme = useTheme((t) => t.theme);
+  const setTheme = useTheme((t) => t.setTheme);
   const [name, setName] = useState(user?.nickname ?? "");
 
   const [version, setVersion] = useState(WEB_VERSION);
@@ -93,8 +98,8 @@ export default function Profile() {
         </div>
 
         <div className="group">
-          <Row icon="graduation" iconColor="var(--brand)" title="年级" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => nav("/profile/subjects")} />
-          <Row icon="books" iconColor="var(--brand)" title="学科" value={
+          <Row art="grade" title="年级" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => nav("/profile/subjects")} />
+          <Row art="folder" title="学科" value={
             // 最多露 3 个学科图标，其余用「+N」收起，免得学科多时把一行挤满
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {user.subjects.slice(0, 3).map((s) => <SubjectTile key={s} subject={s} size="xs" />)}
@@ -104,16 +109,33 @@ export default function Profile() {
         </div>
 
         <div className="group">
-          <Row icon="export" iconColor="var(--brand)" title="导出" onClick={() => nav("/profile/exports")} />
-          <Row icon="photo" iconColor="var(--accent-on)" title="照片" value={`${stats.mb} MB`} chevron={false} />
-          <Row icon="shield" iconColor="var(--mastered)" title="隐私" onClick={() => nav("/profile/privacy")} />
-          <Row icon="person" iconColor="var(--label)" title="账号" value={user.loginMethod === "apple" ? "Apple" : user.loginMethod === "phone" ? "手机号" : ""} onClick={() => nav("/profile/account")} />
+          <Row art="export" title="导出" onClick={() => nav("/profile/exports")} />
+          <Row art="album" title="照片" value={`${stats.mb} MB`} chevron={false} />
+          <Row art="privacy" title="隐私" onClick={() => nav("/profile/privacy")} />
+          <Row art="account" title="账号" value={user.loginMethod === "apple" ? "Apple" : user.loginMethod === "phone" ? "手机号" : ""} onClick={() => nav("/profile/account")} />
         </div>
 
         <div className="group">
-          <Row icon="info" iconColor="var(--secondary)" title="关于" value={version} chevron={false} />
+          <Row art="settings" title="主题" value={THEMES.find((t) => t.id === theme)?.name} onClick={() => setPickTheme(true)} />
+          <Row art="about" title="关于" value={version} chevron={false} />
         </div>
       </div>
+
+      <Sheet open={pickTheme} onClose={() => setPickTheme(false)} title="主题">
+        <div className="theme-grid">
+          {THEMES.map((t) => (
+            <button key={t.id} className={`theme-opt${theme === t.id ? " on" : ""}`} aria-pressed={theme === t.id} onClick={() => setTheme(t.id)}>
+              <span className="theme-opt__art" style={{ background: `linear-gradient(160deg, ${t.swatch[0]}, ${t.swatch[0]}cc)` }}>
+                {(["collect", "plan", "star"] as const).map((n) => (
+                  <svg key={n} width="34" height="34" viewBox="0 0 48 48" fill="none" aria-hidden="true" className="theme-opt__icon" dangerouslySetInnerHTML={{ __html: colorIconInner(n, t.id) }} />
+                ))}
+              </span>
+              <span className="theme-opt__name">{t.name}{theme === t.id && <Icon name="checkcircle" size={18} stroke={2.4} />}</span>
+              <span className="theme-opt__note">{t.note}</span>
+            </button>
+          ))}
+        </div>
+      </Sheet>
 
       <Sheet open={editName} onClose={() => setEditName(false)} title="怎么称呼你">
         <input className="input" autoFocus value={name} maxLength={16} onChange={(e) => setName(e.target.value)} />

@@ -73,13 +73,55 @@
   --ill-ok-bg: #dcf5e7;
   --ill-shadow: rgba(31, 42, 68, 0.12);
 
+  /* 首页头图 */
+  --hero-a: #2b4f96;
+  --hero-b: #1f3b73;
+  --hero-spot-a: #eaf0fc;
+  --hero-spot-b: #cfdcf6;
+  --hero-pin: #e2566a;
+  --shadow-card: rgba(31, 59, 115, 0.12);
+
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Noto Sans CJK SC", Roboto, sans-serif;
 }
 
+/* 第二套主题「元气粉」：粉色主色、蓝色点缀。只换品牌色和插画色；文字灰、错题红、学科色两套主题共用。 */
+:root[data-theme="pop"] {
+  --brand: #e8477c;
+  --brand-pressed: #cf3568;
+  --brand-tint: #ffe9f0;
+  --brand-on-tint: #d63a6f;
+  --brand-solid: #f4608f;
+  --brand-glow: rgba(251, 114, 153, 0.38);
+  --tie: #0095c8;
+  --tie-bg: #dff5fd;
+  --tie-trim: rgba(0, 174, 236, 0.55);
+  --bg: #f6f4f7;
+
+  --ill-paper2: #ffd6e2;
+  --ill-line: #f4608f;
+  --ill-ink: #4a2a36;
+  --ill-tie: #00aeec;
+  --ill-star: #ffc53d;
+  --ill-shadow: rgba(120, 40, 70, 0.12);
+
+  --hero-a: #ff9dba;
+  --hero-b: #fb7299;
+  --hero-spot-a: #ffffff;
+  --hero-spot-b: #ffe3ec;
+  --hero-pin: #00aeec;
+  --shadow-card: rgba(232, 71, 124, 0.14);
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
+    --hero-a: #2a4a8c;
+    --hero-b: #16284f;
+    --hero-spot-a: #33456e;
+    --hero-spot-b: #223052;
+    --shadow-card: rgba(0, 0, 0, 0.4);
+
     --brand: #8fa9e6;
     --brand-pressed: #a9bdee;
     --brand-tint: #1a2440;
@@ -140,5 +182,31 @@
     --geography-bg: #0f2a3a;
     --politics: #ff8080;
     --politics-bg: #3a1616;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="pop"] {
+    --brand: #ff8fb0;
+    --brand-pressed: #ffa9c2;
+    --brand-tint: #3a1a27;
+    --brand-on-tint: #ffb3ca;
+    --brand-solid: #d9487a;
+    --brand-glow: rgba(0, 0, 0, 0.5);
+    --tie: #5cc8f0;
+    --tie-bg: #10303d;
+    --tie-trim: rgba(92, 200, 240, 0.55);
+    --bg: #000000;
+
+    --ill-paper2: #5a2c3d;
+    --ill-line: #ff8fb0;
+    --ill-ink: #2a1a22;
+    --ill-tie: #5cc8f0;
+    --ill-shadow: rgba(0, 0, 0, 0.45);
+
+    --hero-a: #b83a68;
+    --hero-b: #7d2444;
+    --hero-spot-a: #5a2c3d;
+    --hero-spot-b: #40202c;
   }
 }

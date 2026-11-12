@@ -12,11 +12,12 @@ import { toast, useDataVersion, useTabBar } from "../../lib/hooks";
 import { pollPendingJobs, scanStageText } from "../../lib/jobs";
 import { folderStats } from "../../lib/logic";
 import { deleteFolder, listFolders, moveFolder, saveFolder, type Folder } from "../../lib/store";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 import { useShare, useShareTimelineToo } from "../../lib/share";
 
 /** 试卷 Tab（和 App 一致）：一次考试一个文件夹，自动建、自动命名。添加试卷走底栏相机键，不用先选文件夹。 */
 export default function Papers() {
+  const tc = useThemeClass();
   useShare();
   useShareTimelineToo();
   useTabBar(1);
@@ -63,7 +64,7 @@ export default function Papers() {
   };
 
   return (
-    <View className="page page--tab" style={{ paddingTop: 0 }}>
+    <View className={"page page--tab" + tc} style={{ paddingTop: 0 }}>
       <TopBar>
         <Text className="topbar__text">{`${folders.length} 个文件夹 · ${paperCount} 份试卷`}</Text>
         <Text className="topbar__hint flex1" style={{ textAlign: "right" }}>

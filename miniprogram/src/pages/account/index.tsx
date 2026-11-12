@@ -5,6 +5,7 @@ import { Row } from "../../components/ui";
 import { currentUser, loginLabel, logout } from "../../lib/auth";
 import { SYNC_EVENT, syncNow, syncStatus } from "../../lib/sync";
 import { useShare } from "../../lib/share";
+import { C, useThemeClass } from "../../lib/theme";
 
 const maskPhone = (p: string) => `${p.slice(0, 3)}****${p.slice(-4)}`;
 
@@ -18,6 +19,7 @@ function syncLabel(): string {
 
 /** 账号与登录（和 App 的同名页面一致）：登录方式、绑定手机号、云同步状态 */
 export default function Account() {
+  const tc = useThemeClass();
   useShare();
   const [user, setUser] = useState(() => currentUser());
   const [, setTick] = useState(0);
@@ -38,7 +40,7 @@ export default function Account() {
   };
   const err = syncStatus().state === "error" ? syncStatus().error : "";
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       <View className="group">
         <Row icon="person" iconBg="#1c1c1e" title="登录方式" value={loginLabel(user?.loginMethod)} chevron={false} />
         {user?.phone ? (
@@ -46,7 +48,7 @@ export default function Account() {
         ) : (
           <Row icon="lock" iconBg="#34c759" title="绑定手机号" value="App 里用手机号登录看同样内容" onClick={() => Taro.navigateTo({ url: "/pages/bind-phone/index" })} />
         )}
-        <Row icon="refresh" iconBg="#1f3b73" title="云同步" value={syncLabel()} onClick={() => void syncNow()} />
+        <Row icon="refresh" iconBg={C.brand} title="云同步" value={syncLabel()} onClick={() => void syncNow()} />
       </View>
       <Text className="group-note">同一个微信、或绑定的手机号登录，在别的手机、电脑上也能看到这些试卷和错题。{err ? `上次失败：${err}` : ""}</Text>
       <View className="group">

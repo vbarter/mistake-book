@@ -9,6 +9,7 @@ import type { Subject } from "../../lib/types";
 import { SubjectTile } from "../../components/ui";
 import "./index.scss";
 import { useShare } from "../../lib/share";
+import { useThemeClass } from "../../lib/theme";
 
 const GRADES = Object.keys(GRADE_LABEL);
 
@@ -23,6 +24,7 @@ function leave() {
  * 只在用户要扫描、导出等操作时打开（lib/auth 的 ensureLogin），随时可以「暂不登录」回去接着看。
  */
 export default function Login() {
+  const tc = useThemeClass();
   useShare();
   const [grade, setGrade] = useState("7");
   const [subjects, setSubjects] = useState<Subject[]>(["math", "chinese", "english"]);
@@ -48,7 +50,7 @@ export default function Login() {
   };
 
   return (
-    <View className="page login">
+    <View className={"page login" + tc}>
       <View className="login__hero">
         <Text className="login__logo">错</Text>
         <Text className="t-title1 b">上壹课</Text>
