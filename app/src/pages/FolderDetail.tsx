@@ -172,9 +172,16 @@ export default function FolderDetail() {
   );
 
   const scopedPapers = scope ? view.papers : [];
+  // 一张可看的试卷都没有（比如删掉了最后一张）：只留一处空状态，0 的统计和切换一起收起
+  const nothing = view.papers.length === 0 && tree.pending.length === 0;
+  const emptyState =
+    folder.papers.length === 0 || !scope ? (
+      <Empty icon="document" title="还没有试卷" text="拍一张或从相册选，扫描后会按学科自动归档，错题自动汇总。" />
+    ) : (
+      <Empty icon="document" title={`这里没有${SUBJECT_LABEL[scope]}试卷了`} action={<Button size="sm" variant="tinted" onClick={() => nav(`/papers/${folder.id}`, { replace: true })}>回到 {folder.name}</Button>} />
+    );
   const papersTab = (
     <>
-      {folder.papers.length === 0 && <Empty icon="document" title="还没有试卷" text="拍一张或从相册选，扫描后会按学科自动归档，错题自动汇总。" />}
       {pendingScan > 0 && (
         <div className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Icon name="sparkles" size={22} style={{ color: "var(--brand)", flexShrink: 0 }} />
@@ -203,7 +210,6 @@ export default function FolderDetail() {
           </button>
         );
       })}
-      {scope && scopedPapers.length === 0 && tree.pending.length === 0 && <Empty icon="document" title={`这里没有${SUBJECT_LABEL[scope]}试卷了`} action={<Button size="sm" variant="tinted" onClick={() => nav(`/papers/${folder.id}`, { replace: true })}>回到 {folder.name}</Button>} />}
       {scope && paperList(scopedPapers)}
       {tree.pending.length > 0 && (tree.subjects.length > 0 || scope) && pendingHead}
       {tree.pending.length > 0 && paperList(tree.pending)}
@@ -279,13 +285,19 @@ export default function FolderDetail() {
             </span>
           </div>
         </div>
-        <div className="stats" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-          <Stat label="错题" value={stats.wrong} icon="xcircle" color="var(--wrong)" />
-          <Stat label="未作答" value={stats.blank} icon="alert" color="var(--accent-on)" />
-        </div>
-        <IconSegmented value={tab} onChange={setTab} options={[{ value: "papers", label: `目录 ${stats.papers}`, icon: "list" }, { value: "errors", label: `错题汇总 ${stats.problems}`, icon: "target" }]} />
+        {nothing ? (
+          emptyState
+        ) : (
+          <>
+            <div className="stats" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+              <Stat label="错题" value={stats.wrong} icon="xcircle" color="var(--wrong)" />
+              <Stat label="未作答" value={stats.blank} icon="alert" color="var(--accent-on)" />
+            </div>
+            <IconSegmented value={tab} onChange={setTab} options={[{ value: "papers", label: `目录 ${stats.papers}`, icon: "list" }, { value: "errors", label: `错题汇总 ${stats.problems}`, icon: "target" }]} />
 
-        {tab === "papers" ? papersTab : errorsTab}
+            {tab === "papers" ? papersTab : errorsTab}
+          </>
+        )}
 
         <div className="bottom-bar" style={{ marginTop: "auto" }}>
           <Button variant="outline" icon="export" onClick={() => setExporting(true)} style={{ flex: 1 }} disabled={stats.papers === 0}>导出</Button>
