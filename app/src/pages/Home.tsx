@@ -6,13 +6,13 @@ import { ColorIcon } from "../components/ColorIcon";
 import { Icon } from "../components/Icon";
 import { Buddy } from "../components/Illustration";
 import { Sheet } from "../components/ui";
-import { Avatar, Tag, subjectColors } from "../components/v2";
+import { Avatar, subjectColors } from "../components/v2";
 import { allErrors } from "../lib/errors";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL } from "../lib/format";
 import { analyze, inRange } from "../lib/insights";
 import { useJobs } from "../lib/jobs";
-import { createdLabel, dueLabel, fetchPlans, joinPath, pendingJoin, planIdleLabel, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
+import { createdLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/banner";
 
@@ -20,22 +20,8 @@ const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
  * 首页：头图（问候、小人、一句提示），下面依次是两个入口「错题收集」「试卷擦除」、识别进度、
- * 学习计划（每个计划一行，进度环 / 对勾）、近 30 天错题数和各科小柱子。导出错题本在「分析」页。
+ * 学习计划（每个计划一行：名字、身份图标、创建时间）、近 30 天错题数和各科小柱子。导出错题本在「分析」页。
  */
-/** 进度环：交了几份 / 一共几份 */
-function Ring({ done, total }: { done: number; total: number }) {
-  const r = 18, c = 2 * Math.PI * r;
-  return (
-    <span className="h4__ring" aria-label={`已交 ${done} 份，共 ${total} 份`}>
-      <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
-        <circle cx="22" cy="22" r={r} fill="none" stroke="var(--due-bg)" strokeWidth="5" />
-        <circle cx="22" cy="22" r={r} fill="none" stroke="var(--accent)" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(c * done) / total} ${c}`} transform="rotate(-90 22 22)" />
-      </svg>
-      <span>{done}/{total}</span>
-    </span>
-  );
-}
-
 /** 头图上的装饰：几颗星星和淡淡的圆弧 */
 function HeroDeco() {
   const star = "M0-8l2.2 5.8L8 0 2.2 2.2 0 8l-2.2-5.8L-8 0l5.8-2.2z";
@@ -95,7 +81,6 @@ export default function Home() {
     setPicking(true);
   };
 
-  const memberTodo = planList.filter((p) => p.role !== "owner" && (p.todo ?? 0) > 0);
   // 头图里那颗提示：有作业先说作业，一份试卷都没有时提醒拍第一张
   const pill = plans && plans.todo > 0 ? { n: plans.todo, text: "份作业待交", go: () => nav("/plans") }
     : plans && plans.toReview > 0 ? { n: plans.toReview, text: "份等你批阅", go: () => nav("/plans") }
@@ -104,14 +89,9 @@ export default function Home() {
   const bars = recent.bySubject.slice(0, 3);
   const barMax = Math.max(1, ...bars.map((g) => g.items.length));
 
+  // 计划行只留头像、名字、身份图标和创建时间：状态文字和右边的进度标记都拿掉了，进计划里再看
   const planRow = (p: PlanInfo) => {
     const owner = p.role === "owner";
-    const n = pending(p);
-    const total = p.assignments ?? 0;
-    const idle = planIdleLabel(p);
-    const allDone = n === 0 && (idle === "都交了" || idle === "都批完了");
-    // 截止时间服务器只给了最近的一份：只有一个计划有待交时才知道它是哪个计划的
-    const due = !owner && n > 0 && memberTodo.length === 1 && plans?.nextDue ? dueLabel(plans.nextDue) : "";
     const created = createdLabel(p.createdAt);
     return (
       <button key={p.id} className="h4__plan" aria-label={`${p.name}，${owner ? "我建的" : `${p.teacher}建的`}`} onClick={() => nav(`/plans/${p.id}`)}>
@@ -119,16 +99,11 @@ export default function Home() {
         <span className="h4__main">
           <span className="h4__name ellipsis">{p.name}</span>
           <span className="h4__sub">
-            {/* 图标代替「我建的」三个字：插旗是我建的，进门是我加入的。有待批时这行没有别的可写，才把字留着 */}
+            {/* 插旗是我建的，进门是我加入的 */}
             <ColorIcon name={owner ? "plan-mine" : "plan-joined"} size={18} />
-            <span className="ellipsis">{[owner ? "" : p.teacher, n === 0 ? idle : ""].filter(Boolean).join(" · ") || "我建的"}</span>
-            {due && <b><Icon name="clock" size={12} stroke={2.6} />{due} 截止</b>}
+            <span className="h4__time ellipsis">{created || (owner ? "我建的" : p.teacher)}</span>
           </span>
-          {created && <span className="h4__time">{created}</span>}
         </span>
-        {n > 0 && owner && <Tag kind="info">待批 {n}</Tag>}
-        {n > 0 && !owner && (total >= n && total > 0 ? <Ring done={total - n} total={total} /> : <Tag kind="pending">待交 {n}</Tag>)}
-        {allDone && <span className="h4__done"><Icon name="check" size={20} stroke={3} /></span>}
       </button>
     );
   };
