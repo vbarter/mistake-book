@@ -66,6 +66,10 @@ class DeepSeekClient:
         key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
         if not key:
             return None
+        if not key.isascii() or any(c.isspace() for c in key):
+            # 占位符、被打码的密钥（sk-abc•••）之类：HTTP 头只能是 ASCII，硬用会让整个 Provider 起不来
+            log.error("DEEPSEEK_API_KEY 里有非 ASCII 字符或空白，不像真实密钥，DeepSeek 通道不启用")
+            return None
         try:
             floor = int(os.getenv("DEEPSEEK_MAX_TOKENS") or 32000)
         except ValueError:
