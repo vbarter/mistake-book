@@ -1,5 +1,5 @@
 /**
- * 一张能向左滑出「删除」的卡片（学习计划页创建人删作业用）。
+ * 一张能向左滑出按钮的卡片（学习计划页：创建人删作业；成员把交过的作业「解绑」，这时是卡片里的一行，inline）。
  *
  * - 整张卡片（children）跟手左移，右边露出红色按钮；滑过一半松手就停在打开位置，否则弹回
  * - 同一时间只开一张：open 由页面管，按到别的卡片、点卡片本身或上下滚动时页面把它收回
@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { View, Text, type ITouchEvent } from "@tarojs/components";
 import Taro from "@tarojs/taro";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
 // 样式里的 px 会按屏幕宽度换算（375 设计稿），这里手写的位移也按同一个比例算，不然宽屏上按钮露不全
 let ratio = 1;
@@ -20,7 +20,8 @@ try {
 }
 const ACTION_W = 68; // 删除按钮宽度（和 .swipe-row__action 的宽度一致）
 const GAP = 8; // 卡片和按钮之间露出的页面底色
-const SHIFT = Math.round((ACTION_W + GAP) * ratio);
+const SHIFT_CARD = Math.round((ACTION_W + GAP) * ratio);
+const SHIFT_INLINE = Math.round(ACTION_W * ratio); // 卡片里的一行：按钮贴着右边，不留缝
 const HINT = Math.round(36 * ratio); // 首次引导露出多少
 const SLOP = 6; // 超过这个距离才判断横滑 / 竖滑
 
@@ -39,11 +40,15 @@ interface Props {
   onDelete: () => void;
   children: ReactNode;
   label?: string;
+  icon?: IconName;
+  /** 卡片里的一行（外面已经有 .group 了）：自己不再是一张卡片，按钮直角贴边 */
+  inline?: boolean;
   hint?: boolean;
   onHintDone?: () => void;
 }
 
-export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删除", hint, onHintDone }: Props) {
+export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删除", icon = "trash", inline, hint, onHintDone }: Props) {
+  const SHIFT = inline ? SHIFT_INLINE : SHIFT_CARD;
   const g = useRef<Gesture>({ kind: "idle" });
   const [x, setXState] = useState(open ? -SHIFT : 0);
   const [animate, setAnimate] = useState(false);
@@ -130,7 +135,7 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删�
   };
 
   return (
-    <View className="swipe-row">
+    <View className={inline ? "swipe-row swipe-row--inline" : "swipe-row"}>
       <View
         className="swipe-row__action"
         style={{ opacity: x < 0 ? 1 : 0 }}
@@ -139,11 +144,11 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删�
           onDelete();
         }}
       >
-        <Icon name="trash" size={22} color="#fff" stroke={2} />
+        <Icon name={icon} size={22} color="#fff" stroke={2} />
         <Text>{label}</Text>
       </View>
       <View
-        className="swipe-row__content group"
+        className={inline ? "swipe-row__content" : "swipe-row__content group"}
         style={{ transform: `translateX(${x}px)`, transition: animate ? "transform 0.22s ease" : "none" }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Icon } from "../../components/Icon";
+import { SwipeRow } from "../../components/SwipeRow";
 import { Button, Sheet } from "../../components/ui";
 import { Stat, Tag } from "../../components/v2";
 import { haptic, pickImages, takePhoto } from "../../lib/native";
-import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../../lib/plans";
+import { AI_GRADING, STATUS_LABEL, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, isOverdue, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../../lib/plans";
 import { canUseLiveCamera } from "../../lib/scanCamera";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
@@ -12,15 +13,25 @@ import { addAlbumPages, clearScan, removeShot, restoreDraft, startScan, useScan 
 import { openFile } from "./Assignment";
 import { Busy, Count } from "./shared";
 
+const SWIPE_HINT = "zcb.plan.unbindHint";
+function swipeHintPending(): boolean {
+  try {
+    return !localStorage.getItem(SWIPE_HINT);
+  } catch {
+    return false;
+  }
+}
+
 type Look = "done" | "returned" | "todo" | "revoked";
-/** 一份作业的样子：交了 = 绿，退回重做 = 红，待交 = 橙 */
+/** 一份作业的样子：交了 = 绿，退回重做 = 红，没交 = 不上色 */
 const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
 
 /**
  * 成员看到的学习计划页（和小程序的 components/PlanMember 对应）。成员不再有单独的「作业」页，全在这一页：
  * 待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），底部「导出」「扫描上传」。
  * 扫描上传：连拍扫描（pages/scan，拍完回到这里）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
- * 交完页面跟着刷新，交了的作业那几行标成绿色，下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
+ * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色（这两种不再贴「已交」「待交」标签）。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
+ *AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  * 拍好还没交的照片放在连拍扫描的那一批里（store/scan，plan = 这个计划），App 被杀也还在。
  */
 export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () => Promise<unknown> }) {
@@ -37,6 +48,8 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const [target, setTarget] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [swiped, setSwiped] = useState<string | null>(null); // 左滑开着的那份作业
+  const [hint, setHint] = useState(swipeHintPending); // 第一次有交过的作业：那一行自己滑出一小截，露一下「解绑」
 
   useEffect(() => { void restoreDraft(); }, []);
   // 从相机回来、相册选完（或上次拍了没交）：直接弹出「交到哪一份」
@@ -95,6 +108,18 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     }
   };
 
+  const withdraw = async (a: MemberAssignment) => {
+    setSwiped(null);
+    try {
+      await withdrawHomework(a.id);
+      toast("已解绑", "success");
+    } catch (e) {
+      toastError(e);
+    }
+    await reload();
+  };
+  const firstSwipe = list.find(canWithdraw)?.id;
+
   const exportPdf = async (a: MemberAssignment) => {
     try {
       const digitized = (await fetchAssignment(a.id)).assignment.digitized;
@@ -108,10 +133,11 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     }
   };
 
+  // 颜色已经说清了交没交（绿 = 已交，不上色 = 待交），这两种不再重复贴标签；已阅 / 退回 / 已删除才标出来
   const statusTag = (a: MemberAssignment, onTint = false) =>
-    a.revoked ? <Tag kind="neutral">已删除</Tag> : (
+    !a.revoked && (a.status === "todo" || a.status === "submitted") ? null : a.revoked ? <Tag kind="neutral">已删除</Tag> : (
       <Tag
-        kind={a.status === "todo" ? "pending" : a.status === "returned" ? "wrong" : "correct"}
+        kind={a.status === "todo" ? "neutral" : a.status === "returned" ? "wrong" : "correct"}
         icon={a.status === "todo" ? "clock" : a.status === "returned" ? "refresh" : undefined}
         style={onTint && a.status !== "todo" ? { background: "var(--card)" } : undefined}
       >{STATUS_LABEL[a.status]}</Tag>
@@ -120,7 +146,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   return (
     <>
       <div className="plan-stats">
-        <Stat icon="clock" label="待交" value={todo.length} color={todo.length ? "var(--due)" : undefined} />
+        <Stat icon="clock" label="待交" value={todo.length} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? "var(--mastered)" : undefined} />
       </div>
       {/* 一张卡片，一份份作业（计划名在导航栏，创建时间在页面头部创建人名字下面） */}
@@ -130,9 +156,38 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         const look = lookOf(a);
         const waiting = a.status === "todo" || a.status === "returned";
         const mine = a.status !== "todo";
+        // 批改关着：只有被退回 / 迟交 / 老师留了话才多一行，不点进批改结果
+        const note = AI_GRADING ? mine : a.status === "returned" || a.late || Boolean(a.comment);
         const files = a.files ?? [];
+        // 交了、老师还没批阅：这一份可以向左滑出「解绑」
+        const wrap = (body: ReactNode) =>
+          canWithdraw(a) ? (
+            <SwipeRow
+              inline
+              label="解绑"
+              icon="unlink"
+              open={swiped === a.id}
+              onOpenChange={(o) => setSwiped((cur) => (o ? a.id : cur === a.id ? null : cur))}
+              onDelete={() => void withdraw(a)}
+              hint={hint && a.id === firstSwipe}
+              onHintDone={() => {
+                setHint(false);
+                try {
+                  localStorage.setItem(SWIPE_HINT, "1");
+                } catch {
+                  /* 存不下：下次再演示一遍 */
+                }
+              }}
+            >
+              {body}
+            </SwipeRow>
+          ) : (
+            body
+          );
         return (
           <div key={a.id} className="plan-hw">
+            {wrap(
+              <>
             {/* 没有作业名那一行了：状态标在每个文件上（交了的整行标绿，退回的标红） */}
             {files.map((f) => (
               <button key={f.id} className={`row plan-row--${look}`} onClick={() => openFile(f)}>
@@ -152,11 +207,13 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
               </div>
             )}
             {/* 交过：一行小字是对 / 错 / 没做和老师的话，点进去看自己那份的批改结果 */}
-            {mine && (
-              <button className={`plan-task plan-task--${look}`} onClick={() => nav(`/plans/a/${a.id}`)}>
-                <span className="plan-task__head">
+            {note && (
+              <button className={`plan-task plan-task--${look}`} onClick={() => AI_GRADING && nav(`/plans/a/${a.id}`)}>
+                <span className="plan-task__head" style={AI_GRADING || a.status === "returned" || a.late ? undefined : { display: "none" }}>
                   <span className="plan-counts" style={{ flex: 1 }}>
-                    {a.score ? (
+                    {!AI_GRADING ? (
+                      a.status === "returned" && <span className="t-foot c-sec">老师退回了，重新交一次</span>
+                    ) : a.score ? (
                       <>
                         <Count icon="checkcircle" color="var(--mastered)">{a.score.correct}</Count>
                         <Count icon="xcircle" color="var(--wrong)">{a.score.wrong}</Count>
@@ -165,8 +222,12 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
                     ) : <span className="t-foot c-sec">{a.status === "returned" ? "老师退回了，重新交一次" : "批改中"}</span>}
                     {a.late && <span className="t-foot c-sec">迟交</span>}
                   </span>
-                  <span className="t-foot c-sec">批改结果</span>
-                  <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
+                  {AI_GRADING && (
+                    <>
+                      <span className="t-foot c-sec">批改结果</span>
+                      <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
+                    </>
+                  )}
                 </span>
                 {a.comment && (
                   <span className="plan-count" style={{ alignItems: "flex-start", fontWeight: 400, color: a.status === "returned" ? "var(--wrong)" : "var(--secondary)" }}>
@@ -175,6 +236,8 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
                   </span>
                 )}
               </button>
+            )}
+              </>,
             )}
           </div>
         );

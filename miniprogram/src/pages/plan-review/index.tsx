@@ -7,7 +7,7 @@ import { Button, MathText, Sheet, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { formatDateTime } from "../../lib/format";
 import { toast } from "../../lib/hooks";
-import { absoluteUrl, bumpPlans, fetchSubmission, memberName, reviewSubmission, type SubmissionRes } from "../../lib/plans";
+import { AI_GRADING, absoluteUrl, bumpPlans, fetchSubmission, memberName, reviewSubmission, type SubmissionRes } from "../../lib/plans";
 import { useShare } from "../../lib/share";
 import { C, useThemeClass } from "../../lib/theme";
 import type { Mark } from "../../lib/types";
@@ -52,7 +52,7 @@ export default function PlanReview() {
 
   const { submission: sub, nav: pager, assignment, plan } = data;
   const owner = plan.role === "owner";
-  const results = sub.results ?? null;
+  const results = AI_GRADING ? sub.results ?? null : null; // 批改关着：只看照片，标已阅 / 退回
   const q = picked !== null && results ? results[picked] : null;
   const photos = sub.files.filter((f) => f.url).map((f) => absoluteUrl(f.url!));
   const open = (sid: string) => Taro.redirectTo({ url: `/pages/plan-review/index?id=${sid}` });
@@ -129,7 +129,7 @@ export default function PlanReview() {
             {sub.status === "reviewed" ? "已阅" : sub.status === "returned" ? "已退回" : "待阅"}
           </Tag>
         </View>
-        {results && sub.score ? (
+        {!AI_GRADING ? null : results && sub.score ? (
           <>
             <ScoreStats score={sub.score} />
             <QuestionGrid results={results} onPick={setPicked} />

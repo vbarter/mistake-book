@@ -14,6 +14,13 @@ import { effectiveMark, isBlank, validDigitized } from "./logic";
 import { addPaper, autoTargetFolderId, getFolder, newId, savePhoto, updatePaper, type FolderPage } from "./store";
 import type { DigitizeJob, DigitizedQuestion, DigitizedResult, Mark, Subject } from "./types";
 
+/**
+ * 交作业后的 AI 批改开关（和 App 的 lib/plans.ts 同名开关保持一致）。先关着：交作业只把照片传给老师，
+ * 不存进自己的试卷、不提交扫描批改、不回填逐题结果，界面上也不显示批改中 / 对错统计 / 题号。
+ * 要恢复：两端都改回 true 即可，下面的批改和回填代码都原样留着。
+ */
+export const AI_GRADING: boolean = false;
+
 export type PlanSubject = Subject | "mixed";
 /** 新建学习计划不再选学科：没有学科（或老的「综合」）就不显示学科，老计划选过的具体学科照旧显示 */
 export const planSubjectText = (subject: PlanSubject | null | undefined): string => (subject && subject !== "mixed" ? SUBJECT_LABEL[subject] ?? "" : "");
@@ -119,6 +126,13 @@ export async function fetchPlan(id: string): Promise<PlanDetailRes> {
     }),
   );
   return r;
+}
+/** 成员能不能把这份「解绑」（撤掉自己交的那份，回到没交）：交了、老师还没批阅 */
+export const canWithdraw = (a: MemberAssignment) => a.status === "submitted";
+/** 解绑：撤掉自己交的那份，照片从服务器删掉 */
+export async function withdrawHomework(assignmentId: string): Promise<void> {
+  await api(`/api/plans/assignments/${assignmentId}/submission`, { method: "DELETE" });
+  bumpPlans();
 }
 /** 这份作业现在还能不能交：没撤回、老师还没批阅（交过没批阅的可以重交，退回的要重交） */
 export const canHandIn = (a: MemberAssignment) => !a.revoked && a.status !== "reviewed";
@@ -266,7 +280,7 @@ function writePending(fn: (p: Pending) => Pending) {
 }
 
 /** 这次提交的批改结果还没回填给老师（界面上显示「批改中」） */
-export const isSubmissionPending = (submissionId: string) => readPending().subs.some((s) => s.submissionId === submissionId);
+export const isSubmissionPending = (submissionId: string) => AI_GRADING && readPending().subs.some((s) => s.submissionId === submissionId);
 export const isAssignmentScanning = (assignmentId: string) => readPending().jobs.some((j) => j.assignmentId === assignmentId);
 
 /** 请求被服务器明确拒绝（作业撤回了、已批阅、没权限）：不用再试 */
@@ -323,6 +337,7 @@ export function toResultRow(q: DigitizedQuestion): ResultRow {
 
 let flushing = false;
 async function flushSubmissions(): Promise<number> {
+  if (!AI_GRADING) return 0; // 批改关着：以前记下的待回填项先放着，不判也不交
   if (flushing) return readPending().subs.length;
   flushing = true;
   let left = 0;
@@ -392,6 +407,16 @@ export function stopPlanSync() {
  * 批改完的逐题结果由 startPlanSync 回填；错题照常进自己的错题榜。
  */
 export async function submitHomework(assignment: AssignmentBrief, paths: string[], onStage?: (text: string) => void): Promise<SubmissionView> {
+  if (!AI_GRADING) {
+    // 批改关着：照片只传给老师
+    const drafts: DraftFile[] = paths.map((path, i) => ({ clientId: newId(), kind: "scan", name: `第 ${i + 1} 页.jpg`, mime: "image/jpeg", size: fileSize(path), path }));
+    const res = await api<{ submission: SubmissionView; uploads: Upload[] }>(`/api/plans/assignments/${assignment.id}/submission`, { method: "POST", body: { files: filesBody(drafts) } });
+    await uploadAll(res.uploads, drafts, onStage);
+    // 重交：旧的那份以前记过待回填的话，一并去掉
+    writePending((p) => ({ ...p, subs: p.subs.filter((x) => x.submissionId !== res.submission.id) }));
+    bumpPlans();
+    return res.submission;
+  }
   onStage?.("正在保存");
   const pages: FolderPage[] = [];
   for (const p of paths) pages.push(await savePhoto(p));
