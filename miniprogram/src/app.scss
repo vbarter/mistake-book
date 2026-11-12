@@ -485,8 +485,10 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .prow--btn { width: 100%; margin: 0; background: transparent; border-radius: 0; text-align: left; line-height: normal; color: inherit; font-size: inherit; overflow: visible; }
 .prow--btn::after { border: 0; }
 .prow__icon { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.prow__title { flex: 1; min-width: 0; font-size: 17px; font-weight: 500; }
-.prow__value { display: flex; align-items: center; gap: 6px; color: $secondary; font-size: 17px; flex-shrink: 0; }
+/* 标题不换行、不被压缩；右侧的值太长时自己截断成省略号，不能把标题挤成一字一行 */
+.prow__title { flex: 1 0 auto; white-space: nowrap; font-size: 17px; font-weight: 500; }
+.prow__value { display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: $secondary; font-size: 17px; flex: 0 1 auto; min-width: 0; }
+.prow__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .group-title { font-size: 13px; font-weight: 600; color: $secondary; padding: 0 12px 6px; }
 .group-note { font-size: 12px; color: $secondary; padding: 6px 12px 0; line-height: 1.5; }
 

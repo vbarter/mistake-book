@@ -92,7 +92,7 @@ export function Row({ icon, iconBg, art, title, value, chevron = true, danger, o
       )}
       <Text className={`prow__title${danger ? " c-wrong" : ""}`}>{title}</Text>
       <View className="prow__value">
-        {typeof value === "string" ? <Text>{value}</Text> : value}
+        {typeof value === "string" ? <Text className="prow__text">{value}</Text> : value}
         {chevron && <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />}
       </View>
     </>
