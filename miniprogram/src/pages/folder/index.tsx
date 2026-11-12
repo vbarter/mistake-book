@@ -209,9 +209,16 @@ export default function FolderPage() {
     });
 
   const scopedPapers = scope ? view.papers : [];
+  // 一张可看的试卷都没有（比如删掉了最后一张）：只留一处空状态，0 的统计和切换一起收起
+  const nothing = view.papers.length === 0 && tree.pending.length === 0;
+  const emptyState =
+    folder.papers.length === 0 || !scope ? (
+      <Empty icon="document" title="还没有试卷" text="拍一张或从相册选，扫描后会按学科自动归档，错题自动汇总。" />
+    ) : (
+      <Empty icon="document" title={`这里没有${SUBJECT_LABEL[scope]}试卷了`} />
+    );
   const papersTab = (
     <>
-      {folder.papers.length === 0 && <Empty icon="document" title="还没有试卷" text="拍一张或从相册选，扫描后会按学科自动归档，错题自动汇总。" />}
       {!scope &&
         tree.subjects.map(({ subject: sub, papers }) => {
           const st = folderStats(scopeFolder(folder, sub));
@@ -242,7 +249,6 @@ export default function FolderPage() {
             </View>
           );
         })}
-      {scope && scopedPapers.length === 0 && tree.pending.length === 0 && <Empty icon="document" title={`这里没有${SUBJECT_LABEL[scope]}试卷了`} />}
       {scope && paperList(scopedPapers)}
       {tree.pending.length > 0 && (tree.subjects.length > 0 || scope) && (
         <View className="row-center gap6" style={{ padding: "4px 4px 0" }}>
@@ -348,13 +354,19 @@ export default function FolderPage() {
           </View>
         )}
       </View>
-      <View className="stats">
-        <Stat label="错题" value={stats.wrong} icon="xcircle" color={C.wrong} />
-        <Stat label="未作答" value={stats.blank} icon="alert" color={C.accentOn} />
-      </View>
-      <IconSegmented value={tab} onChange={setTab} options={[{ value: "papers", label: `目录 ${stats.papers}`, icon: "list" }, { value: "errors", label: `错题汇总 ${stats.problems}`, icon: "target" }]} />
+      {nothing ? (
+        emptyState
+      ) : (
+        <>
+          <View className="stats">
+            <Stat label="错题" value={stats.wrong} icon="xcircle" color={C.wrong} />
+            <Stat label="未作答" value={stats.blank} icon="alert" color={C.accentOn} />
+          </View>
+          <IconSegmented value={tab} onChange={setTab} options={[{ value: "papers", label: `目录 ${stats.papers}`, icon: "list" }, { value: "errors", label: `错题汇总 ${stats.problems}`, icon: "target" }]} />
 
-      {tab === "papers" ? papersTab : errorsTab}
+          {tab === "papers" ? papersTab : errorsTab}
+        </>
+      )}
 
       <View className="bottom-bar">
         <Button variant="outline" icon="export" disabled={stats.papers === 0} style={{ flex: 1 }} onClick={() => setExporting(true)}>

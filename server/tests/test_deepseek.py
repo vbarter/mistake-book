@@ -31,7 +31,7 @@ def make(monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-test")
-        for k in ("DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "DEEPSEEK_VISION", "DEEPSEEK_MAX_TOKENS", "LLM_DEFAULT", "LLM_FALLBACK"):
+        for k in ("DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "DEEPSEEK_VISION", "DEEPSEEK_MAX_TOKENS", "DEEPSEEK_REASONING_EFFORT", "DIGITIZE_TEXT_ONLY", "LLM_DEFAULT", "LLM_FALLBACK"):
             monkeypatch.delenv(k, raising=False)
         for k, v in env.items():
             monkeypatch.setenv(k, v)
@@ -171,3 +171,123 @@ def test_malformed_key_disables_channel_instead_of_crashing(monkeypatch, key):
     monkeypatch.setenv("DEEPSEEK_API_KEY", key)
     provider = ClaudeProvider(model="gpt-6.1-sol")
     assert provider.deepseek is None and provider.name == "claude-relay"
+
+
+# ---------- 纯文字链路：OCR 认题目和手写，DeepSeek 只拿文字解题、批改 ----------
+
+SHEET = {"sheets": [{"label": "p1", "blocks": [{"type": "item", "number": "4", "questionType": "solve", "text": "刷完这面墙一共要用多少千克涂料？[[4]]", "blanks": [{"id": "4", "student": "7.2", "mark": "unmarked", "answer": "7.2 千克"}]}]}]}
+
+
+def _digitize(provider, monkeypatch, ocr_text="4 粉刷如下图所示的一面墙\n[手写] 48×0.15=7.2"):
+    """跑一次整页还原，返回每次大模型调用的 content（不走网络：_call 换成假的，但通道选择仍用真的 _channels）。"""
+    from app.ai import ocr
+    from app.ai.base import Crop
+
+    monkeypatch.setattr("app.ai.claude.ocr.enabled", lambda: ocr_text is not None)
+    monkeypatch.setattr(ocr, "ocr_page", lambda data, media_type="image/jpeg", **kw: ocr.OcrPage(text=ocr_text or ""))
+    calls = []
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        calls.append({"system": system, "content": content, "channels": provider._channels(content)})
+        return SHEET if "sheets" in schema.get("properties", {}) else {"results": []}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    sheets, _ = provider.digitize_pages([Crop(data=b"img")], subjects=["math"], grade="5")
+    return calls, sheets
+
+
+def test_digitize_sends_only_ocr_text_to_deepseek(make, monkeypatch):
+    from app.ai import claude
+
+    provider = make([])
+    assert provider.text_only is True
+    calls, sheets = _digitize(provider, monkeypatch)
+    page = calls[0]
+    assert not any(c.get("type") == "image" for c in page["content"])
+    texts = "\n".join(c["text"] for c in page["content"])
+    assert "<ocr>" in texts and "[手写] 48×0.15=7.2" in texts and claude.TEXT_ONLY_DIGITIZE_NOTE in texts
+    assert page["channels"][0] == "deepseek"
+    assert sheets[0].blocks[0].blanks[0].student == "7.2"
+    # 后面的阅卷、讲解等步骤也都不带照片
+    assert all(not any(c.get("type") == "image" for c in call["content"]) for call in calls)
+
+
+def test_digitize_keeps_photo_when_ocr_skipped_vertical_text(make, monkeypatch):
+    """OCR 略去了竖排文字（竖格抄写的古诗）的页：那几列只能看图转写，这一页带照片、不走纯文字"""
+    from app.ai import claude, ocr
+
+    provider = make([])
+    calls, _ = _digitize(provider, monkeypatch, ocr_text="默写古诗\n\n" + ocr.VERTICAL_NOTE + "照片中竖排的格子里，OCR 在这里检测到 4 处")
+    page = calls[0]
+    assert any(c.get("type") == "image" for c in page["content"])
+    assert claude.TEXT_ONLY_DIGITIZE_NOTE not in "\n".join(c.get("text", "") for c in page["content"])
+    assert page["channels"] == ["anthropic"]
+
+
+def test_digitize_keeps_photo_when_ocr_has_no_text(make, monkeypatch):
+    provider = make([])
+    for text in (None, "  "):  # OCR 没开 / OCR 没认出字
+        calls, _ = _digitize(provider, monkeypatch, ocr_text=text)
+        assert any(c.get("type") == "image" for c in calls[0]["content"])
+        assert calls[0]["channels"] == ["anthropic"]
+
+
+@pytest.mark.parametrize("env", [{"DIGITIZE_TEXT_ONLY": "0"}, {"DEEPSEEK_VISION": "1"}])
+def test_text_only_can_be_turned_off(make, monkeypatch, env):
+    provider = make([], **env)
+    assert provider.text_only is False
+    calls, _ = _digitize(provider, monkeypatch)
+    assert any(c.get("type") == "image" for c in calls[0]["content"])
+
+
+def test_text_only_needs_deepseek(monkeypatch):
+    from app.ai import claude
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    assert claude.ClaudeProvider(model="gpt-6.1-sol").text_only is False
+
+
+def test_page_images_skips_pages_that_have_ocr(make):
+    from app.ai import claude
+    from app.ai.base import Crop
+
+    provider = make([])
+    content, skipped = provider._page_images([Crop(data=b"a"), Crop(data=b"b")], (0, 1), {0: "第一页的字"})
+    assert skipped and [c["type"] for c in content] == ["text", "image", "text"]
+    assert "第 2 张照片" in content[0]["text"] and content[-1]["text"] == claude.TEXT_ONLY_SOLVE_NOTE
+
+
+def test_needs_figure_blank_is_not_graded(make, monkeypatch):
+    """要看图才能做的题（answer = 需看图）不送阅卷；作答读不清（verdict = unclear）的保持 unmarked。"""
+    from app.ai.digitize import sheets_from_dicts
+
+    provider = make([])
+    sheets = sheets_from_dicts([{"page": 0, "label": "p1", "blocks": [
+        {"type": "item", "number": "3", "questionType": "solve", "text": "求涂色部分的面积 [[3]]", "blanks": [{"id": "3", "student": "96", "mark": "unmarked", "answer": "需看图"}]},
+        {"type": "item", "number": "4", "questionType": "solve", "text": "一共要用多少千克？[[4]]", "blanks": [{"id": "4", "student": "72□2", "mark": "unmarked", "answer": "7.2"}]},
+    ]}])
+    seen = []
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        seen.append(content[0]["text"])
+        return {"results": [{"key": "s0b1#4", "answer": "7.2", "verdict": "unclear", "analysis": ""}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    assert provider.grade_unmarked(sheets, grade="5") == 0
+    assert "求涂色部分" not in seen[0].split("<ocr>")[0] and "手写 OCR" in seen[0]
+    assert [b.mark for blk in sheets[0].blocks for b in blk.blanks] == ["unmarked", "unmarked"]
+
+
+def test_reasoning_effort_defaults_to_none(make):
+    provider = make([_sse('{"ok": true}'), _sse('{"ok": true}')])
+    provider._call("sys", [TEXT], {"type": "object"})
+    assert json.loads(provider.requests[0].content)["reasoning_effort"] == "none"
+
+
+@pytest.mark.parametrize("value, sent", [("high", "high"), ("default", None)])
+def test_reasoning_effort_env(make, value, sent):
+    provider = make([_sse('{"ok": true}')], DEEPSEEK_REASONING_EFFORT=value)
+    provider._call("sys", [TEXT], {"type": "object"})
+    assert json.loads(provider.requests[0].content).get("reasoning_effort") == sent
