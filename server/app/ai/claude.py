@@ -9,6 +9,9 @@
 - LLM_DEFAULT=deepseek（默认）| anthropic：优先走哪条。
 - 带图片的调用只在 DEEPSEEK_VISION=1 时才发给 DeepSeek，否则一律走 Anthropic / 中转通道。
 - LLM_FALLBACK=1（默认）：首选通道失败后换另一条再试一次（另一条得能接这次调用）；0 关闭。
+- DIGITIZE_TEXT_ONLY=1（默认，配了 DeepSeek 且没开 DEEPSEEK_VISION 时生效）：整页还原、跨页重新作答、写讲解这三步
+  在 OCR 成功的页上不再附照片，只把 OCR 文字（印刷题干 + [手写] 学生作答）交给大模型，于是这些调用走 DeepSeek；
+  OCR 失败或没开 OCR 的页照旧带照片走 Anthropic / 中转通道。设成 0 恢复「照片 + OCR 一起发」。
 """
 from __future__ import annotations
 
@@ -329,7 +332,7 @@ GRADE_SCHEMA = {
                 "properties": {
                     "key": {"type": "string"},
                     "answer": {"type": "string"},
-                    "verdict": {"type": "string", "enum": ["correct", "wrong", "partial"]},
+                    "verdict": {"type": "string", "enum": ["correct", "wrong", "partial", "unclear"]},  # unclear：纯文字链路里作答读不清，不判，保持 unmarked
                     "analysis": {"type": "string"},
                 },
                 "required": ["key", "answer", "verdict", "analysis"],
@@ -488,6 +491,33 @@ def _json_instruction(schema: dict) -> str:
     )
 
 
+# 纯文字链路（DIGITIZE_TEXT_ONLY）：没有照片时追加在整页还原提示词后面，把「以照片为准」的规则改成以 OCR 为准
+TEXT_ONLY_DIGITIZE_NOTE = (
+    "【这次没有照片】本次只有 OCR 文字，没有试卷照片。上面所有要求「以照片为准」「对照照片」的地方，一律改为以 OCR 文字为准：\n"
+    "- 没有标记的行是印刷内容，照抄为题干；明显被认错的数学符号按上下文写对，拿不准的字原样保留并记入 uncertainSpans。\n"
+    "- 以 [手写] 开头的行是学生的作答：按它在 OCR 里的先后位置和内容，对应到最近的题和空，填进 student。"
+    "手写 OCR 错读很多，只能依据学生自己的算式前后文校正明显的错读（如漏掉的小数点、运算符），校正不了的字写「□」；"
+    "不要根据题意或正确答案去猜学生写了什么。整行印刷题干被误标成 [手写] 时仍照抄为题干。\n"
+    "- 你看不到勾、叉等批改符号：只有 [红笔] 行给出了明确的对错或分数时才按它判 mark，否则有作答的空一律 mark = unmarked，没作答的仍是 blank。\n"
+    "- 你看不到图形。题目依赖插图（几何图形、统计图、实物图等）时，只能用题干和 [图中文字] 行里的标注作答；"
+    "条件足够就正常给出 answer；图形关系无法从文字确定时，answer 写「需看图」，analysis 以「缺图：」开头说明缺什么条件，"
+    "不要猜，更不要照着学生的算式反推题意。\n"
+    "- bbox 按 OCR 行的先后顺序和末尾列出的版面区域估计；figure 的 bbox 照抄 OCR 末尾列出的插图 / 表格区域，text 写图中文字能说明的内容。\n"
+    "- photoIssues 给空数组，photoNote 留空。"
+)
+NEEDS_FIGURE = "需看图"  # 纯文字链路里依赖插图、文字条件不够的题：answer 写这个，不送阅卷（没有可比的答案）
+# 纯文字链路的阅卷：学生作答是手写 OCR 的结果
+TEXT_ONLY_GRADE_NOTE = (
+    "注意：学生作答是手写 OCR 识别出来的，错读很多（漏小数点、数字和符号认错、多行串在一起）。"
+    "能从学生自己的算式前后文看出最终答案的，按那个答案判；作答确实读不清、无法确定学生写了什么时，这个空的 verdict 写 unclear，不要判错。"
+)
+# 跨页重新作答、写讲解两步没有照片时的说明
+TEXT_ONLY_SOLVE_NOTE = (
+    "【这次没有照片】本次只附 OCR 文字，没有照片：提示里说的「照片」都以 OCR 文字为准。"
+    "你看不到图形，依赖插图的题只能用题干和图中标注的文字来做；图形关系无法从文字确定时如实说明缺什么条件，不要猜，也不要照着学生的算式反推题意。"
+)
+
+
 def _has_image(content: list[dict]) -> bool:
     return any(b.get("type") == "image" for b in content)
 
@@ -511,6 +541,8 @@ class ClaudeProvider(AIProvider):
         self.fallback = os.getenv("LLM_FALLBACK", "1") != "0"
         if self.deepseek is not None:
             self.name = f"deepseek+{self.name}" if self.default_channel == "deepseek" else f"{self.name}+deepseek"
+        # 纯文字链路：OCR 负责认题目和手写，大模型只拿文字。DeepSeek 能看图（DEEPSEEK_VISION=1）时没必要去掉照片
+        self.text_only = self.deepseek is not None and not self.deepseek.vision and os.getenv("DIGITIZE_TEXT_ONLY", "1") != "0"
 
     # ------------------------------------------------------------------ helpers
     def _create(self, system: str, content: list[dict], schema: dict, max_tokens: int, on_text=None):
@@ -546,6 +578,20 @@ class ClaudeProvider(AIProvider):
             fallbacks="default",
         ) as stream:
             return drain(stream)
+
+    def _page_images(self, pages: list[Crop], page_ids, ocr_of: dict[int, str]) -> tuple[list[dict], bool]:
+        """跨页作答 / 讲解用的照片块。纯文字链路下，有 OCR 文字的页不附照片；返回 (内容块, 是否有页被省掉了照片)。"""
+        content: list[dict] = []
+        skipped = False
+        for k in page_ids:
+            if self.text_only and ocr_of.get(k):
+                skipped = True
+                continue
+            content.append({"type": "text", "text": f"第 {k + 1} 张照片："})
+            content.append({"type": "image", "source": {"type": "base64", "media_type": pages[k].media_type, "data": base64.standard_b64encode(pages[k].data).decode("utf-8")}})
+        if skipped:
+            content.append({"type": "text", "text": TEXT_ONLY_SOLVE_NOTE})
+        return content, skipped
 
     def _channels(self, content: list[dict]) -> list[str]:
         """这次调用按顺序试哪些通道：首选在前，后面是失败时的回退。DeepSeek 不开图片输入时，带图片的调用不会发给它。"""
@@ -725,7 +771,9 @@ class ClaudeProvider(AIProvider):
                     log.warning("ocr failed on page %s, fallback to image only: %s", index, e)
                 if on_page_progress:
                     on_page_progress(index, 0.08)
-            content = [
+            # 纯文字链路：这一页 OCR 成功就不附照片（调用因此走 DeepSeek）；OCR 没结果的页照旧让大模型看图
+            text_only = self.text_only and bool(ocr_text.strip())
+            content = [] if text_only else [
                 {
                     "type": "image",
                     "source": {"type": "base64", "media_type": page.media_type, "data": base64.standard_b64encode(page.data).decode("utf-8")},
@@ -743,6 +791,8 @@ class ClaudeProvider(AIProvider):
                     ),
                 },
             ]
+            if text_only:
+                content.append({"type": "text", "text": TEXT_ONLY_DIGITIZE_NOTE})
             # 整页输出通常 8k–20k 字：按已生成字数估算这一页的完成度，曲线渐近到 1（OCR 阶段占前 8%）
             on_text = (lambda n: on_page_progress(index, 0.08 + 0.92 * (1 - math.exp(-n / 9000.0)))) if on_page_progress else None
             # 模型偶尔吐出解析不了 / 被截断的 JSON：这张照片自动重试一次，不让整个任务失败
@@ -825,10 +875,7 @@ class ClaudeProvider(AIProvider):
         note = grades.grade_note(*grades.resolve(sheets, grade))
 
         def solve(page_ids: tuple[int, ...], chunk: list[tuple[int, int]]) -> int:
-            content: list[dict] = []
-            for k in page_ids:
-                content.append({"type": "text", "text": f"第 {k + 1} 张照片："})
-                content.append({"type": "image", "source": {"type": "base64", "media_type": pages[k].media_type, "data": base64.standard_b64encode(pages[k].data).decode("utf-8")}})
+            content, _ = self._page_images(pages, page_ids, ocr_of)
             ocr_text = "\n\n".join(f"<page n=\"{k + 1}\">\n{ocr_of[k][:6000]}\n</page>" for k in page_ids if k in ocr_of)
             todo: dict[str, tuple] = {}
             parts = []
@@ -888,10 +935,7 @@ class ClaudeProvider(AIProvider):
         ocr_of = {s.page: s.ocrText for s in sheets if s.ocrText}
 
         def run(page_ids: tuple[int, ...], chunk: list[tuple[int, int, DigitizedBlank]]) -> int:
-            content: list[dict] = []
-            for k in page_ids:
-                content.append({"type": "text", "text": f"第 {k + 1} 张照片："})
-                content.append({"type": "image", "source": {"type": "base64", "media_type": pages[k].media_type, "data": base64.standard_b64encode(pages[k].data).decode("utf-8")}})
+            content, _ = self._page_images(pages, page_ids, ocr_of)
             ocr_text = "\n\n".join(f"<page n=\"{k + 1}\">\n{ocr_of[k][:6000]}\n</page>" for k in page_ids if k in ocr_of)
             todo: dict[str, tuple] = {}
             parts = []
@@ -1109,7 +1153,7 @@ class ClaudeProvider(AIProvider):
     @staticmethod
     def _ungraded(sheets: list[DigitizedPage]) -> int:
         listening = listening_blocks(sheets)
-        return sum(1 for si, s in enumerate(sheets) for bi, blk in enumerate(s.blocks) if blk.type in ("item", "passage") and (si, bi) not in listening for b in blk.blanks if b.mark == "unmarked" and b.student.strip() and not unreadable(b.student))
+        return sum(1 for si, s in enumerate(sheets) for bi, blk in enumerate(s.blocks) if blk.type in ("item", "passage") and (si, bi) not in listening for b in blk.blanks if b.mark == "unmarked" and b.student.strip() and not unreadable(b.student) and not b.answer.strip().startswith(NEEDS_FIGURE))
 
     def _grade_round(self, sheets: list[DigitizedPage], batch: int, grade: str = "") -> int:
         todo: list[tuple[str, DigitizedBlank, str]] = []
@@ -1127,6 +1171,8 @@ class ClaudeProvider(AIProvider):
                     # 没写的不送；整个看不清的也不送（猜不出来，界面显示「看不清」并提示重拍）
                     if b.mark != "unmarked" or not b.student.strip() or unreadable(b.student):
                         continue
+                    if b.answer.strip().startswith(NEEDS_FIGURE):
+                        continue  # 纯文字链路：这题要看图才能做，没有答案可比，留给用户自己核对
                     stem = _render_text(block.text, block.blanks, b.id).replace("____", "【空】", 1)
                     extra = " ".join(x for x in [block.hint, f"（{block.instruction}）" if block.instruction else ""] if x)
                     ctx = "\n".join(x for x in [
@@ -1145,7 +1191,7 @@ class ClaudeProvider(AIProvider):
         note = grades.grade_note(*grades.resolve(sheets, grade))
         for i in range(0, len(todo), batch):
             chunk = todo[i : i + batch]
-            text = note + "\n\n" + "\n\n".join(f"<blank key=\"{k}\">\n{ctx}\n</blank>" for k, _, ctx in chunk)
+            text = note + ("\n" + TEXT_ONLY_GRADE_NOTE if self.text_only else "") + "\n\n" + "\n\n".join(f"<blank key=\"{k}\">\n{ctx}\n</blank>" for k, _, ctx in chunk)
             if ocr:
                 text += "\n\n整张卷子的 OCR 文字（供查找词库和上下文）：\n<ocr>\n" + ocr + "\n</ocr>"
             data = self._call(GRADE_SYSTEM_PROMPT, [{"type": "text", "text": text}], GRADE_SCHEMA, max_tokens=8000)

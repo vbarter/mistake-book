@@ -7,6 +7,8 @@
 - DEEPSEEK_MODEL：默认 deepseek-v4-pro
 - DEEPSEEK_VISION：1 = 带图片的调用也发给 DeepSeek（模型支持图片输入时才开）；默认 0
 - DEEPSEEK_MAX_TOKENS：输出上限的下限，默认 32000（思考过程也算在输出里，给小了容易被截断）
+- DEEPSEEK_REASONING_EFFORT：思考强度，默认 none（不思考：实测整页 17 秒，带思考 273 秒且图形题照样猜错）；
+  设成 low / medium / high 打开思考，设成 default 则不传这个参数、用模型自己的默认值
 """
 from __future__ import annotations
 
@@ -50,8 +52,9 @@ def to_openai_content(content: list[dict]) -> str | list[dict]:
 
 
 class DeepSeekClient:
-    def __init__(self, api_key: str, base_url: str = DEFAULT_BASE_URL, model: str = DEFAULT_MODEL, vision: bool = False, min_max_tokens: int = 32000):
+    def __init__(self, api_key: str, base_url: str = DEFAULT_BASE_URL, model: str = DEFAULT_MODEL, vision: bool = False, min_max_tokens: int = 32000, reasoning_effort: str = "none"):
         self.model = model
+        self.reasoning_effort = reasoning_effort  # 空串 = 不传，用模型默认
         self.vision = vision
         self.min_max_tokens = min_max_tokens
         self.url = base_url.rstrip("/") + "/chat/completions"
@@ -80,6 +83,7 @@ class DeepSeekClient:
             model=(os.getenv("DEEPSEEK_MODEL") or DEFAULT_MODEL).strip(),
             vision=os.getenv("DEEPSEEK_VISION") == "1",
             min_max_tokens=floor,
+            reasoning_effort=_reasoning_effort(os.getenv("DEEPSEEK_REASONING_EFFORT")),
         )
 
     def complete(self, system: str, content: list[dict], max_tokens: int, on_text=None) -> tuple[str, str]:
@@ -91,6 +95,8 @@ class DeepSeekClient:
             "response_format": {"type": "json_object"},
             "stream": True,
         }
+        if self.reasoning_effort:
+            body["reasoning_effort"] = self.reasoning_effort
         text: list[str] = []
         finish = ""
         n = 0
@@ -124,6 +130,12 @@ class DeepSeekClient:
         if not finish:
             raise DeepSeekError(0, "stream ended without finish_reason")
         return "".join(text), finish
+
+
+def _reasoning_effort(raw: str | None) -> str:
+    """环境变量 → 请求里的 reasoning_effort；没配 = none，default = 不传。"""
+    v = (raw or "none").strip().lower()
+    return "" if v == "default" else v
 
 
 def _error_message(raw: bytes) -> str:
