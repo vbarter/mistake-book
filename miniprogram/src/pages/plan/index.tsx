@@ -9,7 +9,7 @@ import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui
 import { SwipeRow, swipeGuard } from "../../components/SwipeRow";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C, useThemeClass } from "../../lib/theme";
 
 const leave = () => {
@@ -41,7 +41,7 @@ const itemTag = (it: MemberItem) =>
       退回
     </Tag>
   ) : (
-    <Tag kind="pending" icon={it.viewed ? "clock" : "eye-off"}>
+    <Tag kind="neutral" icon={it.viewed ? "clock" : "eye-off"}>
       {it.viewed ? "未交" : "没看"}
     </Tag>
   );
@@ -213,7 +213,7 @@ export default function PlanDetail() {
       <>
         <View className="stats">
           <Stat icon="checkcircle" label="交齐" value={handed} />
-          <Stat icon="clock" label="没交齐" value={missing} color={missing > 0 ? C.accentOn : undefined} />
+          <Stat icon="clock" label="没交齐" value={missing} />
           <Stat icon="family" label="总成员" value={plan.members ?? active.length} />
         </View>
         <Segmented
@@ -237,13 +237,13 @@ export default function PlanDetail() {
               if (swiped) return setSwiped(null);
               fn();
             };
-            // 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的
+            // 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，灰色时钟 = 没交（不上色），灰色闭眼 = 没交的人里还没看过的
             const head = (
               <View className="plan-task" onClick={tap(() => undefined)}>
                 <View className="plan-task__head">
                   <View className="plan-counts flex1">
                     {count("checkcircle", C.ok, a.submitted)}
-                    {count("clock", C.accentOn, a.missing)}
+                    {count("clock", C.secondary, a.missing)}
                     {count("eye-off", C.tertiary, a.unseen)}
                   </View>
                   {a.dueAt && due(a.dueAt)}
@@ -353,7 +353,7 @@ export default function PlanDetail() {
               >
                 <View className="flex1 col gap2 minw0">
                   <Text className="row__title ellipsis">{data.assignments.find((a) => a.id === it.assignmentId)?.title ?? "作业"}</Text>
-                  {(it.status === "submitted" || it.status === "reviewed") && (it.score ? <ScoreCounts score={it.score} /> : <Text className="row__sub">批改中</Text>)}
+                  {AI_GRADING && (it.status === "submitted" || it.status === "reviewed") && (it.score ? <ScoreCounts score={it.score} /> : <Text className="row__sub">批改中</Text>)}
                 </View>
                 {it.late && (
                   <Tag kind="neutral" icon={null}>

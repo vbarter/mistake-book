@@ -7,7 +7,7 @@ import { MathText } from "../../components/MathText";
 import { Button, Empty, InlineNav, Sheet, Spinner } from "../../components/ui";
 import { Tag } from "../../components/v2";
 import { formatDateTime } from "../../lib/format";
-import { fetchSubmission, memberName, reviewSubmission, usePlans, type SubmissionRes } from "../../lib/plans";
+import { AI_GRADING, fetchSubmission, memberName, reviewSubmission, usePlans, type SubmissionRes } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { QuestionGrid, openFile } from "./Assignment";
 import { ScoreStats } from "./shared";
@@ -36,7 +36,7 @@ export default function Submission() {
 
   const { submission: sub, student, nav: pager, assignment, plan } = data;
   const owner = plan.role === "owner";
-  const results = sub.results ?? null;
+  const results = AI_GRADING ? sub.results ?? null : null; // 批改关着：只看照片，标已阅 / 退回
   const q = picked !== null && results ? results[picked] : null;
   const back = () => (owner ? nav(`/plans/${plan.id}`) : assignment ? nav(`/plans/a/${assignment.id}`) : nav(-1));
 
@@ -87,7 +87,7 @@ export default function Submission() {
             {sub.late && <Tag kind="neutral">迟交</Tag>}
             <Tag kind={sub.status === "reviewed" ? "correct" : sub.status === "returned" ? "wrong" : "info"}>{sub.status === "reviewed" ? "已阅" : sub.status === "returned" ? "已退回" : "待阅"}</Tag>
           </div>
-          {results && sub.score ? (
+          {!AI_GRADING ? null : results && sub.score ? (
             <>
               <ScoreStats score={sub.score} />
               <QuestionGrid results={results} onPick={setPicked} />

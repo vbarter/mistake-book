@@ -6,7 +6,7 @@ import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../compo
 import { Tag } from "../../components/v2";
 import type { FullPage, Paper } from "../../lib/folders";
 import { haptic, openRemoteFile } from "../../lib/native";
-import { STATUS_LABEL, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, planGone, sizeLabel, submitHomework, usePlans, type AssignmentRes, type PlanFileView, type ResultRow } from "../../lib/plans";
+import { AI_GRADING, STATUS_LABEL, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, planGone, sizeLabel, submitHomework, usePlans, type AssignmentRes, type PlanFileView, type ResultRow } from "../../lib/plans";
 import { assetUrl } from "../../api/client";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
@@ -165,10 +165,10 @@ export default function Assignment() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="t-headline" style={{ flex: 1 }}>我交的作业</span>
               {sub.late && <Tag kind="neutral">迟交</Tag>}
-              <Tag kind={sub.status === "reviewed" ? "correct" : sub.status === "returned" ? "wrong" : "info"}>{STATUS_LABEL[sub.status]}</Tag>
+              <Tag kind={sub.status === "returned" ? "wrong" : "correct"}>{STATUS_LABEL[sub.status]}</Tag>
             </div>
             {sub.comment && <p className="t-sub" style={{ color: sub.status === "returned" ? "var(--wrong)" : undefined }}>老师：{sub.comment}</p>}
-            {sub.results && sub.score ? (
+            {!AI_GRADING ? null : sub.results && sub.score ? (
               <>
                 <ScoreStats score={sub.score} />
                 <QuestionGrid results={sub.results} />
