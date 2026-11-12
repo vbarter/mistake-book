@@ -5,17 +5,15 @@ import { AvatarPrompt } from "../../components/AvatarPrompt";
 import { Buddy } from "../../components/Buddy";
 import { ColorIcon } from "../../components/ColorIcon";
 import { Icon, base64 } from "../../components/Icon";
-import { Avatar, Progress, subjectColors, useMenuButton } from "../../components/ui";
+import { Avatar, Progress, useMenuButton } from "../../components/ui";
 import { captureInto } from "../../lib/capture";
-import { allErrors } from "../../lib/errors";
 import { useDataVersion, useTabBar } from "../../lib/hooks";
-import { analyze, inRange } from "../../lib/insights";
 import { pollPendingJobs } from "../../lib/jobs";
 import { currentUser, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
 import { PLANS_EVENT, createdLabel, fetchPlans, type PlanInfo, type PlanSummary } from "../../lib/plans";
+import { isScanErrorSeen, markScanErrorSeen } from "../../lib/scanNotice";
 import { listFolders } from "../../lib/store";
-import { SUBJECT_LABEL } from "../../lib/format";
 import { C, useTheme, useThemeClass } from "../../lib/theme";
 import { useShare, useShareTimelineToo } from "../../lib/share";
 
@@ -23,7 +21,7 @@ const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
  * 首页（和 App 一致）：头图（问候、小人、一句提示），下面依次是两个入口「错题收集」「试卷擦除」、识别进度、
- * 学习计划（每个计划一行：名字、身份图标、创建时间）、近 30 天错题数和各科小柱子。导出错题本在「分析」页。
+ * 没扫出来的小喇叭通知、学习计划（每个计划一行：名字、身份图标、创建时间）。错题统计和导出错题本在「分析」页。
  */
 /** 头图上的装饰：几颗星星和淡淡的圆弧（画成背景图，靠左下角对齐） */
 const HERO_DECO = (() => {
@@ -80,12 +78,21 @@ export default function Home() {
     Taro.stopPullDownRefresh();
   });
 
-  const errors = useMemo(() => allErrors(folders), [folders]);
-  const recent = useMemo(() => analyze(inRange(errors, "30d")), [errors]);
   const papers = folders.flatMap((f) => f.papers.map((p) => ({ f, p })));
   const scanning = papers.filter(({ p }) => p.scanJob);
-  const failed = papers.filter(({ p }) => p.scanError && !p.scanJob);
+  // 没扫出来、还没点开看过的：首页用小喇叭提醒，最近失败的排前面
+  const [seenVersion, setSeenVersion] = useState(0);
+  const failed = useMemo(
+    () => papers.filter(({ p }) => p.scanError && !p.scanJob && !isScanErrorSeen(p)).sort((x, y) => ((x.p.scanErrorAt ?? x.p.updatedAt) < (y.p.scanErrorAt ?? y.p.updatedAt) ? 1 : -1)),
+    [folders, seenVersion],
+  );
   const go = (url: string) => Taro.navigateTo({ url });
+  const openFailed = () => {
+    const { f, p } = failed[0];
+    markScanErrorSeen(p);
+    setSeenVersion((x) => x + 1);
+    go(`/pages/paper/index?folderId=${f.id}&paperId=${p.id}`);
+  };
 
   const now = new Date();
   const h = now.getHours();
@@ -129,8 +136,6 @@ export default function Home() {
     : plans && plans.toReview > 0 ? { n: plans.toReview, text: "份等你批阅", go: () => go("/pages/plans/index") }
     : papers.length === 0 ? { n: 0, text: "拍下第一张试卷", go: collect }
     : null;
-  const bars = recent.bySubject.slice(0, 3);
-  const barMax = Math.max(1, ...bars.map((g) => g.items.length));
 
   // 计划行只留头像、名字、身份图标和创建时间：状态文字和右边的进度标记都拿掉了，进计划里再看
   const planRow = (p: PlanInfo) => {
@@ -188,7 +193,7 @@ export default function Home() {
           </View>
         </View>
 
-        {scanning.length > 0 ? (
+        {scanning.length > 0 && (
           <View className="h4__card rise rise--1" hoverClass="h4--hover" onClick={() => go(`/pages/folder/index?id=${scanning[0].f.id}`)}>
             <ColorIcon name="scan" size={44} />
             <View className="h4__main">
@@ -197,17 +202,18 @@ export default function Home() {
             </View>
             <Text className="h4__pct">{Math.round(scanning[0].p.scanJob!.progress || 0)}%</Text>
           </View>
-        ) : (
-          failed.length > 0 && (
-            <View className="h4__card rise rise--1" hoverClass="h4--hover" onClick={() => go(`/pages/paper/index?folderId=${failed[0].f.id}&paperId=${failed[0].p.id}`)}>
-              <ColorIcon name="retry" size={44} />
-              <View className="h4__main">
-                <Text className="h4__name ellipsis">{failed[0].p.name}</Text>
-                <Text className="h4__sub" style={{ color: C.wrong }}>没扫出来</Text>
-              </View>
-              <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-            </View>
-          )
+        )}
+
+        {/* 没扫出来的试卷：一行小喇叭通知，点开去看那张试卷，看过就不再提醒（还有别的失败会接着提醒下一张） */}
+        {failed.length > 0 && (
+          <View className="h4__notice rise rise--1" hoverClass="h4--hover" onClick={openFailed}>
+            <ColorIcon name="horn" size={24} />
+            <Text className="h4__noticet ellipsis">
+              「{failed[0].p.name}」{failed.length > 1 ? `等 ${failed.length} 张` : ""}没扫出来
+            </Text>
+            <Text className="h4__noticea">查看</Text>
+            <Icon name="chevron-right" size={12} color={C.tertiary} stroke={2.4} />
+          </View>
         )}
 
         <View className="rise rise--2">
@@ -234,28 +240,6 @@ export default function Home() {
             )}
           </View>
         </View>
-
-        {recent.total > 0 && (
-          <View className="h4__card h4__err rise rise--3" hoverClass="h4--hover" onClick={() => Taro.switchTab({ url: "/pages/rank/index" })}>
-            <Text className="h4__num">{recent.total}</Text>
-            <View className="h4__main">
-              <Text className="h4__numl">道错题</Text>
-              <Text className="h4__nums">近 30 天</Text>
-            </View>
-            <View className="h4__bars">
-              {bars.map((g) => {
-                const color = subjectColors(g.subject).color;
-                return (
-                  <View key={g.subject} className="h4__bar">
-                    <View className="h4__bari" style={{ height: `${Math.max(8, Math.round((g.items.length / barMax) * 44))}px`, background: color }} />
-                    <Text style={{ color }}>{SUBJECT_LABEL[g.subject].slice(0, 1)}</Text>
-                  </View>
-                );
-              })}
-            </View>
-            <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-          </View>
-        )}
       </View>
     </View>
   );
