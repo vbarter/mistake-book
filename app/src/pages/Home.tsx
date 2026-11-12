@@ -147,7 +147,7 @@ export default function Home() {
             <ColorIcon name="retry" size={44} />
             <span className="h4__main">
               <span className="h4__name ellipsis">{failed[0].p.name}</span>
-              <span className="h4__sub" style={{ color: "var(--wrong)" }}>没识别出来，点开重试</span>
+              <span className="h4__sub" style={{ color: "var(--wrong)" }}>没扫出来</span>
             </span>
             <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
           </button>

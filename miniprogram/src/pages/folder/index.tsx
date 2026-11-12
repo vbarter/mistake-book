@@ -155,7 +155,7 @@ export default function FolderPage() {
                   </>
                 ) : p.scanError ? (
                   <Tag kind="wrong" icon="warning">
-                    扫描失败 · 点开重扫
+                    没扫出来
                   </Tag>
                 ) : st.scanned ? (
                   <>
