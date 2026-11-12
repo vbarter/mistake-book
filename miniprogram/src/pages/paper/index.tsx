@@ -6,9 +6,10 @@ import { ExportSheet } from "../../components/ExportSheet";
 import { SubjectPicker } from "../../components/SubjectPicker";
 import { PrintSheets } from "../../components/PrintSheets";
 import { Icon } from "../../components/Icon";
+import { ColorIcon } from "../../components/ColorIcon";
 import { Button, Empty, ErrorFilterTags, Hint, IconSegmented, MathText, Progress, Tag, Verdict, applyErrorFilter, type ErrorFilter } from "../../components/ui";
 import { C, useThemeClass } from "../../lib/theme";
-import { retake, rotateAndRescan } from "../../lib/capture";
+import { rescan, retake, rotateAndRescan } from "../../lib/capture";
 import { groupBySection, paperErrors } from "../../lib/errors";
 import { SUBJECT_LABEL, formatDateTime } from "../../lib/format";
 import { toast, useDataVersion } from "../../lib/hooks";
@@ -61,6 +62,11 @@ export default function PaperPage() {
     refresh();
   };
 
+  const doRescan = async () => {
+    await rescan(folderId, paperId);
+    refresh();
+  };
+
   /** 照片横着 / 倒着拍的：选个方向，把这张试卷的照片都转正，再扫一次 */
   const doRotate = async () => {
     let r: { tapIndex: number };
@@ -87,22 +93,37 @@ export default function PaperPage() {
           </>
         ) : (
           <>
-            <Icon name={paper.scanError ? "warning" : "viewfinder"} size={44} color={paper.scanError ? C.wrong : C.brand} />
-            <Text className="t-title3">{paper.scanError ? "扫描失败" : "还没扫描"}</Text>
-            {paper.scanError && <Text className="t-sub c-sec center">{paper.scanError}</Text>}
-            <Button icon="camera" onClick={doRetake}>
-              重新拍 / 选照片扫描
-            </Button>
-            {paper.pages.length > 0 && (
-              <Button variant="tinted" icon="rotate" onClick={doRotate}>
-                照片拍横了？转正再扫
+            {/* 失败页少写字：一个大图标、一句话、一个主按钮（照片不动再扫一次），重拍和转正收成两个小图标 */}
+            <ColorIcon name={paper.scanError ? "retry" : "scan"} size={72} />
+            <Text className="t-title3">{paper.scanError ? "没扫出来" : "还没扫描"}</Text>
+            {paper.pages.length > 0 ? (
+              <Button icon="refresh" onClick={doRescan}>
+                再扫一次
               </Button>
+            ) : (
+              <Button icon="camera" onClick={doRetake}>
+                拍照
+              </Button>
+            )}
+            {paper.pages.length > 0 && (
+              <View className="fail-actions">
+                <View className="fail-action" hoverClass="fail-action--hover" onClick={doRetake}>
+                  <View className="icon-btn"><Icon name="camera" size={20} color={C.brand} stroke={2.2} /></View>
+                  <Text>重拍</Text>
+                </View>
+                <View className="fail-action" hoverClass="fail-action--hover" onClick={doRotate}>
+                  <View className="icon-btn"><Icon name="rotate" size={20} color={C.brand} stroke={2.2} /></View>
+                  <Text>转正</Text>
+                </View>
+              </View>
             )}
           </>
         )}
-        <Button variant="tinted" size="sm" onClick={() => Taro.navigateBack()}>
-          先回文件夹
-        </Button>
+        {paper.scanJob && (
+          <Button variant="tinted" size="sm" onClick={() => Taro.navigateBack()}>
+            先回文件夹
+          </Button>
+        )}
       </View>
     );
   }

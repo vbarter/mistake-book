@@ -149,6 +149,21 @@ export async function retake(folderId: string, paperId: string, source: Source):
   return true;
 }
 
+/** 再扫一次：照片不动，原样重新提交（服务器忙、网络断了这类失败，不用重拍） */
+export async function rescan(folderId: string, paperId: string): Promise<boolean> {
+  if (!(await ensureLogin("重新扫描"))) return false;
+  const paper = getFolder(folderId)?.papers.find((p) => p.id === paperId);
+  if (!paper?.pages.length) return false;
+  Taro.showLoading({ title: "上传中…", mask: true });
+  try {
+    updatePaper(folderId, paperId, { scanError: undefined });
+    await scan(folderId, paperId, paper.pages);
+  } finally {
+    Taro.hideLoading();
+  }
+  return true;
+}
+
 /** 照片转向后存的最长边：和 App 一致，离屏画布太大有的手机画不出来 */
 const ROTATE_MAX_SIDE = 2400;
 
