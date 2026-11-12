@@ -6,12 +6,10 @@ import { ColorIcon } from "../components/ColorIcon";
 import { Icon } from "../components/Icon";
 import { Buddy } from "../components/Illustration";
 import { Sheet } from "../components/ui";
-import { Avatar, subjectColors } from "../components/v2";
-import { allErrors } from "../lib/errors";
+import { Avatar } from "../components/v2";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
-import { SUBJECT_LABEL } from "../lib/format";
-import { analyze, inRange } from "../lib/insights";
 import { useJobs } from "../lib/jobs";
+import { isScanErrorSeen, markScanErrorSeen } from "../lib/scanNotice";
 import { createdLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/banner";
@@ -20,7 +18,7 @@ const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
  * 首页：头图（问候、小人、一句提示），下面依次是两个入口「错题收集」「试卷擦除」、识别进度、
- * 学习计划（每个计划一行：名字、身份图标、创建时间）、近 30 天错题数和各科小柱子。导出错题本在「分析」页。
+ * 没扫出来的小喇叭通知、学习计划（每个计划一行：名字、身份图标、创建时间）。错题统计和导出错题本在「分析」页。
  */
 /** 头图上的装饰：几颗星星和淡淡的圆弧 */
 function HeroDeco() {
@@ -63,11 +61,19 @@ export default function Home() {
     listFolders().then(setFolders).catch(() => setFolders([]));
   }, [jobsVersion]);
 
-  const errors = useMemo(() => (folders ? allErrors(folders) : []), [folders]);
-  const recent = useMemo(() => analyze(inRange(errors, "30d")), [errors]);
   const papers = folders?.flatMap((f) => f.papers.map((p) => ({ f, p }))) ?? [];
   const scanning = papers.filter(({ p }) => p.scanJob);
-  const failed = papers.filter(({ p }) => p.scanError && !p.scanJob);
+  // 没扫出来、还没点开看过的：首页用小喇叭提醒，最近失败的排前面
+  const [, setSeenVersion] = useState(0);
+  const failed = papers
+    .filter(({ p }) => p.scanError && !p.scanJob && !isScanErrorSeen(p))
+    .sort((x, y) => ((x.p.scanErrorAt ?? x.p.updatedAt) < (y.p.scanErrorAt ?? y.p.updatedAt) ? 1 : -1));
+  const openFailed = () => {
+    const { f, p } = failed[0];
+    markScanErrorSeen(p);
+    setSeenVersion((x) => x + 1);
+    nav(`/papers/${f.id}/${p.id}`);
+  };
   // 试卷擦除：从最近的试卷里挑一份去擦
   const erasable = papers.filter(({ p }) => !p.scanJob).sort((x, y) => (x.p.createdAt < y.p.createdAt ? 1 : -1)).slice(0, 8);
 
@@ -86,8 +92,6 @@ export default function Home() {
     : plans && plans.toReview > 0 ? { n: plans.toReview, text: "份等你批阅", go: () => nav("/plans") }
     : folders && papers.length === 0 ? { n: 0, text: "拍下第一张试卷", go: add.open }
     : null;
-  const bars = recent.bySubject.slice(0, 3);
-  const barMax = Math.max(1, ...bars.map((g) => g.items.length));
 
   // 计划行只留头像、名字、身份图标和创建时间：状态文字和右边的进度标记都拿掉了，进计划里再看
   const planRow = (p: PlanInfo) => {
@@ -133,7 +137,7 @@ export default function Home() {
           <button className="h4__act h4__act--b" onClick={erase}><ColorIcon name="erase" size={72} className="h4__art" /><b>试卷擦除</b></button>
         </div>
 
-        {scanning.length > 0 ? (
+        {scanning.length > 0 && (
           <button className="h4__card rise" style={{ ["--i" as string]: 1 }} onClick={() => nav(`/papers/${scanning[0].f.id}`)}>
             <ColorIcon name="scan" size={44} />
             <span className="h4__main">
@@ -142,14 +146,15 @@ export default function Home() {
             </span>
             <span className="h4__pct">{Math.round(scanning[0].p.scanJob!.progress || 0)}%</span>
           </button>
-        ) : failed.length > 0 && (
-          <button className="h4__card rise" style={{ ["--i" as string]: 1 }} onClick={() => nav(`/papers/${failed[0].f.id}/${failed[0].p.id}`)}>
-            <ColorIcon name="retry" size={44} />
-            <span className="h4__main">
-              <span className="h4__name ellipsis">{failed[0].p.name}</span>
-              <span className="h4__sub" style={{ color: "var(--wrong)" }}>没扫出来</span>
-            </span>
-            <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+        )}
+
+        {/* 没扫出来的试卷：一行小喇叭通知，点开去看那张试卷，看过就不再提醒（还有别的失败会接着提醒下一张） */}
+        {failed.length > 0 && (
+          <button className="h4__notice rise" style={{ ["--i" as string]: 1 }} onClick={openFailed}>
+            <ColorIcon name="horn" size={24} />
+            <span className="h4__noticet ellipsis">「{failed[0].p.name}」{failed.length > 1 ? `等 ${failed.length} 张` : ""}没扫出来</span>
+            <span className="h4__noticea">查看</span>
+            <Icon name="chevron-right" size={12} stroke={2.4} style={{ color: "var(--tertiary)" }} />
           </button>
         )}
 
@@ -165,20 +170,6 @@ export default function Home() {
             {planList.length > topPlans.length && <button className="h4__more" onClick={() => nav("/plans")}>全部 {planList.length} 个 ›</button>}
           </div>
         </section>
-
-        {recent.total > 0 && (
-          <button className="h4__card h4__err rise" style={{ ["--i" as string]: 3 }} onClick={() => nav("/rank")}>
-            <span className="h4__num">{recent.total}</span>
-            <span className="h4__main"><span className="h4__numl">道错题</span><span className="h4__nums">近 30 天</span></span>
-            <span className="h4__bars" aria-hidden="true">
-              {bars.map((g) => {
-                const color = subjectColors(g.subject).color;
-                return <span key={g.subject} className="h4__bar" style={{ color }}><i style={{ height: Math.max(8, Math.round((g.items.length / barMax) * 44)), background: color }} />{SUBJECT_LABEL[g.subject].slice(0, 1)}</span>;
-              })}
-            </span>
-            <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-          </button>
-        )}
       </div>
       {add.sheet}
       <Sheet open={picking} onClose={() => setPicking(false)} title="擦哪一份试卷">

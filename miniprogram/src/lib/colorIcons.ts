@@ -42,6 +42,8 @@ const GROUPS: Group[] = [
   ["file", "文件", p("M11 5h17l11 11v24a3 3 0 0 1-3 3H11a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z", W) + p("M28 5v8a3 3 0 0 0 3 3h8z", BT) + ln("M14 25h18M14 32h18M14 38h9", L, 2.5, .3)],
   ["video", "讲解视频", r(5, 8, 38, 27, 5) + p("M20 15.5l10 6-10 6z", R) + ln("M15 42h18M24 35v7")],
   ["retry", "重新识别", ln("M39 24a15 15 0 1 1-4.6-10.8", B, 3.2) + ln("M39.5 6.5v8.5H31", L, 3.2) + star(24, 24, .8)],
+  // 小喇叭：首页的通知条用（24 左右），所以画得粗、不垫色块
+  ["horn", "通知", ln("M13 30.5v7a3 3 0 0 0 6 0v-6", L, 3) + p("M18 17.5L31 9v30L18 30.5z", W, L, 3) + r(6, 17.5, 12, 13, 3.5, R, "") + ln("M36.5 19a7 7 0 0 1 0 10", Y, 3.2) + ln("M40.5 13.5a14 14 0 0 1 0 21", Y, 3.2, .55)],
  ]],
  ["学习计划", [
   ["plan", "学习计划", r(9, 9, 30, 34, 5) + r(17, 5, 14, 8, 3, B) + ln("M15 23l2.6 2.6 4.2-4.8M15 33.5l2.6 2.6 4.2-4.8", G, 2.8) + ln("M26.5 23.5h7.5M26.5 34h7.5", L, 2.5, .3)],
@@ -92,7 +94,7 @@ const GROUPS: Group[] = [
   ["plan-dissolve", "解散学习计划", ln("M8 43h12") + p("M14 8h23l-6 8 6 8H14z", RT) + ln("M14 5.5V43", L, 3) + c(34.5, 34.5, 9.5, R) + ln("M31 31l7 7M38 31l-7 7", W, 2.8)],
  ]],
 ];
-const NO_BLOB = ["plan-mine", "plan-joined", "plan-quit", "plan-dissolve"];
+const NO_BLOB = ["horn", "plan-mine", "plan-joined", "plan-quit", "plan-dissolve"];
 if (T.pop) {
   // 小表情：两只眼睛加一个笑
   const face = (x: number, y: number, k = 1, col = L) => `<g transform="translate(${x} ${y}) scale(${k})"><circle cx="-4" cy="0" r="1.7" fill="${col}"/><circle cx="4" cy="0" r="1.7" fill="${col}"/><path d="M-2.6 3.6q2.6 2.4 5.2 0" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round"/></g>`;
@@ -142,7 +144,7 @@ function table(key: string): Record<string, string> {
 }
 export type ColorIconName =
   | "home" | "papers" | "camera" | "analysis" | "me"
-  | "collect" | "album" | "erase" | "scan" | "wrong" | "ranking" | "knowledge" | "export" | "folder" | "file" | "video" | "retry"
+  | "collect" | "album" | "erase" | "scan" | "wrong" | "ranking" | "knowledge" | "export" | "folder" | "file" | "video" | "retry" | "horn"
   | "plan" | "plan-new" | "homework" | "submit" | "review" | "deadline" | "done" | "teacher" | "members" | "invite"
   | "chinese" | "math" | "english" | "science" | "physics" | "chemistry" | "biology" | "history" | "geography" | "politics"
   | "grade" | "privacy" | "account" | "service" | "about" | "settings" | "bell" | "search" | "star" | "trash" | "todo" | "pomodoro"

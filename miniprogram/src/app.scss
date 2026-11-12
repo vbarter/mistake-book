@@ -566,14 +566,11 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .h4__time { font-size: 12px; line-height: 16px; color: $tertiary; }
 .h4__empty { display: flex; align-items: center; gap: 12px; height: 76px; padding: 0 16px; border-radius: 18px; border: 1.5px dashed $sep; color: $secondary; font-size: 15px; }
 .h4__more { height: 36px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: $brand; }
-.h4__err { min-height: 92px; padding: 0 16px; gap: 14px; }
-.h4__num { font-size: 38px; line-height: 40px; font-weight: 800; color: $brand; }
-.h4__numl { font-size: 14px; font-weight: 700; color: $label; }
-.h4__nums { font-size: 12px; color: $secondary; }
-.h4__bars { display: flex; align-items: flex-end; gap: 10px; height: 64px; }
-.h4__bar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 100%; font-size: 11px; font-weight: 700; }
-.h4__bari { width: 18px; border-radius: 6px 6px 3px 3px; }
 .h4__pct { font-size: 17px; font-weight: 800; color: $brand; }
+/* 小喇叭通知条：比卡片矮一截，图标、一句话、右边「查看」 */
+.h4__notice { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 10px; background: $card; border-radius: 14px; text-align: left; }
+.h4__noticet { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; font-weight: 600; color: $label; }
+.h4__noticea { flex-shrink: 0; font-size: 13px; font-weight: 600; color: $brand; }
 
 /* ---------- 试卷：文件夹目录 ---------- */
 .toc-num { min-width: 20px; font-size: 13px; font-weight: 700; color: $tertiary; }
