@@ -159,3 +159,15 @@ def test_channel_order(make):
     provider = make([])
     assert provider._channels([TEXT]) == ["deepseek", "anthropic"]
     assert provider._channels([IMAGE, TEXT]) == ["anthropic"]
+
+
+@pytest.mark.parametrize("key", ["你的密钥", "sk-7b50e•••••••", "sk-abc def"])
+def test_malformed_key_disables_channel_instead_of_crashing(monkeypatch, key):
+    """.env 里填了占位符或被打码的密钥：不启用 DeepSeek，服务照常走原通道（以前会在建 HTTP 客户端时抛 UnicodeEncodeError，/api/health 都 500）。"""
+    from app.ai.claude import ClaudeProvider
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.tu-zi.com")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", key)
+    provider = ClaudeProvider(model="gpt-6.1-sol")
+    assert provider.deepseek is None and provider.name == "claude-relay"
