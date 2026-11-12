@@ -1,29 +1,66 @@
 import { useEffect, useMemo, useState } from "react";
-import { Text, View } from "@tarojs/components";
+import { Image, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh } from "@tarojs/taro";
 import { AvatarPrompt } from "../../components/AvatarPrompt";
 import { Buddy } from "../../components/Buddy";
-import { Icon } from "../../components/Icon";
-import { Avatar, Progress, SubjectTile, Tag, TopBar } from "../../components/ui";
+import { ColorIcon } from "../../components/ColorIcon";
+import { Icon, base64 } from "../../components/Icon";
+import { Avatar, Progress, Tag, subjectColors, useMenuButton } from "../../components/ui";
 import { captureInto } from "../../lib/capture";
 import { allErrors } from "../../lib/errors";
 import { useDataVersion, useTabBar } from "../../lib/hooks";
 import { analyze, inRange } from "../../lib/insights";
-import { pollPendingJobs, scanStageText } from "../../lib/jobs";
+import { pollPendingJobs } from "../../lib/jobs";
 import { currentUser, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLANS_EVENT, teacherLine, dueLabel, fetchPlans, planIdleLabel, type PlanInfo, type PlanSummary } from "../../lib/plans";
+import { PLANS_EVENT, dueLabel, fetchPlans, planIdleLabel, type PlanInfo, type PlanSummary } from "../../lib/plans";
 import { listFolders } from "../../lib/store";
-import { C } from "../../lib/theme";
+import { SUBJECT_LABEL } from "../../lib/format";
+import { C, useTheme, useThemeClass } from "../../lib/theme";
 import { useShare, useShareTimelineToo } from "../../lib/share";
 
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
- * 首页（和 App 一致）：顶部「今日安排」（学习计划、待办事项），中间小人用气泡说识别进度 / 近 30 天错题总结，
- * 底部两块大入口「错题收集」「试卷擦除」。导出错题本在「分析」页。
+ * 首页（和 App 一致）：头图（问候、小人、一句提示），下面依次是两个入口「错题收集」「试卷擦除」、识别进度、
+ * 学习计划（每个计划一行，进度环 / 对勾）、近 30 天错题数和各科小柱子。导出错题本在「分析」页。
  */
+/** 头图上的装饰：几颗星星和淡淡的圆弧（画成背景图，靠左下角对齐） */
+const HERO_DECO = (() => {
+  const star = "M0-8l2.2 5.8L8 0 2.2 2.2 0 8l-2.2-5.8L-8 0l5.8-2.2z";
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="390" height="236" viewBox="0 0 390 236" fill="none">` +
+    `<path transform="translate(236 150)" d="${star}" fill="#ffc53d"/><path transform="translate(206 176) scale(.7)" d="${star}" fill="#fff" opacity=".5"/>` +
+    `<path transform="translate(24 196) scale(.6)" d="${star}" fill="#fff" opacity=".35"/><path transform="translate(176 196) scale(.5)" d="${star}" fill="#ffc53d" opacity=".8"/>` +
+    `<path d="M-10 226c60-34 120-34 190-8" stroke="#fff" stroke-opacity=".07" stroke-width="22" stroke-linecap="round"/></svg>`;
+  return `data:image/svg+xml;base64,${base64(svg)}`;
+})();
+
+const ringCache = new Map<string, string>();
+/** 进度环：交了几份 / 一共几份。小程序里没有内联 SVG，环画成图片，数字叠在上面 */
+function Ring({ done, total }: { done: number; total: number }) {
+  const key = `${done}/${total}`;
+  let uri = ringCache.get(key);
+  if (!uri) {
+    const r = 18;
+    const c = 2 * Math.PI * r;
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="88" height="88" viewBox="0 0 44 44"><circle cx="22" cy="22" r="${r}" fill="none" stroke="#fff0e3" stroke-width="5"/>` +
+      `<circle cx="22" cy="22" r="${r}" fill="none" stroke="#ff8a3d" stroke-width="5" stroke-linecap="round" stroke-dasharray="${((c * done) / total).toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 22 22)"/></svg>`;
+    uri = `data:image/svg+xml;base64,${base64(svg)}`;
+    ringCache.set(key, uri);
+  }
+  return (
+    <View className="h4__ring">
+      <Image className="h4__ringi" src={uri} mode="aspectFit" />
+      <Text className="h4__ringt">{key}</Text>
+    </View>
+  );
+}
+
 export default function Home() {
+  const tc = useThemeClass();
+  const theme = useTheme();
   useShare();
   useShareTimelineToo();
   useTabBar(0);
@@ -55,12 +92,6 @@ export default function Home() {
       })
       .catch(() => undefined);
   }, [version, plansVersion]);
-  const hasPlans = !!plans && plans.owned + plans.joined > 0;
-  // 卡片上的大数字：有待交先说待交，没有再说待批阅；两样都没有就说一共有多少份作业
-  // （扫描的和上传文件的都算）。以前这时一直显示「0 份作业待交」，自己创建的计划里明明有作业也是 0。
-  const planMode = plans && plans.todo > 0 ? "todo" : plans && plans.toReview > 0 ? "review" : "all";
-  const planCount = !plans ? 0 : planMode === "todo" ? plans.todo : planMode === "review" ? plans.toReview : planList.reduce((n, p) => n + (p.assignments ?? 0), 0);
-  const planUnit = planMode === "todo" ? "份 作业待交" : planMode === "review" ? "份 等你批阅" : "份 作业";
   // 首页直接列几个学习计划：有作业待交 / 待批阅的排前面，其余按新旧，最多 3 个（和 App 一致）
   const pending = (p: PlanInfo) => (p.role === "owner" ? p.toReview ?? 0 : p.todo ?? 0);
   const topPlans = [...planList].sort((a, b) => Number(pending(b) > 0) - Number(pending(a) > 0) || (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 3);
@@ -114,146 +145,155 @@ export default function Home() {
     }
   };
 
-  return (
-    <View className="home2">
-      <AvatarPrompt version={version} />
-      <TopBar>
-        <View className="home2__logo">
-          <Icon name="check" size={18} color="#ffffff" stroke={3} />
-        </View>
-        <Text className="home2__name">上壹课</Text>
-        <Text className="home2__date">{today}</Text>
-      </TopBar>
+  const mb = useMenuButton();
+  const memberTodo = planList.filter((p) => p.role !== "owner" && (p.todo ?? 0) > 0);
+  // 头图里那颗提示：有作业先说作业，一份试卷都没有时提醒拍第一张
+  const pill = plans && plans.todo > 0 ? { n: plans.todo, text: "份作业待交", go: () => go("/pages/plans/index") }
+    : plans && plans.toReview > 0 ? { n: plans.toReview, text: "份等你批阅", go: () => go("/pages/plans/index") }
+    : papers.length === 0 ? { n: 0, text: "拍下第一张试卷", go: collect }
+    : null;
+  const bars = recent.bySubject.slice(0, 3);
+  const barMax = Math.max(1, ...bars.map((g) => g.items.length));
 
-      <View className="plan rise">
-        <View className="plan__top">
-          <Text className="plan__title">今日安排</Text>
-          <Text className="plan__sub">计划和作业，一眼看清</Text>
-        </View>
-        <View className="plan__cards">
-          <View className="pc" hoverClass="pc--hover" onClick={() => go("/pages/plans/index")}>
-            <View className="pc__h">
-              <Text className="pc__t">学习计划</Text>
-              {/* 右上角直接新建；卡片其余地方点了还是进计划列表（和 App 一致） */}
-              <View className="pc__add" hoverClass="pc__add--hover" hoverStopPropagation onClick={(e) => (e.stopPropagation(), go("/pages/plan-new/index"))}>
-                <Icon name="plus" size={12} color="#ffffff" stroke={3} />
-                <Text>新建</Text>
-              </View>
-            </View>
-            {hasPlans && plans ? (
-              <>
-                <View className="pc__big">
-                  <Text className="pc__num">{planCount}</Text>
-                  <Text>{planUnit}</Text>
-                </View>
-                <View className="pc__m">
-                  {plans.todo > 0 && plans.nextSubject && plans.nextSubject !== "mixed" && <SubjectTile subject={plans.nextSubject} size="xs" className="pc__tile" />}
-                  <Text className="ellipsis flex1">{plans.todo > 0 ? plans.nextTitle ?? "作业" : plans.owned > 0 ? `今天已交 ${plans.submittedToday} 份` : "作业都交了"}</Text>
-                </View>
-                {plans.todo > 0 && plans.nextDue && <Text className="pc__m pc__m--due">{dueLabel(plans.nextDue)} 截止</Text>}
-              </>
-            ) : (
-              <>
-                <Text className="pc__empty">还没有计划</Text>
-                <Text className="pc__m pc__m--wrap">加入老师的计划，或自己建一个</Text>
-              </>
-            )}
-          </View>
-          {/* 待办事项还没做好：先占个位置，点了提示一下（和 App 一致） */}
-          <View className="pc pc--tie" hoverClass="pc--hover" onClick={() => toast("待办事项还在开发中，过几天就能用了")}>
-            <View className="pc__h">
-              <Text className="pc__t">待办事项</Text>
-              <Text className="tag tag--neutral">即将上线</Text>
-            </View>
-            <Text className="pc__empty">记下今天要做的事</Text>
-            <Text className="pc__m pc__m--wrap">拍一张作业单，自动列成待办</Text>
-          </View>
-        </View>
-        {topPlans.length > 0 && (
-          <View className="plist">
-            {topPlans.map((p) => (
-              <View key={p.id} className="plist__row" hoverClass="plist__row--hover" onClick={() => go(`/pages/plan/index?id=${p.id}`)}>
-                <Avatar name={p.teacher} url={p.teacherAvatar} size={36} />
-                <View className="plist__main">
-                  <Text className="plist__name ellipsis">{p.name}</Text>
-                  <Text className="plist__sub ellipsis">
-                    {teacherLine(p.teacher, p.subject)}
-                  </Text>
-                </View>
-                {pending(p) > 0 ? (
-                  <Tag kind={p.role === "owner" ? "info" : "pending"} icon={null}>
-                    {p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}
-                  </Tag>
-                ) : (
-                  <Text className="plist__ok">{planIdleLabel(p)}</Text>
-                )}
-                <Icon name="chevron-right" size={13} color={C.tertiary} stroke={2.4} />
-              </View>
-            ))}
-            {planList.length > topPlans.length && (
-              <View className="plist__more" hoverClass="plist__row--hover" onClick={() => go("/pages/plans/index")}>
-                <Text>全部 {planList.length} 个学习计划 ›</Text>
+  const planRow = (p: PlanInfo) => {
+    const owner = p.role === "owner";
+    const n = pending(p);
+    const total = p.assignments ?? 0;
+    const idle = planIdleLabel(p);
+    const allDone = n === 0 && (idle === "都交了" || idle === "都批完了");
+    // 截止时间服务器只给了最近的一份：只有一个计划有待交时才知道它是哪个计划的
+    const due = !owner && n > 0 && memberTodo.length === 1 && plans?.nextDue ? dueLabel(plans.nextDue) : "";
+    return (
+      <View key={p.id} className="h4__plan" hoverClass="h4--hover" onClick={() => go(`/pages/plan/index?id=${p.id}`)}>
+        <Avatar name={p.teacher} url={p.teacherAvatar} size={44} />
+        <View className="h4__main">
+          <Text className="h4__name ellipsis">{p.name}</Text>
+          <View className="h4__sub">
+            <Text className="ellipsis">{owner ? "我建的" : p.teacher}{n === 0 ? ` · ${idle}` : ""}</Text>
+            {!!due && (
+              <View className="h4__due">
+                <Icon name="clock" size={12} color={C.tie} stroke={2.6} />
+                <Text>{due} 截止</Text>
               </View>
             )}
+          </View>
+        </View>
+        {n > 0 && owner && <Tag kind="info" icon={null}>待批 {n}</Tag>}
+        {n > 0 && !owner && (total >= n && total > 0 ? <Ring done={total - n} total={total} /> : <Tag kind="pending" icon={null}>待交 {n}</Tag>)}
+        {allDone && (
+          <View className="h4__done">
+            <Icon name="check" size={20} color={C.ok} stroke={3} />
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <View className={"home4" + tc}>
+      <AvatarPrompt version={version} />
+      <View className="h4__hero" style={{ height: `${mb.bottom + 148}px`, paddingTop: `${mb.top}px`, backgroundImage: `url("${HERO_DECO}"), linear-gradient(160deg, var(--hero-a) 0%, var(--hero-b) 70%)` }}>
+        <View className="h4__spot" />
+        <Buddy scene={scanning.length ? "scan" : papers.length === 0 ? "empty" : "hero"} size={150} style={{ position: "absolute", right: "8px", bottom: "30px" }} />
+        <View className="h4__brand" style={{ height: `${mb.height}px` }}>
+          <View className="h4__logo">
+            <Icon name="check" size={17} color={theme === "pop" ? "#fb7299" : "#1f3b73"} stroke={3} />
+          </View>
+          <Text className="h4__bname">上壹课</Text>
+          <Text className="h4__date">{today}</Text>
+        </View>
+        <Text className="h4__hi ellipsis">
+          {hello}
+          {nickname ? `，${nickname}` : ""}
+        </Text>
+        {pill && (
+          <View className="h4__pill" hoverClass="h4--hover" onClick={pill.go}>
+            <View className="h4__pilln">{pill.n > 0 ? <Text>{pill.n}</Text> : <Icon name="camera" size={12} color="#5a3600" stroke={2.6} />}</View>
+            <Text>{pill.text}</Text>
           </View>
         )}
       </View>
 
-      <View className="hero2 rise rise--2">
+      <View className="h4">
+        <View className="h4__acts rise">
+          <View className="h4__act h4__act--a" hoverClass="h4--hover" onClick={collect}>
+            <ColorIcon name="collect" size={72} className="h4__art" />
+            <Text className="h4__actt">错题收集</Text>
+          </View>
+          <View className="h4__act h4__act--b" hoverClass="h4--hover" onClick={erase}>
+            <ColorIcon name="erase" size={72} className="h4__art" />
+            <Text className="h4__actt">试卷擦除</Text>
+          </View>
+        </View>
+
         {scanning.length > 0 ? (
-          <View className="bubble" onClick={() => go(`/pages/folder/index?id=${scanning[0].f.id}`)}>
-            <Text className="bubble__small">
-              正在识别 · {scanStageText(scanning[0].p.scanJob!)}
-              {scanning.length > 1 ? ` · 共 ${scanning.length} 份` : ""}
-            </Text>
-            <Text className="bubble__text">「{scanning[0].p.name}」好了会自动归档。</Text>
-            <Progress value={scanning[0].p.scanJob!.progress} style={{ marginTop: "8px" }} />
-          </View>
-        ) : failed.length > 0 ? (
-          <View className="bubble" onClick={() => go(`/pages/paper/index?folderId=${failed[0].f.id}&paperId=${failed[0].p.id}`)}>
-            <Text className="bubble__small" style={{ color: C.wrong }}>
-              识别失败
-            </Text>
-            <Text className="bubble__text">「{failed[0].p.name}」没识别出来。</Text>
-            <Text className="bubble__more">点开重新识别 ›</Text>
-          </View>
-        ) : recent.total > 0 ? (
-          <View className="bubble" onClick={() => Taro.switchTab({ url: "/pages/rank/index" })}>
-            <Text className="bubble__small">近 30 天 · {recent.total} 道错题</Text>
-            <Text className="bubble__text">{recent.summary}</Text>
-            <Text className="bubble__more">看错题榜 ›</Text>
+          <View className="h4__card rise rise--1" hoverClass="h4--hover" onClick={() => go(`/pages/folder/index?id=${scanning[0].f.id}`)}>
+            <ColorIcon name="scan" size={44} />
+            <View className="h4__main">
+              <Text className="h4__name ellipsis">正在识别 {scanning[0].p.name}</Text>
+              <Progress value={scanning[0].p.scanJob!.progress || 0} style={{ marginTop: "6px" }} />
+            </View>
+            <Text className="h4__pct">{Math.round(scanning[0].p.scanJob!.progress || 0)}%</Text>
           </View>
         ) : (
-          <View className="bubble">
-            <Text className="bubble__small">
-              {hello}
-              {nickname ? `，${nickname}` : ""}
-            </Text>
-            <Text className="bubble__text">{papers.length === 0 ? "点「错题收集」或下面的相机，拍下第一张试卷。" : "拍下新试卷，错题会自动整理。"}</Text>
-          </View>
+          failed.length > 0 && (
+            <View className="h4__card rise rise--1" hoverClass="h4--hover" onClick={() => go(`/pages/paper/index?folderId=${failed[0].f.id}&paperId=${failed[0].p.id}`)}>
+              <ColorIcon name="retry" size={44} />
+              <View className="h4__main">
+                <Text className="h4__name ellipsis">{failed[0].p.name}</Text>
+                <Text className="h4__sub" style={{ color: C.wrong }}>没识别出来，点开重试</Text>
+              </View>
+              <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+            </View>
+          )
         )}
-        <Buddy scene={scanning.length ? "scan" : "hero"} size={148} />
-      </View>
 
-      <View className="sheet2 rise rise--3">
-        <View className="big">
-          <View className="bt bt--a" hoverClass="bt--hover" onClick={collect}>
-            <View className="bt__deco" />
-            <View className="bt__ic">
-              <Icon name="camera" size={25} color="#ffffff" stroke={2} />
+        <View className="rise rise--2">
+          <View className="h4__sech">
+            <Text className="h4__sect" onClick={() => go("/pages/plans/index")}>学习计划</Text>
+            <View className="h4__add" hoverClass="h4--hover" onClick={() => go("/pages/plan-new/index")}>
+              <Icon name="plus" size={13} color="#ffffff" stroke={3} />
+              <Text>新建</Text>
             </View>
-            <Text className="bt__t">错题收集</Text>
-            <Text className="bt__s">拍试卷，错题自动整理</Text>
           </View>
-          <View className="bt bt--b" hoverClass="bt--hover" onClick={erase}>
-            <View className="bt__deco" />
-            <View className="bt__ic">
-              <Icon name="brush" size={25} color="#ffffff" stroke={2} />
-            </View>
-            <Text className="bt__t">试卷擦除</Text>
-            <Text className="bt__s">擦掉手写，空白卷重练</Text>
+          <View className="h4__plans">
+            {topPlans.length > 0 ? (
+              topPlans.map(planRow)
+            ) : (
+              <View className="h4__empty" hoverClass="h4--hover" onClick={() => go("/pages/plans/index")}>
+                <ColorIcon name="plan" size={40} />
+                <Text>还没有学习计划</Text>
+              </View>
+            )}
+            {planList.length > topPlans.length && (
+              <View className="h4__more" hoverClass="h4--hover" onClick={() => go("/pages/plans/index")}>
+                <Text>全部 {planList.length} 个 ›</Text>
+              </View>
+            )}
           </View>
         </View>
+
+        {recent.total > 0 && (
+          <View className="h4__card h4__err rise rise--3" hoverClass="h4--hover" onClick={() => Taro.switchTab({ url: "/pages/rank/index" })}>
+            <Text className="h4__num">{recent.total}</Text>
+            <View className="h4__main">
+              <Text className="h4__numl">道错题</Text>
+              <Text className="h4__nums">近 30 天</Text>
+            </View>
+            <View className="h4__bars">
+              {bars.map((g) => {
+                const color = subjectColors(g.subject).color;
+                return (
+                  <View key={g.subject} className="h4__bar">
+                    <View className="h4__bari" style={{ height: `${Math.max(8, Math.round((g.items.length / barMax) * 44))}px`, background: color }} />
+                    <Text style={{ color }}>{SUBJECT_LABEL[g.subject].slice(0, 1)}</Text>
+                  </View>
+                );
+              })}
+            </View>
+            <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+          </View>
+        )}
       </View>
     </View>
   );

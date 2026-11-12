@@ -10,7 +10,7 @@ import { SubjectPicker } from "../../components/SubjectPicker";
 import { ensureLogin } from "../../lib/auth";
 import { captureInto, type Source } from "../../lib/capture";
 import { folderErrors, groupByKnowledge, groupBySection, knowledgeKey, paperErrors } from "../../lib/errors";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 import { SUBJECTS, SUBJECT_LABEL, formatDate, formatDateTime } from "../../lib/format";
 import { toast, useDataVersion } from "../../lib/hooks";
 import { gradeIfNeeded, scanStageText, tagIfNeeded } from "../../lib/jobs";
@@ -24,6 +24,7 @@ type Tab = "papers" | "errors";
 /** 文件夹（和 App 一致）：「目录」是自动生成的试卷目录（序号 · 卷头标题 · 大题与错题数），「错题汇总」跨试卷合并、按知识点归类；底栏导出与加卷。
  * 外层文件夹按扫描日期，里面的试卷扫描后按学科自动归进子目录（subject=math 就是只看数学这个子目录）；还没认出学科的放在「待归类」。 */
 export default function FolderPage() {
+  const tc = useThemeClass();
   useShare();
   const { params } = useRouter();
   const folderId = params.id ?? "";
@@ -327,7 +328,7 @@ export default function FolderPage() {
   );
 
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       <View className="row-center gap12">
         {stats.subjects.length > 1 ? <SubjectStack subjects={stats.subjects} /> : <SubjectTile subject={stats.subject} size="lg" />}
         <View className="flex1 col gap4 minw0">

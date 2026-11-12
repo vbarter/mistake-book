@@ -7,7 +7,7 @@ import { Button, Empty } from "../../components/ui";
 import { allErrors, type ErrorItem } from "../../lib/errors";
 import { getRankView } from "../../lib/rankView";
 import { listFolders } from "../../lib/store";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 import { useShare } from "../../lib/share";
 
 /** 只渲染当前这张和左右各 NEAR 张：整张榜上百题一起画，插图同时裁图很占内存（和 App 一样的做法） */
@@ -18,6 +18,7 @@ const NEAR = 1;
  * 每张顶部是名次、所属知识点和易错指数，下面是原题、作答、正确答案和解析。
  */
 export default function RankDetail() {
+  const tc = useThemeClass();
   useShare();
   const { params } = useRouter();
   const { title, entries } = useMemo(() => getRankView(), []);
@@ -34,7 +35,7 @@ export default function RankDetail() {
 
   if (slides.length === 0)
     return (
-      <View className="page">
+      <View className={"page" + tc}>
         <Empty icon="seal" title="这道题找不到了">
           <Button size="sm" variant="tinted" onClick={() => Taro.navigateBack()}>
             回到错题榜
@@ -45,7 +46,7 @@ export default function RankDetail() {
 
   const at = Math.min(current, slides.length - 1);
   return (
-    <View className="detail">
+    <View className={"detail" + tc}>
       <Swiper className="detail__swiper" current={at} onChange={(e) => setCurrent(e.detail.current)}>
         {slides.map(({ en, item }, i) => (
           <SwiperItem key={item.key} className="detail__slide">

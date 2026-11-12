@@ -9,7 +9,7 @@ import { LOGIN_CLOSED_EVENT, LOGIN_PAGE, currentUser, isLoggedIn } from "../../l
 import { toast } from "../../lib/hooks";
 import { DEFAULT_NICKNAME, teacherLine, bumpPlans, joinPlan, joinedText, startPlanSync, type AssignmentBrief, type JoinedPreview, type PlanInfo, type PlanSubject } from "../../lib/plans";
 import { useShare } from "../../lib/share";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 
 interface Preview {
   plan: { id: string; name: string; subject: PlanSubject | null; teacher: string; teacherAvatar?: string | null };
@@ -27,6 +27,7 @@ interface Preview {
  * 不用老师批准。刚注册的新用户先起名字；已经在用的直接用自己的名字加入。
  */
 export default function PlanJoin() {
+  const tc = useThemeClass();
   useShare(); // 这一页转发出去只是首页：学生不能把老师的卡片再包一层发出去
   const { code = "", a = "" } = useRouter().params;
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -99,7 +100,7 @@ export default function PlanJoin() {
   if (error) return <PageState error={error} action={isLoggedIn() ? mine : undefined} />;
 
   return (
-    <View className="page center-page">
+    <View className={"page center-page" + tc}>
       {joining || !preview ? (
         <>
           <View className="spinner spinner--lg" />

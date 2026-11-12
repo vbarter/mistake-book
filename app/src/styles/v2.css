@@ -145,3 +145,14 @@
 
 /* 昵称旁的小灰标（「游客」） */
 .pill-mute { flex-shrink: 0; font-size: 11px; font-weight: 600; line-height: 16px; color: var(--secondary); background: var(--fill-light); border-radius: 8px; padding: 1px 7px; }
+
+/* 主题选择（我的 → 主题）：两张预览卡，各用自己那套图标和主色 */
+.theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.theme-opt { display: flex; flex-direction: column; gap: 4px; padding: 8px 8px 12px; border-radius: 20px; background: var(--fill-light); border: 2px solid transparent; text-align: left; }
+.theme-opt.on { border-color: var(--brand); background: var(--brand-tint); }
+.theme-opt:active { transform: scale(0.98); }
+.theme-opt__art { height: 84px; border-radius: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 6px; }
+.theme-opt__icon { background: #fff; border-radius: 12px; padding: 3px; box-sizing: content-box; }
+.theme-opt__name { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; font-size: 16px; font-weight: 700; color: var(--label); }
+.theme-opt.on .theme-opt__name svg { color: var(--brand); }
+.theme-opt__note { padding: 0 6px; font-size: 12px; line-height: 16px; color: var(--secondary); }

@@ -7,13 +7,14 @@ import { errorText } from "../../lib/api";
 import { EXPORTS_EVENT, isPending, listExports, openExport, removeExport, type ExportJob } from "../../lib/export";
 import { formatDateTime } from "../../lib/format";
 import { toast } from "../../lib/hooks";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 import { useShare } from "../../lib/share";
 
 const sizeLabel = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
 /** 我的导出（和 App 一致）：最近 7 天在服务器上生成的错题本 / 电子试卷 / 空白卷，点一下下载打开；生成中的自动刷新。 */
 export default function Exports() {
+  const tc = useThemeClass();
   useShare();
   const [items, setItems] = useState<ExportJob[] | null>(null);
 
@@ -59,7 +60,7 @@ export default function Exports() {
   };
 
   return (
-    <View className="page" style={{ gap: "10px" }}>
+    <View className={"page" + tc} style={{ gap: "10px" }}>
       {items && items.length === 0 && <Empty icon="export" title="还没有导出过" text="在首页、文件夹或试卷里点「导出」，PDF 会在后台生成，放在这里。" />}
       {(items ?? []).map((job) => {
         const pending = isPending(job);

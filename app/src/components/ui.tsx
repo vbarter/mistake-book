@@ -1,3 +1,4 @@
+import { ColorIcon, type ColorIconName } from "./ColorIcon";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -160,10 +161,13 @@ export function Ring({ value, size = 72, stroke = 6, color = "var(--brand)", chi
 }
 
 /* ---------- 空状态 ---------- */
-export function Empty({ icon, title, text, action }: { icon: IconName; title: string; text?: string; action?: ReactNode }) {
+/** 空页面常用的几个细线图标，换成对应的彩色图标 */
+const EMPTY_ART: Partial<Record<IconName, ColorIconName>> = { document: "file", folder: "folder", seal: "star", camera: "camera" };
+
+export function Empty({ icon, art = EMPTY_ART[icon], title, text, action }: { icon: IconName; /** 彩色图标：给了就用它代替细线图标 */ art?: ColorIconName; title: string; text?: string; action?: ReactNode }) {
   return (
     <div className="empty">
-      <Icon name={icon} size={44} stroke={1.5} className="empty__icon" />
+      {art ? <ColorIcon name={art} size={72} /> : <Icon name={icon} size={44} stroke={1.5} className="empty__icon" />}
       <span className="empty__title">{title}</span>
       {text && <span className="t-sub">{text}</span>}
       {action && <div style={{ marginTop: 6 }}>{action}</div>}
@@ -257,10 +261,11 @@ export function BannerHost() {
 }
 
 /* ---------- 行 ---------- */
-export function Row({ icon, iconColor, title, sub, value, chevron = true, onClick, danger }: { icon?: IconName; iconColor?: string; title: string; sub?: string; value?: ReactNode; chevron?: boolean; onClick?: () => void; danger?: boolean }) {
+export function Row({ icon, iconColor, art, title, sub, value, chevron = true, onClick, danger }: { icon?: IconName; iconColor?: string; /** 彩色图标：给了就不画 icon 的小色块 */ art?: ColorIconName; title: string; sub?: string; value?: ReactNode; chevron?: boolean; onClick?: () => void; danger?: boolean }) {
   return (
     <button className="row" onClick={onClick} style={danger ? { color: "var(--wrong)" } : undefined}>
-      {icon && (
+      {art && <ColorIcon name={art} size={32} />}
+      {icon && !art && (
         <span className="row__icon" style={{ background: iconColor ?? "var(--brand)" }}>
           <Icon name={icon} size={18} stroke={2} />
         </span>

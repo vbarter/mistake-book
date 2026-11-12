@@ -1,18 +1,19 @@
 import { Component } from "react";
 import Taro from "@tarojs/taro";
 import { Text, View } from "@tarojs/components";
-import { Icon, type IconName } from "../components/Icon";
+import { ColorIcon, type ColorIconName } from "../components/ColorIcon";
+import { Icon } from "../components/Icon";
 import { captureInto, type Source } from "../lib/capture";
 import { toast } from "../lib/hooks";
-import { C } from "../lib/theme";
+import { onThemeChange, themeClass } from "../lib/theme";
 import "./index.scss";
 
 /** 和 app.config 里 tabBar.list 的顺序一致 */
-export const TABS: { path: string; label: string; icon: IconName }[] = [
-  { path: "pages/home/index", label: "首页", icon: "house" },
-  { path: "pages/papers/index", label: "试卷", icon: "folder" },
-  { path: "pages/rank/index", label: "分析", icon: "chart" },
-  { path: "pages/profile/index", label: "我的", icon: "person" },
+export const TABS: { path: string; label: string; icon: ColorIconName }[] = [
+  { path: "pages/home/index", label: "首页", icon: "home" },
+  { path: "pages/papers/index", label: "试卷", icon: "papers" },
+  { path: "pages/rank/index", label: "分析", icon: "analysis" },
+  { path: "pages/profile/index", label: "我的", icon: "me" },
 ];
 
 function currentIndex(): number {
@@ -33,6 +34,15 @@ interface State {
  */
 export default class CustomTabBar extends Component<object, State> {
   state: State = { selected: currentIndex(), open: false, hidden: false };
+
+  // 切主题时重画（「我的」本身是 Tab 页，换完主题 Tab 栏要立刻跟着变）
+  private offTheme?: () => void;
+  componentDidMount() {
+    this.offTheme = onThemeChange(() => this.forceUpdate());
+  }
+  componentWillUnmount() {
+    this.offTheme?.();
+  }
 
   setSelected(selected: number) {
     this.setState({ selected, open: false });
@@ -73,7 +83,7 @@ export default class CustomTabBar extends Component<object, State> {
     return (
       <View key={t.path} className={`ctb-tab${on ? " ctb-tab--on" : ""}`} onClick={() => this.go(i)}>
         <View className="ctb-tab__icon">
-          <Icon name={t.icon} size={26} color={on ? C.brand : C.secondary} fill={on} stroke={1.8} />
+          <ColorIcon name={t.icon} size={28} muted={!on} />
         </View>
         <Text className="ctb-tab__label">{t.label}</Text>
       </View>
@@ -84,18 +94,18 @@ export default class CustomTabBar extends Component<object, State> {
     const { open, hidden } = this.state;
     if (hidden) return null;
     return (
-      <View className="ctb">
+      <View className={"ctb" + themeClass()}>
         {open && <View className="ctb-scrim" catchMove onClick={() => this.setState({ open: false })} />}
         <View className={`ctb-menu${open ? " ctb-menu--open" : ""}`}>
           <View className="ctb-bubble ctb-bubble--left" onClick={() => this.add("camera")}>
             <View className="ctb-bubble__icon">
-              <Icon name="camera" size={24} color={C.brand} stroke={2} />
+              <ColorIcon name="camera" size={34} />
             </View>
             <Text>拍照</Text>
           </View>
           <View className="ctb-bubble ctb-bubble--right" onClick={() => this.add("album")}>
             <View className="ctb-bubble__icon">
-              <Icon name="photo" size={24} color={C.brand} stroke={2} />
+              <ColorIcon name="album" size={34} />
             </View>
             <Text>相册导入</Text>
           </View>

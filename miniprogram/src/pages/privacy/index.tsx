@@ -5,9 +5,11 @@ import { Row } from "../../components/ui";
 import { toast, useDataVersion } from "../../lib/hooks";
 import { clearAllFolders, listFolders } from "../../lib/store";
 import { useShare } from "../../lib/share";
+import { useThemeClass } from "../../lib/theme";
 
 /** 隐私与数据（和 App 的同名页面一致），底部可以清空本应用数据 */
 export default function Privacy() {
+  const tc = useThemeClass();
   useShare();
   const [version, refresh] = useDataVersion();
   const folders = useMemo(() => listFolders(), [version]);
@@ -34,7 +36,7 @@ export default function Privacy() {
   );
 
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       {card("我们收集什么", "账号保存昵称、年级、学科设置、登录方式和你绑定的手机号。登录后，试卷照片、电子版和错题会同步保存到我们在腾讯云（上海）的服务器，用于在你的其他手机、电脑上查看；照片加密存储，只有你的账号能访问。不收集姓名、学校、班级、位置。")}
       {card("扫描时如何处理照片", "扫描时把试卷照片发到我们的服务器识别和批改，并要求 AI 忽略姓名、学校、班级等信息。识别用的临时文件保留一天后自动删除；登录后试卷照片和识别结果另按上面的方式同步保存。")}
       {card("第三方 SDK", "不接入任何广告或分析 SDK。")}

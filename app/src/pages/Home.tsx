@@ -2,24 +2,55 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAddPaper } from "../components/AddSheet";
 import { AvatarPrompt } from "../components/AvatarPrompt";
+import { ColorIcon } from "../components/ColorIcon";
 import { Icon } from "../components/Icon";
 import { Buddy } from "../components/Illustration";
 import { Sheet } from "../components/ui";
-import { Avatar, SubjectTile, Tag } from "../components/v2";
+import { Avatar, Tag, subjectColors } from "../components/v2";
 import { allErrors } from "../lib/errors";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
+import { SUBJECT_LABEL } from "../lib/format";
 import { analyze, inRange } from "../lib/insights";
-import { scanStageText, useJobs } from "../lib/jobs";
-import { teacherLine, dueLabel, fetchPlans, joinPath, pendingJoin, planIdleLabel, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
+import { useJobs } from "../lib/jobs";
+import { dueLabel, fetchPlans, joinPath, pendingJoin, planIdleLabel, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/banner";
 
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
- * 首页：顶部「今日安排」（学习计划、待办事项），中间小人用气泡说识别进度 / 近 30 天错题总结，
- * 底部两块大入口「错题收集」「试卷擦除」。导出错题本在「分析」页。
+ * 首页：头图（问候、小人、一句提示），下面依次是两个入口「错题收集」「试卷擦除」、识别进度、
+ * 学习计划（每个计划一行，进度环 / 对勾）、近 30 天错题数和各科小柱子。导出错题本在「分析」页。
  */
+/** 进度环：交了几份 / 一共几份 */
+function Ring({ done, total }: { done: number; total: number }) {
+  const r = 18, c = 2 * Math.PI * r;
+  return (
+    <span className="h4__ring" aria-label={`已交 ${done} 份，共 ${total} 份`}>
+      <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
+        <circle cx="22" cy="22" r={r} fill="none" stroke="var(--due-bg)" strokeWidth="5" />
+        <circle cx="22" cy="22" r={r} fill="none" stroke="var(--accent)" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(c * done) / total} ${c}`} transform="rotate(-90 22 22)" />
+      </svg>
+      <span>{done}/{total}</span>
+    </span>
+  );
+}
+
+/** 头图上的装饰：几颗星星和淡淡的圆弧 */
+function HeroDeco() {
+  const star = "M0-8l2.2 5.8L8 0 2.2 2.2 0 8l-2.2-5.8L-8 0l5.8-2.2z";
+  return (
+    <svg className="h4__deco" viewBox="0 0 390 236" preserveAspectRatio="xMinYMax slice" fill="none" aria-hidden="true">
+      <path transform="translate(236 150)" d={star} fill="#ffc53d" />
+      <path transform="translate(206 176) scale(.7)" d={star} fill="#fff" opacity=".5" />
+      <path transform="translate(24 196) scale(.6)" d={star} fill="#fff" opacity=".35" />
+      <path transform="translate(176 196) scale(.5)" d={star} fill="#ffc53d" opacity=".8" />
+      <circle cx="352" cy="34" r="46" stroke="#fff" strokeOpacity=".08" strokeWidth="14" />
+      <path d="M-10 226c60-34 120-34 190-8" stroke="#fff" strokeOpacity=".07" strokeWidth="22" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function Home() {
   const nav = useNavigate();
   const add = useAddPaper();
@@ -38,12 +69,6 @@ export default function Home() {
   useEffect(() => {
     fetchPlans().then((r) => { setPlans(r.summary); setPlanList(r.plans); }).catch(() => undefined); // 没网时卡片照样在，只是不带数字
   }, [plansVersion]);
-  const hasPlans = !!plans && plans.owned + plans.joined > 0;
-  // 卡片上的大数字：有待交先说待交，没有再说待批阅；两样都没有就说一共有多少份作业
-  // （扫描的和上传文件的都算）。以前这时一直显示「0 份作业待交」，自己创建的计划里明明有作业也是 0。
-  const planMode = plans && plans.todo > 0 ? "todo" : plans && plans.toReview > 0 ? "review" : "all";
-  const planCount = !plans ? 0 : planMode === "todo" ? plans.todo : planMode === "review" ? plans.toReview : planList.reduce((n, p) => n + (p.assignments ?? 0), 0);
-  const planUnit = planMode === "todo" ? "份 作业待交" : planMode === "review" ? "份 等你批阅" : "份 作业";
   // 首页直接列几个学习计划：有作业待交 / 待批阅的排前面，其余按新旧，最多 3 个
   const pending = (p: PlanInfo) => (p.role === "owner" ? p.toReview ?? 0 : p.todo ?? 0);
   const topPlans = [...planList].sort((a, b) => Number(pending(b) > 0) - Number(pending(a) > 0) || (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 3);
@@ -70,124 +95,111 @@ export default function Home() {
     setPicking(true);
   };
 
+  const memberTodo = planList.filter((p) => p.role !== "owner" && (p.todo ?? 0) > 0);
+  // 头图里那颗提示：有作业先说作业，一份试卷都没有时提醒拍第一张
+  const pill = plans && plans.todo > 0 ? { n: plans.todo, text: "份作业待交", go: () => nav("/plans") }
+    : plans && plans.toReview > 0 ? { n: plans.toReview, text: "份等你批阅", go: () => nav("/plans") }
+    : folders && papers.length === 0 ? { n: 0, text: "拍下第一张试卷", go: add.open }
+    : null;
+  const bars = recent.bySubject.slice(0, 3);
+  const barMax = Math.max(1, ...bars.map((g) => g.items.length));
+
+  const planRow = (p: PlanInfo) => {
+    const owner = p.role === "owner";
+    const n = pending(p);
+    const total = p.assignments ?? 0;
+    const idle = planIdleLabel(p);
+    const allDone = n === 0 && (idle === "都交了" || idle === "都批完了");
+    // 截止时间服务器只给了最近的一份：只有一个计划有待交时才知道它是哪个计划的
+    const due = !owner && n > 0 && memberTodo.length === 1 && plans?.nextDue ? dueLabel(plans.nextDue) : "";
+    return (
+      <button key={p.id} className="h4__plan" onClick={() => nav(`/plans/${p.id}`)}>
+        <Avatar name={p.teacher} url={p.teacherAvatar} size={44} />
+        <span className="h4__main">
+          <span className="h4__name ellipsis">{p.name}</span>
+          <span className="h4__sub">
+            <span className="ellipsis">{owner ? "我建的" : p.teacher}{n === 0 ? ` · ${idle}` : ""}</span>
+            {due && <b><Icon name="clock" size={12} stroke={2.6} />{due} 截止</b>}
+          </span>
+        </span>
+        {n > 0 && owner && <Tag kind="info">待批 {n}</Tag>}
+        {n > 0 && !owner && (total >= n && total > 0 ? <Ring done={total - n} total={total} /> : <Tag kind="pending">待交 {n}</Tag>)}
+        {allDone && <span className="h4__done"><Icon name="check" size={20} stroke={3} /></span>}
+      </button>
+    );
+  };
+
   return (
-    <div className="screen home2">
+    <div className="screen home4">
       <AvatarPrompt />
-      <header className="topbar home2__head">
-        <span className="home2__logo"><Icon name="check" size={18} stroke={3} /></span>
-        <span className="home2__name">上壹课</span>
-        <span className="home2__date">{today}</span>
+      <header className="h4__hero">
+        <HeroDeco />
+        <span className="h4__spot" />
+        <Buddy scene={scanning.length ? "scan" : folders && papers.length === 0 ? "empty" : "hero"} size={150} style={{ position: "absolute", right: 8, bottom: 30 }} />
+        <div className="h4__brand">
+          <span className="h4__logo"><Icon name="check" size={17} stroke={3} /></span>
+          <span className="h4__bname">上壹课</span>
+          <span className="h4__date">{today}</span>
+        </div>
+        <div className="h4__hi ellipsis">{hello}{nickname ? `，${nickname}` : ""}</div>
+        {pill && (
+          <button className="h4__pill" onClick={pill.go}>
+            <i>{pill.n > 0 ? pill.n : <Icon name="camera" size={12} stroke={2.6} />}</i>{pill.text}
+          </button>
+        )}
       </header>
-      <div className="home2__body">
-        <section className="plan rise" style={{ ["--i" as string]: 0 }}>
-          <div className="plan__top"><span className="plan__title">今日安排</span><span className="plan__sub">计划和作业，一眼看清</span></div>
-          <div className="plan__cards">
-            <button className="pc" onClick={() => nav("/plans")}>
-              <span className="pc__h"><span className="pc__t">学习计划</span>
-                {/* 右上角直接新建；卡片其余地方点了还是进计划列表。外层已经是 button，这里只能用 span */}
-                <span className="pc__add" role="button" aria-label="新建学习计划" onClick={(e) => { e.stopPropagation(); nav("/plans/new"); }}><Icon name="plus" size={12} stroke={3} />新建</span>
-              </span>
-              {hasPlans && plans ? (
-                <>
-                  <span className="pc__big"><b className="pc__num">{planCount}</b>{planUnit}</span>
-                  <span className="pc__m">
-                    {plans.todo > 0 && plans.nextSubject && plans.nextSubject !== "mixed" && <SubjectTile subject={plans.nextSubject} size="xs" style={{ width: 16, height: 16, borderRadius: 5, fontSize: 10 }} />}
-                    <span className="ellipsis">{plans.todo > 0 ? plans.nextTitle ?? "作业" : plans.owned > 0 ? `今天已交 ${plans.submittedToday} 份` : "作业都交了"}</span>
-                  </span>
-                  {plans.todo > 0 && plans.nextDue && <span className="pc__m pc__m--due">{dueLabel(plans.nextDue)} 截止</span>}
-                </>
-              ) : (
-                <>
-                  <span className="pc__empty">还没有计划</span>
-                  <span className="pc__m pc__m--wrap">加入老师的计划，或自己建一个</span>
-                </>
-              )}
-            </button>
-            {/* 待办事项还没做好：先占个位置，点了提示一下 */}
-            <button className="pc" onClick={() => toast("待办事项还在开发中，过几天就能用了")}>
-              <span className="pc__h"><span className="pc__t">待办事项</span><span className="tag tag--neutral">即将上线</span></span>
-              <span className="pc__empty">记下今天要做的事</span>
-              <span className="pc__m pc__m--wrap">拍一张作业单，自动列成待办</span>
-            </button>
+      <div className="h4">
+        <div className="h4__acts rise" style={{ ["--i" as string]: 0 }}>
+          <button className="h4__act h4__act--a" onClick={add.open}><ColorIcon name="collect" size={72} className="h4__art" /><b>错题收集</b></button>
+          <button className="h4__act h4__act--b" onClick={erase}><ColorIcon name="erase" size={72} className="h4__art" /><b>试卷擦除</b></button>
+        </div>
+
+        {scanning.length > 0 ? (
+          <button className="h4__card rise" style={{ ["--i" as string]: 1 }} onClick={() => nav(`/papers/${scanning[0].f.id}`)}>
+            <ColorIcon name="scan" size={44} />
+            <span className="h4__main">
+              <span className="h4__name ellipsis">正在识别 {scanning[0].p.name}</span>
+              <span className="progress" style={{ marginTop: 6, height: 8 }}><span style={{ width: `${Math.max(6, scanning[0].p.scanJob!.progress || 0)}%` }} /></span>
+            </span>
+            <span className="h4__pct">{Math.round(scanning[0].p.scanJob!.progress || 0)}%</span>
+          </button>
+        ) : failed.length > 0 && (
+          <button className="h4__card rise" style={{ ["--i" as string]: 1 }} onClick={() => nav(`/papers/${failed[0].f.id}/${failed[0].p.id}`)}>
+            <ColorIcon name="retry" size={44} />
+            <span className="h4__main">
+              <span className="h4__name ellipsis">{failed[0].p.name}</span>
+              <span className="h4__sub" style={{ color: "var(--wrong)" }}>没识别出来，点开重试</span>
+            </span>
+            <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+          </button>
+        )}
+
+        <section className="rise" style={{ ["--i" as string]: 2 }}>
+          <div className="h4__sech">
+            <button className="h4__sect" onClick={() => nav("/plans")}>学习计划</button>
+            <button className="h4__add" aria-label="新建学习计划" onClick={() => nav("/plans/new")}><Icon name="plus" size={13} stroke={3} />新建</button>
           </div>
-          {topPlans.length > 0 && (
-            <div className="plist">
-              {topPlans.map((p) => (
-                <button key={p.id} className="plist__row" onClick={() => nav(`/plans/${p.id}`)}>
-                  <Avatar name={p.teacher} url={p.teacherAvatar} size={36} />
-                  <span className="plist__main">
-                    <span className="plist__name ellipsis">{p.name}</span>
-                    <span className="plist__sub ellipsis">{teacherLine(p.teacher, p.subject)}</span>
-                  </span>
-                  {pending(p) > 0
-                    ? <Tag kind={p.role === "owner" ? "info" : "pending"}>{p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}</Tag>
-                    : <span className="plist__ok">{planIdleLabel(p)}</span>}
-                  <Icon name="chevron-right" size={13} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-                </button>
-              ))}
-              {planList.length > topPlans.length && <button className="plist__more" onClick={() => nav("/plans")}>全部 {planList.length} 个学习计划 ›</button>}
-            </div>
-          )}
+          <div className="h4__plans">
+            {topPlans.length > 0 ? topPlans.map(planRow) : (
+              <button className="h4__empty" onClick={() => nav("/plans")}><ColorIcon name="plan" size={40} />还没有学习计划</button>
+            )}
+            {planList.length > topPlans.length && <button className="h4__more" onClick={() => nav("/plans")}>全部 {planList.length} 个 ›</button>}
+          </div>
         </section>
 
-        <section className="hero2 rise" style={{ ["--i" as string]: 2 }}>
-          {scanning.length > 0 ? (
-            <button className="bubble" onClick={() => nav(`/papers/${scanning[0].f.id}`)}>
-              <span className="bubble__small">正在识别 · {scanStageText(scanning[0].p.scanJob!)}{scanning.length > 1 ? ` · 共 ${scanning.length} 份` : ""}</span>
-              <span className="bubble__text">「{scanning[0].p.name}」好了会自动归档。</span>
-              <span className="progress" style={{ background: "var(--brand-tint)", marginTop: 8 }}><span style={{ width: `${Math.max(6, scanning[0].p.scanJob!.progress)}%` }} /></span>
-            </button>
-          ) : failed.length > 0 ? (
-            <button className="bubble" onClick={() => nav(`/papers/${failed[0].f.id}/${failed[0].p.id}`)}>
-              <span className="bubble__small" style={{ color: "var(--wrong)" }}>识别失败</span>
-              <span className="bubble__text">「{failed[0].p.name}」没识别出来。</span>
-              <span className="bubble__more">点开重新识别 ›</span>
-            </button>
-          ) : recent.total > 0 ? (
-            <button className="bubble" onClick={() => nav("/rank")}>
-              <span className="bubble__small">近 30 天 · {recent.total} 道错题</span>
-              <span className="bubble__text">{recent.summary}</span>
-              <span className="bubble__more">看错题榜 ›</span>
-            </button>
-          ) : (
-            <div className="bubble">
-              <span className="bubble__small">{hello}{nickname ? `，${nickname}` : ""}</span>
-              <span className="bubble__text">{papers.length === 0 ? "点「错题收集」或下面的相机，拍下第一张试卷。" : "拍下新试卷，错题会自动整理。"}</span>
-            </div>
-          )}
-          <Buddy scene={scanning.length ? "scan" : "hero"} size={148} style={{ flexShrink: 0 }} />
-        </section>
-
-        <section className="sheet2 rise" style={{ ["--i" as string]: 3 }}>
-          <div className="big">
-            <button className="bt bt--a" onClick={add.open}>
-              <span className="bt__deco" /><span className="bt__ic"><Icon name="camera" size={25} stroke={2} /></span>
-              <span className="bt__t">错题收集</span><span className="bt__s">拍试卷，错题自动整理</span>
-            </button>
-            <button className="bt bt--b" onClick={erase}>
-              <span className="bt__deco" /><span className="bt__ic"><Icon name="brush" size={25} stroke={2} /></span>
-              <span className="bt__t">试卷擦除</span><span className="bt__s">擦掉手写，空白卷重练</span>
-            </button>
-          </div>
-          {topPlans.length > 0 && (
-            <div className="plist">
-              {topPlans.map((p) => (
-                <button key={p.id} className="plist__row" onClick={() => nav(`/plans/${p.id}`)}>
-                  <Avatar name={p.teacher} url={p.teacherAvatar} size={36} />
-                  <span className="plist__main">
-                    <span className="plist__name ellipsis">{p.name}</span>
-                    <span className="plist__sub ellipsis">{teacherLine(p.teacher, p.subject)}</span>
-                  </span>
-                  {pending(p) > 0
-                    ? <Tag kind={p.role === "owner" ? "info" : "pending"}>{p.role === "owner" ? `待批 ${pending(p)}` : `待交 ${pending(p)}`}</Tag>
-                    : <span className="plist__ok">{planIdleLabel(p)}</span>}
-                  <Icon name="chevron-right" size={13} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-                </button>
-              ))}
-              {planList.length > topPlans.length && <button className="plist__more" onClick={() => nav("/plans")}>全部 {planList.length} 个学习计划 ›</button>}
-            </div>
-          )}
-        </section>
+        {recent.total > 0 && (
+          <button className="h4__card h4__err rise" style={{ ["--i" as string]: 3 }} onClick={() => nav("/rank")}>
+            <span className="h4__num">{recent.total}</span>
+            <span className="h4__main"><span className="h4__numl">道错题</span><span className="h4__nums">近 30 天</span></span>
+            <span className="h4__bars" aria-hidden="true">
+              {bars.map((g) => {
+                const color = subjectColors(g.subject).color;
+                return <span key={g.subject} className="h4__bar" style={{ color }}><i style={{ height: Math.max(8, Math.round((g.items.length / barMax) * 44)), background: color }} />{SUBJECT_LABEL[g.subject].slice(0, 1)}</span>;
+              })}
+            </span>
+            <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+          </button>
+        )}
       </div>
       {add.sheet}
       <Sheet open={picking} onClose={() => setPicking(false)} title="擦哪一份试卷">

@@ -8,10 +8,11 @@ import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
 import { teacherLine, byNewest, createdLabel, fetchPlans, type PlanInfo } from "../../lib/plans";
 import { useShare } from "../../lib/share";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 
 /** 学习计划列表（和 App 一致）：我创建的、我加入的。加入只能靠点微信里的卡片，这里只有「新建」一个入口。 */
 export default function Plans() {
+  const tc = useThemeClass();
   useShare();
   const [version] = usePlansVersion();
   const [plans, setPlans] = useState<PlanInfo[] | null>(null);
@@ -75,7 +76,7 @@ export default function Plans() {
   );
 
   return (
-    <View className="page" style={{ gap: "10px" }}>
+    <View className={"page" + tc} style={{ gap: "10px" }}>
       {!plans && (
         <View className="empty">
           <View className="spinner spinner--lg" />

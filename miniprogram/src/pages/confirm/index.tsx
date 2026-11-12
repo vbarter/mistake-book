@@ -5,6 +5,7 @@ import { Icon } from "../../components/Icon";
 import { useMenuButton } from "../../components/ui";
 import { answerConfirm, confirmingSrc } from "../../lib/confirm";
 import { useShare } from "../../lib/share";
+import { useThemeClass } from "../../lib/theme";
 
 /**
  * 拍完照的全屏确认：黑底居中显示照片，底下一排「向左转 / 向右转」。没有确认按钮，靠上滑确认，照片下方有循环的上滑引导。
@@ -23,6 +24,7 @@ const MIN_FLICK = 24;
 const FLY_MS = 200;
 
 export default function ConfirmPage() {
+  const tc = useThemeClass();
   useShare();
   const src = useMemo(() => confirmingSrc(), []);
   const mb = useMenuButton();
@@ -130,7 +132,7 @@ export default function ConfirmPage() {
   const armed = progress >= 1;
 
   return (
-    <View className="confirm" catchMove>
+    <View className={"confirm" + tc} catchMove>
       <View style={{ height: `${barTop}px` }} />
       <View style={{ height: `${barH}px` }} />
       <View className="confirm__stage" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>

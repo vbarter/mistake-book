@@ -5,6 +5,7 @@ import { ApiError, errorText } from "../../lib/api";
 import { bindPhone, sendBindCode } from "../../lib/auth";
 import { syncNow } from "../../lib/sync";
 import "./index.scss";
+import { useThemeClass } from "../../lib/theme";
 
 const MERGE_TEXT = "这个手机号已经有账号了（比如在上壹课 App 里注册过）。合并后两边的试卷都会保留，以后用微信或这个手机号登录都能看到同样的内容。合并后不能拆开。";
 
@@ -13,6 +14,7 @@ const MERGE_TEXT = "这个手机号已经有账号了（比如在上壹课 App �
  * 两种验证：微信「手机号快速验证」一键授权（需要小程序是企业 / 个体户主体），或短信验证码。号码已有账号时确认后合并。
  */
 export default function BindPhone() {
+  const tc = useThemeClass();
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [wait, setWait] = useState(0);
@@ -99,7 +101,7 @@ export default function BindPhone() {
   };
 
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       <Text className="t-sub c-sec">绑定后，在上壹课 App 里用这个手机号登录，就能看到同样的试卷和错题。</Text>
       <Button className="btn btn--wx" openType="getPhoneNumber" onGetPhoneNumber={onWxPhone} disabled={busy}>
         微信手机号一键绑定
