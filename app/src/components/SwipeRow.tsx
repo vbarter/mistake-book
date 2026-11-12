@@ -1,5 +1,5 @@
 /**
- * 一张能向左滑出「删除」的卡片（学习计划页创建人删作业用，和小程序一致）。
+ * 一张能向左滑出按钮的卡片（学习计划页：创建人删作业；成员把交过的作业「解绑」，这时是卡片里的一行，inline。和小程序一致）。
  *
  * - 整张卡片（children）跟手左移，右边露出红色按钮；滑过一半松手就停在打开位置，否则弹回
  * - 同一时间只开一张：open 由页面管；按到卡片外面、页面滚动、点卡片本身都会收回
@@ -7,11 +7,11 @@
  * - hint：首次引导，自己滑出一小截再弹回，露一下红色按钮，不加文字
  */
 import { useEffect, useRef, type ReactNode } from "react";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
 const ACTION_W = 68; // 删除按钮宽度（和 .swipe-row__action 的宽度一致）
 const GAP = 8; // 卡片和按钮之间露出的页面底色
-const SHIFT = ACTION_W + GAP;
+const SHIFT_CARD = ACTION_W + GAP;
 const SLOP = 6; // 超过这个距离才判断横滑 / 竖滑
 
 type Gesture =
@@ -27,11 +27,15 @@ interface Props {
   children: ReactNode;
   className?: string; // 加在卡片本身上（比如 group）
   label?: string;
+  icon?: IconName;
+  /** 卡片里的一行（外面已经有 .group 了）：按钮直角贴边，不留缝 */
+  inline?: boolean;
   hint?: boolean;
   onHintDone?: () => void;
 }
 
-export function SwipeRow({ open, onOpenChange, onDelete, children, className = "", label = "删除", hint, onHintDone }: Props) {
+export function SwipeRow({ open, onOpenChange, onDelete, children, className = "", label = "删除", icon = "trash", inline, hint, onHintDone }: Props) {
+  const SHIFT = inline ? ACTION_W : SHIFT_CARD;
   const g = useRef<Gesture>({ kind: "idle" });
   const root = useRef<HTMLDivElement | null>(null);
   const content = useRef<HTMLDivElement | null>(null);
@@ -124,7 +128,7 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, className = "
   };
 
   return (
-    <div className="swipe-row" ref={root}>
+    <div className={inline ? "swipe-row swipe-row--inline" : "swipe-row"} ref={root}>
       <button
         className="swipe-row__action"
         tabIndex={open ? 0 : -1}
@@ -134,7 +138,7 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, className = "
           onDelete();
         }}
       >
-        <Icon name="trash" size={22} stroke={2} />
+        <Icon name={icon} size={22} stroke={2} />
         <span>{label}</span>
       </button>
       <div

@@ -21,6 +21,12 @@ export const planSubjectText = (subject: PlanSubject | null | undefined): string
 /** 「小同学 · 数学」；没有学科时只有名字 */
 export const teacherLine = (teacher: string, subject: PlanSubject | null | undefined): string => [teacher, planSubjectText(subject)].filter(Boolean).join(" · ");
 export const DEFAULT_NICKNAME = "小同学";
+/**
+ * 交作业后的 AI 批改开关（和小程序的 lib/plans.ts 同名开关保持一致）。先关着：交作业只把照片传给老师，
+ * 不存进自己的试卷、不提交扫描批改、不回填逐题结果，界面上也不显示批改中 / 对错统计 / 题号。
+ * 要恢复：两端都改回 true 即可，下面的批改和回填代码都原样留着。
+ */
+export const AI_GRADING: boolean = false;
 export const MAX_PLAN_FILE_BYTES = 20 * 1024 * 1024;
 export const ATTACHMENT_MIMES = [
   "application/pdf",
@@ -116,6 +122,13 @@ export async function fetchPlan(id: string): Promise<PlanDetailRes> {
     }),
   );
   return r;
+}
+/** 成员能不能把这份「解绑」（撤掉自己交的那份，回到没交）：交了、老师还没批阅 */
+export const canWithdraw = (a: MemberAssignment) => a.status === "submitted";
+/** 解绑：撤掉自己交的那份，照片从服务器删掉 */
+export async function withdrawHomework(assignmentId: string): Promise<void> {
+  await api(`/api/plans/assignments/${assignmentId}/submission`, { method: "DELETE" });
+  usePlans.getState().bump();
 }
 /** 这份作业现在还能不能交：没撤回、老师还没批阅（交过没批阅的可以重交，退回的要重交） */
 export const canHandIn = (a: MemberAssignment) => !a.revoked && a.status !== "reviewed";
@@ -244,7 +257,7 @@ function writePending(fn: (p: Pending) => Pending) {
 let wake: (() => void) | null = null;
 
 /** 这次提交的批改结果还没回填给老师（界面上显示「批改中」） */
-export const isSubmissionPending = (submissionId: string) => readPending().subs.some((s) => s.submissionId === submissionId);
+export const isSubmissionPending = (submissionId: string) => AI_GRADING && readPending().subs.some((s) => s.submissionId === submissionId);
 export const isAssignmentScanning = (assignmentId: string) => readPending().jobs.some((j) => j.assignmentId === assignmentId);
 
 /** 请求被服务器明确拒绝（作业撤回了、已批阅、没权限）：不用再试 */
@@ -295,6 +308,7 @@ export function toResultRow(q: DigitizedQuestion): ResultRow {
 
 let flushing = false;
 async function flushSubmissions(): Promise<number> {
+  if (!AI_GRADING) return 0; // 批改关着：以前记下的待回填项先放着，不判也不交
   if (flushing) return readPending().subs.length;
   flushing = true;
   let left = 0;
@@ -375,6 +389,12 @@ export async function submitHomework(assignment: AssignmentBrief, pages: FullPag
   const drafts = pages.map(scanDraft);
   const res = await api<{ submission: SubmissionView; uploads: Upload[] }>(`/api/plans/assignments/${assignment.id}/submission`, { method: "POST", body: { files: filesBody(drafts) } });
   await uploadAll(res.uploads, drafts, onStage);
+  if (!AI_GRADING) {
+    // 批改关着：照片只传给老师。重交时，旧的那份以前记过待回填的话一并去掉
+    writePending((p) => ({ ...p, subs: p.subs.filter((x) => x.submissionId !== res.submission.id) }));
+    usePlans.getState().bump();
+    return res.submission;
+  }
   const target = await autoTargetFolder();
   const { folder, paper } = await addPaper(target?.id ?? null, pages, assignment.title);
   // 重交：旧的那份不再回填

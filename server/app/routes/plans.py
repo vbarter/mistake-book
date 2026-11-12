@@ -843,6 +843,30 @@ def submit(assignment_id: str):
     return jsonify({"submission": _submission_view(sub, storage.get_storage()), "uploads": uploads}), 201
 
 
+@bp.delete("/plans/assignments/<assignment_id>/submission")
+@login_required
+def withdraw_submission(assignment_id: str):
+    """成员解绑：撤掉自己交的那份（照片一起删），这份作业回到没交。老师批阅过的不能撤"""
+    user = current_user()
+    a, plan = _assignment_or_404(assignment_id)
+    _require_role(plan, "member")
+    sub = PlanSubmission.query.filter_by(assignment_id=a.id, user_id=user.id).first()
+    if sub is None:
+        return jsonify({"ok": True})  # 本来就没交（或者点了两下）
+    if sub.status == "reviewed":
+        abort(409, "老师已经批阅过了，不能解绑")
+    _delete_files(_files_of(a.id, sub.id))
+    db.session.delete(sub)
+    db.session.flush()
+    # 老师删掉的作业只是为交过的人留着：最后一份也撤了，就把它真的删掉
+    if a.revoked and not PlanSubmission.query.filter_by(assignment_id=a.id).count():
+        _delete_files(PlanFile.query.filter_by(assignment_id=a.id).all())
+        PlanView.query.filter_by(assignment_id=a.id).delete(synchronize_session=False)
+        db.session.delete(a)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 def _submission_or_404(submission_id: str) -> tuple[PlanSubmission, Plan]:
     sub = db.session.get(PlanSubmission, submission_id)
     if sub is None:

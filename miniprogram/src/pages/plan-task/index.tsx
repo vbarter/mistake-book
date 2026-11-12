@@ -8,7 +8,7 @@ import { Button, Segmented, Sheet, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { submitExport } from "../../lib/export";
 import { toast } from "../../lib/hooks";
-import { STATUS_LABEL, absoluteUrl, bumpPlans, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, openPlanFile, planGone, sizeLabel, submitHomework, type AssignmentRes } from "../../lib/plans";
+import { AI_GRADING, STATUS_LABEL, absoluteUrl, bumpPlans, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, openPlanFile, planGone, sizeLabel, submitHomework, type AssignmentRes } from "../../lib/plans";
 import type { Paper } from "../../lib/store";
 import { C, useThemeClass } from "../../lib/theme";
 
@@ -203,7 +203,7 @@ export default function PlanTask() {
                 迟交
               </Tag>
             )}
-            <Tag kind={sub.status === "reviewed" ? "correct" : sub.status === "returned" ? "wrong" : "info"} icon={sub.status === "reviewed" ? undefined : null}>
+            <Tag kind={sub.status === "returned" ? "wrong" : "correct"}>
               {STATUS_LABEL[sub.status]}
             </Tag>
           </View>
@@ -212,7 +212,7 @@ export default function PlanTask() {
               老师：{sub.comment}
             </Text>
           )}
-          {sub.results && sub.score ? (
+          {!AI_GRADING ? null : sub.results && sub.score ? (
             <>
               <ScoreStats score={sub.score} />
               <QuestionGrid results={sub.results} />

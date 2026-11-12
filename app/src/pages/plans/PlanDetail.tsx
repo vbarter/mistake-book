@@ -5,7 +5,7 @@ import { SwipeRow } from "../../components/SwipeRow";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Avatar, Stat, Tag } from "../../components/v2";
-import { planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { openFile } from "./Assignment";
 import { PlanMember } from "./PlanMember";
@@ -37,7 +37,7 @@ const itemTag = (it: MemberItem) =>
   it.status === "submitted" ? <Tag kind="info" icon="pencil">待阅</Tag>
     : it.status === "reviewed" ? <Tag kind="correct">已阅</Tag>
       : it.status === "returned" ? <Tag kind="wrong" icon="refresh">退回</Tag>
-        : <Tag kind="pending" icon={it.viewed ? "clock" : "eye-off"}>{it.viewed ? "未交" : "没看"}</Tag>;
+        : <Tag kind="neutral" icon={it.viewed ? "clock" : "eye-off"}>{it.viewed ? "未交" : "没看"}</Tag>;
 
 export default function PlanDetail() {
   const nav = useNavigate();
@@ -126,7 +126,7 @@ export default function PlanDetail() {
               <>
                 <div className="plan-stats plan-stats--3">
                   <Stat icon="checkcircle" label="交齐" value={handed} />
-                  <Stat icon="clock" label="没交齐" value={missing} color={missing > 0 ? "var(--due)" : undefined} />
+                  <Stat icon="clock" label="没交齐" value={missing} />
                   <Stat icon="family" label="总成员" value={plan.members ?? active.length} />
                 </div>
                 <Segmented value={tab} options={[{ value: "tasks", label: `作业 ${tasks.length}` }, { value: "members", label: `成员 ${active.length}` }]} onChange={setTab} />
@@ -149,12 +149,12 @@ export default function PlanDetail() {
                       }
                     }}
                   >
-                    {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的 */}
+                    {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，灰色时钟 = 没交（不上色），灰色闭眼 = 没交的人里还没看过的 */}
                     <div className="plan-task plan-task--static">
                       <span className="plan-task__head">
                         <span className="plan-counts" style={{ flex: 1 }} aria-label={`已交 ${a.submitted}，没交 ${a.missing}，其中没看 ${a.unseen}`}>
                           {count("checkcircle", "var(--mastered)", a.submitted)}
-                          {count("clock", "var(--accent-on, #8a4b00)", a.missing)}
+                          {count("clock", "var(--secondary)", a.missing)}
                           {count("eye-off", "var(--tertiary)", a.unseen)}
                         </span>
                         {a.dueAt && due(a.dueAt)}
@@ -217,7 +217,7 @@ export default function PlanDetail() {
               <button key={it.assignmentId} className="row" disabled={!it.submissionId} onClick={() => { setMember(null); nav(`/plans/s/${it.submissionId}`); }}>
                 <span className="row__main">
                   <span className="row__title ellipsis">{data.assignments.find((a) => a.id === it.assignmentId)?.title ?? "作业"}</span>
-                  {(it.status === "submitted" || it.status === "reviewed") && (it.score ? <ScoreCounts score={it.score} /> : <span className="row__sub">批改中</span>)}
+                  {AI_GRADING && (it.status === "submitted" || it.status === "reviewed") && (it.score ? <ScoreCounts score={it.score} /> : <span className="row__sub">批改中</span>)}
                 </span>
                 {it.late && <Tag kind="neutral">迟交</Tag>}
                 {itemTag(it)}
