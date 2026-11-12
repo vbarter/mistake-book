@@ -312,7 +312,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
 
       {/* 自己交上去的那几页：一页页往下排，点一页用系统预览放大 */}
       <Sheet open={myFiles !== null} onClose={() => setMyFiles(null)} title={`我交的作业 · ${myFiles?.length ?? 0} 页`}>
-        {(myFiles ?? []).map((f) => (f.url ? <img key={f.id} className="plan-photo" src={assetUrl(f.url)} alt={f.name} loading="lazy" onClick={() => void openFile(f)} /> : <div key={f.id} className="plan-files__empty card">「{f.name}」还在上传</div>))}
+        {(myFiles ?? []).map((f) => (f.url ? <img key={f.id} className="plan-photo" style={{ flexShrink: 0 }} src={assetUrl(f.url)} alt={f.name} loading="lazy" onClick={() => void openFile(f)} /> : <div key={f.id} className="plan-files__empty card">「{f.name}」还在上传</div>))}
       </Sheet>
 
       <Sheet open={exporting} onClose={() => setExporting(false)} title="导出作业">
