@@ -112,10 +112,6 @@
 .h4__name { font-size: 16px; line-height: 22px; font-weight: 700; color: var(--label); }
 .h4__sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; line-height: 18px; color: var(--secondary); }
 .h4__time { font-size: 12px; line-height: 16px; color: var(--tertiary); }
-.h4__sub b { flex-shrink: 0; display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--tie); }
-.h4__ring { position: relative; width: 44px; height: 44px; flex-shrink: 0; }
-.h4__ring > span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: var(--due); font-variant-numeric: tabular-nums; }
-.h4__done { width: 44px; height: 44px; border-radius: 22px; flex-shrink: 0; background: var(--mastered-bg); color: var(--mastered); display: flex; align-items: center; justify-content: center; }
 .h4__empty { display: flex; align-items: center; gap: 12px; height: 76px; padding: 0 16px; border-radius: 18px; border: 1.5px dashed color-mix(in srgb, var(--brand) 35%, transparent); color: var(--secondary); font-size: 15px; text-align: left; }
 .h4__more { height: 36px; font-size: 13px; font-weight: 600; color: var(--brand); }
 .h4__err { min-height: 92px; padding: 0 16px; gap: 14px; }

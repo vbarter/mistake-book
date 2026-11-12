@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Image, Text, View } from "@tarojs/components";
+import { Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh } from "@tarojs/taro";
 import { AvatarPrompt } from "../../components/AvatarPrompt";
 import { Buddy } from "../../components/Buddy";
 import { ColorIcon } from "../../components/ColorIcon";
 import { Icon, base64 } from "../../components/Icon";
-import { Avatar, Progress, Tag, subjectColors, useMenuButton } from "../../components/ui";
+import { Avatar, Progress, subjectColors, useMenuButton } from "../../components/ui";
 import { captureInto } from "../../lib/capture";
 import { allErrors } from "../../lib/errors";
 import { useDataVersion, useTabBar } from "../../lib/hooks";
@@ -13,7 +13,7 @@ import { analyze, inRange } from "../../lib/insights";
 import { pollPendingJobs } from "../../lib/jobs";
 import { currentUser, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLANS_EVENT, createdLabel, dueLabel, fetchPlans, planIdleLabel, type PlanInfo, type PlanSummary } from "../../lib/plans";
+import { PLANS_EVENT, createdLabel, fetchPlans, type PlanInfo, type PlanSummary } from "../../lib/plans";
 import { listFolders } from "../../lib/store";
 import { SUBJECT_LABEL } from "../../lib/format";
 import { C, useTheme, useThemeClass } from "../../lib/theme";
@@ -23,7 +23,7 @@ const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
  * 首页（和 App 一致）：头图（问候、小人、一句提示），下面依次是两个入口「错题收集」「试卷擦除」、识别进度、
- * 学习计划（每个计划一行，进度环 / 对勾）、近 30 天错题数和各科小柱子。导出错题本在「分析」页。
+ * 学习计划（每个计划一行：名字、身份图标、创建时间）、近 30 天错题数和各科小柱子。导出错题本在「分析」页。
  */
 /** 头图上的装饰：几颗星星和淡淡的圆弧（画成背景图，靠左下角对齐） */
 const HERO_DECO = (() => {
@@ -35,28 +35,6 @@ const HERO_DECO = (() => {
     `<path d="M-10 226c60-34 120-34 190-8" stroke="#fff" stroke-opacity=".07" stroke-width="22" stroke-linecap="round"/></svg>`;
   return `data:image/svg+xml;base64,${base64(svg)}`;
 })();
-
-const ringCache = new Map<string, string>();
-/** 进度环：交了几份 / 一共几份。小程序里没有内联 SVG，环画成图片，数字叠在上面 */
-function Ring({ done, total }: { done: number; total: number }) {
-  const key = `${done}/${total}`;
-  let uri = ringCache.get(key);
-  if (!uri) {
-    const r = 18;
-    const c = 2 * Math.PI * r;
-    const svg =
-      `<svg xmlns="http://www.w3.org/2000/svg" width="88" height="88" viewBox="0 0 44 44"><circle cx="22" cy="22" r="${r}" fill="none" stroke="#fff0e3" stroke-width="5"/>` +
-      `<circle cx="22" cy="22" r="${r}" fill="none" stroke="#ff8a3d" stroke-width="5" stroke-linecap="round" stroke-dasharray="${((c * done) / total).toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 22 22)"/></svg>`;
-    uri = `data:image/svg+xml;base64,${base64(svg)}`;
-    ringCache.set(key, uri);
-  }
-  return (
-    <View className="h4__ring">
-      <Image className="h4__ringi" src={uri} mode="aspectFit" />
-      <Text className="h4__ringt">{key}</Text>
-    </View>
-  );
-}
 
 export default function Home() {
   const tc = useThemeClass();
@@ -146,7 +124,6 @@ export default function Home() {
   };
 
   const mb = useMenuButton();
-  const memberTodo = planList.filter((p) => p.role !== "owner" && (p.todo ?? 0) > 0);
   // 头图里那颗提示：有作业先说作业，一份试卷都没有时提醒拍第一张
   const pill = plans && plans.todo > 0 ? { n: plans.todo, text: "份作业待交", go: () => go("/pages/plans/index") }
     : plans && plans.toReview > 0 ? { n: plans.toReview, text: "份等你批阅", go: () => go("/pages/plans/index") }
@@ -155,14 +132,9 @@ export default function Home() {
   const bars = recent.bySubject.slice(0, 3);
   const barMax = Math.max(1, ...bars.map((g) => g.items.length));
 
+  // 计划行只留头像、名字、身份图标和创建时间：状态文字和右边的进度标记都拿掉了，进计划里再看
   const planRow = (p: PlanInfo) => {
     const owner = p.role === "owner";
-    const n = pending(p);
-    const total = p.assignments ?? 0;
-    const idle = planIdleLabel(p);
-    const allDone = n === 0 && (idle === "都交了" || idle === "都批完了");
-    // 截止时间服务器只给了最近的一份：只有一个计划有待交时才知道它是哪个计划的
-    const due = !owner && n > 0 && memberTodo.length === 1 && plans?.nextDue ? dueLabel(plans.nextDue) : "";
     const created = createdLabel(p.createdAt);
     return (
       <View key={p.id} className="h4__plan" hoverClass="h4--hover" onClick={() => go(`/pages/plan/index?id=${p.id}`)}>
@@ -170,23 +142,11 @@ export default function Home() {
         <View className="h4__main">
           <Text className="h4__name ellipsis">{p.name}</Text>
           <View className="h4__sub">
-            <Text className="ellipsis">{owner ? "我建的" : p.teacher}{n === 0 ? ` · ${idle}` : ""}</Text>
-            {!!due && (
-              <View className="h4__due">
-                <Icon name="clock" size={12} color={C.tie} stroke={2.6} />
-                <Text>{due} 截止</Text>
-              </View>
-            )}
+            {/* 插旗是我建的，进门是我加入的 */}
+            <ColorIcon name={owner ? "plan-mine" : "plan-joined"} size={18} />
+            <Text className="h4__time ellipsis">{created || (owner ? "我建的" : p.teacher)}</Text>
           </View>
-          {!!created && <Text className="h4__time">{created}</Text>}
         </View>
-        {n > 0 && owner && <Tag kind="info" icon={null}>待批 {n}</Tag>}
-        {n > 0 && !owner && (total >= n && total > 0 ? <Ring done={total - n} total={total} /> : <Tag kind="pending" icon={null}>待交 {n}</Tag>)}
-        {allDone && (
-          <View className="h4__done">
-            <Icon name="check" size={20} color={C.ok} stroke={3} />
-          </View>
-        )}
       </View>
     );
   };

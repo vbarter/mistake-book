@@ -81,7 +81,13 @@ const GROUPS: Group[] = [
   ["todo", "待办", r(6.5, 6.5, 35, 35, 7) + r(12.5, 13.5, 8, 8, 2.5, GT) + ln("M14.5 17.500l1.8 1.8 3-3.5", G, 2.2) + r(12.5, 26.5, 8, 8, 2.5) + ln("M25.5 17.500h10M25.5 30.500h10", L, 2.5, .3)],
   ["pomodoro", "番茄钟", c(24, 27.5, 15.5, R) + ln("M13.5 25a11 11 0 0 1 5-7", W, 2.6, .8) + p("M24 14.500l-7-4.5 5.5-.500L24 4.500l1.5 5 5.5.500z", "#3aa57a")],
  ]],
+ // 计划行里的小图标（18 左右）：插旗是我建的，进门是我加入的。太小，元气粉也不垫色块
+ ["计划身份", [
+  ["plan-mine", "我建的", ln("M11 43h12") + p("M17 8h23l-6 8 6 8H17z", R) + ln("M22 16h7", W, 2.5, .9) + ln("M17 5.5V43", L, 3)],
+  ["plan-joined", "我加入的", r(7, 5, 23, 38, 4, BT) + c(13.5, 24, 1.8, L, false) + ln("M27 26H23", W, 7.5) + ln("M44 26H23M29.5 19.5L23 26l6.5 6.5", G, 3.4)],
+ ]],
 ];
+const NO_BLOB = ["plan-mine", "plan-joined"];
 if (T.pop) {
   // 小表情：两只眼睛加一个笑
   const face = (x: number, y: number, k = 1, col = L) => `<g transform="translate(${x} ${y}) scale(${k})"><circle cx="-4" cy="0" r="1.7" fill="${col}"/><circle cx="4" cy="0" r="1.7" fill="${col}"/><path d="M-2.6 3.6q2.6 2.4 5.2 0" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round"/></g>`;
@@ -103,11 +109,14 @@ if (T.pop) {
     about: `<circle cx="24" cy="24" r="18" fill="${BT}" ${s(B)}/>` + ln("M24 22v11.5", B, 3.6) + c(24, 15, 2.3, B, false),
     search: `<circle cx="21" cy="21" r="13" fill="${BT}" ${s(B)}/>` + ln("M30.5 30.5L41.5 41.5", L, 4.2) + ln("M14.5 20a7 7 0 0 1 5.5-5.5", W, 2.6),
     privacy: p("M24 4.5l15.5 5.5v12c0 10-6.5 17.5-15.5 21.5C15 39.5 8.5 32 8.5 22V10z", BT, B) + ln("M17 23.5l5 5 9.5-10.5", B, 3.4),
+    "plan-mine": ln("M11 43h12") + p("M17 8h23l-6 8 6 8H17z", R) + face(25.5, 15, .8, W) + ln("M17 5.5V43", L, 3),
+    "plan-joined": `<rect x="7" y="5" width="23" height="38" rx="4" fill="${BT}" ${s(B)}/>` + face(18, 15, .8, B) + ln("M27 26H23", W, 7.5) + ln("M44 26H23M29.5 19.5L23 26l6.5 6.5", R, 3.4),
   };
   // 背后错开的色块，粉蓝交替
   let i = 0;
   for (const [, list] of GROUPS) for (const it of list) {
     if (O[it[0]]) it[2] = O[it[0]];
+    if (NO_BLOB.includes(it[0])) continue;
     const blob = i++ % 2 ? BT : RT;
     it[2] = `<path d="M27 8c9-1 16 5 17 14s-4 18-13 20-19-2-22-10 0-17 6-21 8-2.5 12-3z" fill="${blob}" opacity=".75" transform="rotate(${(i * 47) % 360} 26 26)"/>` + it[2];
   }
@@ -129,7 +138,8 @@ export type ColorIconName =
   | "collect" | "album" | "erase" | "scan" | "wrong" | "ranking" | "knowledge" | "export" | "folder" | "file" | "video" | "retry"
   | "plan" | "plan-new" | "homework" | "submit" | "review" | "deadline" | "done" | "teacher" | "members" | "invite"
   | "chinese" | "math" | "english" | "science" | "physics" | "chemistry" | "biology" | "history" | "geography" | "politics"
-  | "grade" | "privacy" | "account" | "service" | "about" | "settings" | "bell" | "search" | "star" | "trash" | "todo" | "pomodoro";
+  | "grade" | "privacy" | "account" | "service" | "about" | "settings" | "bell" | "search" | "star" | "trash" | "todo" | "pomodoro"
+  | "plan-mine" | "plan-joined";
 /** 图标的 SVG 内容（不含外层 <svg>），viewBox 是 0 0 48 48 */
 export function colorIconInner(name: ColorIconName, theme: ThemeName, dark = false): string {
   return table(dark ? `${theme}-dark` : theme)[name] ?? "";
