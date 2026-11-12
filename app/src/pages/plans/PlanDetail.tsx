@@ -16,7 +16,7 @@ let remembered: { planId: string; tab: "tasks" | "members"; filter: Filter } | n
 
 /**
  * 学习计划页。创建人在这一页看完所有东西，不再有单独的「作业情况」页：
- * 顶部今日已交 / 未交 / 总成员；「作业」平铺每份作业的文件（点文件直接打开，点作业名：转发、提醒没交的、撤回）；
+ * 顶部今日已交 / 未交 / 总成员；「作业」平铺每份作业的文件（点文件直接打开，点作业名：提醒没交的、撤回）；
  * 「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，点一个人看他每份作业的情况并进去批阅、移出。
  * 点标题弹出面板：改名，下面是「让旧卡片失效」「解散」。
  * 成员点标题：改老师看到的名字、退出。页面上只留内容，不放这些不常用的操作。能用图标 + 数字说清的就不写字。
@@ -124,8 +124,8 @@ export default function PlanDetail() {
                 {tab === "tasks" && tasks.length === 0 && <div className="group"><div className="plan-files__empty">还没有作业</div></div>}
                 {tab === "tasks" && tasks.map((a) => (
                   <div key={a.id} className="group">
-                    {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的。点这一行：转发 / 提醒 / 撤回 */}
-                    <button className="plan-task" aria-label="这份作业的转发、提醒、撤回" onClick={() => setTask(a)}>
+                    {/* 不显示作业名（和成员那边一样），只留一行进度：绿勾 = 已交，橙色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的。点这一行：提醒 / 撤回 */}
+                    <button className="plan-task" aria-label="这份作业的提醒、撤回" onClick={() => setTask(a)}>
                       <span className="plan-task__head">
                         <span className="plan-counts" style={{ flex: 1 }} aria-label={`已交 ${a.submitted}，没交 ${a.missing}，其中没看 ${a.unseen}`}>
                           {count("checkcircle", "var(--mastered)", a.submitted)}
@@ -224,10 +224,9 @@ export default function PlanDetail() {
           </div>
         )}
       </Sheet>
-      {/* 点作业名：这份作业的转发、提醒、撤回 */}
+      {/* 点作业名：这份作业的提醒、撤回 */}
       <Sheet open={Boolean(task)} onClose={() => setTask(null)} title={task?.title}>
         <div className="plan-quiet plan-quiet--only">
-          <button onClick={() => { const a = task!; setTask(null); void forward(a); }}>转发这份作业</button>
           {task && task.missing > 0 && <button onClick={() => { const a = task; setTask(null); void forward(a, true); }}>提醒没交的同学</button>}
           <button className="plan-quiet__danger" onClick={() => { setRevoking(task); setTask(null); }}>撤回这份作业</button>
         </div>
