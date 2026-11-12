@@ -4,7 +4,7 @@ import { Icon } from "../../components/Icon";
 import { Button, Sheet } from "../../components/ui";
 import { Stat, Tag } from "../../components/v2";
 import { haptic, pickImages, takePhoto } from "../../lib/native";
-import { STATUS_LABEL, canHandIn, createdLabel, dueLabel, fetchAssignment, fileBadge, isOverdue, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../../lib/plans";
+import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../../lib/plans";
 import { canUseLiveCamera } from "../../lib/scanCamera";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
@@ -123,12 +123,8 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         <Stat icon="clock" label="待交" value={todo.length} color={todo.length ? "var(--due)" : undefined} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? "var(--mastered)" : undefined} />
       </div>
-      {/* 一张卡片：最上面是计划名 + 创建时间（只出现一次），下面一份份作业 */}
+      {/* 一张卡片，一份份作业（计划名在导航栏，创建时间在页面头部创建人名字下面） */}
       <div className="group">
-        <div className="plan-task plan-task--static">
-          <span className="t-headline ellipsis">{plan.name}</span>
-          <span className="t-foot c-sec">{createdLabel(plan.createdAt)}</span>
-        </div>
         {list.length === 0 && <div className="plan-files__empty">还没有作业</div>}
         {list.map((a) => {
         const look = lookOf(a);

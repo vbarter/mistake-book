@@ -86,8 +86,13 @@ const GROUPS: Group[] = [
   ["plan-mine", "我建的", ln("M11 43h12") + p("M17 8h23l-6 8 6 8H17z", R) + ln("M22 16h7", W, 2.5, .9) + ln("M17 5.5V43", L, 3)],
   ["plan-joined", "我加入的", r(7, 5, 23, 38, 4, BT) + c(13.5, 24, 1.8, L, false) + ln("M27 26H23", W, 7.5) + ln("M44 26H23M29.5 19.5L23 26l6.5 6.5", G, 3.4)],
  ]],
+ // 学习计划页头部的圆按钮（22 左右）：出门是退出（和「进门」相反：门敞开、箭头往外），旗子打叉是解散（和「插旗」相对）
+ ["计划操作", [
+  ["plan-quit", "退出学习计划", `<path d="M25 6H13a5 5 0 0 0-5 5v26a5 5 0 0 0 5 5h12z" fill="${RT}"/>` + ln("M25 6H13a5 5 0 0 0-5 5v26a5 5 0 0 0 5 5h12") + ln("M19 24h24", W, 7.5) + ln("M19.5 24H42M34.5 16.5L42 24l-7.5 7.5", R, 3.4)],
+  ["plan-dissolve", "解散学习计划", ln("M8 43h12") + p("M14 8h23l-6 8 6 8H14z", RT) + ln("M14 5.5V43", L, 3) + c(34.5, 34.5, 9.5, R) + ln("M31 31l7 7M38 31l-7 7", W, 2.8)],
+ ]],
 ];
-const NO_BLOB = ["plan-mine", "plan-joined"];
+const NO_BLOB = ["plan-mine", "plan-joined", "plan-quit", "plan-dissolve"];
 if (T.pop) {
   // 小表情：两只眼睛加一个笑
   const face = (x: number, y: number, k = 1, col = L) => `<g transform="translate(${x} ${y}) scale(${k})"><circle cx="-4" cy="0" r="1.7" fill="${col}"/><circle cx="4" cy="0" r="1.7" fill="${col}"/><path d="M-2.6 3.6q2.6 2.4 5.2 0" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round"/></g>`;
@@ -111,6 +116,8 @@ if (T.pop) {
     privacy: p("M24 4.5l15.5 5.5v12c0 10-6.5 17.5-15.5 21.5C15 39.5 8.5 32 8.5 22V10z", BT, B) + ln("M17 23.5l5 5 9.5-10.5", B, 3.4),
     "plan-mine": ln("M11 43h12") + p("M17 8h23l-6 8 6 8H17z", R) + face(25.5, 15, .8, W) + ln("M17 5.5V43", L, 3),
     "plan-joined": `<rect x="7" y="5" width="23" height="38" rx="4" fill="${BT}" ${s(B)}/>` + face(18, 15, .8, B) + ln("M27 26H23", W, 7.5) + ln("M44 26H23M29.5 19.5L23 26l6.5 6.5", R, 3.4),
+    "plan-quit": `<path d="M25 6H13a5 5 0 0 0-5 5v26a5 5 0 0 0 5 5h12z" fill="${BT}"/>` + ln("M25 6H13a5 5 0 0 0-5 5v26a5 5 0 0 0 5 5h12", B) + ln("M19 24h24", W, 7.5) + ln("M19.5 24H42M34.5 16.5L42 24l-7.5 7.5", R, 3.4),
+    "plan-dissolve": ln("M8 43h12") + p("M14 8h23l-6 8 6 8H14z", RT, B) + ln("M14 5.5V43", B, 3) + `<circle cx="34.5" cy="34.5" r="9.5" fill="${R}" ${s(R)}/>` + ln("M31 31l7 7M38 31l-7 7", W, 2.3),
   };
   // 背后错开的色块，粉蓝交替
   let i = 0;
@@ -139,7 +146,7 @@ export type ColorIconName =
   | "plan" | "plan-new" | "homework" | "submit" | "review" | "deadline" | "done" | "teacher" | "members" | "invite"
   | "chinese" | "math" | "english" | "science" | "physics" | "chemistry" | "biology" | "history" | "geography" | "politics"
   | "grade" | "privacy" | "account" | "service" | "about" | "settings" | "bell" | "search" | "star" | "trash" | "todo" | "pomodoro"
-  | "plan-mine" | "plan-joined";
+  | "plan-mine" | "plan-joined" | "plan-quit" | "plan-dissolve";
 /** 图标的 SVG 内容（不含外层 <svg>），viewBox 是 0 0 48 48 */
 export function colorIconInner(name: ColorIconName, theme: ThemeName, dark = false): string {
   return table(dark ? `${theme}-dark` : theme)[name] ?? "";

@@ -298,6 +298,11 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .btn--glow { box-shadow: 0 6px 16px $brand-glow; }
 .icon-btn { width: 40px; height: 40px; border-radius: 20px; background: $brand-tint; color: $brand; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
+/* 扫描失败页：主按钮下面的一排小图标操作（重拍 / 转正） */
+.fail-actions { display: flex; gap: 36px; margin-top: 4px; }
+.fail-action { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: $secondary; }
+.fail-action--hover { opacity: 0.6; }
+
 /* 页面底部固定操作栏（非 Tab 页） */
 .bottom-bar {
   position: fixed;
@@ -704,6 +709,9 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-add .btn { flex: 1; min-width: 0; }
 .plan-pill { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px 0 11px; border-radius: 17px; background: $card; border: 1px solid $sep-light; color: $label; font-size: 14px; font-weight: 600; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; }
 .plan-head { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+/* 头部的圆图标按钮（解散 / 退出），和「转发」同高 */
+.plan-iconbtn { width: 34px; height: 34px; border-radius: 17px; background: $card; border: 1px solid $sep-light; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box; }
+.plan-iconbtn--hover { opacity: 0.6; }
 .plan-creator { flex-direction: row; align-items: center; gap: 12px; }
 .plan-task { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-top: 1px solid $sep-light; }
 .plan-task:first-child, .group__header + .plan-task { border-top: 0; }
@@ -713,6 +721,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-hw > .plan-task { border-top: 0; padding-top: 6px; }
 .plan-hw { border-top: 1px solid $sep-light; }
 .plan-hw > .list-row:first-child { border-top: 1px solid $sep-light; }
+.group > .plan-hw:first-child, .group > .plan-hw:first-child > .list-row:first-child { border-top: 0; }
 /* 成员的计划页：交了的作业整块标绿，退回重做的标红 */
 .plan-task--done { background: $ok-bg; }
 .plan-task--returned { background: $wrong-bg; }

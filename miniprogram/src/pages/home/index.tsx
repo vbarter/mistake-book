@@ -203,7 +203,7 @@ export default function Home() {
               <ColorIcon name="retry" size={44} />
               <View className="h4__main">
                 <Text className="h4__name ellipsis">{failed[0].p.name}</Text>
-                <Text className="h4__sub" style={{ color: C.wrong }}>没识别出来，点开重试</Text>
+                <Text className="h4__sub" style={{ color: C.wrong }}>没扫出来</Text>
               </View>
               <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
             </View>

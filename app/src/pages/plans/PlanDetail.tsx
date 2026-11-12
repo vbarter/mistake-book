@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ColorIcon } from "../../components/ColorIcon";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Avatar, Stat, Tag } from "../../components/v2";
-import { planSubjectText, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
-import { useAuth } from "../../store/auth";
 import { openFile } from "./Assignment";
 import { PlanMember } from "./PlanMember";
-import { ConfirmSheet, PlanCreator, ScoreCounts } from "./shared";
+import { ConfirmSheet, ScoreCounts } from "./shared";
 
 type Filter = "all" | Exclude<MemberState, "none">;
 /** 从批阅页回来还停在刚才的页签和筛选上 */
@@ -18,8 +18,8 @@ let remembered: { planId: string; tab: "tasks" | "members"; filter: Filter } | n
  * 学习计划页。创建人在这一页看完所有东西，不再有单独的「作业情况」页：
  * 顶部今日已交 / 未交 / 总成员；「作业」平铺每份作业的文件（点文件直接打开，点作业名：提醒没交的、撤回）；
  * 「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，点一个人看他每份作业的情况并进去批阅、移出。
- * 点标题弹出面板：改名，下面是「让旧卡片失效」「解散」。
- * 成员点标题：改老师看到的名字、退出。页面上只留内容，不放这些不常用的操作。能用图标 + 数字说清的就不写字。
+ * 头部两边一样：创建人头像 + 名字 + 创建时间（计划名在导航栏），右边一个圆图标按钮，创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。
+ * 计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。「让旧卡片失效」在「成员」页签最下面。能用图标 + 数字说清的就不写字。
  * 成员：只有自己的待交 / 已交和作业（见 PlanMember），看不到其他成员、人数和别人交没交。
  */
 /** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅 */
@@ -32,7 +32,6 @@ const itemTag = (it: MemberItem) =>
 export default function PlanDetail() {
   const nav = useNavigate();
   const { planId = "" } = useParams();
-  const updateProfile = useAuth((st) => st.updateProfile);
   const [data, setData] = useState<PlanDetailRes | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"tasks" | "members">(remembered?.planId === planId ? remembered.tab : "tasks");
@@ -40,8 +39,6 @@ export default function PlanDetail() {
   const [member, setMember] = useState<PlanMemberRow | null>(null);
   const [task, setTask] = useState<OwnerAssignment | null>(null);
   const [revoking, setRevoking] = useState<OwnerAssignment | null>(null);
-  const [renaming, setRenaming] = useState(false);
-  const [planName, setPlanName] = useState("");
   const [confirm, setConfirm] = useState<"dissolve" | "leave" | "reset" | null>(null);
   const [removing, setRemoving] = useState<PlanMemberRow | null>(null);
   const version = usePlans((s) => s.version);
@@ -76,15 +73,6 @@ export default function PlanDetail() {
   const forward = (a: { id: string; title: string } | undefined = data.assignments.find((x) => !x.revoked), remind = false) =>
     act(() => shareInvite({ plan, invite: data.invite!, title: a?.title, assignmentId: a?.id, remind }));
 
-  const openPanel = () => { setPlanName(owner ? plan.name : data.me?.defaultName ? "" : data.me?.name ?? ""); setRenaming(true); };
-  const saveName = () => act(async () => {
-    const value = planName.trim();
-    if (owner) await updatePlan(plan.id, { name: value });
-    else await updateProfile({ nickname: value });
-    setRenaming(false);
-    await load();
-  }, owner ? "已更新" : "已改名，老师那边同步更新");
-
   const count = (icon: IconName, color: string, n: number | string) => (
     <span className="plan-count" style={{ color }}><Icon name={icon} size={14} stroke={2.4} /><span className="num">{n}</span></span>
   );
@@ -100,10 +88,20 @@ export default function PlanDetail() {
         subtitle={subject || undefined}
         back
         onBack={() => nav("/plans")}
-        onTitle={openPanel}
-        right={owner && data.invite ? <button className="plan-pill" onClick={() => forward()}><WechatIcon />转发</button> : undefined}
       />
       <div className="screen__content screen__content--modal" style={{ paddingTop: 8, gap: 12 }}>
+        <div className="plan-head">
+          <Avatar name={plan.teacher} url={plan.teacherAvatar} size={42} />
+          <span className="plan-head__main">
+            <span className="t-headline ellipsis">{plan.teacher}</span>
+            <span className="t-foot c-sec ellipsis">{createdLabel(plan.createdAt)}</span>
+          </span>
+          {/* 解散 / 退出：点了先确认 */}
+          <button className="plan-iconbtn" aria-label={owner ? "解散学习计划" : "退出学习计划"} onClick={() => setConfirm(owner ? "dissolve" : "leave")}>
+            <ColorIcon name={owner ? "plan-dissolve" : "plan-quit"} size={22} />
+          </button>
+          {owner && data.invite && <button className="plan-pill" onClick={() => forward()}><WechatIcon />转发</button>}
+        </div>
         {owner ? (
           (() => {
             const tasks = data.assignments as OwnerAssignment[];
@@ -167,6 +165,7 @@ export default function PlanDetail() {
                         );
                       })}
                     </div>
+                    <div className="plan-quiet plan-quiet--only"><button onClick={() => setConfirm("reset")}>让旧卡片失效</button></div>
                   </>
                 )}
                 <div className="bottom-bar" style={{ marginTop: "auto" }}>
@@ -176,25 +175,10 @@ export default function PlanDetail() {
             );
           })()
         ) : (
-          <>
-            <PlanCreator plan={plan} brief />
-            <PlanMember data={data} reload={load} />
-          </>
+          <PlanMember data={data} reload={load} />
         )}
       </div>
 
-      {/* 点标题弹出：改名在上面，不常用的操作安静地放在下面，页面上不再占地方 */}
-      <Sheet open={renaming} onClose={() => setRenaming(false)} title={owner ? "学习计划" : plan.name}>
-        <label className="plan-field">
-          <span className="plan-field__label">{owner ? "名称" : "老师看到的名字"}</span>
-          <input className="input" value={planName} maxLength={owner ? 60 : 16} onChange={(e) => setPlanName(e.target.value)} />
-        </label>
-        <Button disabled={!planName.trim() || planName.trim() === (owner ? plan.name : data.me?.name)} onClick={saveName}>保存</Button>
-        <div className="plan-quiet">
-          {owner && <button onClick={() => { setRenaming(false); setConfirm("reset"); }}>让旧卡片失效</button>}
-          <button className="plan-quiet__danger" onClick={() => { setRenaming(false); setConfirm(owner ? "dissolve" : "leave"); }}>{owner ? "解散学习计划" : "退出学习计划"}</button>
-        </div>
-      </Sheet>
       <ConfirmSheet open={confirm === "reset"} title="让以前转发的卡片失效？" text="之前发到微信里的卡片和链接都不能再用来加入。之后要邀请新同学，需要重新转发一次。" action="失效并换新的" onClose={() => setConfirm(null)}
         onConfirm={() => act(async () => { await updatePlan(plan.id, { resetInvite: true }); setConfirm(null); await load(); }, "旧卡片已失效，重新转发即可")} />
       <ConfirmSheet open={confirm === "dissolve"} danger title="解散这个学习计划？" text="计划、作业和同学交上来的内容都会从服务器删除，不能恢复。同学自己试卷里存的那份不受影响。" action="解散" onClose={() => setConfirm(null)}
