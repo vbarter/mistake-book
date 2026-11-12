@@ -13,7 +13,7 @@ import { useDataVersion } from "../../lib/hooks";
 import { scanStageText } from "../../lib/jobs";
 import { validDigitized } from "../../lib/logic";
 import { getFolder } from "../../lib/store";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 import { useShare } from "../../lib/share";
 
 /**
@@ -22,6 +22,7 @@ import { useShare } from "../../lib/share";
  * 所以把有插图的照片放到服务器后台擦一遍手写，插图从擦过的照片里裁。
  */
 export default function ErasePage() {
+  const tc = useThemeClass();
   useShare();
   const { params } = useRouter();
   const folderId = params.folderId ?? "";
@@ -58,7 +59,7 @@ export default function ErasePage() {
 
   if (!digitized) {
     return (
-      <View className="page center-page">
+      <View className={"page center-page" + tc}>
         <Icon name={paper.scanJob ? "sparkles" : "brush"} size={44} color={C.brand} />
         {paper.scanJob ? (
           <>
@@ -112,7 +113,7 @@ export default function ErasePage() {
   };
 
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       <View className="row-center" style={{ padding: "4px 4px 0" }}>
         <Text className="t-headline ellipsis flex1 minw0">{paper.name}</Text>
         <Text className="t-foot c-sec">{digitized.pages.length} 个卷面</Text>

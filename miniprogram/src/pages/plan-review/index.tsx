@@ -9,7 +9,7 @@ import { formatDateTime } from "../../lib/format";
 import { toast } from "../../lib/hooks";
 import { absoluteUrl, bumpPlans, fetchSubmission, memberName, reviewSubmission, type SubmissionRes } from "../../lib/plans";
 import { useShare } from "../../lib/share";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 import type { Mark } from "../../lib/types";
 
 const MARK_OPTIONS: { value: Mark; label: string }[] = [
@@ -24,6 +24,7 @@ const MARK_OPTIONS: { value: Mark; label: string }[] = [
  * 带上一个 / 下一个，连着批不用来回进出。这一页有同学的名字和作业，转发出去的只是首页。
  */
 export default function PlanReview() {
+  const tc = useThemeClass();
   useShare();
   const id = useRouter().params.id || "";
   const [version] = usePlansVersion();
@@ -88,7 +89,7 @@ export default function PlanReview() {
   };
 
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       <View className="plan-head">
         <View className="flex1 col minw0">
           <Text className="t-headline ellipsis">{assignment?.title ?? "作业"}</Text>

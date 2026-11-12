@@ -1,10 +1,14 @@
 /* 底部导航（自定义 tabBar）：颜色和 App 的 nav.css 一致。组件样式和页面隔离，这里自带一份。 */
-$brand: #1f3b73;
-$brand-glow: rgba(31, 59, 115, 0.32);
+$brand: var(--brand);
+$brand-glow: var(--brand-glow);
 $secondary: #5b5b63;
 $sep: #d1d1d6;
 $bg: #f3f4f8;
 $spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+/* 品牌色跟主题走：Tab 栏不在页面里，拿不到页面上的变量，这里自己定一份（值和 app.scss 一致） */
+.ctb { --brand: #1f3b73; --brand-solid: #1f3b73; --brand-glow: rgba(31, 59, 115, 0.32); }
+.ctb.theme-pop { --brand: #e8477c; --brand-solid: #f4608f; --brand-glow: rgba(251, 114, 153, 0.38); }
 
 .ctb-bar {
   position: fixed;

@@ -10,13 +10,14 @@ import { submitExport } from "../../lib/export";
 import { toast } from "../../lib/hooks";
 import { STATUS_LABEL, absoluteUrl, bumpPlans, dueLabel, fetchAssignment, fileBadge, isAssignmentScanning, isOverdue, isSubmissionPending, openPlanFile, planGone, sizeLabel, submitHomework, type AssignmentRes } from "../../lib/plans";
 import type { Paper } from "../../lib/store";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 
 /**
  * 作业页（和 App 一致，成员用）：作业内容 + 底部「导出」「扫描上传」，交了以后看自己的对 / 错 / 没做，不会拿到任何别人的信息。
  * 创建人不进这一页，直接回学习计划页（文件、谁交了谁没交都在那边）。
  */
 export default function PlanTask() {
+  const tc = useThemeClass();
   const id = useRouter().params.id || "";
   const [version] = usePlansVersion();
   const [data, setData] = useState<AssignmentRes | null>(null);
@@ -192,7 +193,7 @@ export default function PlanTask() {
   );
 
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       {!owner && sub && (
         <View className="card" style={{ gap: "12px" }}>
           <View className="row-center gap8">

@@ -9,9 +9,11 @@ import { GRADE_GROUPS, GRADE_LABEL, SUBJECTS, SUBJECT_GROUPS, SUBJECT_LABEL } fr
 import { toast } from "../../lib/hooks";
 import type { Subject } from "../../lib/types";
 import { useShare } from "../../lib/share";
+import { C, useThemeClass } from "../../lib/theme";
 
 /** 年级、城市与学科（和 App 的同名页面一致） */
 export default function Settings() {
+  const tc = useThemeClass();
   useShare();
   const user = useMemo(() => currentUser(), []);
   const [grade, setGrade] = useState(user?.grade ?? "5");
@@ -39,7 +41,7 @@ export default function Settings() {
   };
 
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       <View className="card">
         <Text className="t-headline">年级</Text>
         {GRADE_GROUPS.map((g) => (
@@ -75,7 +77,7 @@ export default function Settings() {
                 <View key={s} className="prow" hoverClass="prow--pressed" onClick={() => toggle(s)}>
                   <SubjectTile subject={s} size="sm" />
                   <Text className="prow__title">{SUBJECT_LABEL[s]}</Text>
-                  <Icon name={on ? "checkcircle" : "target"} size={24} color={on ? "#1f3b73" : "#d1d1d6"} stroke={on ? 2.2 : 1.6} />
+                  <Icon name={on ? "checkcircle" : "target"} size={24} color={on ? C.brand : "#d1d1d6"} stroke={on ? 2.2 : 1.6} />
                 </View>
               );
             })}

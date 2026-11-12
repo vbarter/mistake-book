@@ -3,13 +3,14 @@ import { Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { AvatarSheet } from "../../components/AvatarPrompt";
 import { Icon } from "../../components/Icon";
-import { Avatar, Row, Stat, SubjectTile, TopBar } from "../../components/ui";
+import { Avatar, Row, Sheet, Stat, SubjectTile, TopBar } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { LOGIN_PAGE, currentUser, ensureLogin, isLoggedIn, loginLabel, refreshUser, updateProfile } from "../../lib/auth";
 import { allErrors } from "../../lib/errors";
 import { GRADE_LABEL } from "../../lib/format";
 import { toast, useDataVersion, useTabBar } from "../../lib/hooks";
-import { C } from "../../lib/theme";
+import { C, THEMES, setTheme, useTheme, useThemeClass } from "../../lib/theme";
+import { ColorIcon } from "../../components/ColorIcon";
 import { listFolders, photosSizeMB } from "../../lib/store";
 import { useShare, useShareTimelineToo } from "../../lib/share";
 
@@ -18,6 +19,7 @@ const VERSION = "1.8.9";
 
 /** 我的：和 App 的「我的」同一套布局——账号卡片、统计、学习设置、数据与隐私、关于。没登录也能看，账号卡片换成「登录」。只留图标和短标题，不放解释性的段落 */
 export default function Profile() {
+  const tc = useThemeClass();
   useShare();
   useShareTimelineToo();
   useTabBar(3);
@@ -65,9 +67,11 @@ export default function Profile() {
   };
 
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const theme = useTheme();
 
   return (
-    <View className="page page--tab" style={{ gap: "14px", paddingTop: 0 }}>
+    <View className={"page page--tab" + tc} style={{ gap: "14px", paddingTop: 0 }}>
       <TopBar />
       <View className="card card--row profile-card" hoverClass="card--pressed" onClick={editName}>
         <View className="avatar-wrap">
@@ -108,10 +112,9 @@ export default function Profile() {
       </View>
 
       <View className="group">
-        <Row icon="graduation" iconBg={C.brand} title="年级" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => goLoggedIn("/pages/settings/index", "修改年级")} />
+        <Row art="grade" title="年级" value={[grade, city].filter(Boolean).join(" · ")} onClick={() => goLoggedIn("/pages/settings/index", "修改年级")} />
         <Row
-          icon="books"
-          iconBg={C.brand}
+          art="folder"
           title="学科"
           value={
             // 最多露 3 个学科图标，其余用「+N」收起
@@ -127,21 +130,42 @@ export default function Profile() {
       </View>
 
       <View className="group">
-        <Row icon="export" iconBg={C.brand} title="导出" onClick={() => goLoggedIn("/pages/exports/index", "查看导出")} />
-        <Row icon="photo" iconBg={C.accentOn} title="照片" value={`${stats.mb} MB`} chevron={false} />
-        <Row icon="shield" iconBg={C.ok} title="隐私" onClick={() => go("/pages/privacy/index")} />
+        <Row art="export" title="导出" onClick={() => goLoggedIn("/pages/exports/index", "查看导出")} />
+        <Row art="album" title="照片" value={`${stats.mb} MB`} chevron={false} />
+        <Row art="privacy" title="隐私" onClick={() => go("/pages/privacy/index")} />
         {user ? (
-          <Row icon="person" iconBg={C.label} title="账号" value={guest ? "" : loginLabel(user.loginMethod)} onClick={() => go("/pages/account/index")} />
+          <Row art="account" title="账号" value={guest ? "" : loginLabel(user.loginMethod)} onClick={() => go("/pages/account/index")} />
         ) : (
-          <Row icon="person" iconBg={C.label} title="登录" onClick={() => go(LOGIN_PAGE)} />
+          <Row art="account" title="登录" onClick={() => go(LOGIN_PAGE)} />
         )}
       </View>
 
       <View className="group">
-        <Row icon="bubble" iconBg={C.ok} title="客服" contact sessionFrom={`profile|${user?.id ?? "guest"}|${VERSION}`} />
-        <Row icon="info" iconBg={C.secondary} title="关于" value={VERSION} chevron={false} />
+        <Row art="settings" title="主题" value={THEMES.find((t) => t.id === theme)?.name} onClick={() => setThemeOpen(true)} />
+        <Row art="service" title="客服" contact sessionFrom={`profile|${user?.id ?? "guest"}|${VERSION}`} />
+        <Row art="about" title="关于" value={VERSION} chevron={false} />
       </View>
       {user && <AvatarSheet open={avatarOpen} user={user} onClose={() => setAvatarOpen(false)} />}
+      <Sheet open={themeOpen} onClose={() => setThemeOpen(false)} title="主题">
+        <View className="theme-grid">
+          {THEMES.map((t) => (
+            <View key={t.id} className={`theme-opt${theme === t.id ? " theme-opt--on" : ""}`} hoverClass="h4--hover" onClick={() => setTheme(t.id)}>
+              <View className="theme-opt__art" style={{ background: t.swatch }}>
+                {(["collect", "plan", "star"] as const).map((n) => (
+                  <View key={n} className="theme-opt__icon">
+                    <ColorIcon name={n} theme={t.id} size={34} />
+                  </View>
+                ))}
+              </View>
+              <View className="theme-opt__name">
+                <Text>{t.name}</Text>
+                {theme === t.id && <Icon name="checkcircle" size={18} color={C.brand} stroke={2.4} />}
+              </View>
+              <Text className="theme-opt__note">{t.note}</Text>
+            </View>
+          ))}
+        </View>
+      </Sheet>
     </View>
   );
 }

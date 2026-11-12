@@ -9,7 +9,7 @@ import { errorText } from "../../lib/api";
 import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
 import { planSubjectText, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 
 const leave = () => {
   if (Taro.getCurrentPages().length > 1) void Taro.navigateBack();
@@ -44,6 +44,7 @@ const itemTag = (it: MemberItem) =>
  * 页面上只留内容，不放这些不常用的操作。页面上能用图标 + 数字说清的就不写字。
  */
 export default function PlanDetail() {
+  const tc = useThemeClass();
   const id = useRouter().params.id || "";
   const [version] = usePlansVersion();
   const [data, setData] = useState<PlanDetailRes | null>(null);
@@ -313,7 +314,7 @@ export default function PlanDetail() {
   };
 
   return (
-    <View className="page">
+    <View className={"page" + tc}>
       {head}
       {owner ? ownerBody() : <PlanMember data={data} reload={load} />}
 

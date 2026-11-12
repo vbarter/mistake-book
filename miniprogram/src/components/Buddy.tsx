@@ -5,25 +5,28 @@
 import { Image } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import type { CSSProperties } from "react";
+import { C, ILLUST, getTheme, useTheme } from "../lib/theme";
 import { base64 } from "./Icon";
 
 export type Scene = "hero" | "scan" | "chart" | "empty";
 
-const K = {
+/** 画的时候取当前主题的颜色 */
+const colors = () => ({
   paper: "#ffffff",
-  paper2: "#dbe2f0",
-  line: "#1f3b73",
-  ink: "#1f2a44",
+  paper2: ILLUST.paper2,
+  line: ILLUST.line,
+  ink: ILLUST.ink,
   cheek: "#ffb4a8",
-  tie: "#a3303f",
-  star: "#e0b252",
+  tie: ILLUST.tie,
+  star: ILLUST.star,
   ok: "#1e9e5a",
   okBg: "#dcf5e7",
-  shadow: "rgba(31,42,68,0.12)",
-  brand: "#1f3b73",
-};
+  shadow: ILLUST.shadow,
+  brand: C.brandSolid,
+});
 
 function svg(scene: Scene): string {
+  const K = colors();
   const hand =
     scene === "empty"
       ? `<path d="M112 78q14-6 16-20" stroke="${K.line}" stroke-width="5" stroke-linecap="round"/>`
@@ -62,16 +65,18 @@ function svg(scene: Scene): string {
   );
 }
 
-const cache = new Map<Scene, string>();
+const cache = new Map<string, string>();
 const uri = (scene: Scene) => {
-  let u = cache.get(scene);
+  const key = `${getTheme()}|${scene}`;
+  let u = cache.get(key);
   if (!u) {
     u = `data:image/svg+xml;base64,${base64(svg(scene))}`;
-    cache.set(scene, u);
+    cache.set(key, u);
   }
   return u;
 };
 
 export function Buddy({ scene = "hero", size = 140, style }: { scene?: Scene; size?: number; style?: CSSProperties }) {
+  useTheme(); // 切主题时重画
   return <Image className="buddy" src={uri(scene)} mode="aspectFit" style={{ width: Taro.pxTransform(size), height: Taro.pxTransform(size), ...style }} />;
 }

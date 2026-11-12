@@ -8,7 +8,7 @@ import { errorText } from "../../lib/api";
 import { pickPhotos } from "../../lib/capture";
 import { toast } from "../../lib/hooks";
 import { MAX_FILES, attachmentDraft, fetchPlan, imageAttachmentDraft, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PublishRes } from "../../lib/plans";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 
 /**
  * 新建学习计划（同时布置第一份作业），以及在已有计划里布置新作业（带 planId），是同一个页面（和 App 一致）：
@@ -16,6 +16,7 @@ import { C } from "../../lib/theme";
  * 和 App 不同的一点：小程序里转发必须由用户亲手点一下原生的转发按钮，所以布置好以后弹出一块「转发到微信群」，点了才拉起微信的选人页。
  */
 export default function PlanNew() {
+  const tc = useThemeClass();
   const planId = useRouter().params.planId || "";
   const [version] = usePlansVersion();
   const [plan, setPlan] = useState<PlanInfo | null>(null);
@@ -141,7 +142,7 @@ export default function PlanNew() {
   };
 
   return (
-    <View className="page" style={{ gap: "16px" }}>
+    <View className={"page" + tc} style={{ gap: "16px" }}>
       {planId ? (
         <>
           {plan && <Text className="t-foot c-sec pad12">{plan.name}</Text>}

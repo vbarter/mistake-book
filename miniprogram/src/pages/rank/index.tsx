@@ -14,7 +14,7 @@ import { getLastExportAt } from "../../lib/prefs";
 import { BOARDS, rank, type Board } from "../../lib/ranks";
 import { setRankView } from "../../lib/rankView";
 import { listFolders } from "../../lib/store";
-import { C } from "../../lib/theme";
+import { C, useThemeClass } from "../../lib/theme";
 import type { Subject } from "../../lib/types";
 import { useShare, useShareTimelineToo } from "../../lib/share";
 
@@ -23,6 +23,7 @@ import { useShare, useShareTimelineToo } from "../../lib/share";
  * 易错指数由错题数量、是否真错、跨几份试卷、离现在多近算出（lib/ranks.ts），扫描完自动更新。
  */
 export default function Ranking() {
+  const tc = useThemeClass();
   useShare();
   useShareTimelineToo();
   useTabBar(2);
@@ -56,7 +57,7 @@ export default function Ranking() {
   };
 
   return (
-    <View className={`page page--tab${errors.length > 0 ? " page--dock" : ""}`} style={{ gap: "14px", paddingTop: 0 }}>
+    <View className={`page page--tab${errors.length > 0 ? " page--dock" : ""}${tc}`} style={{ gap: "14px", paddingTop: 0 }}>
       {/* 时间范围放在顶栏，和右上角胶囊按钮同一行（App 里是居中的一条） */}
       <TopBar>
         <View className="flex1">
