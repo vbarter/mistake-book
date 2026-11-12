@@ -5,8 +5,8 @@ import { ScanViewer } from "../../components/ScanViewer";
 import { Button, Sheet } from "../../components/ui";
 import { DETECT_SIDE, detectQuad, QuadTracker, type Quad } from "../../lib/docDetect";
 import { finishFlow } from "../../lib/flow";
-import { haptic, pickImages, releaseCanvas, takePhoto } from "../../lib/native";
-import { canUseLiveCamera, coverMapping, openCamera, setTorch, stopCamera, torchSupported } from "../../lib/scanCamera";
+import { haptic, loadImage, pickImages, releaseCanvas, takePhoto } from "../../lib/native";
+import { canUseLiveCamera, coverMapping, openCamera, setTorch, stopCamera, takeStill, torchSupported } from "../../lib/scanCamera";
 import { toastError } from "../../store/banner";
 import { useCapture } from "../../store/capture";
 import { addAlbumPages, addShot, clearScan, loadScanPrefs, removeShot, restoreDraft, setAutoShoot, setEnhance, startScan, useScan } from "../../store/scan";
@@ -166,7 +166,10 @@ export default function ScanCamera() {
 
   const map = video ? coverMapping(video.w, video.h, view.w, view.h) : null;
 
-  /** 拍一张：整帧存下来，带上当前的绿框，后台拉正 */
+  /**
+   * 拍一张：带上按快门那一刻的绿框，后台拉正。
+   * 能拍静态照片的（安卓）用全分辨率照片，比视频帧清楚得多；拍不了（iOS）或者没拍成就用按快门那一刻的视频帧。
+   */
   const shoot = async () => {
     const v = videoRef.current;
     if (!v || !v.videoWidth || shootingRef.current) return;
@@ -174,20 +177,58 @@ export default function ScanCamera() {
     try {
       const vw = v.videoWidth;
       const vh = v.videoHeight;
+      const q = quadRef.current;
+      let norm = q ? (q.map(([x, y]) => [Math.min(1, Math.max(0, x / vw)), Math.min(1, Math.max(0, y / vh))]) as Quad) : null;
+      // 先把这一帧留下来：静态照片要等几百毫秒，没拍成时用它
       const s = Math.min(1, RAW_MAX_SIDE / Math.max(vw, vh));
       const c = document.createElement("canvas");
       c.width = Math.round(vw * s);
       c.height = Math.round(vh * s);
       c.getContext("2d")!.drawImage(v, 0, 0, c.width, c.height);
-      const raw = c.toDataURL("image/jpeg", 0.92);
-      releaseCanvas(c);
-      const q = quadRef.current;
-      const norm = q ? (q.map(([x, y]) => [Math.min(1, Math.max(0, x / vw)), Math.min(1, Math.max(0, y / vh))]) as Quad) : null;
-      addShot(raw, Math.round(vw * s), Math.round(vh * s), norm);
-      armedRef.current = false;
-      lastShotQuad.current = q;
       void haptic.rigid();
       setFlash((n) => n + 1);
+      const blob = await takeStill(streamRef.current);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        try {
+          const img = await loadImage(url);
+          const iw = img.naturalWidth;
+          const ih = img.naturalHeight;
+          // 比视频帧大、方向和视频一致才用（横竖不一样说明这台机器给的照片没转正，用视频帧）
+          if (Math.max(iw, ih) > Math.max(vw, vh) && iw > ih === vw > vh) {
+            const k = Math.min(1, RAW_MAX_SIDE / Math.max(iw, ih));
+            c.width = Math.round(iw * k);
+            c.height = Math.round(ih * k);
+            const ctx = c.getContext("2d", { willReadFrequently: true })!;
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            // 照片和视频比例不一样时取景范围也不一样，绿框对不上：在照片上重新找一次四边
+            if (Math.abs(iw / ih - vw / vh) > 0.03 * (vw / vh)) {
+              const d = DETECT_SIDE / Math.max(c.width, c.height);
+              const dw = Math.round(c.width * d);
+              const dh = Math.round(c.height * d);
+              const small = document.createElement("canvas");
+              small.width = dw;
+              small.height = dh;
+              const sctx = small.getContext("2d", { willReadFrequently: true })!;
+              sctx.drawImage(c, 0, 0, dw, dh);
+              const found = detectQuad(sctx.getImageData(0, 0, dw, dh).data, dw, dh);
+              norm = found ? (found.map(([x, y]) => [x / dw, y / dh]) as Quad) : null;
+              releaseCanvas(small);
+            }
+          }
+        } catch {
+          /* 照片解不开：用视频帧 */
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+      const raw = c.toDataURL("image/jpeg", 0.92);
+      const rawW = c.width;
+      const rawH = c.height;
+      releaseCanvas(c);
+      addShot(raw, rawW, rawH, norm);
+      armedRef.current = false;
+      lastShotQuad.current = q;
       // 飞进右下角：从绿框（没有框就是整个取景区）缩过去
       const m = coverMapping(vw, vh, view.w, view.h);
       let from = { x: 16, y: 16, w: view.w - 32, h: view.h - 32 };
