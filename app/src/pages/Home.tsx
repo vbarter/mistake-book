@@ -12,7 +12,7 @@ import { listFolders, thumbOf, type Folder } from "../lib/folders";
 import { SUBJECT_LABEL } from "../lib/format";
 import { analyze, inRange } from "../lib/insights";
 import { useJobs } from "../lib/jobs";
-import { dueLabel, fetchPlans, joinPath, pendingJoin, planIdleLabel, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
+import { createdLabel, dueLabel, fetchPlans, joinPath, pendingJoin, planIdleLabel, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/banner";
 
@@ -112,6 +112,7 @@ export default function Home() {
     const allDone = n === 0 && (idle === "都交了" || idle === "都批完了");
     // 截止时间服务器只给了最近的一份：只有一个计划有待交时才知道它是哪个计划的
     const due = !owner && n > 0 && memberTodo.length === 1 && plans?.nextDue ? dueLabel(plans.nextDue) : "";
+    const created = createdLabel(p.createdAt);
     return (
       <button key={p.id} className="h4__plan" onClick={() => nav(`/plans/${p.id}`)}>
         <Avatar name={p.teacher} url={p.teacherAvatar} size={44} />
@@ -121,6 +122,7 @@ export default function Home() {
             <span className="ellipsis">{owner ? "我建的" : p.teacher}{n === 0 ? ` · ${idle}` : ""}</span>
             {due && <b><Icon name="clock" size={12} stroke={2.6} />{due} 截止</b>}
           </span>
+          {created && <span className="h4__time">{created}</span>}
         </span>
         {n > 0 && owner && <Tag kind="info">待批 {n}</Tag>}
         {n > 0 && !owner && (total >= n && total > 0 ? <Ring done={total - n} total={total} /> : <Tag kind="pending">待交 {n}</Tag>)}
