@@ -2,13 +2,14 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { haptic } from "../lib/native";
 import { useAddPaper } from "./AddSheet";
-import { Icon, type IconName } from "./Icon";
+import { ColorIcon, type ColorIconName } from "./ColorIcon";
+import { Icon } from "./Icon";
 
-const tabs: { to: string; label: string; icon: IconName }[] = [
-  { to: "/home", label: "首页", icon: "house" },
-  { to: "/papers", label: "试卷", icon: "folder" },
-  { to: "/rank", label: "分析", icon: "chart" },
-  { to: "/profile", label: "我的", icon: "person" },
+const tabs: { to: string; label: string; icon: ColorIconName }[] = [
+  { to: "/home", label: "首页", icon: "home" },
+  { to: "/papers", label: "试卷", icon: "papers" },
+  { to: "/rank", label: "分析", icon: "analysis" },
+  { to: "/profile", label: "我的", icon: "me" },
 ];
 
 /** 底部导航：中间是凸起的相机键。点一下弹出「拍照 / 相册导入」两个气泡（弹簧动画），再点或点空白收起。 */
@@ -38,7 +39,7 @@ export function TabBar() {
           }
         }}
       >
-        <span className="tab__icon"><Icon name={t.icon} size={26} fill={on} stroke={1.8} /></span>
+        <span className="tab__icon"><ColorIcon name={t.icon} size={28} muted={!on} /></span>
         <span className="tab__label">{t.label}</span>
       </NavLink>
     );
@@ -49,10 +50,10 @@ export function TabBar() {
       {open && <div className="fab-scrim" onClick={() => setOpen(false)} />}
       <div className={`fab-menu${open ? " open" : ""}`} aria-hidden={!open}>
         <button className="fab-bubble fab-bubble--left" tabIndex={open ? 0 : -1} onClick={() => { setOpen(false); void add.camera(); }}>
-          <span className="fab-bubble__icon"><Icon name="camera" size={24} stroke={2} /></span>拍照
+          <span className="fab-bubble__icon"><ColorIcon name="camera" size={34} /></span>拍照
         </button>
         <button className="fab-bubble fab-bubble--right" tabIndex={open ? 0 : -1} onClick={() => { setOpen(false); void add.photos(); }}>
-          <span className="fab-bubble__icon"><Icon name="photo" size={24} stroke={2} /></span>相册导入
+          <span className="fab-bubble__icon"><ColorIcon name="album" size={34} /></span>相册导入
         </button>
       </div>
       <nav className="tabbar tabbar--fab" aria-label="主导航">

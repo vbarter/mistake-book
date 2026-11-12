@@ -6,7 +6,7 @@ import { canUseLiveCamera } from "../lib/scanCamera";
 import { toast, toastError } from "../store/banner";
 import { useCapture } from "../store/capture";
 import { addAlbumPages, startScan } from "../store/scan";
-import { Icon, type IconName } from "./Icon";
+import { ColorIcon, type ColorIconName } from "./ColorIcon";
 import { Sheet } from "./ui";
 
 /**
@@ -61,7 +61,7 @@ export function useAddPaper(folderId?: string) {
     <Sheet open={open} onClose={() => setOpen(false)} title="添加试卷">
       <div className="add-grid">
         <AddTile icon="camera" title="拍照" sub="可以连着拍几页" onClick={camera} />
-        <AddTile icon="photo" title="相册导入" sub="一次选多张" onClick={photos} />
+        <AddTile icon="album" title="相册导入" sub="一次选多张" onClick={photos} />
       </div>
       <button className="t-sub" style={{ color: "var(--brand)", minHeight: 40 }} onClick={sample}>没有试卷？用示例试卷试试</button>
     </Sheet>
@@ -70,10 +70,10 @@ export function useAddPaper(folderId?: string) {
   return { open: () => setOpen(true), camera, photos, sheet };
 }
 
-function AddTile({ icon, title, sub, onClick }: { icon: IconName; title: string; sub: string; onClick: () => void }) {
+function AddTile({ icon, title, sub, onClick }: { icon: ColorIconName; title: string; sub: string; onClick: () => void }) {
   return (
     <button className="add-tile" onClick={onClick}>
-      <span className="add-tile__icon"><Icon name={icon} size={28} stroke={2} /></span>
+      <ColorIcon name={icon} size={52} style={{ marginBottom: 2 }} />
       <span className="t-headline">{title}</span>
       <span className="t-cap c-sec">{sub}</span>
     </button>
