@@ -31,7 +31,7 @@ const optionLabel = (a: MemberAssignment) => (a.status === "todo" ? a.title : `$
 /**
  * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片里直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），
  * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
- * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
+ * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色（这两种不再贴「已交」「待交」标签）。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
  *AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  */
 export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () => Promise<void> }) {
@@ -106,8 +106,9 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     }
   };
 
+  // 颜色已经说清了交没交（绿 = 已交，不上色 = 待交），这两种不再重复贴标签；已阅 / 退回 / 已删除才标出来
   const statusTag = (a: MemberAssignment, onTint = false) =>
-    a.revoked ? (
+    !a.revoked && (a.status === "todo" || a.status === "submitted") ? null : a.revoked ? (
       <Tag kind="neutral" icon={null}>
         已删除
       </Tag>

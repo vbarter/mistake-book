@@ -30,7 +30,7 @@ const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.sta
  * 成员看到的学习计划页（和小程序的 components/PlanMember 对应）。成员不再有单独的「作业」页，全在这一页：
  * 待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），底部「导出」「扫描上传」。
  * 扫描上传：连拍扫描（pages/scan，拍完回到这里）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
- * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
+ * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色（这两种不再贴「已交」「待交」标签）。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
  *AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  * 拍好还没交的照片放在连拍扫描的那一批里（store/scan，plan = 这个计划），App 被杀也还在。
  */
@@ -133,8 +133,9 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     }
   };
 
+  // 颜色已经说清了交没交（绿 = 已交，不上色 = 待交），这两种不再重复贴标签；已阅 / 退回 / 已删除才标出来
   const statusTag = (a: MemberAssignment, onTint = false) =>
-    a.revoked ? <Tag kind="neutral">已删除</Tag> : (
+    !a.revoked && (a.status === "todo" || a.status === "submitted") ? null : a.revoked ? <Tag kind="neutral">已删除</Tag> : (
       <Tag
         kind={a.status === "todo" ? "neutral" : a.status === "returned" ? "wrong" : "correct"}
         icon={a.status === "todo" ? "clock" : a.status === "returned" ? "refresh" : undefined}
