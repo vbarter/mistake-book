@@ -760,6 +760,10 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .stat--icon { flex-direction: row; align-items: center; justify-content: center; gap: 8px; padding: 12px; }
 .plan-counts { display: flex; align-items: center; gap: 14px; }
 .plan-count { display: flex; align-items: center; gap: 4px; font-size: 13px; line-height: 18px; font-weight: 600; }
+/* 成员行右边的提交进度：小圆环 + 「3/4」 */
+.plan-progress { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.plan-progress__frac { font-size: 13px; line-height: 20px; font-weight: 600; }
+.plan-progress__n { font-size: 16px; font-weight: 800; }
 /* 面板底部不常用的操作：纯文字，居中，破坏性的用红色 */
 .plan-quiet { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 6px; padding-top: 6px; border-top: 1px solid $sep-light; }
 .plan-quiet__item { height: 44px; line-height: 44px; padding: 0 16px; font-size: 16px; color: $brand; }

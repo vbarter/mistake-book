@@ -9,7 +9,7 @@ import { planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBad
 import { toast, toastError } from "../../store/banner";
 import { openFile } from "./Assignment";
 import { PlanMember } from "./PlanMember";
-import { ConfirmSheet, ScoreCounts } from "./shared";
+import { ConfirmSheet, ScoreCounts, SubmitProgress } from "./shared";
 
 const SWIPE_HINT = "zcb.plan.swipeHint";
 function swipeHintPending(): boolean {
@@ -26,8 +26,8 @@ let remembered: { planId: string; tab: "tasks" | "members"; filter: Filter } | n
 
 /**
  * 学习计划页。创建人在这一页看完所有东西，不再有单独的「作业情况」页：
- * 顶部今日已交 / 未交 / 总成员；「作业」平铺每份作业的文件（点文件直接打开；把一份作业向左滑，露出「删除」）；
- * 「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，点一个人看他每份作业的情况并进去批阅、移出。
+ * 顶部交齐 / 没交齐 / 总成员（都数人）；「作业」平铺每份作业的文件（点文件直接打开；把一份作业向左滑，露出「删除」）；
+ * 「成员」列头像 + 名字 + 进度环（交了几份 / 共几份），可按交齐 / 没交齐筛选，点一个人看他每份作业的情况并进去批阅、移出。
  * 头部两边一样：创建人头像 + 名字 + 创建时间（计划名在导航栏），右边一个圆图标按钮，创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。
  * 计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。「让旧卡片失效」在「成员」页签最下面。能用图标 + 数字说清的就不写字。
  * 成员：只有自己的待交 / 已交和作业（见 PlanMember），看不到其他成员、人数和别人交没交。
@@ -121,12 +121,12 @@ export default function PlanDetail() {
             const handed = active.filter((m) => memberState(m) === "submitted").length;
             const missing = plan.missing ?? active.filter((m) => memberState(m) === "missing").length;
             const shown = filter === "all" ? rows : active.filter((m) => memberState(m) === filter);
-            const filters: { value: Filter; label: string; n: number }[] = [{ value: "all", label: "全部", n: rows.length }, { value: "submitted", label: "已交", n: handed }, { value: "missing", label: "未交", n: missing }];
+            const filters: { value: Filter; label: string; n: number }[] = [{ value: "all", label: "全部", n: rows.length }, { value: "submitted", label: "交齐", n: handed }, { value: "missing", label: "没交齐", n: missing }];
             return (
               <>
                 <div className="plan-stats plan-stats--3">
-                  <Stat icon="checkcircle" label="今日已交" value={plan.submittedToday ?? 0} />
-                  <Stat icon="clock" label="未交" value={missing} color={missing > 0 ? "var(--due)" : undefined} />
+                  <Stat icon="checkcircle" label="交齐" value={handed} />
+                  <Stat icon="clock" label="没交齐" value={missing} color={missing > 0 ? "var(--due)" : undefined} />
                   <Stat icon="family" label="总成员" value={plan.members ?? active.length} />
                 </div>
                 <Segmented value={tab} options={[{ value: "tasks", label: `作业 ${tasks.length}` }, { value: "members", label: `成员 ${active.length}` }]} onChange={setTab} />
@@ -177,15 +177,14 @@ export default function PlanDetail() {
                       ))}
                     </div>
                     <div className="group">
-                      {shown.length === 0 && <div className="plan-files__empty">{rows.length === 0 ? "还没有人加入" : filter === "missing" ? "都交了" : "还没有人交"}</div>}
+                      {shown.length === 0 && <div className="plan-files__empty">{rows.length === 0 ? "还没有人加入" : filter === "missing" ? "都交齐了" : "还没有人交齐"}</div>}
                       {shown.map((m) => {
-                        const state = memberState(m);
                         return (
                           <button key={m.userId} className="row" style={{ minHeight: 56 }} onClick={() => setMember(m)}>
                             <Avatar name={m.name} url={m.avatar} />
                             <span className="row__main"><span className="row__title ellipsis">{memberName(m)}{m.left ? "（已退出）" : ""}</span></span>
                             {(m.toReview ?? 0) > 0 && <Tag kind="info" icon="pencil">待阅</Tag>}
-                            {state === "submitted" ? <Tag kind="correct">已交</Tag> : state === "missing" ? <Tag kind="pending" icon="clock">未交</Tag> : null}
+                            <SubmitProgress done={m.submitted} total={m.assignments} />
                             <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                           </button>
                         );

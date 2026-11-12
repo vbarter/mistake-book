@@ -64,6 +64,10 @@
 .plan-avatar { width: 36px; height: 36px; border-radius: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--brand-tint); color: var(--brand); font-weight: 800; }
 .plan-counts { display: flex; align-items: center; gap: 14px; }
 .plan-count { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; line-height: 18px; font-weight: 600; }
+/* 成员行右边的提交进度：小圆环 + 「3/4」 */
+.plan-progress { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.plan-progress__frac { font-size: 13px; line-height: 20px; font-weight: 600; }
+.plan-progress__frac b { font-size: 16px; font-weight: 800; }
 .plan-row-icon { flex-shrink: 0; color: var(--secondary); }
 /* 面板底部不常用的操作：纯文字，居中，破坏性的用红色 */
 .plan-quiet { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; border-top: 1px solid var(--separator-light); margin-top: 6px; }

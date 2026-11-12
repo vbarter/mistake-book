@@ -3,7 +3,7 @@ import { Text, View } from "@tarojs/components";
 import Taro, { usePageScroll, usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { ColorIcon } from "../../components/ColorIcon";
 import { Icon, type IconName } from "../../components/Icon";
-import { LoginGate, PageState, ScoreCounts, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
+import { LoginGate, PageState, ScoreCounts, ShareButton, SubmitProgress, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { PlanMember } from "../../components/PlanMember";
 import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui";
 import { SwipeRow, swipeGuard } from "../../components/SwipeRow";
@@ -47,8 +47,8 @@ const itemTag = (it: MemberItem) =>
   );
 
 /**
- * 学习计划页（和 App 一致）。创建人在这一页看完所有东西，不再有单独的「作业情况」页：顶部今日已交 / 未交 / 总成员；
- * 「作业」平铺每份作业的文件（点文件直接打开；创建人把一份作业向左滑，露出「删除」）；「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，
+ * 学习计划页（和 App 一致）。创建人在这一页看完所有东西，不再有单独的「作业情况」页：顶部交齐 / 没交齐 / 总成员（都数人）；
+ * 「作业」平铺每份作业的文件（点文件直接打开；创建人把一份作业向左滑，露出「删除」）；「成员」列头像 + 名字 + 进度环（交了几份 / 共几份），可按交齐 / 没交齐筛选，
  * 点一个人看他每份作业的情况并进去批阅、移出。成员：只有自己的待交 / 已交和作业（见 components/PlanMember），
  * 看不到其他成员、人数和别人交没交。头部两边一样：创建人头像 + 名字 + 创建时间（计划名在顶部标题栏），右边一个圆图标按钮，
  * 创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。
@@ -206,14 +206,14 @@ export default function PlanDetail() {
     const shown = filter === "all" ? rows : active.filter((m) => memberState(m) === filter);
     const filters: { value: Filter; label: string; n: number }[] = [
       { value: "all", label: "全部", n: rows.length },
-      { value: "submitted", label: "已交", n: handed },
-      { value: "missing", label: "未交", n: missing },
+      { value: "submitted", label: "交齐", n: handed },
+      { value: "missing", label: "没交齐", n: missing },
     ];
     return (
       <>
         <View className="stats">
-          <Stat icon="checkcircle" label="今日已交" value={plan.submittedToday ?? 0} />
-          <Stat icon="clock" label="未交" value={missing} color={missing > 0 ? C.accentOn : undefined} />
+          <Stat icon="checkcircle" label="交齐" value={handed} />
+          <Stat icon="clock" label="没交齐" value={missing} color={missing > 0 ? C.accentOn : undefined} />
           <Stat icon="family" label="总成员" value={plan.members ?? active.length} />
         </View>
         <Segmented
@@ -300,9 +300,8 @@ export default function PlanDetail() {
               ))}
             </View>
             <View className="group">
-              {shown.length === 0 && <Text className="plan-empty">{rows.length === 0 ? "还没有人加入" : filter === "missing" ? "都交了" : "还没有人交"}</Text>}
+              {shown.length === 0 && <Text className="plan-empty">{rows.length === 0 ? "还没有人加入" : filter === "missing" ? "都交齐了" : "还没有人交齐"}</Text>}
               {shown.map((m) => {
-                const state = memberState(m);
                 return (
                   <View key={m.userId} className="list-row" hoverClass="list-row--hover" style={{ minHeight: "56px" }} onClick={() => setMember(m)}>
                     <Avatar name={m.name} url={m.avatar} />
@@ -315,13 +314,7 @@ export default function PlanDetail() {
                         待阅
                       </Tag>
                     )}
-                    {state === "submitted" ? (
-                      <Tag kind="correct">已交</Tag>
-                    ) : state === "missing" ? (
-                      <Tag kind="pending" icon="clock">
-                        未交
-                      </Tag>
-                    ) : null}
+                    <SubmitProgress done={m.submitted} total={m.assignments} />
                     <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
                   </View>
                 );

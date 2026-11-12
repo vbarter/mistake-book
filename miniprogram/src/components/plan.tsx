@@ -1,8 +1,8 @@
 /** 学习计划各页面共用的小组件（和 App 的 pages/plans/shared.tsx 对应）：学科方块、扫描面板、起名字、题号格子、转发按钮、登录提示 */
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Taro, { useDidShow, useShareAppMessage } from "@tarojs/taro";
-import { Button as NativeButton, Input, Text, View } from "@tarojs/components";
-import { Icon, WechatIcon, type IconName } from "./Icon";
+import { Button as NativeButton, Image, Input, Text, View } from "@tarojs/components";
+import { Icon, WechatIcon, base64, type IconName } from "./Icon";
 import { Avatar, Button, Empty, Sheet, SubjectTile } from "./ui";
 import { errorText } from "../lib/api";
 import { currentUser, ensureLogin, isLoggedIn, updateProfile } from "../lib/auth";
@@ -19,6 +19,40 @@ export function Count({ icon, color = C.secondary, children }: { icon: IconName;
       <Icon name={icon} size={14} color={color} stroke={2.4} />
       <Text className="num" style={{ color }}>
         {children}
+      </Text>
+    </View>
+  );
+}
+
+const ringCache = new Map<string, string>();
+/** 进度环的 SVG 图片：交齐 = 绿色实心勾，交了一部分 = 橙色弧（交多少画多少），一份没交 = 灰色空环 */
+function ringUri(done: number, total: number): string {
+  const key = `${done}/${total}`;
+  let u = ringCache.get(key);
+  if (!u) {
+    const r = 9.5;
+    const len = 2 * Math.PI * r;
+    const body =
+      done >= total
+        ? `<circle cx="12" cy="12" r="11" fill="${C.ok}"/><path d="M7 12.4l3.3 3.3L17 8.6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`
+        : `<circle cx="12" cy="12" r="${r}" fill="none" stroke="#e3e4ea" stroke-width="3.4"/>` +
+          (done > 0 ? `<circle cx="12" cy="12" r="${r}" fill="none" stroke="${C.accentOn}" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="${((len * done) / total).toFixed(2)} ${len.toFixed(2)}" transform="rotate(-90 12 12)"/>` : "");
+    u = `data:image/svg+xml;base64,${base64(`<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 24 24">${body}</svg>`)}`;
+    ringCache.set(key, u);
+  }
+  return u;
+}
+
+/** 一个成员交了几份 / 共几份：小进度环 + 「3/4」，代替笼统的「已交 / 未交」 */
+export function SubmitProgress({ done, total }: { done: number; total: number }) {
+  if (total <= 0) return null;
+  const n = Math.max(0, Math.min(done, total));
+  const color = n >= total ? C.ok : n > 0 ? C.accentOn : C.tertiary;
+  return (
+    <View className="plan-progress">
+      <Image src={ringUri(n, total)} mode="aspectFit" style={{ width: "24px", height: "24px", flexShrink: 0 }} />
+      <Text className="plan-progress__frac num" style={{ color }}>
+        <Text className="plan-progress__n">{n}</Text>/{total}
       </Text>
     </View>
   );
