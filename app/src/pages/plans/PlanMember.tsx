@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { assetUrl } from "../../api/client";
 import { Icon } from "../../components/Icon";
 import { SwipeRow } from "../../components/SwipeRow";
 import { Button, Sheet } from "../../components/ui";
 import { Stat, Tag } from "../../components/v2";
 import { haptic, pickImages, takePhoto } from "../../lib/native";
-import { AI_GRADING, STATUS_LABEL, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, isOverdue, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../../lib/plans";
+import { AI_GRADING, STATUS_LABEL, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, isOverdue, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes, type PlanFileView } from "../../lib/plans";
 import { canUseLiveCamera } from "../../lib/scanCamera";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
@@ -31,6 +32,7 @@ const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.sta
  * 待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），底部「导出」「扫描上传」。
  * 扫描上传：连拍扫描（pages/scan，拍完回到这里）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
  * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色（这两种不再贴「已交」「待交」标签）。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
+ * 批改关着时，交过的作业下面多一行「我交的作业」，点开看自己交上去的照片。
  *AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  * 拍好还没交的照片放在连拍扫描的那一批里（store/scan，plan = 这个计划），App 被杀也还在。
  */
@@ -48,6 +50,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const [target, setTarget] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [myFiles, setMyFiles] = useState<PlanFileView[] | null>(null); // 正在看的：自己交上去的那几页
   const [swiped, setSwiped] = useState<string | null>(null); // 左滑开着的那份作业
   const [hint, setHint] = useState(swipeHintPending); // 第一次有交过的作业：那一行自己滑出一小截，露一下「解绑」
 
@@ -69,6 +72,17 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const busy = shots.some((s) => s.status === "busy");
   const exportable = list.filter((a) => a.digitized || (a.files ?? []).length > 0);
 
+  /** 看自己交上去的那几页：批改关着时照片只在服务器上 */
+  const viewMine = async (a: MemberAssignment) => {
+    try {
+      const sub = (await fetchAssignment(a.id)).submission;
+      if (!sub?.files.length) return toast("没找到交上去的照片");
+      setMyFiles(sub.files);
+    } catch (e) {
+      toastError(e);
+      if (planGone(e)) void reload();
+    }
+  };
   const fail = (e: unknown) => toastError((e as Error).message === "permission_denied" ? new Error("需要相机 / 相册权限，可以在系统设置里打开") : e);
   const add = async (get: () => Promise<string[]>) => {
     setPicking(false);
@@ -206,6 +220,17 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
                 {statusTag(a, true)}
               </div>
             )}
+            {/* 批改关着：交过的多一行「我交的作业」，点开看自己交上去的照片 */}
+            {!AI_GRADING && mine && (
+              <button className={`plan-task plan-task--${look}`} onClick={() => void viewMine(a)}>
+                <span className="plan-task__head">
+                  <Icon name="photo" size={14} stroke={2.2} style={{ color: "var(--secondary)", flexShrink: 0 }} />
+                  <span className="t-foot c-sec" style={{ flex: 1, textAlign: "left" }}>我交的作业</span>
+                  <span className="t-foot c-sec">查看</span>
+                  <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
+                </span>
+              </button>
+            )}
             {/* 交过：一行小字是对 / 错 / 没做和老师的话，点进去看自己那份的批改结果 */}
             {note && (
               <button className={`plan-task plan-task--${look}`} onClick={() => AI_GRADING && nav(`/plans/a/${a.id}`)}>
@@ -283,6 +308,11 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         </select>
         {chosen?.status === "submitted" && <p className="t-foot c-sec">这份交过了，再交会换掉上次那份</p>}
         <Button icon="check" disabled={!chosen || !pages.length || busy || Boolean(stage)} onClick={hand}>{busy ? "照片调正中…" : "交给老师"}</Button>
+      </Sheet>
+
+      {/* 自己交上去的那几页：一页页往下排，点一页用系统预览放大 */}
+      <Sheet open={myFiles !== null} onClose={() => setMyFiles(null)} title={`我交的作业 · ${myFiles?.length ?? 0} 页`}>
+        {(myFiles ?? []).map((f) => (f.url ? <img key={f.id} className="plan-photo" src={assetUrl(f.url)} alt={f.name} loading="lazy" onClick={() => void openFile(f)} /> : <div key={f.id} className="plan-files__empty card">「{f.name}」还在上传</div>))}
       </Sheet>
 
       <Sheet open={exporting} onClose={() => setExporting(false)} title="导出作业">
