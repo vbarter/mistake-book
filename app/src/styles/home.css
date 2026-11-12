@@ -111,6 +111,7 @@
 .h4__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .h4__name { font-size: 16px; line-height: 22px; font-weight: 700; color: var(--label); }
 .h4__sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; line-height: 18px; color: var(--secondary); }
+.h4__time { font-size: 12px; line-height: 16px; color: var(--tertiary); }
 .h4__sub b { flex-shrink: 0; display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--tie); }
 .h4__ring { position: relative; width: 44px; height: 44px; flex-shrink: 0; }
 .h4__ring > span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: var(--due); font-variant-numeric: tabular-nums; }

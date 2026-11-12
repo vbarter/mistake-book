@@ -13,7 +13,7 @@ import { analyze, inRange } from "../../lib/insights";
 import { pollPendingJobs } from "../../lib/jobs";
 import { currentUser, isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { PLANS_EVENT, dueLabel, fetchPlans, planIdleLabel, type PlanInfo, type PlanSummary } from "../../lib/plans";
+import { PLANS_EVENT, createdLabel, dueLabel, fetchPlans, planIdleLabel, type PlanInfo, type PlanSummary } from "../../lib/plans";
 import { listFolders } from "../../lib/store";
 import { SUBJECT_LABEL } from "../../lib/format";
 import { C, useTheme, useThemeClass } from "../../lib/theme";
@@ -163,6 +163,7 @@ export default function Home() {
     const allDone = n === 0 && (idle === "都交了" || idle === "都批完了");
     // 截止时间服务器只给了最近的一份：只有一个计划有待交时才知道它是哪个计划的
     const due = !owner && n > 0 && memberTodo.length === 1 && plans?.nextDue ? dueLabel(plans.nextDue) : "";
+    const created = createdLabel(p.createdAt);
     return (
       <View key={p.id} className="h4__plan" hoverClass="h4--hover" onClick={() => go(`/pages/plan/index?id=${p.id}`)}>
         <Avatar name={p.teacher} url={p.teacherAvatar} size={44} />
@@ -177,6 +178,7 @@ export default function Home() {
               </View>
             )}
           </View>
+          {!!created && <Text className="h4__time">{created}</Text>}
         </View>
         {n > 0 && owner && <Tag kind="info" icon={null}>待批 {n}</Tag>}
         {n > 0 && !owner && (total >= n && total > 0 ? <Ring done={total - n} total={total} /> : <Tag kind="pending" icon={null}>待交 {n}</Tag>)}

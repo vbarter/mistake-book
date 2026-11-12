@@ -558,6 +558,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .h4__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .h4__name { font-size: 16px; line-height: 22px; font-weight: 700; color: $label; }
 .h4__sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; line-height: 18px; color: $secondary; }
+.h4__time { font-size: 12px; line-height: 16px; color: $tertiary; }
 .h4__due { flex-shrink: 0; display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: $tie; }
 .h4__ring { position: relative; width: 44px; height: 44px; flex-shrink: 0; }
 .h4__ringi { width: 44px; height: 44px; display: block; }
