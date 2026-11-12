@@ -86,17 +86,20 @@ export function Subjects() {
 /* ---------- 账号与登录 ---------- */
 const maskPhone = (p: string, sep = "") => `${p.slice(0, 3)}${sep}****${sep}${p.slice(-4)}`;
 
-function syncLabel(s: ReturnType<typeof useSync.getState>): string {
-  if (s.state === "running") return s.pendingUploads ? `上传中，还剩 ${s.pendingUploads} 个` : s.pendingDownloads ? `下载中，还剩 ${s.pendingDownloads} 张` : "同步中…";
-  if (s.state === "error") return "同步失败，点一下重试";
-  if (s.state === "off") return "未开启";
-  return s.lastAt ? "已同步" : "点一下同步";
-}
-
 export function Account() {
   const nav = useNavigate();
   const { user, logout: signOut } = useAuth();
   const sync = useSync();
+  // 行上不显示同步状态，点一下才给结果提示
+  const doSync = async () => {
+    if (useSync.getState().state === "running") return toast("正在同步…");
+    toast("正在同步…");
+    await syncNow().catch(() => undefined);
+    const st = useSync.getState().state;
+    if (st === "error") toast("同步失败，请稍后再试", "error");
+    else if (st === "off") toast("云同步未开启");
+    else toast("已同步", "success");
+  };
   // 退出前把还没传完的改动推上去（失败不拦着退出）
   const logout = async () => {
     await Promise.race([syncNow().catch(() => undefined), new Promise((r) => setTimeout(r, 8000))]);
@@ -190,7 +193,7 @@ export function Account() {
         <section className="acct__section">
           <h2 className="acct__label">云同步</h2>
           <div className="group">
-            <Row icon="refresh" iconColor="var(--brand)" title="试卷和错题" value={syncLabel(sync)} onClick={() => void syncNow()} />
+            <Row icon="refresh" iconColor="var(--brand)" title="试卷和错题" onClick={doSync} />
           </div>
           <p className="acct__foot">用同一个手机号（或在上壹课小程序里绑定了这个手机号的微信）登录，在别的手机、电脑上也能看到同样的试卷和错题。{sync.state === "error" && sync.error ? `上次失败：${sync.error}` : ""}</p>
         </section>

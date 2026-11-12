@@ -270,12 +270,12 @@ export function Row({ icon, iconColor, art, title, sub, value, chevron = true, o
           <Icon name={icon} size={18} stroke={2} />
         </span>
       )}
-      <span className="row__main">
+      <span className="row__main row__main--keep">
         <span className="row__title">{title}</span>
         {sub && <span className="row__sub">{sub}</span>}
       </span>
       <span className="row__value">
-        {value}
+        {typeof value === "string" ? <span className="row__text">{value}</span> : value}
         {chevron && <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />}
       </span>
     </button>
