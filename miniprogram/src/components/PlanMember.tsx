@@ -76,7 +76,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const statusTag = (a: MemberAssignment, onTint = false) =>
     a.revoked ? (
       <Tag kind="neutral" icon={null}>
-        已撤回
+        已删除
       </Tag>
     ) : (
       <Tag
