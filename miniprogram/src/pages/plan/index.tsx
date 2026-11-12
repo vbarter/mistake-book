@@ -309,11 +309,6 @@ export default function PlanDetail() {
                       {memberName(m)}
                       {m.left ? "（已退出）" : ""}
                     </Text>
-                    {(m.toReview ?? 0) > 0 && (
-                      <Tag kind="info" icon="pencil">
-                        待阅
-                      </Tag>
-                    )}
                     <SubmitProgress done={m.submitted} total={m.assignments} />
                     <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
                   </View>

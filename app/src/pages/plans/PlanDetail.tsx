@@ -183,7 +183,6 @@ export default function PlanDetail() {
                           <button key={m.userId} className="row" style={{ minHeight: 56 }} onClick={() => setMember(m)}>
                             <Avatar name={m.name} url={m.avatar} />
                             <span className="row__main"><span className="row__title ellipsis">{memberName(m)}{m.left ? "（已退出）" : ""}</span></span>
-                            {(m.toReview ?? 0) > 0 && <Tag kind="info" icon="pencil">待阅</Tag>}
                             <SubmitProgress done={m.submitted} total={m.assignments} />
                             <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
                           </button>
