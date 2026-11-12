@@ -109,7 +109,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   };
 
   const statusTag = (a: MemberAssignment, onTint = false) =>
-    a.revoked ? <Tag kind="neutral">已撤回</Tag> : (
+    a.revoked ? <Tag kind="neutral">已删除</Tag> : (
       <Tag
         kind={a.status === "todo" ? "pending" : a.status === "returned" ? "wrong" : "correct"}
         icon={a.status === "todo" ? "clock" : a.status === "returned" ? "refresh" : undefined}

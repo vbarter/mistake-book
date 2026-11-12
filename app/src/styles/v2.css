@@ -156,3 +156,10 @@
 .theme-opt__name { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; font-size: 16px; font-weight: 700; color: var(--label); }
 .theme-opt.on .theme-opt__name svg { color: var(--brand); }
 .theme-opt__note { padding: 0 6px; font-size: 12px; line-height: 16px; color: var(--secondary); }
+
+/* ---------- 左滑删除（学习计划页创建人删作业） ---------- */
+/* 红色按钮垫在卡片后面；卡片左移时整张滑出去（不裁切），右边露出按钮，中间留 8px 页面底色 */
+.swipe-row { position: relative; touch-action: pan-y; }
+.swipe-row__action { position: absolute; right: 0; top: 0; bottom: 0; width: 68px; border: 0; border-radius: var(--radius-list); background: var(--wrong); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 13px; line-height: 18px; font-weight: 600; opacity: 0; transition: opacity 0.1s; }
+.swipe-row--shown .swipe-row__action { opacity: 1; }
+.swipe-row__content { position: relative; user-select: none; -webkit-user-select: none; }

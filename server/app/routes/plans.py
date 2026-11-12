@@ -749,7 +749,7 @@ def get_assignment(assignment_id: str):
         body["invite"] = _invite(plan, a)
     else:
         if a.revoked and not PlanSubmission.query.filter_by(assignment_id=a.id, user_id=user.id).first():
-            abort(404, "老师撤回了这份作业")
+            abort(404, "老师删除了这份作业")
         if not PlanView.query.filter_by(assignment_id=a.id, user_id=user.id).first():
             # 客户端刚进页面会连着请求两次，两个请求可能同时发现「还没看过」都去写，后写的撞唯一约束。
             # 撞了说明已经记上了，当成功处理，不能让整个请求 500。
@@ -823,7 +823,7 @@ def submit(assignment_id: str):
     a, plan = _assignment_or_404(assignment_id)
     _require_role(plan, "member")
     if a.revoked:
-        abort(409, "老师撤回了这份作业")
+        abort(409, "老师删除了这份作业")
     files = _clean_files((request.get_json(silent=True) or {}).get("files"), ("scan",))
     if not files:
         abort(400, "先拍下做完的作业")
