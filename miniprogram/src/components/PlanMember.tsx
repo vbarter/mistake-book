@@ -9,7 +9,7 @@ import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
 import { toast } from "../lib/hooks";
-import { AI_GRADING, STATUS_LABEL, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
+import { AI_GRADING, STATUS_LABEL, absoluteUrl, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
 import { C } from "../lib/theme";
 
 type Look = "done" | "returned" | "todo" | "revoked";
@@ -32,6 +32,7 @@ const optionLabel = (a: MemberAssignment) => (a.status === "todo" ? a.title : `$
  * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片里直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），
  * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
  * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色（这两种不再贴「已交」「待交」标签）。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
+ * 批改关着时，交过的作业下面多一行「我交的作业」，点开翻看自己交上去的照片。
  *AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  */
 export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () => Promise<void> }) {
@@ -82,6 +83,21 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       toast(errorText(e));
     }
     await reload();
+  };
+  /** 看自己交上去的那几页：批改关着时照片只在服务器上，点开直接翻看 */
+  const viewMine = async (a: MemberAssignment) => {
+    Taro.showLoading({ title: "打开中…", mask: true });
+    try {
+      const sub = (await fetchAssignment(a.id)).submission;
+      const urls = (sub?.files ?? []).filter((f) => f.url).map((f) => absoluteUrl(f.url!));
+      Taro.hideLoading();
+      if (!urls.length) return toast(sub?.files.length ? "照片还在上传，稍后再试" : "没找到交上去的照片");
+      void Taro.previewImage({ current: urls[0], urls });
+    } catch (e) {
+      Taro.hideLoading();
+      toast(errorText(e));
+      if (planGone(e)) void reload();
+    }
   };
   /** 行上的点击：刚滑过的那一下不算；有一行滑开着时，这一下只把它收回 */
   const tap = (fn: () => void) => () => {
@@ -190,6 +206,17 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
               <View className={`list-row plan-row--${look}`} onClick={tap(() => undefined)}>
                 <Text className="row__title ellipsis flex1">{a.title}</Text>
                 {statusTag(a, true)}
+              </View>
+            )}
+            {/* 批改关着：交过的多一行「我交的作业」，点开翻看自己交上去的照片 */}
+            {!AI_GRADING && mine && (
+              <View className={`plan-task plan-task--${look}`} hoverClass="list-row--hover" onClick={tap(() => void viewMine(a))}>
+                <View className="plan-task__head">
+                  <Icon name="photo" size={14} color={C.secondary} stroke={2.2} />
+                  <Text className="t-foot c-sec flex1">我交的作业</Text>
+                  <Text className="t-foot c-sec">查看</Text>
+                  <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+                </View>
               </View>
             )}
             {/* 交过：一行小字是对 / 错 / 没做和老师的话，点进去看自己那份的批改结果 */}
