@@ -1,14 +1,15 @@
 /** 成员看到的学习计划页（和 App 的 pages/plans/PlanMember.tsx 对应）。 */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Image, Picker, Text, View } from "@tarojs/components";
-import Taro from "@tarojs/taro";
+import Taro, { usePageScroll } from "@tarojs/taro";
 import { Icon } from "./Icon";
 import { Busy, Count, ScanSheet } from "./plan";
+import { SwipeRow, swipeGuard } from "./SwipeRow";
 import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
 import { toast } from "../lib/hooks";
-import { AI_GRADING, STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
+import { AI_GRADING, STATUS_LABEL, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
 import { C } from "../lib/theme";
 
 type Look = "done" | "returned" | "todo" | "revoked";
@@ -16,12 +17,22 @@ type Look = "done" | "returned" | "todo" | "revoked";
 const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
 
 /** 下拉列表里的一行：作业名，交过的带上状态 */
+const SWIPE_HINT = "zcb.plan.unbindHint";
+function swipeHintPending(): boolean {
+  try {
+    return !Taro.getStorageSync(SWIPE_HINT);
+  } catch {
+    return false;
+  }
+}
+
 const optionLabel = (a: MemberAssignment) => (a.status === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`);
 
 /**
  * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片里直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），
  * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
- * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色。AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
+ * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
+ *AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  */
 export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () => Promise<void> }) {
   const list = data.assignments as MemberAssignment[];
@@ -31,6 +42,11 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const [target, setTarget] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [swiped, setSwiped] = useState<string | null>(null); // 左滑开着的那份作业
+  const [hint, setHint] = useState(swipeHintPending); // 第一次有交过的作业：那一行自己滑出一小截，露一下「解绑」
+  usePageScroll(() => {
+    if (swiped) setSwiped(null);
+  });
 
   const todo = list.filter((a) => !a.revoked && (a.status === "todo" || a.status === "returned"));
   const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
@@ -55,6 +71,23 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     } finally {
       setStage(null);
     }
+  };
+
+  const withdraw = async (a: MemberAssignment) => {
+    setSwiped(null);
+    try {
+      await withdrawHomework(a.id);
+      toast("已解绑", "success");
+    } catch (e) {
+      toast(errorText(e));
+    }
+    await reload();
+  };
+  /** 行上的点击：刚滑过的那一下不算；有一行滑开着时，这一下只把它收回 */
+  const tap = (fn: () => void) => () => {
+    if (swipeGuard.moved) return;
+    if (swiped) return setSwiped(null);
+    fn();
   };
 
   const exportPdf = async (a: MemberAssignment) => {
@@ -87,11 +120,12 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         {STATUS_LABEL[a.status]}
       </Tag>
     );
+  const firstSwipe = list.find(canWithdraw)?.id;
   const exportable = list.filter((a) => a.digitized || (a.files ?? []).length > 0);
 
   return (
     <>
-      <View className="stats">
+      <View className="stats" onClick={tap(() => undefined)}>
         <Stat icon="clock" label="待交" value={todo.length} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? C.ok : undefined} />
       </View>
@@ -105,11 +139,38 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         const mine = a.status !== "todo";
         // 批改关着：只有被退回 / 迟交 / 老师留了话才多一行，不点进批改结果
         const note = AI_GRADING ? mine : a.status === "returned" || a.late || Boolean(a.comment);
+        // 交了、老师还没批阅：这一份可以向左滑出「解绑」
+        const wrap = (body: ReactNode) =>
+          canWithdraw(a) ? (
+            <SwipeRow
+              inline
+              label="解绑"
+              icon="unlink"
+              open={swiped === a.id}
+              onOpenChange={(o) => setSwiped(o ? a.id : null)}
+              onDelete={() => void withdraw(a)}
+              hint={hint && a.id === firstSwipe}
+              onHintDone={() => {
+                setHint(false);
+                try {
+                  Taro.setStorageSync(SWIPE_HINT, "1");
+                } catch {
+                  /* 存不下：下次再演示一遍 */
+                }
+              }}
+            >
+              {body}
+            </SwipeRow>
+          ) : (
+            body
+          );
         return (
           <View key={a.id} className="plan-hw">
+            {wrap(
+              <>
             {/* 没有作业名那一行了：状态标在每个文件上（交了的整行标绿，退回的标红） */}
             {files.map((f) => (
-              <View key={f.id} className={`list-row plan-row--${look}`} hoverClass="list-row--hover" onClick={() => void openPlanFile(f, files)}>
+              <View key={f.id} className={`list-row plan-row--${look}`} hoverClass="list-row--hover" onClick={tap(() => void openPlanFile(f, files))}>
                 <View className="plan-file__icon plan-file__icon--sm">
                   <Text>{fileBadge(f.mime)}</Text>
                 </View>
@@ -125,14 +186,14 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
               </View>
             ))}
             {files.length === 0 && (
-              <View className={`list-row plan-row--${look}`}>
+              <View className={`list-row plan-row--${look}`} onClick={tap(() => undefined)}>
                 <Text className="row__title ellipsis flex1">{a.title}</Text>
                 {statusTag(a, true)}
               </View>
             )}
             {/* 交过：一行小字是对 / 错 / 没做和老师的话，点进去看自己那份的批改结果 */}
             {note && (
-              <View className={`plan-task plan-task--${look}`} hoverClass={AI_GRADING ? "list-row--hover" : "none"} onClick={() => AI_GRADING && void Taro.navigateTo({ url: `/pages/plan-task/index?id=${a.id}` })}>
+              <View className={`plan-task plan-task--${look}`} hoverClass={AI_GRADING ? "list-row--hover" : "none"} onClick={tap(() => AI_GRADING && void Taro.navigateTo({ url: `/pages/plan-task/index?id=${a.id}` }))}>
                 <View className="plan-task__head" style={AI_GRADING || a.status === "returned" || a.late ? undefined : { display: "none" }}>
                   <View className="plan-counts flex1">
                     {!AI_GRADING ? (
@@ -170,6 +231,8 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
                   </View>
                 )}
               </View>
+            )}
+              </>,
             )}
           </View>
         );

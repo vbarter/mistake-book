@@ -785,3 +785,9 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .swipe-row { position: relative; }
 .swipe-row__action { background: $wrong; position: absolute; right: 0; top: 0; bottom: 0; width: 68px; border-radius: $radius-list; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #fff; font-size: 13px; line-height: 18px; font-weight: 600; transition: opacity 0.1s; }
 .swipe-row__content { position: relative; }
+/* 卡片里的一行向左滑（成员「解绑」交过的作业）：按钮直角贴边，行自己带底色盖住它 */
+.swipe-row--inline .swipe-row__action { border-radius: 0; }
+.swipe-row--inline .swipe-row__content { background: $card; }
+.plan-hw .swipe-row__content > .plan-task { border-top: 0; padding-top: 6px; }
+.plan-hw .swipe-row__content > .list-row:first-child { border-top: 1px solid $sep-light; }
+.group > .plan-hw:first-child .swipe-row__content > .list-row:first-child { border-top: 0; }

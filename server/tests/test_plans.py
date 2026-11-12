@@ -2,7 +2,7 @@
 import pytest
 
 from app.extensions import db
-from app.models import Plan, PlanFile, PlanMember, PlanSubmission, User
+from app.models import Plan, PlanAssignment, PlanFile, PlanMember, PlanSubmission, User
 
 
 @pytest.fixture(autouse=True)
@@ -572,3 +572,39 @@ def test_split_script_for_old_multi_attachment_assignments(client, auth, app):
     assert [(a["title"], [f["name"] for f in a["files"]], a["status"]) for a in mine] == [
         ("第三单元练习", ["第三单元练习.pdf"], "submitted"), ("物理一模", ["物理一模.pdf"], "todo"), ("英语一模", ["英语一模.pdf"], "todo"),
     ]
+
+
+def test_member_withdraws_own_submission(client, auth):
+    out = _create(client, auth)
+    pid, aid, code = out["plan"]["id"], out["assignment"]["id"], out["invite"]["code"]
+    s1, u1 = _login(client, "13800000001", "王小明")
+    s2, _ = _login(client, "13800000002", "李华")
+    for s in (s1, s2):
+        _join(client, s, code)
+    url = f"/api/plans/assignments/{aid}/submission"
+    mine = lambda h: client.get(f"/api/plans/{pid}", headers=h).get_json()["assignments"][0]["status"]  # noqa: E731
+
+    assert client.delete(url, headers=auth).status_code == 403  # 老师没有自己的提交
+    assert client.delete(url, headers=s1).status_code == 200  # 没交过：不报错
+    sid1, sid2 = _submit(client, s1, aid), _submit(client, s2, aid)
+    assert mine(s1) == "submitted" and PlanFile.query.filter_by(submission_id=sid1).count() == 1
+
+    # 解绑：只撤自己那份，照片一起删，回到没交；别人的不动；可以再交
+    assert client.delete(url, headers=s1).status_code == 200
+    assert mine(s1) == "todo" and mine(s2) == "submitted"
+    assert db.session.get(PlanSubmission, sid1) is None and PlanFile.query.filter_by(submission_id=sid1).count() == 0
+    assert db.session.get(PlanSubmission, sid2) is not None and PlanFile.query.filter_by(submission_id=sid2).count() == 1
+    row = next(m for m in client.get(f"/api/plans/{pid}", headers=auth).get_json()["members"] if m["userId"] == u1)
+    assert (row["submitted"], row["items"][0]["status"], row["items"][0]["submissionId"]) == (0, "todo", None)
+    sid1 = _submit(client, s1, aid)
+    assert mine(s1) == "submitted"
+
+    # 老师批阅过的不能撤
+    client.patch(f"/api/plans/submissions/{sid1}", json={"status": "reviewed"}, headers=auth)
+    assert client.delete(url, headers=s1).status_code == 409 and mine(s1) == "reviewed"
+
+    # 老师删掉的作业：交过的人还看得到；最后一份也撤了，作业连文件一起没了
+    assert client.delete(f"/api/plans/assignments/{aid}", headers=auth).status_code == 200
+    assert client.delete(url, headers=s2).status_code == 200
+    assert db.session.get(PlanAssignment, aid) is not None  # 王小明那份还在
+    assert client.get(f"/api/plans/{pid}", headers=s2).get_json()["assignments"] == []

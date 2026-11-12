@@ -123,6 +123,13 @@ export async function fetchPlan(id: string): Promise<PlanDetailRes> {
   );
   return r;
 }
+/** 成员能不能把这份「解绑」（撤掉自己交的那份，回到没交）：交了、老师还没批阅 */
+export const canWithdraw = (a: MemberAssignment) => a.status === "submitted";
+/** 解绑：撤掉自己交的那份，照片从服务器删掉 */
+export async function withdrawHomework(assignmentId: string): Promise<void> {
+  await api(`/api/plans/assignments/${assignmentId}/submission`, { method: "DELETE" });
+  usePlans.getState().bump();
+}
 /** 这份作业现在还能不能交：没撤回、老师还没批阅（交过没批阅的可以重交，退回的要重交） */
 export const canHandIn = (a: MemberAssignment) => !a.revoked && a.status !== "reviewed";
 export const fetchAssignment = (id: string) => api<AssignmentRes>(`/api/plans/assignments/${id}`);
