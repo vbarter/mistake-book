@@ -8,7 +8,7 @@ import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
 import { toast } from "../lib/hooks";
-import { STATUS_LABEL, canHandIn, createdLabel, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
+import { STATUS_LABEL, canHandIn, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
 import { C } from "../lib/theme";
 
 type Look = "done" | "returned" | "todo" | "revoked";
@@ -19,7 +19,7 @@ const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.sta
 const optionLabel = (a: MemberAssignment) => (a.status === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`);
 
 /**
- * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），
+ * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片里直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），
  * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
  * 交完页面跟着刷新，交了的作业那几行标成绿色，下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  */
@@ -95,12 +95,8 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         <Stat icon="clock" label="待交" value={todo.length} color={todo.length ? C.accentOn : undefined} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? C.ok : undefined} />
       </View>
-      {/* 一张卡片：最上面是计划名 + 创建时间（只出现一次），下面一份份作业 */}
+      {/* 一张卡片，一份份作业（计划名在顶部标题栏，创建时间在页面头部创建人名字下面） */}
       <View className="group">
-        <View className="plan-task">
-          <Text className="t-headline ellipsis">{data.plan.name}</Text>
-          <Text className="t-foot c-sec">{createdLabel(data.plan.createdAt)}</Text>
-        </View>
         {list.length === 0 && <Text className="plan-empty">还没有作业</Text>}
         {list.map((a) => {
         const look = lookOf(a);

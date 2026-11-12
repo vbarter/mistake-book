@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Input, Text, View } from "@tarojs/components";
+import { Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
+import { ColorIcon } from "../../components/ColorIcon";
 import { Icon, type IconName } from "../../components/Icon";
 import { LoginGate, PageState, ScoreCounts, ShareButton, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { PlanMember } from "../../components/PlanMember";
 import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
-import { updateProfile } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { planSubjectText, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C, useThemeClass } from "../../lib/theme";
 
 const leave = () => {
@@ -40,8 +40,9 @@ const itemTag = (it: MemberItem) =>
  * 学习计划页（和 App 一致）。创建人在这一页看完所有东西，不再有单独的「作业情况」页：顶部今日已交 / 未交 / 总成员；
  * 「作业」平铺每份作业的文件（点文件直接打开，点作业名：提醒没交的、撤回）；「成员」列头像 + 名字 + 已交 / 未交，可按状态筛选，
  * 点一个人看他每份作业的情况并进去批阅、移出。成员：只有自己的待交 / 已交和作业（见 components/PlanMember），
- * 看不到其他成员、人数和别人交没交。点计划名弹出面板：创建人改计划名、让旧卡片失效、解散；成员改老师看到的名字、退出。
- * 页面上只留内容，不放这些不常用的操作。页面上能用图标 + 数字说清的就不写字。
+ * 看不到其他成员、人数和别人交没交。头部两边一样：创建人头像 + 名字 + 创建时间（计划名在顶部标题栏），右边一个圆图标按钮，
+ * 创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。
+ * 「让旧卡片失效」在「成员」页签最下面。页面上能用图标 + 数字说清的就不写字。
  */
 export default function PlanDetail() {
   const tc = useThemeClass();
@@ -53,8 +54,6 @@ export default function PlanDetail() {
   const [filter, setFilter] = useState<Filter>("all");
   const [member, setMember] = useState<PlanMemberRow | null>(null);
   const [task, setTask] = useState<OwnerAssignment | null>(null);
-  const [panel, setPanel] = useState(false);
-  const [name, setName] = useState("");
   const logged = loggedIn();
   const shown = useRef(false);
 
@@ -111,21 +110,7 @@ export default function PlanDetail() {
     }
   };
 
-  const openPanel = () => {
-    setName(owner ? plan.name : data.me?.defaultName ? "" : (data.me?.name ?? ""));
-    setPanel(true);
-  };
-  const saveName = async () => {
-    const value = name.trim();
-    await act(async () => {
-      if (owner) await updatePlan(plan.id, { name: value.slice(0, 60) });
-      else await updateProfile({ nickname: value.slice(0, 16) });
-      setPanel(false);
-      await load();
-    }, owner ? "已更新" : "已改名");
-  };
   const resetInvite = async () => {
-    setPanel(false);
     if (!(await confirm("让以前转发的卡片失效？", "之前发到微信里的卡片都不能再用来加入。之后要邀请新同学，需要重新转发一次。", "失效并换新的"))) return;
     await act(async () => {
       await updatePlan(plan.id, { resetInvite: true });
@@ -133,7 +118,6 @@ export default function PlanDetail() {
     }, "旧卡片已失效");
   };
   const dissolve = async () => {
-    setPanel(false);
     if (!(await confirm("解散这个学习计划？", "计划、作业和同学交上来的内容都会从服务器删除，不能恢复。同学自己试卷里存的那份不受影响。", "解散", true))) return;
     await act(async () => {
       await deletePlan(plan.id);
@@ -142,7 +126,6 @@ export default function PlanDetail() {
     }, "已解散");
   };
   const quit = async () => {
-    setPanel(false);
     if (!(await confirm("退出这个学习计划？", "退出后看不到这里的作业了。已经交过的作业老师还能看到。再点一次老师发的卡片可以重新加入。", "退出", true))) return;
     await act(async () => {
       await removeMember(plan.id, "me");
@@ -170,15 +153,15 @@ export default function PlanDetail() {
 
   const head = (
     <View className="plan-head">
-      <Avatar name={plan.teacher} url={plan.teacherAvatar} size={owner ? 38 : 44} />
-      {/* 点计划名弹出面板：改名，下面是不常用的操作（和 iOS 的标题菜单一个意思） */}
-      <View className="flex1 col minw0" onClick={openPanel}>
-        <View className="row-center gap6">
-          {/* 成员：头像旁边只有创建人的名字，计划名 + 创建时间在下面作业卡片的最上面；创建人自己看到的还是计划名 + 学科 */}
-          <Text className="t-headline ellipsis">{owner ? plan.name : plan.teacher}</Text>
-          <Icon name="chevron-down" size={14} color={C.tertiary} stroke={2.6} />
-        </View>
-        {owner && !!planSubjectText(plan.subject) && <Text className="t-foot c-sec ellipsis">{planSubjectText(plan.subject)}</Text>}
+      <Avatar name={plan.teacher} url={plan.teacherAvatar} size={42} />
+      {/* 两边都是创建人的名字 + 创建时间；计划名在顶部标题栏 */}
+      <View className="flex1 col minw0">
+        <Text className="t-headline ellipsis">{plan.teacher}</Text>
+        <Text className="t-foot c-sec ellipsis">{createdLabel(plan.createdAt)}</Text>
+      </View>
+      {/* 解散 / 退出：点了先确认 */}
+      <View className="plan-iconbtn" hoverClass="plan-iconbtn--hover" onClick={() => void (owner ? dissolve() : quit())}>
+        <ColorIcon name={owner ? "plan-dissolve" : "plan-quit"} size={22} />
       </View>
       {owner && data.invite && <ShareButton pill>转发</ShareButton>}
     </View>
@@ -302,6 +285,11 @@ export default function PlanDetail() {
                 );
               })}
             </View>
+            <View className="plan-quiet plan-quiet--only">
+              <Text className="plan-quiet__item" onClick={() => void resetInvite()}>
+                让旧卡片失效
+              </Text>
+            </View>
           </>
         )}
         <View className="bottom-bar">
@@ -317,28 +305,6 @@ export default function PlanDetail() {
     <View className={"page" + tc}>
       {head}
       {owner ? ownerBody() : <PlanMember data={data} reload={load} />}
-
-      <Sheet open={panel} onClose={() => setPanel(false)} title={owner ? "学习计划" : plan.name}>
-        <View className="plan-field">
-          <View className="plan-field__label">
-            <Text>{owner ? "名称" : "老师看到的名字"}</Text>
-          </View>
-          <Input className="input" value={name} maxlength={owner ? 60 : 16} adjustPosition={false} confirmType="done" onInput={(e) => setName(e.detail.value)} />
-        </View>
-        <Button disabled={!name.trim() || name.trim() === (owner ? plan.name : data.me?.name)} onClick={() => void saveName()}>
-          保存
-        </Button>
-        <View className="plan-quiet">
-          {owner && (
-            <Text className="plan-quiet__item" onClick={() => void resetInvite()}>
-              让旧卡片失效
-            </Text>
-          )}
-          <Text className="plan-quiet__item c-wrong" onClick={() => void (owner ? dissolve() : quit())}>
-            {owner ? "解散学习计划" : "退出学习计划"}
-          </Text>
-        </View>
-      </Sheet>
 
       {/* 点一个成员：他每份作业交没交，交了的点进去批阅；最下面是移出 */}
       <Sheet open={Boolean(member)} onClose={() => setMember(null)} title={member ? memberName(member) : ""}>

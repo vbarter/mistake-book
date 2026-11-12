@@ -15,6 +15,11 @@
 .plan-add { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 /* 计划页 */
+/* 学习计划页头部：创建人头像 + 名字 + 创建时间，右边圆图标按钮（解散 / 退出）和「转发」 */
+.plan-head { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+.plan-head__main { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; }
+.plan-iconbtn { width: 34px; height: 34px; border-radius: 17px; background: var(--card); border: 1px solid var(--separator-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.plan-iconbtn:active { opacity: 0.6; }
 .plan-pill { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px 0 11px; border-radius: 17px; background: var(--card); border: 1px solid var(--separator-light); color: var(--label); font-size: 14px; font-weight: 600; white-space: nowrap; }
 .plan-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .plan-stats--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -28,6 +33,7 @@
 .plan-hw > .plan-task { border-top: 0; padding-top: 6px; }
 .plan-hw { border-top: 1px solid var(--separator-light); }
 .plan-hw > .row:first-child { border-top: 1px solid var(--separator-light); }
+.group > .plan-hw:first-child, .group > .plan-hw:first-child > .row:first-child { border-top: 0; }
 /* 成员的计划页：交了的作业整块标绿，退回重做的标红 */
 .plan-task--done, .plan-task--done:active { background: var(--mastered-bg); }
 .plan-task--returned, .plan-task--returned:active { background: var(--wrong-bg); }

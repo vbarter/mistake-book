@@ -17,16 +17,15 @@ export function Count({ icon, color = "var(--secondary)", children }: { icon: Ic
 /**
  * 成员看到的「这是谁的哪个学习计划」：创建人头像、计划名、创建人称呼 · 学科、创建时间。
  * 作业页上用它，点一下去学习计划页看全部作业（more 是右边那句话）。
- * brief：成员的计划页上只留创建人的名字（计划名 + 创建时间在下面作业卡片的最上面）。
  */
-export function PlanCreator({ plan, more, brief, onClick }: { plan: PlanInfo; more?: string; brief?: boolean; onClick?: () => void }) {
+export function PlanCreator({ plan, more, onClick }: { plan: PlanInfo; more?: string; onClick?: () => void }) {
   const body = (
     <>
       <Avatar name={plan.teacher} url={plan.teacherAvatar} size={44} />
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, textAlign: "left" }}>
-        <span className="t-headline ellipsis">{brief ? plan.teacher : plan.name}</span>
-        {!brief && <span className="t-foot c-sec ellipsis">{teacherLine(plan.teacher, plan.subject)}</span>}
-        {!brief && <span className="t-foot c-sec">{createdLabel(plan.createdAt)}</span>}
+        <span className="t-headline ellipsis">{plan.name}</span>
+        <span className="t-foot c-sec ellipsis">{teacherLine(plan.teacher, plan.subject)}</span>
+        <span className="t-foot c-sec">{createdLabel(plan.createdAt)}</span>
       </span>
       {onClick && (
         <span className="t-foot c-sec" style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
