@@ -155,6 +155,8 @@ export const revokeAssignment = (id: string) => api(`/api/plans/assignments/${id
 export const joinPlan = (code: string) => api<{ plan: PlanInfo; joined: boolean; me: Me }>("/api/plans/join", { method: "POST", body: { code } });
 
 /** 加入页上「已经有谁加入了」：人数 + 最早加入的几个人 */
+/** 加入页上的一份作业：名字、布置时间和下面的文件。还没加入也看得到，所以文件没有打开的地址（url 是 null）；shared = 卡片指向的那份 */
+export interface PreviewAssignment extends AssignmentBrief { files: PlanFileView[]; shared: boolean }
 export interface JoinedPreview { count: number; list: { name: string; avatar?: string | null }[] }
 /** 「小明、小红、小刚等 12 人已加入」；还没人时，对同学说「你是第一个」，对创建人说「还没有人加入」 */
 export function joinedText(m: JoinedPreview, owner = false): string {

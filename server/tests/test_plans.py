@@ -102,6 +102,29 @@ def test_create_validation(client, auth):
     assert "<span>学科</span>" not in page and "还没有布置" in page
 
 
+def test_invite_preview_lists_assignments_with_their_files(client, auth):
+    """加入页先看到作业名、再看到作业下面的文件：新的在上，卡片指向的那份带 shared；文件只给名字，不给打开的地址"""
+    out = _create(client, auth, title="第三单元练习", files=[SCAN, PDF])
+    pid, code, first = out["plan"]["id"], out["invite"]["code"], out["assignment"]["id"]
+    second = client.post(f"/api/plans/{pid}/assignments", json={"title": "周末卷", "files": [SCAN]}, headers=auth).get_json()["assignment"]["id"]
+    r = client.get(f"/api/plans/invite/{code}?a={first}").get_json()
+    assert [(a["title"], a["shared"], [f["name"] for f in a["files"]]) for a in r["assignments"]] == [
+        ("周末卷", False, ["第 1 页.jpg"]),
+        ("第三单元练习", True, ["第 1 页.jpg", "第三单元练习.pdf"]),
+    ]
+    assert r["assignment"]["id"] == first and all(f["url"] is None for a in r["assignments"] for f in a["files"])
+    # 没指定哪份：最新一份算这次布置的
+    r = client.get(f"/api/plans/invite/{code}").get_json()
+    assert r["assignment"]["id"] == second and [a["shared"] for a in r["assignments"]] == [True, False]
+    html = client.get(f"/api/plans/j/{code}?a={first}").get_data(as_text=True)
+    assert html.index("周末卷") < html.index("第三单元练习.pdf") and html.count("<details") == 2 and html.count("这次布置") == 1
+    assert "2 个文件" in html and "X-Amz" not in html and "/api/plans/files/" not in html
+    # 删掉的作业不出现；指向它的旧卡片落到最新一份
+    assert client.delete(f"/api/plans/assignments/{first}", headers=auth).status_code == 200
+    r = client.get(f"/api/plans/invite/{code}?a={first}").get_json()
+    assert [a["title"] for a in r["assignments"]] == ["周末卷"] and r["assignment"]["id"] == second
+
+
 def test_invite_preview_and_landing_page(client, auth):
     out = _create(client, auth)
     code = out["invite"]["code"]
