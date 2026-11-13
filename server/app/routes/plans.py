@@ -292,6 +292,21 @@ def _owner_counts(plan: Plan, assignments: list[PlanAssignment]) -> dict[str, di
 # --------------------------------------------------------------------------- 计划
 
 
+def dated_title(day: datetime, taken: set[str]) -> str:
+    """按布置日期起的作业名「11月13日作业」；这个名字计划里已经有了就往后排「11月13日作业（2）」"""
+    base = f"{day.month}月{day.day}日作业"
+    title, n = base, 1
+    while title in taken:
+        n += 1
+        title = f"{base}（{n}）"
+    return title
+
+
+def _dated_title(plan_id: str, day: datetime, skip: str | None = None) -> str:
+    rows = PlanAssignment.query.filter_by(plan_id=plan_id).all()
+    return dated_title(day, {r.title for r in rows if r.id != skip})
+
+
 def _create_assignments(plan: Plan, data: dict) -> tuple[list[PlanAssignment], list[dict]]:
     """布置：一次布置的所有文件（扫描件、上传的图片 / PDF / Word）算一份作业，同学整份交一次。
     返回的列表只有这一份（接口里的 assignments 字段留着，老客户端按列表读）。"""
@@ -302,8 +317,8 @@ def _create_assignments(plan: Plan, data: dict) -> tuple[list[PlanAssignment], l
     now = datetime.now()
     due = data.get("dueAt")
     due = due[:32] if isinstance(due, str) and due else None
-    # 没起名字：一律按布置日期起名，不用文件名（作业名和文件名是两回事）
-    title = custom or f"{now.month}月{now.day}日作业"
+    # 没起名字：一律按布置日期起名，不用文件名（作业名和文件名是两回事）；同一天布置了几份的，后面的带上（2）（3）
+    title = custom or _dated_title(plan.id, now)
     a = PlanAssignment(plan_id=plan.id, title=title[:120], due_at=due, created_at=now)
     db.session.add(a)
     db.session.flush()
@@ -682,8 +697,7 @@ def add_assignment_files(assignment_id: str):
         abort(400, f"一份作业最多 {MAX_FILES} 个文件")
     # 以前没起名字的单文件作业名字取自文件名：文件多了以后它不再代表整份作业，换成按布置日期的名字
     if len(have) == 1 and have[0].kind == "attachment" and have[0].name and a.title == have[0].name.rsplit(".", 1)[0][:120]:
-        day = a.created_at or datetime.now()
-        a.title = f"{day.month}月{day.day}日作业"
+        a.title = _dated_title(plan.id, a.created_at or datetime.now(), skip=a.id)
     base = max((f.position or 0 for f in have), default=-1) + 1
     for f in files:
         f["position"] += base
