@@ -591,10 +591,10 @@ export function createdLabel(iso: string | null | undefined): string {
   const hm = m[4] ? ` ${m[4]}:${m[5]}` : "";
   return `创建于 ${year}${Number(m[2])}月${Number(m[3])}日${hm}`;
 }
-/** 作业卡片头部的那行小字：「11月12日 · 5 个文件」（不是今年的带上年份） */
+/** 作业卡片头部的那行小字：「11月12日 21:03 · 5 个文件」，是布置的时间，到分钟（不是今年的带上年份）。直接取服务器给的北京时间，不受手机时区影响 */
 export function hwMeta(a: { createdAt?: string | null; files?: unknown[] }): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(a.createdAt ?? "");
-  const date = m ? `${Number(m[1]) === new Date().getFullYear() ? "" : `${m[1]}年`}${Number(m[2])}月${Number(m[3])}日` : "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(a.createdAt ?? "");
+  const date = m ? `${Number(m[1]) === new Date().getFullYear() ? "" : `${m[1]}年`}${Number(m[2])}月${Number(m[3])}日${m[4] ? ` ${m[4]}:${m[5]}` : ""}` : "";
   return [date, `${(a.files ?? []).length} 个文件`].filter(Boolean).join(" · ");
 }
 /** 交作业时下拉列表里的一行：计划页上的序号 + 作业名（交过的带上状态），和卡片头部对得上，认的是作业不是文件 */

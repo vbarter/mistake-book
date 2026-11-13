@@ -119,6 +119,9 @@ def test_invite_preview_lists_assignments_with_their_files(client, auth):
     html = client.get(f"/api/plans/j/{code}?a={first}").get_data(as_text=True)
     assert html.index("周末卷") < html.index("第三单元练习.pdf") and html.count("<details") == 2 and html.count("这次布置") == 1
     assert "2 个文件" in html and "X-Amz" not in html and "/api/plans/files/" not in html
+    # 卡片头部是布置的时间，到分钟
+    import re
+    assert re.search(r"\d+月\d+日 \d{2}:\d{2} · 2 个文件", html)
     # 删掉的作业不出现；指向它的旧卡片落到最新一份
     assert client.delete(f"/api/plans/assignments/{first}", headers=auth).status_code == 200
     r = client.get(f"/api/plans/invite/{code}?a={first}").get_json()

@@ -9,7 +9,7 @@ import { Avatar, Button, IconSegmented, Sheet, Stat, Tag } from "../../component
 import { SwipeRow, swipeGuard } from "../../components/SwipeRow";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C, useThemeClass } from "../../lib/theme";
 
 const leave = () => {
@@ -177,10 +177,9 @@ export default function PlanDetail() {
   const head = (
     <View className="plan-head">
       <Avatar name={plan.teacher} url={plan.teacherAvatar} size={42} />
-      {/* 两边都是创建人的名字 + 创建时间；计划名在顶部标题栏 */}
+      {/* 两边都只有创建人的名字；计划名在顶部标题栏，时间看每份作业自己的 */}
       <View className="flex1 col minw0">
         <Text className="t-headline ellipsis">{plan.teacher}</Text>
-        <Text className="t-foot c-sec ellipsis">{createdLabel(plan.createdAt)}</Text>
       </View>
       {/* 解散 / 退出：点了先确认 */}
       <View className="plan-iconbtn" hoverClass="plan-iconbtn--hover" onClick={() => void (owner ? dissolve() : quit())}>
@@ -247,7 +246,7 @@ export default function PlanDetail() {
               if (swiped) return setSwiped(null);
               fn();
             };
-            // 头部：序号（第几次布置）+ 作业名 + 「11月12日 · 5 个文件」+ 三个数（绿勾 = 已交，灰色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的），点三个数看名单
+            // 头部：序号（第几次布置）+ 作业名 + 「11月12日 21:03 · 5 个文件」+ 三个数（绿勾 = 已交，灰色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的），点三个数看名单
             const head = (
               <View className="hw-head" hoverClass="list-row--hover" onClick={tap(() => setOpened((o) => ({ ...o, [a.id]: !open })))}>
                 <View className="hw-no">
