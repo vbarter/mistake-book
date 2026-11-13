@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { Image, Picker, Text, View } from "@tarojs/components";
 import Taro, { usePageScroll } from "@tarojs/taro";
+import { useCelebrate } from "./Celebrate";
 import { Icon } from "./Icon";
 import { Busy, Count, ScanSheet } from "./plan";
 import { SwipeRow, swipeGuard } from "./SwipeRow";
@@ -45,6 +46,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const [opened, setOpened] = useState<Record<string, boolean>>({}); // 手动展开 / 收起过的作业（没动过的：待交、退回的展开，交过的收起）
   const [full, setFull] = useState<Record<string, boolean>>({}); // 文件全部展开了的作业
   const [hint, setHint] = useState(swipeHintPending); // 第一次有交过的作业：那一行自己滑出一小截，露一下「解绑」
+  const [cele, celebrate] = useCelebrate();
   usePageScroll(() => {
     if (swiped) setSwiped(null);
   });
@@ -63,7 +65,9 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       setShots([]);
       setTarget(null);
       void Taro.vibrateShort({ type: "light" }).catch(() => undefined);
-      toast(`已交到「${chosen.title.length > 12 ? `${chosen.title.slice(0, 12)}…` : chosen.title}」`, "success");
+      // 交上了：庆祝一下；这一份交完就没有待交的了，算「交齐」，纸屑多一些
+      const cleared = todo.every((a) => a.id === chosen.id);
+      celebrate({ title: "交上啦！", sub: cleared && list.length > 1 ? `${chosen.title} · 作业都交齐了` : chosen.title, big: cleared });
       await reload();
     } catch (e) {
       await Taro.showModal({ title: "没交上去", content: errorText(e), showCancel: false });
@@ -284,6 +288,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         );
       })}
 
+      {cele}
       <View className="bottom-bar">
         <Button variant="outline" icon="printer" className={open.length ? undefined : "flex1"} disabled={exportable.length === 0} onClick={() => setExporting(true)}>
           导出

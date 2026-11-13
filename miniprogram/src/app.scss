@@ -848,3 +848,20 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .hw-empty__title { font-size: 16px; font-weight: 600; margin-top: 6px; }
 .hw-empty__sub { font-size: 13px; line-height: 19px; color: $secondary; text-align: center; white-space: pre-line; }
 
+/* 庆祝层（components/Celebrate.tsx，和 App 的 motion.css 同一套）：小人跳出来举手、撒纸屑、一句话，1.9 秒自己收起。不接触摸，不挡操作。 */
+.cele { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 400; pointer-events: none; animation: cele-show 1.9s both; }
+.cele__veil { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: rgba(243, 244, 248, 0.86); }
+.cele__center { position: absolute; left: 0; right: 0; top: 28%; display: flex; flex-direction: column; align-items: center; padding: 0 32px; }
+.cele__buddy { width: 170px; height: 170px; animation: cele-jump 1.1s 0.05s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.cele__title { margin-top: 6px; font-size: 22px; font-weight: 800; color: $label; animation: rise-in 0.4s 0.2s both; }
+.cele__sub { margin-top: 6px; font-size: 14px; color: $secondary; text-align: center; animation: rise-in 0.4s 0.3s both; }
+.cele__burst { position: absolute; left: 50%; top: 28%; margin-top: 100px; width: 0; height: 0; }
+.cele__bit { position: absolute; left: 0; top: 0; opacity: 0; animation: cele-fly 1.2s cubic-bezier(0.15, 0.7, 0.3, 1) both; }
+@keyframes cele-show { 0% { opacity: 0; } 8%, 86% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes cele-jump { 0% { transform: translateY(60px) scale(0.6); opacity: 0; } 45% { transform: translateY(-22px) scale(1.05); opacity: 1; } 70% { transform: translateY(0) scale(1, 0.96); } 100% { transform: none; opacity: 1; } }
+@keyframes cele-fly { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--x), var(--y)) rotate(var(--r)); } }
+/* 系统开了「减弱动态效果」：不跳、不撒纸屑，只淡入淡出那句话 */
+@media (prefers-reduced-motion: reduce) {
+  .cele__burst { display: none; }
+  .cele__buddy, .cele__title, .cele__sub { animation: none; }
+}
