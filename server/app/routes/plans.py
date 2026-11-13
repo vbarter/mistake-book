@@ -302,9 +302,8 @@ def _create_assignments(plan: Plan, data: dict) -> tuple[list[PlanAssignment], l
     now = datetime.now()
     due = data.get("dueAt")
     due = due[:32] if isinstance(due, str) and due else None
-    # 没起名字：只有一个上传的文件就用它的文件名，否则用日期
-    named = files[0]["name"].rsplit(".", 1)[0] if len(files) == 1 and files[0]["kind"] == "attachment" and files[0]["name"] else ""
-    title = custom or named or f"{now.month}月{now.day}日作业"
+    # 没起名字：一律按布置日期起名，不用文件名（作业名和文件名是两回事）
+    title = custom or f"{now.month}月{now.day}日作业"
     a = PlanAssignment(plan_id=plan.id, title=title[:120], due_at=due, created_at=now)
     db.session.add(a)
     db.session.flush()
@@ -681,6 +680,10 @@ def add_assignment_files(assignment_id: str):
     have = _files_of(a.id, None)
     if len(have) + len(files) > MAX_FILES:
         abort(400, f"一份作业最多 {MAX_FILES} 个文件")
+    # 以前没起名字的单文件作业名字取自文件名：文件多了以后它不再代表整份作业，换成按布置日期的名字
+    if len(have) == 1 and have[0].kind == "attachment" and have[0].name and a.title == have[0].name.rsplit(".", 1)[0][:120]:
+        day = a.created_at or datetime.now()
+        a.title = f"{day.month}月{day.day}日作业"
     base = max((f.position or 0 for f in have), default=-1) + 1
     for f in files:
         f["position"] += base

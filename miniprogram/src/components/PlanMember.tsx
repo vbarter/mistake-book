@@ -9,14 +9,13 @@ import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
 import { toast } from "../lib/hooks";
-import { AI_GRADING, HW_PREVIEW, STATUS_LABEL, shownStatus, absoluteUrl, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, hwMeta, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
+import { AI_GRADING, HW_PREVIEW, STATUS_LABEL, shownStatus, absoluteUrl, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, handInLabel, hwMeta, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
 import { C } from "../lib/theme";
 
 type Look = "done" | "returned" | "todo" | "revoked";
 /** 一份作业的样子：交了 = 绿，退回重做 = 红，没交 = 不上色 */
 const lookOf = (a: MemberAssignment): Look => { const st = shownStatus(a.status); return st === "submitted" || st === "reviewed" ? "done" : st === "returned" ? "returned" : a.revoked ? "revoked" : "todo"; };
 
-/** 下拉列表里的一行：作业名，交过的带上状态 */
 const SWIPE_HINT = "zcb.plan.unbindHint";
 function swipeHintPending(): boolean {
   try {
@@ -25,8 +24,6 @@ function swipeHintPending(): boolean {
     return false;
   }
 }
-
-const optionLabel = (a: MemberAssignment) => (shownStatus(a.status) === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`);
 
 /**
  * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，下面一份作业一张卡片：头部是序号 + 作业名 + 布置日期和文件数 + 自己的状态（待交 / 已交 / 退回重做），
@@ -66,7 +63,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       setShots([]);
       setTarget(null);
       void Taro.vibrateShort({ type: "light" }).catch(() => undefined);
-      toast("交上去了", "success");
+      toast(`已交到「${chosen.title.length > 12 ? `${chosen.title.slice(0, 12)}…` : chosen.title}」`, "success");
       await reload();
     } catch (e) {
       await Taro.showModal({ title: "没交上去", content: errorText(e), showCancel: false });
@@ -141,6 +138,8 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       </Tag>
     );
   const firstSwipe = list.find(canWithdraw)?.id;
+  /** 这份作业在页面上的序号（卡片头部左边那个数） */
+  const noOf = (a: MemberAssignment) => list.length - list.findIndex((x) => x.id === a.id);
   const exportable = list.filter((a) => a.digitized || (a.files ?? []).length > 0);
 
   return (
@@ -319,12 +318,14 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         </View>
         <Text className="t-foot c-sec">交到哪一份作业</Text>
         {/* 下拉选择：点开是微信自带的滚轮，列出所有还能交的作业 */}
-        <Picker mode="selector" range={open.map(optionLabel)} value={Math.max(0, open.findIndex((a) => a.id === chosen?.id))} onChange={(e) => setTarget(open[Number(e.detail.value)]?.id ?? null)}>
+        <Picker mode="selector" range={open.map((a) => handInLabel(a, noOf(a)))} value={Math.max(0, open.findIndex((a) => a.id === chosen?.id))} onChange={(e) => setTarget(open[Number(e.detail.value)]?.id ?? null)}>
           <View className="field">
-            <Text className={`ellipsis flex1${chosen ? "" : " c-sec"}`}>{chosen ? chosen.title : "请选择作业"}</Text>
+            <Text className={`ellipsis flex1${chosen ? "" : " c-sec"}`}>{chosen ? handInLabel(chosen, noOf(chosen)) : "请选择作业"}</Text>
             <Icon name="chevron-down" size={16} color={C.tertiary} stroke={2.4} />
           </View>
         </Picker>
+        {/* 选中的那份：再说一遍是哪天布置的、里面几个文件，确认交的是整份作业 */}
+        {chosen && <Text className="t-foot c-sec">{`作业 ${noOf(chosen)} · ${hwMeta(chosen)}`}</Text>}
         {chosen?.status === "submitted" && <Text className="t-foot c-sec">这份交过了，再交会换掉上次那份</Text>}
         <Button icon="check" disabled={!chosen || shots.length === 0 || Boolean(stage)} onClick={() => void hand()}>
           交给老师

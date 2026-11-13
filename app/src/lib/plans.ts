@@ -185,6 +185,8 @@ const absolute = (url: string) => (url.startsWith("http") ? url : `${getApiBase(
 const dataUrlToBlob = async (src: string) => (await fetch(src)).blob();
 const dataUrlBytes = (src: string) => Math.floor(((src.length - src.indexOf(",") - 1) * 3) / 4);
 
+/** 同学交上来的一页：只叫「第 N 页」。它属于哪份作业看作业名，不靠文件名 */
+const handInDraft = (page: FullPage, index: number): DraftFile => ({ ...scanDraft(page, index), name: `第 ${index + 1} 页.jpg` });
 export const scanDraft = (page: FullPage, index: number): DraftFile => ({ clientId: page.id, kind: "scan", name: `扫描件 第 ${index + 1} 页.jpg`, mime: "image/jpeg", size: dataUrlBytes(page.src), thumb: page.thumb ?? page.src, page });
 
 const EXT_MIME: Record<string, string> = { pdf: "application/pdf", doc: "application/msword", docx: ATTACHMENT_MIMES[2], jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
@@ -418,7 +420,7 @@ export function startPlanSync(): () => void {
  */
 export async function submitHomework(assignment: AssignmentBrief, pages: FullPage[], onStage?: (text: string) => void): Promise<SubmissionView> {
   onStage?.("正在保存");
-  const drafts = pages.map(scanDraft);
+  const drafts = pages.map(handInDraft);
   const res = await api<{ submission: SubmissionView; uploads: Upload[] }>(`/api/plans/assignments/${assignment.id}/submission`, { method: "POST", body: { files: filesBody(drafts) } });
   await uploadAll(res.uploads, drafts, onStage);
   if (!AI_GRADING) {
@@ -538,6 +540,8 @@ export function hwMeta(a: { createdAt?: string | null; files?: unknown[] }): str
   const date = m ? `${Number(m[1]) === new Date().getFullYear() ? "" : `${m[1]}年`}${Number(m[2])}月${Number(m[3])}日` : "";
   return [date, `${(a.files ?? []).length} 个文件`].filter(Boolean).join(" · ");
 }
+/** 交作业时下拉列表里的一行：计划页上的序号 + 作业名（交过的带上状态），和卡片头部对得上，认的是作业不是文件 */
+export const handInLabel = (a: MemberAssignment, no: number): string => `${no}. ${a.title}${shownStatus(a.status) === "todo" ? "" : `（${STATUS_LABEL[shownStatus(a.status)]}）`}`;
 /** 一份作业展开后先显示几个文件，其余的收在「其余 N 个文件」里 */
 export const HW_PREVIEW = 3;
 /** 最新创建的排最前 */

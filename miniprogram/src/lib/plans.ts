@@ -597,6 +597,8 @@ export function hwMeta(a: { createdAt?: string | null; files?: unknown[] }): str
   const date = m ? `${Number(m[1]) === new Date().getFullYear() ? "" : `${m[1]}年`}${Number(m[2])}月${Number(m[3])}日` : "";
   return [date, `${(a.files ?? []).length} 个文件`].filter(Boolean).join(" · ");
 }
+/** 交作业时下拉列表里的一行：计划页上的序号 + 作业名（交过的带上状态），和卡片头部对得上，认的是作业不是文件 */
+export const handInLabel = (a: MemberAssignment, no: number): string => `${no}. ${a.title}${shownStatus(a.status) === "todo" ? "" : `（${STATUS_LABEL[shownStatus(a.status)]}）`}`;
 /** 一份作业展开后先显示几个文件，其余的收在「其余 N 个文件」里 */
 export const HW_PREVIEW = 3;
 /** 最新创建的排最前 */
