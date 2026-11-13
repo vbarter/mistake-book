@@ -40,3 +40,27 @@
 @keyframes buddy-wave { 50% { transform: rotate(-18deg); } }
 @keyframes buddy-scan { from { transform: translateY(0); } to { transform: translateY(86px); } }
 @keyframes buddy-bar { 50% { transform: scaleY(0.55); } }
+
+/* 庆祝层（components/Celebrate.tsx，小程序 app.scss 同一套）：小人跳出来举手、撒纸屑、一句话，1.9 秒自己收起。不接触摸，不挡操作。 */
+.cele { position: fixed; inset: 0; z-index: 900; pointer-events: none; animation: cele-show 1.9s both; }
+.cele__veil { position: absolute; inset: 0; background: var(--bg); opacity: 0.86; }
+.cele__center { position: absolute; left: 0; right: 0; top: 28%; display: flex; flex-direction: column; align-items: center; padding: 0 32px; }
+.cele .buddy__body { animation: cele-jump 1.1s 0.05s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.cele .buddy__shadow { animation: cele-shadow 1.1s 0.05s both; }
+.buddy__armL { animation: cele-wave-l 0.35s 0.3s 3 alternate; transform-origin: 40px 80px; }
+.buddy__armR { animation: cele-wave-r 0.35s 0.3s 3 alternate; transform-origin: 112px 80px; }
+.cele__title { margin-top: 6px; font-size: 22px; font-weight: 800; color: var(--label); animation: rise-in 0.4s 0.2s both; }
+.cele__sub { margin-top: 6px; font-size: 14px; color: var(--secondary); text-align: center; animation: rise-in 0.4s 0.3s both; }
+.cele__burst { position: absolute; left: 50%; top: 28%; margin-top: 100px; width: 0; height: 0; }
+.cele__bit { position: absolute; left: 0; top: 0; opacity: 0; animation: cele-fly 1.2s cubic-bezier(0.15, 0.7, 0.3, 1) both; }
+@keyframes cele-show { 0% { opacity: 0; } 8%, 86% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes cele-jump { 0% { transform: translateY(60px) scale(0.6); opacity: 0; } 45% { transform: translateY(-22px) scale(1.05); opacity: 1; } 70% { transform: translateY(0) scale(1, 0.96); } 100% { transform: none; opacity: 1; } }
+@keyframes cele-shadow { 0% { opacity: 0; } 45% { transform: scaleX(0.7); opacity: 0.6; } 100% { transform: none; opacity: 1; } }
+@keyframes cele-wave-l { to { transform: rotate(-16deg); } }
+@keyframes cele-wave-r { to { transform: rotate(16deg); } }
+@keyframes cele-fly { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--x), var(--y)) rotate(var(--r)); } }
+/* 系统开了「减弱动态效果」：base.css 把所有动画压到一瞬间，庆祝层会一闪而过；这里改成不跳、不撒纸屑，那句话照常停留 1.9 秒 */
+@media (prefers-reduced-motion: reduce) {
+  .cele { animation-duration: 1.9s !important; }
+  .cele__burst { display: none; }
+}
