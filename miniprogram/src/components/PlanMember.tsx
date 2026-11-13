@@ -9,12 +9,12 @@ import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
 import { toast } from "../lib/hooks";
-import { AI_GRADING, HW_PREVIEW, STATUS_LABEL, absoluteUrl, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, hwMeta, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
+import { AI_GRADING, HW_PREVIEW, STATUS_LABEL, shownStatus, absoluteUrl, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, hwMeta, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
 import { C } from "../lib/theme";
 
 type Look = "done" | "returned" | "todo" | "revoked";
 /** 一份作业的样子：交了 = 绿，退回重做 = 红，没交 = 不上色 */
-const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
+const lookOf = (a: MemberAssignment): Look => { const st = shownStatus(a.status); return st === "submitted" || st === "reviewed" ? "done" : st === "returned" ? "returned" : a.revoked ? "revoked" : "todo"; };
 
 /** 下拉列表里的一行：作业名，交过的带上状态 */
 const SWIPE_HINT = "zcb.plan.unbindHint";
@@ -26,7 +26,7 @@ function swipeHintPending(): boolean {
   }
 }
 
-const optionLabel = (a: MemberAssignment) => (a.status === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`);
+const optionLabel = (a: MemberAssignment) => (shownStatus(a.status) === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`);
 
 /**
  * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，下面一份作业一张卡片：头部是序号 + 作业名 + 布置日期和文件数 + 自己的状态（待交 / 已交 / 退回重做），
@@ -126,18 +126,18 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   };
 
   /** 头部右边自己的状态：待交 / 已交 / 已阅 / 退回重做 / 已删除 */
-  const statusTag = (a: MemberAssignment) =>
-    a.revoked && a.status === "todo" ? (
+  const statusTag = (a: MemberAssignment, st = shownStatus(a.status)) =>
+    a.revoked && st === "todo" ? (
       <Tag kind="neutral" icon={null}>
         已删除
       </Tag>
     ) : (
       <Tag
-        kind={a.status === "todo" ? "pending" : a.status === "returned" ? "wrong" : "correct"}
-        icon={a.status === "todo" ? "clock" : a.status === "returned" ? "refresh" : undefined}
-        style={a.status === "submitted" || a.status === "reviewed" ? { background: C.card } : undefined}
+        kind={st === "todo" ? "pending" : st === "returned" ? "wrong" : "correct"}
+        icon={st === "todo" ? "clock" : st === "returned" ? "refresh" : undefined}
+        style={st === "submitted" || st === "reviewed" ? { background: C.card } : undefined}
       >
-        {STATUS_LABEL[a.status]}
+        {STATUS_LABEL[st]}
       </Tag>
     );
   const firstSwipe = list.find(canWithdraw)?.id;
@@ -161,9 +161,10 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       {/* 一份作业一张卡片（计划名在顶部标题栏，创建时间在页面头部创建人名字下面） */}
       {list.map((a, i) => {
         const look = lookOf(a);
-        const waiting = a.status === "todo" || a.status === "returned";
+        const st = shownStatus(a.status);
+        const waiting = st === "todo" || st === "returned";
         const files = a.files ?? [];
-        const mine = a.status !== "todo";
+        const mine = st !== "todo";
         const open = opened[a.id] ?? (waiting && !a.revoked);
         const shownFiles = open ? (full[a.id] ? files : files.slice(0, HW_PREVIEW)) : [];
         const rest = files.length - HW_PREVIEW;
@@ -206,14 +207,14 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
               </View>
             )}
             {/* 退回重做：一句提醒；老师留的话跟在后面 */}
-            {open && a.status === "returned" && (
+            {open && st === "returned" && (
               <View className="hw-foot hw-foot--wrong">
                 <Text>老师退回了，重新交一次</Text>
               </View>
             )}
             {open && a.comment && (
-              <View className={`hw-foot ${a.status === "returned" ? "hw-foot--wrong" : "hw-foot--mute"}`} style={{ height: "auto", padding: "10px 16px 10px 48px", alignItems: "flex-start" }}>
-                <Icon name="bubble" size={14} color={a.status === "returned" ? C.wrong : C.tertiary} stroke={2.2} style={{ marginTop: "3px" }} />
+              <View className={`hw-foot ${st === "returned" ? "hw-foot--wrong" : "hw-foot--mute"}`} style={{ height: "auto", padding: "10px 16px 10px 48px", alignItems: "flex-start" }}>
+                <Icon name="bubble" size={14} color={st === "returned" ? C.wrong : C.tertiary} stroke={2.2} style={{ marginTop: "3px" }} />
                 <Text className="flex1" style={{ fontWeight: 400, lineHeight: "20px" }}>
                   {a.comment}
                 </Text>
@@ -236,7 +237,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
                       </Count>
                     </>
                   ) : (
-                    <Text>{a.status === "returned" ? "" : "批改中"}</Text>
+                    <Text>{st === "returned" ? "" : "批改中"}</Text>
                   )}
                 </View>
                 <Text>批改结果</Text>

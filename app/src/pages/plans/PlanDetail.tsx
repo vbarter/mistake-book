@@ -5,7 +5,7 @@ import { SwipeRow } from "../../components/SwipeRow";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Segmented, Sheet, Spinner } from "../../components/ui";
 import { Avatar, Stat, Tag } from "../../components/v2";
-import { AI_GRADING, HW_PREVIEW, planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, RETURN_REDO, planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { openFile } from "./Assignment";
 import { PlanMember } from "./PlanMember";
@@ -38,7 +38,7 @@ let remembered: { planId: string; tab: "tasks" | "members"; filter: Filter; open
 const itemTag = (it: MemberItem) =>
   it.status === "submitted" ? <Tag kind="info" icon="pencil">待阅</Tag>
     : it.status === "reviewed" ? <Tag kind="correct">已阅</Tag>
-      : it.status === "returned" ? <Tag kind="wrong" icon="refresh">退回</Tag>
+      : RETURN_REDO && it.status === "returned" ? <Tag kind="wrong" icon="refresh">退回</Tag>
         : <Tag kind="neutral" icon={it.viewed ? "clock" : "eye-off"}>{it.viewed ? "未交" : "没看"}</Tag>;
 
 export default function PlanDetail() {

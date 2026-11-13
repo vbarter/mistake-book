@@ -9,7 +9,7 @@ import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui
 import { SwipeRow, swipeGuard } from "../../components/SwipeRow";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { AI_GRADING, HW_PREVIEW, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, RETURN_REDO, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C, useThemeClass } from "../../lib/theme";
 
 const leave = () => {
@@ -36,7 +36,7 @@ const itemTag = (it: MemberItem) =>
     </Tag>
   ) : it.status === "reviewed" ? (
     <Tag kind="correct">已阅</Tag>
-  ) : it.status === "returned" ? (
+  ) : RETURN_REDO && it.status === "returned" ? (
     <Tag kind="wrong" icon="refresh">
       退回
     </Tag>

@@ -41,6 +41,14 @@ const EXT_MIME: Record<string, string> = {
 export const ATTACHMENT_EXTENSIONS = Object.keys(EXT_MIME);
 
 export type MyStatus = "todo" | "submitted" | "reviewed" | "returned";
+/**
+ * 「退回重做」开关（两端的 lib/plans.ts 同名开关保持一致）。先关着：批阅页没有「退回」按钮，只能标已阅；
+ * 以前退回过的作业在界面上按「待交」显示（同学照常可以重新交），不标红、不写「退回重做」。
+ * 要恢复：两端都改回 true 即可，服务端和下面的显示代码都原样留着。
+ */
+export const RETURN_REDO: boolean = false;
+/** 界面上显示的状态：开关关着时，退回的按待交显示 */
+export const shownStatus = (s: MyStatus): MyStatus => (!RETURN_REDO && s === "returned" ? "todo" : s);
 export interface Score { total: number; correct: number; wrong: number; blank: number }
 export interface PlanInfo {
   id: string;
