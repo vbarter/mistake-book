@@ -81,6 +81,8 @@ export function makeScene(root, { id, from, to, html, origin = "50% 50%", wipe =
       // 下一幕展开时盖在上面，这一幕多留一小段
       const on = t >= from && t < to + 0.8;
       el.style.visibility = on ? "visible" : "hidden";
+      // 幕里有些元素自己设了 visibility: visible，会透出隐藏的父级；不在场的幕整个不参与排版
+      el.style.display = on ? "block" : "none";
       if (!on) return;
       if (wipe > 0 && from > 0) {
         const k = p(t, from, from + wipe, E.io);
