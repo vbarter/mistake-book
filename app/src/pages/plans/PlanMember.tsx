@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { assetUrl } from "../../api/client";
+import { useCelebrate } from "../../components/Celebrate";
 import { Icon } from "../../components/Icon";
 import { SwipeRow } from "../../components/SwipeRow";
 import { Button, Sheet } from "../../components/ui";
@@ -66,6 +67,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     seen.current = n;
   }, [n]);
 
+  const [cele, celebrate] = useCelebrate();
   const todo = list.filter((a) => !a.revoked && (a.status === "todo" || a.status === "returned"));
   const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
   const open = list.filter(canHandIn);
@@ -114,7 +116,9 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       clearScan();
       setTarget(null);
       void haptic.success();
-      toast(`已交到「${chosen.title}」`, "success");
+      // 交上了：庆祝一下；这一份交完就没有待交的了，算「交齐」，纸屑多一些
+      const cleared = todo.every((a) => a.id === chosen.id);
+      celebrate({ title: "交上啦！", sub: cleared && list.length > 1 ? `${chosen.title} · 作业都交齐了` : chosen.title, big: cleared });
       await reload();
     } catch (e) {
       toastError(e);
@@ -164,6 +168,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
 
   return (
     <>
+      {cele}
       <div className="plan-stats">
         <Stat icon="clock" label="待交" value={todo.length} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? "var(--mastered)" : undefined} />

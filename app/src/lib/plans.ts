@@ -150,7 +150,6 @@ export const fetchAssignment = (id: string) => api<AssignmentRes>(`/api/plans/as
 export const fetchSubmission = (id: string) => api<SubmissionRes>(`/api/plans/submissions/${id}`);
 export const reviewSubmission = (id: string, body: { marks?: Record<number, Mark>; status?: "reviewed" | "returned"; comment?: string }) =>
   api<{ submission: SubmissionView }>(`/api/plans/submissions/${id}`, { method: "PATCH", body });
-export const updatePlan = (id: string, body: { name?: string; subject?: PlanSubject; resetInvite?: boolean }) => api<{ plan: PlanInfo; invite: Invite }>(`/api/plans/${id}`, { method: "PATCH", body });
 export const deletePlan = (id: string) => api(`/api/plans/${id}`, { method: "DELETE" });
 export const removeMember = (planId: string, userId: string) => api(`/api/plans/${planId}/members/${userId}`, { method: "DELETE" });
 export const revokeAssignment = (id: string) => api(`/api/plans/assignments/${id}`, { method: "DELETE" });
