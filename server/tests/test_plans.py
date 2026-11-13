@@ -636,3 +636,18 @@ def test_member_withdraws_own_submission(client, auth):
     assert client.delete(url, headers=s2).status_code == 200
     assert db.session.get(PlanAssignment, aid) is not None  # 王小明那份还在
     assert client.get(f"/api/plans/{pid}", headers=s2).get_json()["assignments"] == []
+
+
+def test_auto_title_follows_files(client, auth):
+    """没起名字、只有一个上传文件的作业用文件名；后来又加了文件，名字换成按布置日期的；自己起的名字不动"""
+    from datetime import datetime
+
+    r = client.post("/api/plans", json={"name": "名字跟着文件走", "files": [PDF]}, headers=auth).get_json()
+    pid, aid = r["plan"]["id"], r["assignment"]["id"]
+    assert r["assignment"]["title"] == PDF["name"].rsplit(".", 1)[0]
+    now = datetime.now()
+    r = client.post(f"/api/plans/assignments/{aid}/files", json={"files": [{**PDF, "clientId": "more1"}]}, headers=auth)
+    assert r.status_code == 201 and r.get_json()["assignment"]["title"] == f"{now.month}月{now.day}日作业"
+    named = client.post(f"/api/plans/{pid}/assignments", json={"title": "周末卷子", "files": [PDF]}, headers=auth).get_json()["assignment"]
+    r = client.post(f"/api/plans/assignments/{named['id']}/files", json={"files": [{**PDF, "clientId": "more2"}]}, headers=auth)
+    assert r.get_json()["assignment"]["title"] == "周末卷子"

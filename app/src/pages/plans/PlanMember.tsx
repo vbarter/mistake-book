@@ -6,7 +6,7 @@ import { SwipeRow } from "../../components/SwipeRow";
 import { Button, Sheet } from "../../components/ui";
 import { Stat, Tag } from "../../components/v2";
 import { haptic, pickImages, takePhoto } from "../../lib/native";
-import { AI_GRADING, HW_PREVIEW, STATUS_LABEL, shownStatus, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, hwMeta, isOverdue, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes, type PlanFileView } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, STATUS_LABEL, shownStatus, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, handInLabel, hwMeta, isOverdue, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes, type PlanFileView } from "../../lib/plans";
 import { canUseLiveCamera } from "../../lib/scanCamera";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
@@ -51,7 +51,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const [target, setTarget] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [myFiles, setMyFiles] = useState<PlanFileView[] | null>(null); // 正在看的：自己交上去的那几页
+  const [myHw, setMyHw] = useState<{ title: string; files: PlanFileView[] } | null>(null); // 正在看的：自己交到哪份作业的那几页
   const [swiped, setSwiped] = useState<string | null>(null); // 左滑开着的那份作业
   const [opened, setOpened] = useState<Record<string, boolean>>({}); // 手动展开 / 收起过的作业（没动过的：待交、退回的展开，交过的收起）
   const [full, setFull] = useState<Record<string, boolean>>({}); // 文件全部展开了的作业
@@ -80,7 +80,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     try {
       const sub = (await fetchAssignment(a.id)).submission;
       if (!sub?.files.length) return toast("没找到交上去的照片");
-      setMyFiles(sub.files);
+      setMyHw({ title: a.title, files: sub.files });
     } catch (e) {
       toastError(e);
       if (planGone(e)) void reload();
@@ -114,7 +114,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       clearScan();
       setTarget(null);
       void haptic.success();
-      toast("交上去了", "success");
+      toast(`已交到「${chosen.title}」`, "success");
       await reload();
     } catch (e) {
       toastError(e);
@@ -136,6 +136,8 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     await reload();
   };
   const firstSwipe = list.find(canWithdraw)?.id;
+  /** 这份作业在页面上的序号（卡片头部左边那个数） */
+  const noOf = (a: MemberAssignment) => list.length - list.findIndex((x) => x.id === a.id);
 
   const exportPdf = async (a: MemberAssignment) => {
     try {
@@ -307,15 +309,18 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         {/* 下拉选择：列出所有还能交的作业 */}
         <select className="input plan-select" aria-label="交到哪一份作业" value={chosen?.id ?? ""} onChange={(e) => setTarget(e.target.value || null)}>
           {!chosen && <option value="">请选择作业</option>}
-          {open.map((a) => <option key={a.id} value={a.id}>{shownStatus(a.status) === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`}</option>)}
+          {open.map((a) => <option key={a.id} value={a.id}>{handInLabel(a, noOf(a))}</option>)}
         </select>
+        {/* 选中的那份：再说一遍是哪天布置的、里面几个文件，确认交的是整份作业 */}
+        {chosen && <p className="t-foot c-sec">{`作业 ${noOf(chosen)} · ${hwMeta(chosen)}`}</p>}
         {chosen?.status === "submitted" && <p className="t-foot c-sec">这份交过了，再交会换掉上次那份</p>}
         <Button icon="check" disabled={!chosen || !pages.length || busy || Boolean(stage)} onClick={hand}>{busy ? "照片调正中…" : "交给老师"}</Button>
       </Sheet>
 
       {/* 自己交上去的那几页：一页页往下排，点一页用系统预览放大 */}
-      <Sheet open={myFiles !== null} onClose={() => setMyFiles(null)} title={`我交的作业 · ${myFiles?.length ?? 0} 页`}>
-        {(myFiles ?? []).map((f) => (f.url ? <img key={f.id} className="plan-photo" style={{ flexShrink: 0 }} src={assetUrl(f.url)} alt={f.name} loading="lazy" onClick={() => void openFile(f)} /> : <div key={f.id} className="plan-files__empty card">「{f.name}」还在上传</div>))}
+      <Sheet open={myHw !== null} onClose={() => setMyHw(null)} title={`我交的作业 · ${myHw?.files.length ?? 0} 页`}>
+        <span className="t-headline ellipsis" style={{ flexShrink: 0 }}>{myHw?.title}</span>
+        {(myHw?.files ?? []).map((f) => (f.url ? <img key={f.id} className="plan-photo" style={{ flexShrink: 0 }} src={assetUrl(f.url)} alt={f.name} loading="lazy" onClick={() => void openFile(f)} /> : <div key={f.id} className="plan-files__empty card">「{f.name}」还在上传</div>))}
       </Sheet>
 
       <Sheet open={exporting} onClose={() => setExporting(false)} title="导出作业">
