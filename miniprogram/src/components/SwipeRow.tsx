@@ -1,14 +1,16 @@
 /**
  * 一张能向左滑出按钮的卡片（学习计划页：创建人删作业；成员把交过的作业「解绑」，这时是卡片里的一行，inline）。
  *
- * - 整张卡片（children）跟手左移，右边露出红色按钮；滑过一半松手就停在打开位置，否则弹回
+ * - 整张卡片（children）跟手左移，右边露出红色按钮；往哪边滑过三分之一松手就停在哪边，否则回到原位
  * - 同一时间只开一张：open 由页面管，按到别的卡片、点卡片本身或上下滚动时页面把它收回
+ * - 「上下滚动收回」用 useSwipeCloseOnScroll：横滑时手指难免带一点上下，页面会跟着动一下甚至被拉出下拉刷新，
+ *   这种不算滚动，不然刚滑开就被收回去了
  * - 滑动过的那一下不算点击：swipeGuard.moved 为真时，卡片里各行自己的 onClick 应该直接返回
  * - hint：首次引导，自己滑出一小截再弹回，露一下红色按钮，不加文字
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { View, Text, type ITouchEvent } from "@tarojs/components";
-import Taro from "@tarojs/taro";
+import Taro, { usePageScroll } from "@tarojs/taro";
 import { Icon, type IconName } from "./Icon";
 
 // 样式里的 px 会按屏幕宽度换算（375 设计稿），这里手写的位移也按同一个比例算，不然宽屏上按钮露不全
@@ -26,7 +28,35 @@ const HINT = Math.round(36 * ratio); // 首次引导露出多少
 const SLOP = 6; // 超过这个距离才判断横滑 / 竖滑
 
 /** 这一次按下有没有变成滑动。页面里各行的 onClick 先看它，是滑动就不当点击处理 */
-export const swipeGuard = { moved: false };
+export const swipeGuard = { moved: false, swiping: false };
+let movedTimer: ReturnType<typeof setTimeout> | undefined;
+
+const SETTLE_MS = 400; // 刚滑开的这段时间里页面还可能带着惯性在动
+const SCROLL_CLOSE = 12; // 开着之后页面真的滚了这么多才收回
+
+/**
+ * 页面上下滚动时把滑开的卡片收回。
+ * 不能「一有滚动事件就收」：横滑时页面会跟着手指上下带一点，开着下拉刷新的页面还会被拉下来再弹回去，
+ * 这些都会报滚动，卡片刚滑开就自己弹回了。所以：正在滑、刚滑开的一小会儿只记位置；
+ * 下拉回弹（scrollTop 小于 0）按 0 算；之后离滑开时的位置超过一小段才算用户在滚页面。
+ */
+export function useSwipeCloseOnScroll(openId: string | null, close: () => void) {
+  const base = useRef({ top: 0, at: 0 });
+  const last = useRef(0);
+  useEffect(() => {
+    if (openId) base.current = { top: last.current, at: Date.now() };
+  }, [openId]);
+  usePageScroll(({ scrollTop }) => {
+    const top = Math.max(0, scrollTop);
+    last.current = top;
+    if (!openId) return;
+    if (swipeGuard.swiping || Date.now() - base.current.at < SETTLE_MS) {
+      base.current.top = top;
+      return;
+    }
+    if (Math.abs(top - base.current.top) > SCROLL_CLOSE) close();
+  });
+}
 
 type Gesture =
   | { kind: "idle" }
@@ -53,6 +83,8 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删�
   const [x, setXState] = useState(open ? -SHIFT : 0);
   const [animate, setAnimate] = useState(false);
   const xRef = useRef(x);
+  const openRef = useRef(open);
+  openRef.current = open;
 
   const setX = (v: number, withAnimation: boolean) => {
     xRef.current = v;
@@ -67,12 +99,21 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删�
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // 滑到一半卡片没了（比如列表刷新）：别把「正在滑」留在那儿
+  useEffect(
+    () => () => {
+      if (g.current.kind === "swipe") swipeGuard.swiping = false;
+    },
+    [],
+  );
+
   // 首次引导：滑出一小截再弹回
   useEffect(() => {
     if (!hint) return;
     const t1 = setTimeout(() => setX(-HINT, true), 600);
     const t2 = setTimeout(() => {
-      setX(open ? -SHIFT : 0, true);
+      // 演示的这一秒多里用户可能已经自己滑开了：按现在的状态归位，正在滑就不碰
+      if (g.current.kind !== "swipe") setX(openRef.current ? -SHIFT : 0, true);
       onHintDone?.();
     }, 1400);
     return () => {
@@ -83,6 +124,7 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删�
   }, [hint]);
 
   const onTouchStart = (e: ITouchEvent) => {
+    clearTimeout(movedTimer);
     swipeGuard.moved = false;
     const t = e.touches[0];
     if (!t) return;
@@ -100,6 +142,7 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删�
       if (Math.abs(dx) > Math.abs(dy)) {
         g.current = { kind: "swipe", x: cur.x, from: cur.from, dx: 0 };
         swipeGuard.moved = true;
+        swipeGuard.swiping = true;
       } else {
         g.current = { kind: "pass" }; // 竖着滑：交给页面滚动
         return;
@@ -115,9 +158,18 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删�
     const cur = g.current;
     g.current = { kind: "idle" };
     if (cur.kind !== "swipe") return;
-    const openIt = cur.from + cur.dx < -SHIFT / 2;
+    swipeGuard.swiping = false;
+    // 「刚滑过」只管紧跟着的那一下点击；不清掉的话，下一次点别处（不在滑动卡片里的行）会被白白吞掉
+    clearTimeout(movedTimer);
+    movedTimer = setTimeout(() => {
+      swipeGuard.moved = false;
+    }, 350);
+    // 往哪边滑过三分之一就停在哪边（手势被系统打断时也按滑到的位置算，不一律弹回）
+    const wasOpen = cur.from < -SHIFT / 2;
+    const at = Math.max(-SHIFT, Math.min(0, cur.from + cur.dx));
+    const openIt = wasOpen ? at < -SHIFT * (2 / 3) : at < -SHIFT / 3;
     setX(openIt ? -SHIFT : 0, true);
-    if (openIt !== open) onOpenChange(openIt);
+    if (openIt !== openRef.current) onOpenChange(openIt);
   };
 
   // 点卡片本身：开着时只收回；刚滑过的那一下不算点击
@@ -130,7 +182,6 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删�
       e.stopPropagation();
       setX(0, true);
       onOpenChange(false);
-      swipeGuard.moved = true;
     }
   };
 

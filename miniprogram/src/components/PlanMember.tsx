@@ -1,11 +1,11 @@
 /** 成员看到的学习计划页（和 App 的 pages/plans/PlanMember.tsx 对应）。 */
 import { useState, type ReactNode } from "react";
 import { Image, Picker, Text, View } from "@tarojs/components";
-import Taro, { usePageScroll } from "@tarojs/taro";
+import Taro from "@tarojs/taro";
 import { useCelebrate } from "./Celebrate";
 import { Icon } from "./Icon";
 import { Busy, Count, ScanSheet } from "./plan";
-import { SwipeRow, swipeGuard } from "./SwipeRow";
+import { SwipeRow, swipeGuard, useSwipeCloseOnScroll } from "./SwipeRow";
 import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
@@ -47,9 +47,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const [full, setFull] = useState<Record<string, boolean>>({}); // 文件全部展开了的作业
   const [hint, setHint] = useState(swipeHintPending); // 第一次有交过的作业：那一行自己滑出一小截，露一下「解绑」
   const [cele, celebrate] = useCelebrate();
-  usePageScroll(() => {
-    if (swiped) setSwiped(null);
-  });
+  useSwipeCloseOnScroll(swiped, () => setSwiped(null));
 
   const todo = list.filter((a) => !a.revoked && (a.status === "todo" || a.status === "returned"));
   const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;

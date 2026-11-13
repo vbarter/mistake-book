@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "@tarojs/components";
-import Taro, { usePageScroll, usePullDownRefresh, useRouter } from "@tarojs/taro";
+import Taro, { usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { ColorIcon } from "../../components/ColorIcon";
 import { Icon, type IconName } from "../../components/Icon";
 import { LoginGate, PageState, ScoreCounts, ShareButton, SubmitProgress, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { PlanMember } from "../../components/PlanMember";
 import { Avatar, Button, IconSegmented, Sheet, Stat, Tag } from "../../components/ui";
-import { SwipeRow, swipeGuard } from "../../components/SwipeRow";
+import { SwipeRow, swipeGuard, useSwipeCloseOnScroll } from "../../components/SwipeRow";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
 import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, type MemberItem, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
@@ -98,9 +98,7 @@ export default function PlanDetail() {
   useEffect(() => {
     void load();
   }, [id, version]);
-  usePageScroll(() => {
-    if (swiped) setSwiped(null);
-  });
+  useSwipeCloseOnScroll(swiped, () => setSwiped(null));
   usePullDownRefresh(async () => {
     await load();
     Taro.stopPullDownRefresh();
