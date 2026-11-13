@@ -220,8 +220,8 @@ export default function PlanDetail() {
           value={tab}
           onChange={(t) => { setSwiped(null); setTab(t); }}
           options={[
-            { value: "tasks", label: `作业 ${list.length}`, icon: "document" },
-            { value: "members", label: `成员情况 ${active.length}`, icon: "family" },
+            { value: "tasks", label: `作业 ${list.length}`, icon: "pencil" },
+            { value: "members", label: `成员情况 ${active.length}`, icon: "chart" },
           ]}
         />
         {tab === "tasks" && list.length === 0 && (

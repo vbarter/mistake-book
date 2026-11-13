@@ -132,7 +132,7 @@ export default function PlanDetail() {
                   <Stat icon="clock" label="没交齐" value={missing} />
                   <Stat icon="family" label="总成员" value={plan.members ?? active.length} />
                 </div>
-                <IconSegmented value={tab} options={[{ value: "tasks", label: `作业 ${tasks.length}`, icon: "document" }, { value: "members", label: `成员情况 ${active.length}`, icon: "family" }]} onChange={setTab} />
+                <IconSegmented value={tab} options={[{ value: "tasks", label: `作业 ${tasks.length}`, icon: "pencil" }, { value: "members", label: `成员情况 ${active.length}`, icon: "chart" }]} onChange={setTab} />
                 {tab === "tasks" && tasks.length === 0 && (
                   <div className="group">
                     <div className="hw-empty">
