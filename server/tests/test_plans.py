@@ -560,9 +560,9 @@ def test_one_publish_is_one_assignment_with_all_files(client, auth):
 
     # 没起名字：不管几个文件都按布置日期起名，不用文件名
     r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF]}, headers=auth).get_json()
-    assert len(r["assignments"]) == 1 and r["assignment"]["title"].endswith("日作业")
+    assert len(r["assignments"]) == 1 and "日作业" in r["assignment"]["title"]
     r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF, pdf2]}, headers=auth).get_json()
-    assert len(r["assignments"]) == 1 and r["assignment"]["title"].endswith("日作业")
+    assert len(r["assignments"]) == 1 and "日作业" in r["assignment"]["title"]
 
 
 def test_owner_adds_files_to_existing_assignment(client, auth):
@@ -652,3 +652,30 @@ def test_auto_title_follows_files(client, auth):
     named = client.post(f"/api/plans/{pid}/assignments", json={"title": "周末卷子", "files": [PDF]}, headers=auth).get_json()["assignment"]
     r = client.post(f"/api/plans/assignments/{named['id']}/files", json={"files": [{**PDF, "clientId": "more2"}]}, headers=auth)
     assert r.get_json()["assignment"]["title"] == "周末卷子"
+
+
+def test_dated_titles_numbered_and_rename_script(client, auth, app):
+    """同一天没起名字布置几份：后面的带（2）（3）。存量脚本：名字等于文件名的旧作业改成按日期的名字，自己起的不动，可以重复跑"""
+    import os
+    import sys
+    from datetime import datetime
+
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+    from rename_plan_assignments import rename
+
+    now = datetime.now()
+    day = f"{now.month}月{now.day}日作业"
+    stem = PDF["name"].rsplit(".", 1)[0]
+    r = client.post("/api/plans", json={"name": "改名", "files": [PDF]}, headers=auth).get_json()
+    pid = r["plan"]["id"]
+    assert r["assignment"]["title"] == day
+    post = lambda body: client.post(f"/api/plans/{pid}/assignments", json=body, headers=auth).get_json()["assignment"]
+    assert post({"files": [PDF]})["title"] == f"{day}（2）"
+    old1, old2, own = post({"title": stem, "files": [PDF]}), post({"title": stem, "files": [PDF]}), post({"title": "周末卷子", "files": [PDF]})
+    with app.app_context():
+        plan = [c for c in rename() if c["plan"] == pid]
+        assert [(c["assignment"], c["new"]) for c in plan] == [(old1["id"], f"{day}（3）"), (old2["id"], f"{day}（4）")]
+        assert db.session.get(PlanAssignment, old1["id"]).title == stem  # 不带 apply 不写库
+        rename(apply=True)
+        assert [db.session.get(PlanAssignment, i).title for i in (old1["id"], old2["id"], own["id"])] == [f"{day}（3）", f"{day}（4）", "周末卷子"]
+        assert [c for c in rename(apply=True) if c["plan"] == pid] == []
