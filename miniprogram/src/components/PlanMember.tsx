@@ -29,7 +29,7 @@ function swipeHintPending(): boolean {
 /**
  * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，下面一份作业一张卡片：头部是序号 + 作业名 + 布置日期和文件数 + 自己的状态（待交 / 已交 / 退回重做），
  * 文件缩进排在下面（点文件打开）。待交和退回的默认展开，交过的收起，点头部展开 / 收起；文件多于 3 个先显示 3 个。
- * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
+ * 底部「导出」「交作业」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
  * 交完页面跟着刷新，交了的作业整张标成绿色，退回的标红。交了、老师还没批阅的那份可以整张向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
  * 批改关着时，交过的作业展开后最下面多一行「我交的作业」，点开翻看自己交上去的照片。
  *AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
@@ -293,7 +293,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         </Button>
         {open.length > 0 && (
           <Button icon={shots.length ? "check" : "camera"} className="flex1" onClick={() => (shots.length ? setHanding(true) : setScanning(true))}>
-            {shots.length ? `交作业 · ${shots.length} 页` : "扫描上传"}
+            {shots.length ? `交作业 · ${shots.length} 页` : "交作业"}
           </Button>
         )}
       </View>
