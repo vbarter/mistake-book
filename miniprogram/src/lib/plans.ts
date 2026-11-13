@@ -93,7 +93,7 @@ export interface PlanDetailRes { plan: PlanInfo; assignments: (OwnerAssignment |
 export interface AssignmentRes { plan: PlanInfo; assignment: AssignmentDetail; board?: Board; invite?: Invite; submission?: SubmissionView | null }
 export interface SubmissionRes { plan: PlanInfo; assignment: AssignmentBrief | null; submission: SubmissionView; student?: { name: string; tail: string }; nav?: { index: number; total: number; prev: string | null; next: string | null } }
 interface Upload { id: string; clientId: string; method: string; url: string; headers?: Record<string, string> }
-export interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief | null; /** 一个附件一份作业，一次可能建出几份（老服务器没有这个字段） */ assignments?: AssignmentBrief[]; uploads: Upload[]; invite: Invite }
+export interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief | null; /** 一次布置就是一份作业，列表里只有这一份（老服务器一个附件一份，可能有几份） */ assignments?: AssignmentBrief[]; uploads: Upload[]; invite: Invite }
 
 /**
  * 这个计划对我来说已经没有了：创建人解散了（服务器回 plan_dissolved），或者不存在了（404）、我已经不在里面（403）。
@@ -254,6 +254,22 @@ export async function publishAssignment(planId: string | null, form: { name?: st
   }
   bumpPlans();
   return res;
+}
+
+/**
+ * 往已有的一份作业里加文件（创建人）：登记 → 直传 → 确认。没传全就把这次登记的几个删掉，不留打不开的文件。
+ * 后加的扫描件只当图片看，不再重新识别成电子版。
+ */
+export async function addAssignmentFiles(assignmentId: string, drafts: DraftFile[], onStage?: (text: string) => void): Promise<void> {
+  onStage?.("正在添加");
+  const res = await api<{ uploads: Upload[] }>(`/api/plans/assignments/${assignmentId}/files`, { method: "POST", body: { files: filesBody(drafts) } });
+  try {
+    await uploadAll(res.uploads, drafts, onStage);
+  } catch (e) {
+    await Promise.all(res.uploads.map((u) => api(`/api/plans/files/${u.id}`, { method: "DELETE" }).catch(() => undefined)));
+    throw e;
+  }
+  bumpPlans();
 }
 
 // ---------------------------------------------------------------- 后台回填（本机记着没做完的）
@@ -559,6 +575,14 @@ export function createdLabel(iso: string | null | undefined): string {
   const hm = m[4] ? ` ${m[4]}:${m[5]}` : "";
   return `创建于 ${year}${Number(m[2])}月${Number(m[3])}日${hm}`;
 }
+/** 作业卡片头部的那行小字：「11月12日 · 5 个文件」（不是今年的带上年份） */
+export function hwMeta(a: { createdAt?: string | null; files?: unknown[] }): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(a.createdAt ?? "");
+  const date = m ? `${Number(m[1]) === new Date().getFullYear() ? "" : `${m[1]}年`}${Number(m[2])}月${Number(m[3])}日` : "";
+  return [date, `${(a.files ?? []).length} 个文件`].filter(Boolean).join(" · ");
+}
+/** 一份作业展开后先显示几个文件，其余的收在「其余 N 个文件」里 */
+export const HW_PREVIEW = 3;
 /** 最新创建的排最前 */
 export const byNewest = <T extends { createdAt?: string | null }>(list: T[]): T[] =>
   [...list].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));

@@ -75,3 +75,28 @@
 .plan-quiet .plan-quiet__danger { color: var(--wrong); }
 .plan-quiet--only { margin-top: 0; padding-top: 0; border-top: 0; }
 .plan-files__empty svg { display: block; margin: 0 auto; }
+
+/* ---------- 学习计划页：一份作业一张卡片（头部 + 缩进的文件 + 脚部操作） ---------- */
+.hw-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 12px 12px; cursor: pointer; }
+.hw-head:active { background: var(--fill-light); }
+.hw-no { width: 26px; height: 26px; border-radius: 8px; background: var(--brand); color: #fff; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; align-self: flex-start; margin-top: 1px; }
+.hw-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hw-title { font-size: 16px; line-height: 22px; font-weight: 700; }
+.hw-sub { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 18px; color: var(--secondary); }
+/* 三个数能点（看名单）：把可点的范围撑大一点，不改变看上去的位置 */
+.hw-counts { gap: 10px; padding: 8px 4px; margin: -8px -4px; flex-shrink: 0; }
+.row.hw-file { padding: 8px 16px 8px 48px; min-height: 50px; border-top: 1px solid var(--separator-light); background: color-mix(in srgb, var(--fill-light) 40%, var(--card)); }
+.hw-file__name { font-size: 15px; line-height: 20px; font-weight: 500; }
+.hw-foot { display: flex; align-items: center; gap: 5px; width: 100%; min-height: 42px; padding: 0 16px 0 48px; border-top: 1px solid var(--separator-light); font-size: 14px; font-weight: 600; color: var(--brand); background: color-mix(in srgb, var(--fill-light) 40%, var(--card)); text-align: left; }
+button.hw-foot:active { background: var(--fill-light); }
+.hw-foot--mute { color: var(--secondary); font-weight: 500; }
+.hw-foot--wrong { color: var(--wrong); font-weight: 500; }
+.hw-foot--note { align-items: flex-start; padding-top: 10px; padding-bottom: 10px; font-weight: 400; line-height: 20px; }
+/* 加入者：交了的整张标绿，退回重做的标红（头部和脚部上色，中间的文件浅一点） */
+.hw--done .hw-head, .hw--done .hw-foot { background: var(--mastered-bg); }
+.hw--returned .hw-head, .hw--returned .hw-foot { background: var(--wrong-bg); }
+.hw--done .row.hw-file { background: color-mix(in srgb, var(--mastered-bg) 35%, var(--card)); }
+.hw--returned .row.hw-file { background: color-mix(in srgb, var(--wrong-bg) 35%, var(--card)); }
+.hw-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 20px; color: var(--secondary); font-size: 13px; line-height: 19px; text-align: center; }
+.hw-empty b { font-size: 16px; font-weight: 600; color: var(--label); margin-top: 6px; }
+
