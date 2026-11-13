@@ -5,7 +5,7 @@ import { ColorIcon } from "../../components/ColorIcon";
 import { Icon, type IconName } from "../../components/Icon";
 import { LoginGate, PageState, ScoreCounts, ShareButton, SubmitProgress, confirm, loggedIn, usePlanShare, usePlansVersion } from "../../components/plan";
 import { PlanMember } from "../../components/PlanMember";
-import { Avatar, Button, Segmented, Sheet, Stat, Tag } from "../../components/ui";
+import { Avatar, Button, IconSegmented, Sheet, Stat, Tag } from "../../components/ui";
 import { SwipeRow, swipeGuard } from "../../components/SwipeRow";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
@@ -50,11 +50,11 @@ const itemTag = (it: MemberItem) =>
  * 学习计划页（和 App 一致）。创建人在这一页看完所有东西，不再有单独的「作业情况」页：顶部交齐 / 没交齐 / 总成员（都数人）；
  * 「作业」一份作业一张卡片：头部是序号 + 作业名 + 布置日期和文件数 + 已交 / 没交 / 没看三个数，文件缩进排在下面（点文件直接打开）。
  * 最新一份默认展开，其余收成一行，点头部展开 / 收起；文件多于 3 个先显示 3 个，「其余 N 个文件」点开看全部；展开的卡片最下面是「添加文件」（进布置页的加文件模式）。
- * 点头部那三个数看这份作业的名单（谁交了、谁没交、谁还没看）。创建人把一份作业整张向左滑，露出「删除」；「成员」列头像 + 名字 + 进度环（交了几份 / 共几份），可按交齐 / 没交齐筛选，
+ * 点头部那三个数看这份作业的名单（谁交了、谁没交、谁还没看）。创建人把一份作业整张向左滑，露出「删除」；「成员情况」列头像 + 名字 + 进度环（交了几份 / 共几份），可按交齐 / 没交齐筛选，
  * 点一个人看他每份作业的情况并进去批阅、移出。成员：只有自己的待交 / 已交和作业（见 components/PlanMember），
  * 看不到其他成员、人数和别人交没交。头部两边一样：创建人头像 + 名字 + 创建时间（计划名在顶部标题栏），右边一个圆图标按钮，
  * 创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。
- * 「让旧卡片失效」在「成员」页签最下面。页面上能用图标 + 数字说清的就不写字。
+ * 「让旧卡片失效」在「成员情况」页签最下面。页面上能用图标 + 数字说清的就不写字。
  */
 export default function PlanDetail() {
   const tc = useThemeClass();
@@ -216,12 +216,12 @@ export default function PlanDetail() {
           <Stat icon="clock" label="没交齐" value={missing} />
           <Stat icon="family" label="总成员" value={plan.members ?? active.length} />
         </View>
-        <Segmented
+        <IconSegmented
           value={tab}
           onChange={(t) => { setSwiped(null); setTab(t); }}
           options={[
-            { value: "tasks", label: `作业 ${list.length}` },
-            { value: "members", label: `成员 ${active.length}` },
+            { value: "tasks", label: `作业 ${list.length}`, icon: "document" },
+            { value: "members", label: `成员情况 ${active.length}`, icon: "family" },
           ]}
         />
         {tab === "tasks" && list.length === 0 && (
@@ -376,7 +376,7 @@ export default function PlanDetail() {
       {head}
       {owner ? ownerBody() : <PlanMember data={data} reload={load} />}
 
-      {/* 点一份作业头部的三个数：这份作业的名单（按作业看；「成员」页签是按人看） */}
+      {/* 点一份作业头部的三个数：这份作业的名单（按作业看；「成员情况」页签是按人看） */}
       {(() => {
         const a = board ? (data.assignments as OwnerAssignment[]).find((x) => x.id === board) : null;
         if (!a) return null;
