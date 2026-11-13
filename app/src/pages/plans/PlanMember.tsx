@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { assetUrl } from "../../api/client";
 import { Icon } from "../../components/Icon";
@@ -6,7 +6,7 @@ import { SwipeRow } from "../../components/SwipeRow";
 import { Button, Sheet } from "../../components/ui";
 import { Stat, Tag } from "../../components/v2";
 import { haptic, pickImages, takePhoto } from "../../lib/native";
-import { AI_GRADING, STATUS_LABEL, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, isOverdue, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes, type PlanFileView } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, STATUS_LABEL, shownStatus, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, handInLabel, hwMeta, isOverdue, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes, type PlanFileView } from "../../lib/plans";
 import { canUseLiveCamera } from "../../lib/scanCamera";
 import { toast, toastError } from "../../store/banner";
 import { useExports } from "../../store/exports";
@@ -25,14 +25,15 @@ function swipeHintPending(): boolean {
 
 type Look = "done" | "returned" | "todo" | "revoked";
 /** 一份作业的样子：交了 = 绿，退回重做 = 红，没交 = 不上色 */
-const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
+const lookOf = (a: MemberAssignment): Look => { const st = shownStatus(a.status); return st === "submitted" || st === "reviewed" ? "done" : st === "returned" ? "returned" : a.revoked ? "revoked" : "todo"; };
 
 /**
  * 成员看到的学习计划页（和小程序的 components/PlanMember 对应）。成员不再有单独的「作业」页，全在这一页：
- * 待交 / 已交两个数，一张卡片顶上是计划名 + 创建时间，下面直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），底部「导出」「扫描上传」。
+ * 待交 / 已交两个数，下面一份作业一张卡片：头部是序号 + 作业名 + 布置日期和文件数 + 自己的状态（待交 / 已交 / 退回重做），文件缩进排在下面（点文件打开）。
+ * 待交和退回的默认展开，交过的收起，点头部展开 / 收起；文件多于 3 个先显示 3 个。底部「导出」「扫描上传」。
  * 扫描上传：连拍扫描（pages/scan，拍完回到这里）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
- * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色（这两种不再贴「已交」「待交」标签）。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
- * 批改关着时，交过的作业下面多一行「我交的作业」，点开看自己交上去的照片。
+ * 交完页面跟着刷新，交了的作业整张标成绿色，退回的标红。交了、老师还没批阅的那份可以整张向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
+ * 批改关着时，交过的作业展开后最下面多一行「我交的作业」，点开看自己交上去的照片。
  *AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  * 拍好还没交的照片放在连拍扫描的那一批里（store/scan，plan = 这个计划），App 被杀也还在。
  */
@@ -50,8 +51,10 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const [target, setTarget] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [myFiles, setMyFiles] = useState<PlanFileView[] | null>(null); // 正在看的：自己交上去的那几页
+  const [myHw, setMyHw] = useState<{ title: string; files: PlanFileView[] } | null>(null); // 正在看的：自己交到哪份作业的那几页
   const [swiped, setSwiped] = useState<string | null>(null); // 左滑开着的那份作业
+  const [opened, setOpened] = useState<Record<string, boolean>>({}); // 手动展开 / 收起过的作业（没动过的：待交、退回的展开，交过的收起）
+  const [full, setFull] = useState<Record<string, boolean>>({}); // 文件全部展开了的作业
   const [hint, setHint] = useState(swipeHintPending); // 第一次有交过的作业：那一行自己滑出一小截，露一下「解绑」
 
   useEffect(() => { void restoreDraft(); }, []);
@@ -77,7 +80,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     try {
       const sub = (await fetchAssignment(a.id)).submission;
       if (!sub?.files.length) return toast("没找到交上去的照片");
-      setMyFiles(sub.files);
+      setMyHw({ title: a.title, files: sub.files });
     } catch (e) {
       toastError(e);
       if (planGone(e)) void reload();
@@ -111,7 +114,7 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       clearScan();
       setTarget(null);
       void haptic.success();
-      toast("交上去了", "success");
+      toast(`已交到「${chosen.title}」`, "success");
       await reload();
     } catch (e) {
       toastError(e);
@@ -133,6 +136,8 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     await reload();
   };
   const firstSwipe = list.find(canWithdraw)?.id;
+  /** 这份作业在页面上的序号（卡片头部左边那个数） */
+  const noOf = (a: MemberAssignment) => list.length - list.findIndex((x) => x.id === a.id);
 
   const exportPdf = async (a: MemberAssignment) => {
     try {
@@ -147,14 +152,14 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     }
   };
 
-  // 颜色已经说清了交没交（绿 = 已交，不上色 = 待交），这两种不再重复贴标签；已阅 / 退回 / 已删除才标出来
-  const statusTag = (a: MemberAssignment, onTint = false) =>
-    !a.revoked && (a.status === "todo" || a.status === "submitted") ? null : a.revoked ? <Tag kind="neutral">已删除</Tag> : (
+  /** 头部右边自己的状态：待交 / 已交 / 已阅 / 退回重做 / 已删除 */
+  const statusTag = (a: MemberAssignment, st = shownStatus(a.status)) =>
+    a.revoked && st === "todo" ? <Tag kind="neutral">已删除</Tag> : (
       <Tag
-        kind={a.status === "todo" ? "neutral" : a.status === "returned" ? "wrong" : "correct"}
-        icon={a.status === "todo" ? "clock" : a.status === "returned" ? "refresh" : undefined}
-        style={onTint && a.status !== "todo" ? { background: "var(--card)" } : undefined}
-      >{STATUS_LABEL[a.status]}</Tag>
+        kind={st === "todo" ? "pending" : st === "returned" ? "wrong" : "correct"}
+        icon={st === "todo" ? "clock" : st === "returned" ? "refresh" : undefined}
+        style={st === "submitted" || st === "reviewed" ? { background: "var(--card)" } : undefined}
+      >{STATUS_LABEL[st]}</Tag>
     );
 
   return (
@@ -163,21 +168,89 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         <Stat icon="clock" label="待交" value={todo.length} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? "var(--mastered)" : undefined} />
       </div>
-      {/* 一张卡片，一份份作业（计划名在导航栏，创建时间在页面头部创建人名字下面） */}
-      <div className="group">
-        {list.length === 0 && <div className="plan-files__empty">还没有作业</div>}
-        {list.map((a) => {
+      {list.length === 0 && (
+        <div className="group">
+          <div className="hw-empty">
+            <Icon name="document" size={34} stroke={1.6} style={{ color: "var(--tertiary)" }} />
+            <b>还没有作业</b>
+            <span>老师布置后会出现在这里</span>
+          </div>
+        </div>
+      )}
+      {/* 一份作业一张卡片（计划名在导航栏，创建时间在页面头部创建人名字下面） */}
+      {list.map((a, i) => {
         const look = lookOf(a);
-        const waiting = a.status === "todo" || a.status === "returned";
-        const mine = a.status !== "todo";
-        // 批改关着：只有被退回 / 迟交 / 老师留了话才多一行，不点进批改结果
-        const note = AI_GRADING ? mine : a.status === "returned" || a.late || Boolean(a.comment);
+        const st = shownStatus(a.status);
+        const waiting = st === "todo" || st === "returned";
+        const mine = st !== "todo";
         const files = a.files ?? [];
-        // 交了、老师还没批阅：这一份可以向左滑出「解绑」
-        const wrap = (body: ReactNode) =>
-          canWithdraw(a) ? (
+        const open = opened[a.id] ?? (waiting && !a.revoked);
+        const shownFiles = open ? (full[a.id] ? files : files.slice(0, HW_PREVIEW)) : [];
+        const rest = files.length - HW_PREVIEW;
+        const toggle = () => setOpened((o) => ({ ...o, [a.id]: !open }));
+        const body = (
+          <>
+            <div className="hw-head" role="button" tabIndex={0} aria-expanded={open} onClick={toggle} onKeyDown={(e) => { if (e.key === "Enter") toggle(); }}>
+              <span className="hw-no">{list.length - i}</span>
+              <span className="hw-main">
+                <span className="hw-title ellipsis">{a.title}</span>
+                <span className="hw-sub">
+                  <span className="ellipsis" style={{ flex: 1, color: waiting && isOverdue(a.dueAt) ? "var(--wrong)" : undefined }}>{hwMeta(a)}{waiting && a.dueAt ? ` · ${dueLabel(a.dueAt)}截止` : ""}{a.late ? " · 迟交" : ""}</span>
+                </span>
+              </span>
+              {statusTag(a)}
+              <Icon name={open ? "chevron-up" : "chevron-down"} size={16} stroke={2.4} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
+            </div>
+            {shownFiles.map((f) => (
+              <button key={f.id} className="row hw-file" onClick={() => openFile(f)}>
+                <span className="plan-file__icon" style={{ width: 34, height: 40 }}>{fileBadge(f.mime)}</span>
+                <span className="row__main"><span className="hw-file__name ellipsis">{f.name}</span><span className="row__sub">{sizeLabel(f.size)}</span></span>
+                <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+              </button>
+            ))}
+            {open && rest > 0 && (
+              <button className="hw-foot" onClick={() => setFull((m) => ({ ...m, [a.id]: !m[a.id] }))}>
+                {full[a.id] ? "收起" : `其余 ${rest} 个文件`}<Icon name={full[a.id] ? "chevron-up" : "chevron-down"} size={13} stroke={2.4} />
+              </button>
+            )}
+            {/* 退回重做：一句提醒；老师留的话跟在后面 */}
+            {open && st === "returned" && <div className="hw-foot hw-foot--wrong">老师退回了，重新交一次</div>}
+            {open && a.comment && (
+              <div className={`hw-foot hw-foot--note ${st === "returned" ? "hw-foot--wrong" : "hw-foot--mute"}`}>
+                <Icon name="bubble" size={14} stroke={2.2} style={{ marginTop: 3, flexShrink: 0 }} />
+                <span style={{ flex: 1, textAlign: "left" }}>{a.comment}</span>
+              </div>
+            )}
+            {/* 批改开着：交过的多一行对 / 错 / 没做，点进去看自己那份的批改结果 */}
+            {open && AI_GRADING && mine && (
+              <button className="hw-foot hw-foot--mute" onClick={() => nav(`/plans/a/${a.id}`)}>
+                <span className="plan-counts" style={{ flex: 1 }}>
+                  {a.score ? (
+                    <>
+                      <Count icon="checkcircle" color="var(--mastered)">{a.score.correct}</Count>
+                      <Count icon="xcircle" color="var(--wrong)">{a.score.wrong}</Count>
+                      <Count icon="minus" color="var(--tertiary)">{a.score.blank}</Count>
+                    </>
+                  ) : st === "returned" ? null : "批改中"}
+                </span>
+                批改结果<Icon name="chevron-right" size={13} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+              </button>
+            )}
+            {/* 批改关着：交过的多一行「我交的作业」，点开看自己交上去的照片 */}
+            {open && !AI_GRADING && mine && (
+              <button className="hw-foot hw-foot--mute" onClick={() => void viewMine(a)}>
+                <Icon name="photo" size={14} stroke={2.2} />
+                <span style={{ flex: 1, textAlign: "left" }}>我交的作业</span>
+                查看<Icon name="chevron-right" size={13} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+              </button>
+            )}
+          </>
+        );
+        // 交了、老师还没批阅：这一份整张可以向左滑出「解绑」
+        return canWithdraw(a) ? (
+          <div key={a.id} className={`hw hw--${look}`}>
             <SwipeRow
-              inline
+              className="group"
               label="解绑"
               icon="unlink"
               open={swiped === a.id}
@@ -195,79 +268,11 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
             >
               {body}
             </SwipeRow>
-          ) : (
-            body
-          );
-        return (
-          <div key={a.id} className="plan-hw">
-            {wrap(
-              <>
-            {/* 没有作业名那一行了：状态标在每个文件上（交了的整行标绿，退回的标红） */}
-            {files.map((f) => (
-              <button key={f.id} className={`row plan-row--${look}`} onClick={() => openFile(f)}>
-                <span className="plan-file__icon" style={{ width: 34, height: 40 }}>{fileBadge(f.mime)}</span>
-                <span className="row__main">
-                  <span className="row__title ellipsis">{f.name}</span>
-                  <span className="row__sub" style={waiting && isOverdue(a.dueAt) ? { color: "var(--wrong)" } : undefined}>{sizeLabel(f.size)}{waiting && a.dueAt ? ` · ${dueLabel(a.dueAt)}截止` : ""}</span>
-                </span>
-                {statusTag(a, true)}
-                <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-              </button>
-            ))}
-            {files.length === 0 && (
-              <div className={`row plan-row--${look}`}>
-                <span className="row__main"><span className="row__title ellipsis">{a.title}</span></span>
-                {statusTag(a, true)}
-              </div>
-            )}
-            {/* 批改关着：交过的多一行「我交的作业」，点开看自己交上去的照片 */}
-            {!AI_GRADING && mine && (
-              <button className={`plan-task plan-task--${look}`} onClick={() => void viewMine(a)}>
-                <span className="plan-task__head">
-                  <Icon name="photo" size={14} stroke={2.2} style={{ color: "var(--secondary)", flexShrink: 0 }} />
-                  <span className="t-foot c-sec" style={{ flex: 1, textAlign: "left" }}>我交的作业</span>
-                  <span className="t-foot c-sec">查看</span>
-                  <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
-                </span>
-              </button>
-            )}
-            {/* 交过：一行小字是对 / 错 / 没做和老师的话，点进去看自己那份的批改结果 */}
-            {note && (
-              <button className={`plan-task plan-task--${look}`} onClick={() => AI_GRADING && nav(`/plans/a/${a.id}`)}>
-                <span className="plan-task__head" style={AI_GRADING || a.status === "returned" || a.late ? undefined : { display: "none" }}>
-                  <span className="plan-counts" style={{ flex: 1 }}>
-                    {!AI_GRADING ? (
-                      a.status === "returned" && <span className="t-foot c-sec">老师退回了，重新交一次</span>
-                    ) : a.score ? (
-                      <>
-                        <Count icon="checkcircle" color="var(--mastered)">{a.score.correct}</Count>
-                        <Count icon="xcircle" color="var(--wrong)">{a.score.wrong}</Count>
-                        <Count icon="minus" color="var(--tertiary)">{a.score.blank}</Count>
-                      </>
-                    ) : <span className="t-foot c-sec">{a.status === "returned" ? "老师退回了，重新交一次" : "批改中"}</span>}
-                    {a.late && <span className="t-foot c-sec">迟交</span>}
-                  </span>
-                  {AI_GRADING && (
-                    <>
-                      <span className="t-foot c-sec">批改结果</span>
-                      <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)", flexShrink: 0 }} />
-                    </>
-                  )}
-                </span>
-                {a.comment && (
-                  <span className="plan-count" style={{ alignItems: "flex-start", fontWeight: 400, color: a.status === "returned" ? "var(--wrong)" : "var(--secondary)" }}>
-                    <Icon name="bubble" size={14} stroke={2.2} style={{ marginTop: 2, flexShrink: 0 }} />
-                    <span style={{ flex: 1, textAlign: "left" }}>{a.comment}</span>
-                  </span>
-                )}
-              </button>
-            )}
-              </>,
-            )}
           </div>
+        ) : (
+          <div key={a.id} className={`group hw hw--${look}`}>{body}</div>
         );
       })}
-      </div>
 
       <div className="bottom-bar" style={{ marginTop: "auto" }}>
         <Button variant="outline" icon="printer" disabled={exportable.length === 0} onClick={() => setExporting(true)}>导出</Button>
@@ -304,15 +309,18 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         {/* 下拉选择：列出所有还能交的作业 */}
         <select className="input plan-select" aria-label="交到哪一份作业" value={chosen?.id ?? ""} onChange={(e) => setTarget(e.target.value || null)}>
           {!chosen && <option value="">请选择作业</option>}
-          {open.map((a) => <option key={a.id} value={a.id}>{a.status === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`}</option>)}
+          {open.map((a) => <option key={a.id} value={a.id}>{handInLabel(a, noOf(a))}</option>)}
         </select>
+        {/* 选中的那份：再说一遍是哪天布置的、里面几个文件，确认交的是整份作业 */}
+        {chosen && <p className="t-foot c-sec">{`作业 ${noOf(chosen)} · ${hwMeta(chosen)}`}</p>}
         {chosen?.status === "submitted" && <p className="t-foot c-sec">这份交过了，再交会换掉上次那份</p>}
         <Button icon="check" disabled={!chosen || !pages.length || busy || Boolean(stage)} onClick={hand}>{busy ? "照片调正中…" : "交给老师"}</Button>
       </Sheet>
 
       {/* 自己交上去的那几页：一页页往下排，点一页用系统预览放大 */}
-      <Sheet open={myFiles !== null} onClose={() => setMyFiles(null)} title={`我交的作业 · ${myFiles?.length ?? 0} 页`}>
-        {(myFiles ?? []).map((f) => (f.url ? <img key={f.id} className="plan-photo" style={{ flexShrink: 0 }} src={assetUrl(f.url)} alt={f.name} loading="lazy" onClick={() => void openFile(f)} /> : <div key={f.id} className="plan-files__empty card">「{f.name}」还在上传</div>))}
+      <Sheet open={myHw !== null} onClose={() => setMyHw(null)} title={`我交的作业 · ${myHw?.files.length ?? 0} 页`}>
+        <span className="t-headline ellipsis" style={{ flexShrink: 0 }}>{myHw?.title}</span>
+        {(myHw?.files ?? []).map((f) => (f.url ? <img key={f.id} className="plan-photo" style={{ flexShrink: 0 }} src={assetUrl(f.url)} alt={f.name} loading="lazy" onClick={() => void openFile(f)} /> : <div key={f.id} className="plan-files__empty card">「{f.name}」还在上传</div>))}
       </Sheet>
 
       <Sheet open={exporting} onClose={() => setExporting(false)} title="导出作业">

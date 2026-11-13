@@ -6,7 +6,7 @@ import { Count, LoginGate, loggedIn, usePlansVersion } from "../../components/pl
 import { Avatar, Button, Empty, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { teacherLine, byNewest, createdLabel, fetchPlans, type PlanInfo } from "../../lib/plans";
+import { MARK_REVIEWED, teacherLine, byNewest, createdLabel, fetchPlans, type PlanInfo } from "../../lib/plans";
 import { useShare } from "../../lib/share";
 import { C, useThemeClass } from "../../lib/theme";
 
@@ -61,7 +61,7 @@ export default function Plans() {
         </View>
         {createdLabel(p.createdAt) && <Text className="t-cap c-ter">{createdLabel(p.createdAt)}</Text>}
       </View>
-      {p.role === "owner" && (p.toReview ?? 0) > 0 && (
+      {MARK_REVIEWED && p.role === "owner" && (p.toReview ?? 0) > 0 && (
         <Tag kind="info" icon="pencil">
           {p.toReview}
         </Tag>

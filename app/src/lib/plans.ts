@@ -38,6 +38,20 @@ export const ATTACHMENT_MIMES = [
 ];
 
 export type MyStatus = "todo" | "submitted" | "reviewed" | "returned";
+/**
+ * 「退回重做」开关（两端的 lib/plans.ts 同名开关保持一致）。先关着：批阅页没有「退回」按钮，只能标已阅；
+ * 以前退回过的作业在界面上按「待交」显示（同学照常可以重新交），不标红、不写「退回重做」。
+ * 要恢复：两端都改回 true 即可，服务端和下面的显示代码都原样留着。
+ */
+export const RETURN_REDO: boolean = false;
+/**
+ * 「已阅」开关（两端的 lib/plans.ts 同名开关保持一致）。先关着：创建人看作业的那一页只是看，没有「已阅」按钮和「待阅 / 已阅」标签，
+ * 交了的一律显示「已交」（以前标过已阅的也按已交显示），首页和计划列表不再数「等你批阅」。
+ * 要恢复：两端都改回 true 即可，服务端和下面的显示代码都原样留着。
+ */
+export const MARK_REVIEWED: boolean = false;
+/** 界面上显示的状态：退回开关关着时，退回的按待交显示；已阅开关关着时，已阅的按已交显示 */
+export const shownStatus = (s: MyStatus): MyStatus => (!RETURN_REDO && s === "returned" ? "todo" : !MARK_REVIEWED && s === "reviewed" ? "submitted" : s);
 export interface Score { total: number; correct: number; wrong: number; blank: number }
 export interface PlanInfo {
   id: string;
@@ -90,7 +104,7 @@ export interface PlanDetailRes { plan: PlanInfo; assignments: (OwnerAssignment |
 export interface AssignmentRes { plan: PlanInfo; assignment: AssignmentDetail; board?: Board; invite?: Invite; submission?: SubmissionView | null }
 export interface SubmissionRes { plan: PlanInfo; assignment: AssignmentBrief | null; submission: SubmissionView; student?: { name: string; tail: string }; nav?: { index: number; total: number; prev: string | null; next: string | null } }
 interface Upload { id: string; clientId: string; method: string; url: string; headers?: Record<string, string> }
-interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief | null; /** 一个附件一份作业，一次可能建出几份（老服务器没有这个字段） */ assignments?: AssignmentBrief[]; uploads: Upload[]; invite: Invite }
+interface PublishRes { plan: PlanInfo; assignment: AssignmentBrief | null; /** 一次布置就是一份作业，列表里只有这一份（老服务器一个附件一份，可能有几份） */ assignments?: AssignmentBrief[]; uploads: Upload[]; invite: Invite }
 
 /**
  * 这个计划对我来说已经没有了：创建人解散了（服务器回 plan_dissolved），或者不存在了（404）、我已经不在里面（403）。
@@ -143,6 +157,8 @@ export const revokeAssignment = (id: string) => api(`/api/plans/assignments/${id
 export const joinPlan = (code: string) => api<{ plan: PlanInfo; joined: boolean; me: Me }>("/api/plans/join", { method: "POST", body: { code } });
 
 /** 加入页上「已经有谁加入了」：人数 + 最早加入的几个人 */
+/** 加入页上的一份作业：名字、布置时间和下面的文件。还没加入也看得到，所以文件没有打开的地址（url 是 null）；shared = 卡片指向的那份 */
+export interface PreviewAssignment extends AssignmentBrief { files: PlanFileView[]; shared: boolean }
 export interface JoinedPreview { count: number; list: { name: string; avatar?: string | null }[] }
 /** 「小明、小红、小刚等 12 人已加入」；还没人时，对同学说「你是第一个」，对创建人说「还没有人加入」 */
 export function joinedText(m: JoinedPreview, owner = false): string {
@@ -169,6 +185,8 @@ const absolute = (url: string) => (url.startsWith("http") ? url : `${getApiBase(
 const dataUrlToBlob = async (src: string) => (await fetch(src)).blob();
 const dataUrlBytes = (src: string) => Math.floor(((src.length - src.indexOf(",") - 1) * 3) / 4);
 
+/** 同学交上来的一页：只叫「第 N 页」。它属于哪份作业看作业名，不靠文件名 */
+const handInDraft = (page: FullPage, index: number): DraftFile => ({ ...scanDraft(page, index), name: `第 ${index + 1} 页.jpg` });
 export const scanDraft = (page: FullPage, index: number): DraftFile => ({ clientId: page.id, kind: "scan", name: `扫描件 第 ${index + 1} 页.jpg`, mime: "image/jpeg", size: dataUrlBytes(page.src), thumb: page.thumb ?? page.src, page });
 
 const EXT_MIME: Record<string, string> = { pdf: "application/pdf", doc: "application/msword", docx: ATTACHMENT_MIMES[2], jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
@@ -233,6 +251,22 @@ export async function publishAssignment(planId: string | null, form: { name?: st
   }
   usePlans.getState().bump();
   return res;
+}
+
+/**
+ * 往已有的一份作业里加文件（创建人）：登记 → 直传 → 确认。没传全就把这次登记的几个删掉，不留打不开的文件。
+ * 后加的扫描件只当图片看，不再重新识别成电子版。
+ */
+export async function addAssignmentFiles(assignmentId: string, drafts: DraftFile[], onStage?: (text: string) => void): Promise<void> {
+  onStage?.("正在添加");
+  const res = await api<{ uploads: Upload[] }>(`/api/plans/assignments/${assignmentId}/files`, { method: "POST", body: { files: filesBody(drafts) } });
+  try {
+    await uploadAll(res.uploads, drafts, onStage);
+  } catch (e) {
+    await Promise.all(res.uploads.map((u) => api(`/api/plans/files/${u.id}`, { method: "DELETE" }).catch(() => undefined)));
+    throw e;
+  }
+  usePlans.getState().bump();
 }
 
 // ---------------------------------------------------------------- 后台回填（本机记着没做完的）
@@ -386,7 +420,7 @@ export function startPlanSync(): () => void {
  */
 export async function submitHomework(assignment: AssignmentBrief, pages: FullPage[], onStage?: (text: string) => void): Promise<SubmissionView> {
   onStage?.("正在保存");
-  const drafts = pages.map(scanDraft);
+  const drafts = pages.map(handInDraft);
   const res = await api<{ submission: SubmissionView; uploads: Upload[] }>(`/api/plans/assignments/${assignment.id}/submission`, { method: "POST", body: { files: filesBody(drafts) } });
   await uploadAll(res.uploads, drafts, onStage);
   if (!AI_GRADING) {
@@ -500,6 +534,16 @@ export function createdLabel(iso: string | null | undefined): string {
   const hm = m[4] ? ` ${m[4]}:${m[5]}` : "";
   return `创建于 ${year}${Number(m[2])}月${Number(m[3])}日${hm}`;
 }
+/** 作业卡片头部的那行小字：「11月12日 · 5 个文件」（不是今年的带上年份） */
+export function hwMeta(a: { createdAt?: string | null; files?: unknown[] }): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(a.createdAt ?? "");
+  const date = m ? `${Number(m[1]) === new Date().getFullYear() ? "" : `${m[1]}年`}${Number(m[2])}月${Number(m[3])}日` : "";
+  return [date, `${(a.files ?? []).length} 个文件`].filter(Boolean).join(" · ");
+}
+/** 交作业时下拉列表里的一行：计划页上的序号 + 作业名（交过的带上状态），和卡片头部对得上，认的是作业不是文件 */
+export const handInLabel = (a: MemberAssignment, no: number): string => `${no}. ${a.title}${shownStatus(a.status) === "todo" ? "" : `（${STATUS_LABEL[shownStatus(a.status)]}）`}`;
+/** 一份作业展开后先显示几个文件，其余的收在「其余 N 个文件」里 */
+export const HW_PREVIEW = 3;
 /** 最新创建的排最前 */
 export const byNewest = <T extends { createdAt?: string | null }>(list: T[]): T[] =>
   [...list].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
