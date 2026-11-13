@@ -558,9 +558,9 @@ def test_one_publish_is_one_assignment_with_all_files(client, auth):
     _submit(client, student, mine[0]["id"])
     assert client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"][0]["status"] == "submitted"
 
-    # 没起名字：只有一个上传的文件就用文件名，几个文件就用日期
+    # 没起名字：不管几个文件都按布置日期起名，不用文件名
     r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF]}, headers=auth).get_json()
-    assert [a["title"] for a in r["assignments"]] == ["第三单元练习"]
+    assert len(r["assignments"]) == 1 and r["assignment"]["title"].endswith("日作业")
     r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF, pdf2]}, headers=auth).get_json()
     assert len(r["assignments"]) == 1 and r["assignment"]["title"].endswith("日作业")
 
@@ -639,12 +639,13 @@ def test_member_withdraws_own_submission(client, auth):
 
 
 def test_auto_title_follows_files(client, auth):
-    """没起名字、只有一个上传文件的作业用文件名；后来又加了文件，名字换成按布置日期的；自己起的名字不动"""
+    """以前没起名字的单文件作业名字就是文件名（这里用同名的标题模拟）：后来又加了文件，名字换成按布置日期的；别的名字不动"""
     from datetime import datetime
 
-    r = client.post("/api/plans", json={"name": "名字跟着文件走", "files": [PDF]}, headers=auth).get_json()
+    stem = PDF["name"].rsplit(".", 1)[0]
+    r = client.post("/api/plans", json={"name": "名字跟着文件走", "title": stem, "files": [PDF]}, headers=auth).get_json()
     pid, aid = r["plan"]["id"], r["assignment"]["id"]
-    assert r["assignment"]["title"] == PDF["name"].rsplit(".", 1)[0]
+    assert r["assignment"]["title"] == stem
     now = datetime.now()
     r = client.post(f"/api/plans/assignments/{aid}/files", json={"files": [{**PDF, "clientId": "more1"}]}, headers=auth)
     assert r.status_code == 201 and r.get_json()["assignment"]["title"] == f"{now.month}月{now.day}日作业"
