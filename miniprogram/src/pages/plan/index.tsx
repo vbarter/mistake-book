@@ -9,7 +9,7 @@ import { Avatar, Button, IconSegmented, Sheet, Stat, Tag } from "../../component
 import { SwipeRow, swipeGuard } from "../../components/SwipeRow";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C, useThemeClass } from "../../lib/theme";
 
 const leave = () => {
@@ -26,7 +26,6 @@ function swipeHintPending(): boolean {
   }
 }
 
-type Filter = "all" | Exclude<MemberState, "none">;
 
 /** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅（已阅开关关着时，交了的都是「已交」） */
 const itemTag = (it: MemberItem) =>
@@ -52,7 +51,7 @@ const itemTag = (it: MemberItem) =>
  * 学习计划页（和 App 一致）。创建人在这一页看完所有东西，不再有单独的「作业情况」页：顶部交齐 / 没交齐 / 总成员（都数人）；
  * 「作业」一份作业一张卡片：头部是序号 + 作业名 + 布置日期和文件数 + 已交 / 没交 / 没看三个数，文件缩进排在下面（点文件直接打开）。
  * 最新一份默认展开，其余收成一行，点头部展开 / 收起；文件多于 3 个先显示 3 个，「其余 N 个文件」点开看全部；展开的卡片最下面是「添加文件」（进布置页的加文件模式）。
- * 点头部那三个数看这份作业的名单（谁交了、谁没交、谁还没看）。创建人把一份作业整张向左滑，露出「删除」；「成员情况」列头像 + 名字 + 进度环（交了几份 / 共几份），可按交齐 / 没交齐筛选，
+ * 点头部那三个数看这份作业的名单（谁交了、谁没交、谁还没看）。创建人把一份作业整张向左滑，露出「删除」；「成员情况」列头像 + 名字 + 进度环（交了几份 / 共几份），不再筛选，交齐 / 没交齐看顶部的数，
  * 点一个人看他每份作业的情况并进去批阅、移出。成员：只有自己的待交 / 已交和作业（见 components/PlanMember），
  * 看不到其他成员、人数和别人交没交。头部两边一样：创建人头像 + 名字 + 创建时间（计划名在顶部标题栏），右边一个圆图标按钮，
  * 创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。
@@ -65,7 +64,6 @@ export default function PlanDetail() {
   const [data, setData] = useState<PlanDetailRes | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"tasks" | "members">("tasks");
-  const [filter, setFilter] = useState<Filter>("all");
   const [member, setMember] = useState<PlanMemberRow | null>(null);
   const [swiped, setSwiped] = useState<string | null>(null); // 创建人左滑开着的那份作业
   const [opened, setOpened] = useState<Record<string, boolean>>({}); // 手动展开 / 收起过的作业（没动过的：最新一份展开，其余收起）
@@ -177,10 +175,9 @@ export default function PlanDetail() {
   const head = (
     <View className="plan-head">
       <Avatar name={plan.teacher} url={plan.teacherAvatar} size={42} />
-      {/* 两边都是创建人的名字 + 创建时间；计划名在顶部标题栏 */}
+      {/* 两边都只有创建人的名字；计划名在顶部标题栏，时间看每份作业自己的 */}
       <View className="flex1 col minw0">
         <Text className="t-headline ellipsis">{plan.teacher}</Text>
-        <Text className="t-foot c-sec ellipsis">{createdLabel(plan.createdAt)}</Text>
       </View>
       {/* 解散 / 退出：点了先确认 */}
       <View className="plan-iconbtn" hoverClass="plan-iconbtn--hover" onClick={() => void (owner ? dissolve() : quit())}>
@@ -205,12 +202,6 @@ export default function PlanDetail() {
     const active = rows.filter((m) => !m.left);
     const handed = active.filter((m) => memberState(m) === "submitted").length;
     const missing = plan.missing ?? active.filter((m) => memberState(m) === "missing").length;
-    const shown = filter === "all" ? rows : active.filter((m) => memberState(m) === filter);
-    const filters: { value: Filter; label: string; n: number }[] = [
-      { value: "all", label: "全部", n: rows.length },
-      { value: "submitted", label: "交齐", n: handed },
-      { value: "missing", label: "没交齐", n: missing },
-    ];
     return (
       <>
         <View className="stats">
@@ -247,7 +238,7 @@ export default function PlanDetail() {
               if (swiped) return setSwiped(null);
               fn();
             };
-            // 头部：序号（第几次布置）+ 作业名 + 「11月12日 · 5 个文件」+ 三个数（绿勾 = 已交，灰色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的），点三个数看名单
+            // 头部：序号（第几次布置）+ 作业名 + 「11月12日 21:03 · 5 个文件」+ 三个数（绿勾 = 已交，灰色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的），点三个数看名单
             const head = (
               <View className="hw-head" hoverClass="list-row--hover" onClick={tap(() => setOpened((o) => ({ ...o, [a.id]: !open })))}>
                 <View className="hw-no">
@@ -333,17 +324,9 @@ export default function PlanDetail() {
           })}
         {tab === "members" && (
           <>
-            <View className="row-center gap8">
-              {filters.map((f) => (
-                <View key={f.value} className={`chip chip--card${filter === f.value ? " chip--on" : ""}`} onClick={() => setFilter(f.value)}>
-                  <Text>{f.label}</Text>
-                  <Text className="num">{f.n}</Text>
-                </View>
-              ))}
-            </View>
             <View className="group">
-              {shown.length === 0 && <Text className="plan-empty">{rows.length === 0 ? "还没有人加入" : filter === "missing" ? "都交齐了" : "还没有人交齐"}</Text>}
-              {shown.map((m) => {
+              {rows.length === 0 && <Text className="plan-empty">还没有人加入</Text>}
+              {rows.map((m) => {
                 return (
                   <View key={m.userId} className="list-row" hoverClass="list-row--hover" style={{ minHeight: "56px" }} onClick={() => setMember(m)}>
                     <Avatar name={m.name} url={m.avatar} />

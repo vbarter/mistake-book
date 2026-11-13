@@ -5,7 +5,7 @@ import { SwipeRow } from "../../components/SwipeRow";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet, Spinner } from "../../components/ui";
 import { Avatar, IconSegmented, Stat, Tag } from "../../components/v2";
-import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, planSubjectText, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { openFile } from "./Assignment";
 import { PlanMember } from "./PlanMember";
@@ -20,16 +20,15 @@ function swipeHintPending(): boolean {
   }
 }
 
-type Filter = "all" | Exclude<MemberState, "none">;
 /** 从批阅页回来还停在刚才的页签和筛选上 */
-let remembered: { planId: string; tab: "tasks" | "members"; filter: Filter; opened: Record<string, boolean> } | null = null;
+let remembered: { planId: string; tab: "tasks" | "members"; opened: Record<string, boolean> } | null = null;
 
 /**
  * 学习计划页。创建人在这一页看完所有东西，不再有单独的「作业情况」页：
  * 顶部交齐 / 没交齐 / 总成员（都数人）；「作业」一份作业一张卡片：头部是序号 + 作业名 + 布置日期和文件数 + 已交 / 没交 / 没看三个数，文件缩进排在下面（点文件直接打开）。
  * 最新一份默认展开，其余收成一行，点头部展开 / 收起；文件多于 3 个先显示 3 个，「其余 N 个文件」点开看全部；展开的卡片最下面是「添加文件」（进布置页的加文件模式）。
  * 点头部那三个数看这份作业的名单（谁交了、谁没交、谁还没看）。把一份作业整张向左滑，露出「删除」；
- * 「成员情况」列头像 + 名字 + 进度环（交了几份 / 共几份），可按交齐 / 没交齐筛选，点一个人看他每份作业的情况并进去批阅、移出。
+ * 「成员情况」列头像 + 名字 + 进度环（交了几份 / 共几份），不再筛选，交齐 / 没交齐看顶部的数，点一个人看他每份作业的情况并进去批阅、移出。
  * 头部两边一样：创建人头像 + 名字 + 创建时间（计划名在导航栏），右边一个圆图标按钮，创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。
  * 计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。「让旧卡片失效」在「成员情况」页签最下面。能用图标 + 数字说清的就不写字。
  * 成员：只有自己的待交 / 已交和作业（见 PlanMember），看不到其他成员、人数和别人交没交。
@@ -48,7 +47,6 @@ export default function PlanDetail() {
   const [data, setData] = useState<PlanDetailRes | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"tasks" | "members">(remembered?.planId === planId ? remembered.tab : "tasks");
-  const [filter, setFilter] = useState<Filter>(remembered?.planId === planId ? remembered.filter : "all");
   const [member, setMember] = useState<PlanMemberRow | null>(null);
   const [swiped, setSwiped] = useState<string | null>(null); // 左滑开着的那份作业
   const [hint, setHint] = useState(swipeHintPending); // 第一次看到作业：第一张卡片自己滑出一小截，露一下「删除」
@@ -60,7 +58,7 @@ export default function PlanDetail() {
   const [confirm, setConfirm] = useState<"dissolve" | "leave" | "reset" | null>(null);
   const [removing, setRemoving] = useState<PlanMemberRow | null>(null);
   const version = usePlans((s) => s.version);
-  useEffect(() => { remembered = { planId, tab, filter, opened }; }, [planId, tab, filter, opened]);
+  useEffect(() => { remembered = { planId, tab, opened }; }, [planId, tab, opened]);
 
   // 已经显示出来了，一次没拉到（没网）不换成报错页；但计划被解散 / 自己被移出了，就不能再留着旧内容
   const shown = useRef(false);
@@ -109,7 +107,6 @@ export default function PlanDetail() {
           <Avatar name={plan.teacher} url={plan.teacherAvatar} size={42} />
           <span className="plan-head__main">
             <span className="t-headline ellipsis">{plan.teacher}</span>
-            <span className="t-foot c-sec ellipsis">{createdLabel(plan.createdAt)}</span>
           </span>
           {/* 解散 / 退出：点了先确认 */}
           <button className="plan-iconbtn" aria-label={owner ? "解散学习计划" : "退出学习计划"} onClick={() => setConfirm(owner ? "dissolve" : "leave")}>
@@ -124,8 +121,6 @@ export default function PlanDetail() {
             const active = rows.filter((m) => !m.left);
             const handed = active.filter((m) => memberState(m) === "submitted").length;
             const missing = plan.missing ?? active.filter((m) => memberState(m) === "missing").length;
-            const shown = filter === "all" ? rows : active.filter((m) => memberState(m) === filter);
-            const filters: { value: Filter; label: string; n: number }[] = [{ value: "all", label: "全部", n: rows.length }, { value: "submitted", label: "交齐", n: handed }, { value: "missing", label: "没交齐", n: missing }];
             return (
               <>
                 <div className="plan-stats plan-stats--3">
@@ -167,7 +162,7 @@ export default function PlanDetail() {
                         }
                       }}
                     >
-                      {/* 头部：序号（第几次布置）+ 作业名 + 「11月12日 · 5 个文件」+ 三个数（绿勾 = 已交，灰色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的），点三个数看名单 */}
+                      {/* 头部：序号（第几次布置）+ 作业名 + 「11月12日 21:03 · 5 个文件」+ 三个数（绿勾 = 已交，灰色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的），点三个数看名单 */}
                       <div className="hw-head" role="button" tabIndex={0} aria-expanded={open} onClick={toggle} onKeyDown={(e) => { if (e.key === "Enter") toggle(); }}>
                         <span className="hw-no">{tasks.length - i}</span>
                         <span className="hw-main">
@@ -205,14 +200,9 @@ export default function PlanDetail() {
                 })}
                 {tab === "members" && (
                   <>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {filters.map((f) => (
-                        <button key={f.value} className={`chip chip--filter${filter === f.value ? " on" : ""}`} aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>{f.label} <span className="num">{f.n}</span></button>
-                      ))}
-                    </div>
                     <div className="group">
-                      {shown.length === 0 && <div className="plan-files__empty">{rows.length === 0 ? "还没有人加入" : filter === "missing" ? "都交齐了" : "还没有人交齐"}</div>}
-                      {shown.map((m) => {
+                      {rows.length === 0 && <div className="plan-files__empty">还没有人加入</div>}
+                      {rows.map((m) => {
                         return (
                           <button key={m.userId} className="row" style={{ minHeight: 56 }} onClick={() => setMember(m)}>
                             <Avatar name={m.name} url={m.avatar} />
