@@ -7,7 +7,7 @@ import { MathText } from "../../components/MathText";
 import { Button, Empty, InlineNav, Sheet, Spinner } from "../../components/ui";
 import { Tag } from "../../components/v2";
 import { formatDateTime } from "../../lib/format";
-import { AI_GRADING, fetchSubmission, memberName, reviewSubmission, usePlans, type SubmissionRes } from "../../lib/plans";
+import { AI_GRADING, RETURN_REDO, fetchSubmission, memberName, reviewSubmission, usePlans, type SubmissionRes } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { QuestionGrid, openFile } from "./Assignment";
 import { ScoreStats } from "./shared";
@@ -85,7 +85,7 @@ export default function Submission() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span className="t-foot c-sec" style={{ flex: 1 }}>{formatDateTime(sub.submittedAt)}</span>
             {sub.late && <Tag kind="neutral">迟交</Tag>}
-            <Tag kind={sub.status === "reviewed" ? "correct" : sub.status === "returned" ? "wrong" : "info"}>{sub.status === "reviewed" ? "已阅" : sub.status === "returned" ? "已退回" : "待阅"}</Tag>
+            <Tag kind={sub.status === "reviewed" ? "correct" : sub.status === "returned" ? "wrong" : "info"}>{sub.status === "reviewed" ? "已阅" : sub.status === "returned" ? (RETURN_REDO ? "已退回" : "未交") : "待阅"}</Tag>
           </div>
           {!AI_GRADING ? null : results && sub.score ? (
             <>
@@ -102,9 +102,9 @@ export default function Submission() {
 
         {owner && (
           <>
-            <input className="input input--card" aria-label="给同学留句话" value={comment} maxLength={200} placeholder="给同学留句话（退回时必填）" onChange={(e) => setComment(e.target.value)} />
+            <input className="input input--card" aria-label="给同学留句话" value={comment} maxLength={200} placeholder={RETURN_REDO ? "给同学留句话（退回时必填）" : "给同学留句话"} onChange={(e) => setComment(e.target.value)} />
             <div className="bottom-bar" style={{ marginTop: "auto" }}>
-              <Button variant="outline" icon="refresh" onClick={() => finish("returned")} disabled={busy} style={{ flex: "0 0 auto", width: "auto", whiteSpace: "nowrap" }}>退回</Button>
+              {RETURN_REDO && <Button variant="outline" icon="refresh" onClick={() => finish("returned")} disabled={busy} style={{ flex: "0 0 auto", width: "auto", whiteSpace: "nowrap" }}>退回</Button>}
               <Button icon="check" onClick={() => finish("reviewed")} disabled={busy}>{pager?.next ? "已阅，下一份" : "已阅"}</Button>
             </div>
           </>

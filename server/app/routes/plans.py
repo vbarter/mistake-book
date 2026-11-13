@@ -293,30 +293,22 @@ def _owner_counts(plan: Plan, assignments: list[PlanAssignment]) -> dict[str, di
 
 
 def _create_assignments(plan: Plan, data: dict) -> tuple[list[PlanAssignment], list[dict]]:
-    """布置：一个附件就是一份作业（同学一份一份地交、各有各的状态）；扫描件是同一份卷子的几页，合成一份。
-    返回的第一份是带扫描件的那份（有的话），客户端拿它去回填电子版、转发。"""
+    """布置：一次布置的所有文件（扫描件、上传的图片 / PDF / Word）算一份作业，同学整份交一次。
+    返回的列表只有这一份（接口里的 assignments 字段留着，老客户端按列表读）。"""
     files = _clean_files(data.get("files"), ("scan", "attachment"))
     if not files:
         abort(400, "先扫描或上传一个附件")
-    scans = [f for f in files if f["kind"] == "scan"]
-    units = ([scans] if scans else []) + [[f] for f in files if f["kind"] != "scan"]
     custom = str(data.get("title") or "").strip()[:120]
     now = datetime.now()
     due = data.get("dueAt")
     due = due[:32] if isinstance(due, str) and due else None
-    out: list[PlanAssignment] = []
-    uploads: list[dict] = []
-    for i, unit in enumerate(units):
-        named = unit[0]["name"].rsplit(".", 1)[0] if unit[0]["kind"] == "attachment" and unit[0]["name"] else ""
-        # 起的名字只在只有一份时用；一次布置了几份就各用各的文件名
-        title = (custom if len(units) == 1 else "") or named or custom or f"{now.month}月{now.day}日作业"
-        # 列表按创建时间倒序：往前错开一秒，页面上就和选文件的顺序一致
-        a = PlanAssignment(plan_id=plan.id, title=title[:120], due_at=due, created_at=now - timedelta(seconds=i))
-        db.session.add(a)
-        db.session.flush()
-        out.append(a)
-        uploads += _add_files(plan, a, unit)
-    return out, uploads
+    # 没起名字：只有一个上传的文件就用它的文件名，否则用日期
+    named = files[0]["name"].rsplit(".", 1)[0] if len(files) == 1 and files[0]["kind"] == "attachment" and files[0]["name"] else ""
+    title = custom or named or f"{now.month}月{now.day}日作业"
+    a = PlanAssignment(plan_id=plan.id, title=title[:120], due_at=due, created_at=now)
+    db.session.add(a)
+    db.session.flush()
+    return [a], _add_files(plan, a, files)
 
 
 def _created_body(plan: Plan, assignments: list[PlanAssignment], uploads: list[dict]) -> dict:
@@ -657,6 +649,44 @@ def create_assignment(plan_id: str):
     assignments, uploads = _create_assignments(plan, request.get_json(silent=True) or {})
     db.session.commit()
     return jsonify(_created_body(plan, assignments, uploads)), 201
+
+
+@bp.post("/plans/assignments/<assignment_id>/files")
+@login_required
+def add_assignment_files(assignment_id: str):
+    """创建人往已有的一份作业里加文件：登记文件，返回上传链接（传完照常调 files/uploaded 确认）"""
+    a, plan = _assignment_or_404(assignment_id)
+    _require_role(plan, "owner")
+    if a.revoked:
+        abort(409, "这份作业已经删除了")
+    files = _clean_files((request.get_json(silent=True) or {}).get("files"), ("scan", "attachment"))
+    if not files:
+        abort(400, "先扫描或上传一个附件")
+    have = _files_of(a.id, None)
+    if len(have) + len(files) > MAX_FILES:
+        abort(400, f"一份作业最多 {MAX_FILES} 个文件")
+    base = max((f.position or 0 for f in have), default=-1) + 1
+    for f in files:
+        f["position"] += base
+    uploads = _add_files(plan, a, files)
+    db.session.commit()
+    return jsonify({"assignment": _assignment_brief(a), "uploads": uploads}), 201
+
+
+@bp.delete("/plans/files/<file_id>")
+@login_required
+def delete_assignment_file(file_id: str):
+    """创建人删掉作业里的一个文件（加文件没传上去时客户端用它收拾）。作业至少留一个文件；同学交的文件不归这里管"""
+    row = db.session.get(PlanFile, file_id)
+    plan = db.session.get(Plan, row.plan_id) if row else None
+    if row is None or plan is None or row.submission_id:
+        abort(404, "文件不存在")
+    _require_role(plan, "owner")
+    if len(_files_of(row.assignment_id, None)) <= 1:
+        abort(409, "一份作业至少留一个文件")
+    _delete_files([row])
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @bp.post("/plans/files/uploaded")

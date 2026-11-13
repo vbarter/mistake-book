@@ -7,7 +7,7 @@ import { Button, MathText, Sheet, Tag } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { formatDateTime } from "../../lib/format";
 import { toast } from "../../lib/hooks";
-import { AI_GRADING, absoluteUrl, bumpPlans, fetchSubmission, memberName, reviewSubmission, type SubmissionRes } from "../../lib/plans";
+import { AI_GRADING, RETURN_REDO, absoluteUrl, bumpPlans, fetchSubmission, memberName, reviewSubmission, type SubmissionRes } from "../../lib/plans";
 import { useShare } from "../../lib/share";
 import { C, useThemeClass } from "../../lib/theme";
 import type { Mark } from "../../lib/types";
@@ -126,7 +126,7 @@ export default function PlanReview() {
             </Tag>
           )}
           <Tag kind={sub.status === "reviewed" ? "correct" : sub.status === "returned" ? "wrong" : "info"} icon={sub.status === "reviewed" ? undefined : null}>
-            {sub.status === "reviewed" ? "已阅" : sub.status === "returned" ? "已退回" : "待阅"}
+            {sub.status === "reviewed" ? "已阅" : sub.status === "returned" ? (RETURN_REDO ? "已退回" : "未交") : "待阅"}
           </Tag>
         </View>
         {!AI_GRADING ? null : results && sub.score ? (
@@ -148,11 +148,13 @@ export default function PlanReview() {
 
       {owner && (
         <>
-          <Input className="input input--card" value={comment} maxlength={200} placeholder="给同学留句话（退回时必填）" cursorSpacing={90} onInput={(e) => setComment(e.detail.value)} />
+          <Input className="input input--card" value={comment} maxlength={200} placeholder={RETURN_REDO ? "给同学留句话（退回时必填）" : "给同学留句话"} cursorSpacing={90} onInput={(e) => setComment(e.detail.value)} />
           <View className="bottom-bar">
-            <Button variant="outline" icon="refresh" disabled={busy} onClick={() => void finish("returned")}>
-              退回
-            </Button>
+            {RETURN_REDO && (
+              <Button variant="outline" icon="refresh" disabled={busy} onClick={() => void finish("returned")}>
+                退回
+              </Button>
+            )}
             <Button icon="check" className="flex1" disabled={busy} onClick={() => void finish("reviewed")}>
               {pager?.next ? "已阅，下一份" : "已阅"}
             </Button>

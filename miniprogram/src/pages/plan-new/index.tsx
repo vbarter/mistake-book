@@ -7,17 +7,25 @@ import { Button, Sheet } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { pickPhotos } from "../../lib/capture";
 import { toast } from "../../lib/hooks";
-import { MAX_FILES, attachmentDraft, fetchPlan, imageAttachmentDraft, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PublishRes } from "../../lib/plans";
+import { MAX_FILES, addAssignmentFiles, attachmentDraft, fetchPlan, imageAttachmentDraft, fileBadge, publishAssignment, scanDraft, sizeLabel, type DraftFile, type PlanInfo, type PublishRes } from "../../lib/plans";
 import { C, useThemeClass } from "../../lib/theme";
 
 /**
  * 新建学习计划（同时布置第一份作业），以及在已有计划里布置新作业（带 planId），是同一个页面（和 App 一致）：
  * 名称、学科、作业内容（不设截止时间）（文件列表自己滚动，下面固定「扫描」「上传文件」两个按钮）。
+ * 带 assignmentId 进来是「往已有的一份作业里加文件」：不填名称，选好文件点「确定添加」，传完回到计划页，文件进那一份作业（不新建、不转发）。
  * 和 App 不同的一点：小程序里转发必须由用户亲手点一下原生的转发按钮，所以布置好以后弹出一块「转发到微信群」，点了才拉起微信的选人页。
  */
 export default function PlanNew() {
   const tc = useThemeClass();
-  const planId = useRouter().params.planId || "";
+  const params = useRouter().params;
+  const planId = params.planId || "";
+  // 往已有作业里加文件：那份作业的 id、名字、已经有几个文件 / 几页扫描件（算上限、给扫描件接着编号）
+  const addTo = params.assignmentId || "";
+  const addTitle = decodeURIComponent(params.title || "");
+  const had = Number(params.count) || 0;
+  const hadScans = Number(params.scans) || 0;
+  const LIMIT = Math.max(0, MAX_FILES - had);
   const [version] = usePlansVersion();
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [name, setName] = useState("");
@@ -31,8 +39,8 @@ export default function PlanNew() {
   const logged = loggedIn();
 
   useEffect(() => {
-    if (planId) void Taro.setNavigationBarTitle({ title: "布置新作业" });
-  }, [planId]);
+    if (planId) void Taro.setNavigationBarTitle({ title: addTo ? "添加文件" : "布置新作业" });
+  }, [planId, addTo]);
   useEffect(() => {
     if (planId && logged && !plan)
       fetchPlan(planId)
@@ -45,7 +53,7 @@ export default function PlanNew() {
   if (!logged) return <LoginGate what="新建学习计划" />;
 
   const add = (more: DraftFile[]) => {
-    const room = MAX_FILES - files.length;
+    const room = LIMIT - files.length;
     if (more.length > room) toast(`一份作业最多 ${MAX_FILES} 个文件`);
     const next = [...files, ...more.slice(0, Math.max(0, room))];
     setFiles(next);
@@ -56,7 +64,7 @@ export default function PlanNew() {
   const onPhotos = async (paths: string[]) => {
     setStage("正在读取照片");
     try {
-      const base = files.filter((f) => f.kind === "scan").length;
+      const base = hadScans + files.filter((f) => f.kind === "scan").length;
       const drafts: DraftFile[] = [];
       for (let i = 0; i < paths.length; i++) drafts.push(await scanDraft(paths[i], base + i));
       add(drafts);
@@ -70,7 +78,7 @@ export default function PlanNew() {
   /** 上传文件 · 手机相册：选图片原样当附件（不识别成题目，要识别的用「扫描」） */
   const fromAlbum = async () => {
     setAttaching(false);
-    if (files.length >= MAX_FILES) return void toast(`一份作业最多 ${MAX_FILES} 个文件`);
+    if (files.length >= LIMIT) return void toast(`一份作业最多 ${MAX_FILES} 个文件`);
     try {
       const paths = await pickPhotos("album");
       if (!paths.length) return;
@@ -96,7 +104,7 @@ export default function PlanNew() {
   /** 上传文件 · 微信聊天：PDF、Word。小程序读不到手机目录里的文件，微信只让从聊天记录里选（先把文件发给「文件传输助手」或任意一个聊天） */
   const fromChat = async () => {
     setAttaching(false);
-    if (files.length >= MAX_FILES) return void toast(`一份作业最多 ${MAX_FILES} 个文件`);
+    if (files.length >= LIMIT) return void toast(`一份作业最多 ${MAX_FILES} 个文件`);
     let res: Taro.chooseMessageFile.SuccessCallbackResult;
     try {
       res = await Taro.chooseMessageFile({ count: 9, type: "file", extension: ["pdf", "doc", "docx"] });
@@ -123,6 +131,18 @@ export default function PlanNew() {
     if (!planId && !name.trim()) return void toast("给学习计划起个名字");
     // 新建计划可以先不放作业：建好就转发让大家加入，之后再布置；在已有计划里布置就必须有内容
     if (planId && !files.length) return void toast("先扫描或上传一个文件");
+    if (addTo) {
+      try {
+        await addAssignmentFiles(addTo, files, setStage);
+        setStage(null);
+        toast("已添加", "success");
+        setTimeout(() => void Taro.navigateBack(), 500);
+      } catch (e) {
+        setStage(null);
+        void Taro.showModal({ title: "没添加成功", content: errorText(e), showCancel: false });
+      }
+      return;
+    }
     try {
       const res = await publishAssignment(planId || null, planId ? { dueAt: null, title: title.trim() } : { name: name.trim(), dueAt: null, title: title.trim() }, files, setStage);
       setStage(null);
@@ -143,7 +163,9 @@ export default function PlanNew() {
 
   return (
     <View className={"page" + tc} style={{ gap: "16px" }}>
-      {planId ? (
+      {addTo ? (
+        <Text className="t-foot c-sec pad12">添加到「{addTitle || "作业"}」</Text>
+      ) : planId ? (
         <>
           {plan && <Text className="t-foot c-sec pad12">{plan.name}</Text>}
           <View className="plan-field">
@@ -208,8 +230,8 @@ export default function PlanNew() {
 
       <View className="bottom-bar">
         <Button className="flex1" disabled={Boolean(stage) || Boolean(done)} onClick={() => void submit()}>
-          <WechatIcon size={22} color="#ffffff" />
-          <Text>确定，转发到微信</Text>
+          {!addTo && <WechatIcon size={22} color="#ffffff" />}
+          <Text>{addTo ? "确定添加" : "确定，转发到微信"}</Text>
         </Button>
       </View>
 
