@@ -1117,6 +1117,8 @@ def _landing_cards(assignments: list[dict]) -> str:
         files = a["files"]
         created = a["createdAt"] or ""
         date = f"{int(created[5:7])}月{int(created[8:10])}日" if len(created) >= 10 else ""
+        if date and len(created) >= 16:  # 布置时间到分钟，和客户端卡片头部一致
+            date = f"{date} {created[11:16]}"
         if date and created[:4] != str(datetime.now().year):
             date = f"{created[:4]}年{date}"
         sub = " · ".join(x for x in (date, f"{len(files)} 个文件", f"{_due_text(a['dueAt'])}截止" if a["dueAt"] else "") if x)

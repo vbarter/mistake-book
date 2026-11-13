@@ -5,7 +5,7 @@ import { SwipeRow } from "../../components/SwipeRow";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet, Spinner } from "../../components/ui";
 import { Avatar, IconSegmented, Stat, Tag } from "../../components/v2";
-import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, planSubjectText, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { openFile } from "./Assignment";
 import { PlanMember } from "./PlanMember";
@@ -109,7 +109,6 @@ export default function PlanDetail() {
           <Avatar name={plan.teacher} url={plan.teacherAvatar} size={42} />
           <span className="plan-head__main">
             <span className="t-headline ellipsis">{plan.teacher}</span>
-            <span className="t-foot c-sec ellipsis">{createdLabel(plan.createdAt)}</span>
           </span>
           {/* 解散 / 退出：点了先确认 */}
           <button className="plan-iconbtn" aria-label={owner ? "解散学习计划" : "退出学习计划"} onClick={() => setConfirm(owner ? "dissolve" : "leave")}>
@@ -167,7 +166,7 @@ export default function PlanDetail() {
                         }
                       }}
                     >
-                      {/* 头部：序号（第几次布置）+ 作业名 + 「11月12日 · 5 个文件」+ 三个数（绿勾 = 已交，灰色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的），点三个数看名单 */}
+                      {/* 头部：序号（第几次布置）+ 作业名 + 「11月12日 21:03 · 5 个文件」+ 三个数（绿勾 = 已交，灰色时钟 = 没交，灰色闭眼 = 没交的人里还没看过的），点三个数看名单 */}
                       <div className="hw-head" role="button" tabIndex={0} aria-expanded={open} onClick={toggle} onKeyDown={(e) => { if (e.key === "Enter") toggle(); }}>
                         <span className="hw-no">{tasks.length - i}</span>
                         <span className="hw-main">
