@@ -10,7 +10,7 @@ import { Avatar } from "../components/v2";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
 import { useJobs } from "../lib/jobs";
 import { isScanErrorSeen, markScanErrorSeen } from "../lib/scanNotice";
-import { createdLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
+import { MARK_REVIEWED, createdLabel, fetchPlans, joinPath, pendingJoin, usePlans, type PlanInfo, type PlanSummary } from "../lib/plans";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/banner";
 
@@ -54,7 +54,7 @@ export default function Home() {
     fetchPlans().then((r) => { setPlans(r.summary); setPlanList(r.plans); }).catch(() => undefined); // 没网时卡片照样在，只是不带数字
   }, [plansVersion]);
   // 首页直接列几个学习计划：有作业待交 / 待批阅的排前面，其余按新旧，最多 3 个
-  const pending = (p: PlanInfo) => (p.role === "owner" ? p.toReview ?? 0 : p.todo ?? 0);
+  const pending = (p: PlanInfo) => (p.role === "owner" ? (MARK_REVIEWED ? p.toReview ?? 0 : 0) : p.todo ?? 0);
   const topPlans = [...planList].sort((a, b) => Number(pending(b) > 0) - Number(pending(a) > 0) || (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 3);
 
   useEffect(() => {
@@ -89,7 +89,7 @@ export default function Home() {
 
   // 头图里那颗提示：有作业先说作业，一份试卷都没有时提醒拍第一张
   const pill = plans && plans.todo > 0 ? { n: plans.todo, text: "份作业待交", go: () => nav("/plans") }
-    : plans && plans.toReview > 0 ? { n: plans.toReview, text: "份等你批阅", go: () => nav("/plans") }
+    : MARK_REVIEWED && plans && plans.toReview > 0 ? { n: plans.toReview, text: "份等你批阅", go: () => nav("/plans") }
     : folders && papers.length === 0 ? { n: 0, text: "拍下第一张试卷", go: add.open }
     : null;
 

@@ -47,8 +47,14 @@ export type MyStatus = "todo" | "submitted" | "reviewed" | "returned";
  * 要恢复：两端都改回 true 即可，服务端和下面的显示代码都原样留着。
  */
 export const RETURN_REDO: boolean = false;
-/** 界面上显示的状态：开关关着时，退回的按待交显示 */
-export const shownStatus = (s: MyStatus): MyStatus => (!RETURN_REDO && s === "returned" ? "todo" : s);
+/**
+ * 「已阅」开关（两端的 lib/plans.ts 同名开关保持一致）。先关着：创建人看作业的那一页只是看，没有「已阅」按钮和「待阅 / 已阅」标签，
+ * 交了的一律显示「已交」（以前标过已阅的也按已交显示），首页和计划列表不再数「等你批阅」。
+ * 要恢复：两端都改回 true 即可，服务端和下面的显示代码都原样留着。
+ */
+export const MARK_REVIEWED: boolean = false;
+/** 界面上显示的状态：退回开关关着时，退回的按待交显示；已阅开关关着时，已阅的按已交显示 */
+export const shownStatus = (s: MyStatus): MyStatus => (!RETURN_REDO && s === "returned" ? "todo" : !MARK_REVIEWED && s === "reviewed" ? "submitted" : s);
 export interface Score { total: number; correct: number; wrong: number; blank: number }
 export interface PlanInfo {
   id: string;

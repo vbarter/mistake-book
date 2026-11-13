@@ -5,7 +5,7 @@ import { SwipeRow } from "../../components/SwipeRow";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet, Spinner } from "../../components/ui";
 import { Avatar, IconSegmented, Stat, Tag } from "../../components/v2";
-import { AI_GRADING, HW_PREVIEW, RETURN_REDO, planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, planSubjectText, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { openFile } from "./Assignment";
 import { PlanMember } from "./PlanMember";
@@ -34,9 +34,10 @@ let remembered: { planId: string; tab: "tasks" | "members"; filter: Filter; open
  * 计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。「让旧卡片失效」在「成员情况」页签最下面。能用图标 + 数字说清的就不写字。
  * 成员：只有自己的待交 / 已交和作业（见 PlanMember），看不到其他成员、人数和别人交没交。
  */
-/** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅 */
+/** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅（已阅开关关着时，交了的都是「已交」） */
 const itemTag = (it: MemberItem) =>
-  it.status === "submitted" ? <Tag kind="info" icon="pencil">待阅</Tag>
+  !MARK_REVIEWED && (it.status === "submitted" || it.status === "reviewed") ? <Tag kind="correct">已交</Tag>
+  : it.status === "submitted" ? <Tag kind="info" icon="pencil">待阅</Tag>
     : it.status === "reviewed" ? <Tag kind="correct">已阅</Tag>
       : RETURN_REDO && it.status === "returned" ? <Tag kind="wrong" icon="refresh">退回</Tag>
         : <Tag kind="neutral" icon={it.viewed ? "clock" : "eye-off"}>{it.viewed ? "未交" : "没看"}</Tag>;
