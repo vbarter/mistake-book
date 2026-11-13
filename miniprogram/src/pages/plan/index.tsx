@@ -9,7 +9,7 @@ import { Avatar, Button, IconSegmented, Sheet, Stat, Tag } from "../../component
 import { SwipeRow, swipeGuard } from "../../components/SwipeRow";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, bumpPlans, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, type MemberItem, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C, useThemeClass } from "../../lib/theme";
 
 const leave = () => {
@@ -55,7 +55,7 @@ const itemTag = (it: MemberItem) =>
  * 点一个人看他每份作业的情况并进去批阅、移出。成员：只有自己的待交 / 已交和作业（见 components/PlanMember），
  * 看不到其他成员、人数和别人交没交。头部两边一样：创建人头像 + 名字 + 创建时间（计划名在顶部标题栏），右边一个圆图标按钮，
  * 创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。
- * 「让旧卡片失效」在「成员情况」页签最下面。页面上能用图标 + 数字说清的就不写字。
+ * 页面上能用图标 + 数字说清的就不写字。
  */
 export default function PlanDetail() {
   const tc = useThemeClass();
@@ -130,13 +130,6 @@ export default function PlanDetail() {
     }
   };
 
-  const resetInvite = async () => {
-    if (!(await confirm("让以前转发的卡片失效？", "之前发到微信里的卡片都不能再用来加入。之后要邀请新同学，需要重新转发一次。", "失效并换新的"))) return;
-    await act(async () => {
-      await updatePlan(plan.id, { resetInvite: true });
-      await load();
-    }, "旧卡片已失效");
-  };
   const dissolve = async () => {
     if (!(await confirm("解散这个学习计划？", "计划、作业和同学交上来的内容都会从服务器删除，不能恢复。同学自己试卷里存的那份不受影响。", "解散", true))) return;
     await act(async () => {
@@ -323,29 +316,22 @@ export default function PlanDetail() {
             );
           })}
         {tab === "members" && (
-          <>
-            <View className="group">
-              {rows.length === 0 && <Text className="plan-empty">还没有人加入</Text>}
-              {rows.map((m) => {
-                return (
-                  <View key={m.userId} className="list-row" hoverClass="list-row--hover" style={{ minHeight: "56px" }} onClick={() => setMember(m)}>
-                    <Avatar name={m.name} url={m.avatar} />
-                    <Text className="row__title ellipsis flex1">
-                      {memberName(m)}
-                      {m.left ? "（已退出）" : ""}
-                    </Text>
-                    <SubmitProgress done={m.submitted} total={m.assignments} />
-                    <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-                  </View>
-                );
-              })}
-            </View>
-            <View className="plan-quiet plan-quiet--only">
-              <Text className="plan-quiet__item" onClick={() => void resetInvite()}>
-                让旧卡片失效
-              </Text>
-            </View>
-          </>
+          <View className="group">
+            {rows.length === 0 && <Text className="plan-empty">还没有人加入</Text>}
+            {rows.map((m) => {
+              return (
+                <View key={m.userId} className="list-row" hoverClass="list-row--hover" style={{ minHeight: "56px" }} onClick={() => setMember(m)}>
+                  <Avatar name={m.name} url={m.avatar} />
+                  <Text className="row__title ellipsis flex1">
+                    {memberName(m)}
+                    {m.left ? "（已退出）" : ""}
+                  </Text>
+                  <SubmitProgress done={m.submitted} total={m.assignments} />
+                  <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+                </View>
+              );
+            })}
+          </View>
         )}
         <View className="bottom-bar">
           <Button icon="plus" className="flex1" onClick={() => go(`/pages/plan-new/index?planId=${plan.id}`)}>

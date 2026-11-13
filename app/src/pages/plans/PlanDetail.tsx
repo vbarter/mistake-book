@@ -5,7 +5,7 @@ import { SwipeRow } from "../../components/SwipeRow";
 import { Icon, WechatIcon, type IconName } from "../../components/Icon";
 import { Button, Empty, InlineNav, Sheet, Spinner } from "../../components/ui";
 import { Avatar, IconSegmented, Stat, Tag } from "../../components/v2";
-import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, planSubjectText, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, updatePlan, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, planSubjectText, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, planGone, removeMember, revokeAssignment, shareInvite, sizeLabel, usePlans, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { toast, toastError } from "../../store/banner";
 import { openFile } from "./Assignment";
 import { PlanMember } from "./PlanMember";
@@ -30,7 +30,7 @@ let remembered: { planId: string; tab: "tasks" | "members"; opened: Record<strin
  * 点头部那三个数看这份作业的名单（谁交了、谁没交、谁还没看）。把一份作业整张向左滑，露出「删除」；
  * 「成员情况」列头像 + 名字 + 进度环（交了几份 / 共几份），不再筛选，交齐 / 没交齐看顶部的数，点一个人看他每份作业的情况并进去批阅、移出。
  * 头部两边一样：创建人头像 + 名字 + 创建时间（计划名在导航栏），右边一个圆图标按钮，创建人是「解散」（在转发左边），成员是「退出」，点了都先确认。
- * 计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。「让旧卡片失效」在「成员情况」页签最下面。能用图标 + 数字说清的就不写字。
+ * 计划名和成员的名字都不在这里改（名字在「我的」里改，会同步过来）。能用图标 + 数字说清的就不写字。
  * 成员：只有自己的待交 / 已交和作业（见 PlanMember），看不到其他成员、人数和别人交没交。
  */
 /** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅（已阅开关关着时，交了的都是「已交」） */
@@ -55,7 +55,7 @@ export default function PlanDetail() {
   const [full, setFull] = useState<Record<string, boolean>>({}); // 文件全部展开了的作业
   const [board, setBoard] = useState<string | null>(null); // 正在看名单的那份作业
   const [boardFilter, setBoardFilter] = useState<"all" | "done" | "missing">("all");
-  const [confirm, setConfirm] = useState<"dissolve" | "leave" | "reset" | null>(null);
+  const [confirm, setConfirm] = useState<"dissolve" | "leave" | null>(null);
   const [removing, setRemoving] = useState<PlanMemberRow | null>(null);
   const version = usePlans((s) => s.version);
   useEffect(() => { remembered = { planId, tab, opened }; }, [planId, tab, opened]);
@@ -199,22 +199,19 @@ export default function PlanDetail() {
                   );
                 })}
                 {tab === "members" && (
-                  <>
-                    <div className="group">
-                      {rows.length === 0 && <div className="plan-files__empty">还没有人加入</div>}
-                      {rows.map((m) => {
-                        return (
-                          <button key={m.userId} className="row" style={{ minHeight: 56 }} onClick={() => setMember(m)}>
-                            <Avatar name={m.name} url={m.avatar} />
-                            <span className="row__main"><span className="row__title ellipsis">{memberName(m)}{m.left ? "（已退出）" : ""}</span></span>
-                            <SubmitProgress done={m.submitted} total={m.assignments} />
-                            <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="plan-quiet plan-quiet--only"><button onClick={() => setConfirm("reset")}>让旧卡片失效</button></div>
-                  </>
+                  <div className="group">
+                    {rows.length === 0 && <div className="plan-files__empty">还没有人加入</div>}
+                    {rows.map((m) => {
+                      return (
+                        <button key={m.userId} className="row" style={{ minHeight: 56 }} onClick={() => setMember(m)}>
+                          <Avatar name={m.name} url={m.avatar} />
+                          <span className="row__main"><span className="row__title ellipsis">{memberName(m)}{m.left ? "（已退出）" : ""}</span></span>
+                          <SubmitProgress done={m.submitted} total={m.assignments} />
+                          <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
                 <div className="bottom-bar" style={{ marginTop: "auto" }}>
                   <Button icon="plus" onClick={() => nav(`/plans/${plan.id}/new`)}>布置新作业</Button>
@@ -227,8 +224,6 @@ export default function PlanDetail() {
         )}
       </div>
 
-      <ConfirmSheet open={confirm === "reset"} title="让以前转发的卡片失效？" text="之前发到微信里的卡片和链接都不能再用来加入。之后要邀请新同学，需要重新转发一次。" action="失效并换新的" onClose={() => setConfirm(null)}
-        onConfirm={() => act(async () => { await updatePlan(plan.id, { resetInvite: true }); setConfirm(null); await load(); }, "旧卡片已失效，重新转发即可")} />
       <ConfirmSheet open={confirm === "dissolve"} danger title="解散这个学习计划？" text="计划、作业和同学交上来的内容都会从服务器删除，不能恢复。同学自己试卷里存的那份不受影响。" action="解散" onClose={() => setConfirm(null)}
         onConfirm={() => act(async () => { await deletePlan(plan.id); usePlans.getState().bump(); nav("/plans", { replace: true }); }, "已解散")} />
       <ConfirmSheet open={confirm === "leave"} danger title="退出这个学习计划？" text="退出后看不到这里的作业了。已经交过的作业老师还能看到。再点一次老师发的卡片可以重新加入。" action="退出" onClose={() => setConfirm(null)}
