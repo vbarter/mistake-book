@@ -100,3 +100,11 @@ button.hw-foot:active { background: var(--fill-light); }
 .hw-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 20px; color: var(--secondary); font-size: 13px; line-height: 19px; text-align: center; }
 .hw-empty b { font-size: 16px; font-weight: 600; color: var(--label); margin-top: 6px; }
 
+
+/* ---------- 加入页：顶上一条「谁邀请你加入哪个计划」，下面是和计划页同一种作业卡片，按钮固定在底部 ---------- */
+.plan-join { padding: 14px 14px 12px; }
+.plan-join__name { font-size: 20px; line-height: 26px; font-weight: 800; }
+.plan-join__members { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--separator-light); }
+.plan-join__label { font-size: 13px; line-height: 18px; font-weight: 600; color: var(--secondary); padding: 2px 6px 0; margin-bottom: -6px; }
+.plan-join__bar { flex-direction: column; gap: 8px; }
+.plan-join__tip { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--tertiary); }

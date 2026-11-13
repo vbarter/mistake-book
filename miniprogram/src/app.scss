@@ -770,8 +770,14 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .plan-thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
 .plan-thumb { position: relative; }
 .plan-thumb__x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 11px; background: $label; display: flex; align-items: center; justify-content: center; }
-.plan-join { align-items: center; text-align: center; gap: 6px; padding: 28px 20px; }
-.plan-join__members { align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; padding-top: 14px; border-top: 1px solid $sep-light; }
+/* 加入页：顶上一条「谁邀请你加入哪个计划」，下面是和计划页同一种作业卡片，按钮固定在底部 */
+.plan-join-page { padding-bottom: calc(116px + env(safe-area-inset-bottom)); }
+.plan-join { padding: 14px 14px 12px; }
+.plan-join__name { font-size: 20px; line-height: 26px; font-weight: 800; }
+.plan-join__members { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid $sep-light; }
+.plan-join__label { font-size: 13px; line-height: 18px; font-weight: 600; color: $secondary; padding: 2px 6px 0; margin-bottom: -6px; }
+.plan-join__tip { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 12px; line-height: 16px; color: $tertiary; }
+.bottom-bar--col { flex-direction: column; gap: 8px; }
 .avatar-stack { display: flex; flex-shrink: 0; }
 .avatar-stack__item { margin-left: -8px; border: 2px solid #fff; border-radius: 16px; display: flex; }
 .avatar-stack__item:first-child { margin-left: 0; }
