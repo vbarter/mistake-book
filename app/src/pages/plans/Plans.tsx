@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Icon } from "../../components/Icon";
 import { Button, InlineNav, Spinner } from "../../components/ui";
 import { Avatar, Tag } from "../../components/v2";
-import { teacherLine, byNewest, createdLabel, fetchPlans, usePlans, type PlanInfo } from "../../lib/plans";
+import { MARK_REVIEWED, teacherLine, byNewest, createdLabel, fetchPlans, usePlans, type PlanInfo } from "../../lib/plans";
 import { toastError } from "../../store/banner";
 import { Count } from "./shared";
 
@@ -33,7 +33,7 @@ export default function Plans() {
         </span>
         {createdLabel(p.createdAt) && <span className="t-cap" style={{ color: "var(--tertiary)" }}>{createdLabel(p.createdAt)}</span>}
       </span>
-      {p.role === "owner" && (p.toReview ?? 0) > 0 && <Tag kind="info" icon="pencil">{p.toReview}</Tag>}
+      {MARK_REVIEWED && p.role === "owner" && (p.toReview ?? 0) > 0 && <Tag kind="info" icon="pencil">{p.toReview}</Tag>}
       {p.role === "member" && (p.todo ?? 0) > 0 && <Tag kind="pending" icon="clock">{p.todo}</Tag>}
       <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
     </button>

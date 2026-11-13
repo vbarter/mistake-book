@@ -1,22 +1,22 @@
 /** 成员看到的学习计划页（和 App 的 pages/plans/PlanMember.tsx 对应）。 */
 import { useState, type ReactNode } from "react";
 import { Image, Picker, Text, View } from "@tarojs/components";
-import Taro, { usePageScroll } from "@tarojs/taro";
+import Taro from "@tarojs/taro";
+import { useCelebrate } from "./Celebrate";
 import { Icon } from "./Icon";
 import { Busy, Count, ScanSheet } from "./plan";
-import { SwipeRow, swipeGuard } from "./SwipeRow";
+import { SwipeRow, swipeGuard, useSwipeCloseOnScroll } from "./SwipeRow";
 import { Button, Sheet, Stat, Tag } from "./ui";
 import { errorText } from "../lib/api";
 import { submitExport } from "../lib/export";
 import { toast } from "../lib/hooks";
-import { AI_GRADING, STATUS_LABEL, absoluteUrl, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
+import { AI_GRADING, HW_PREVIEW, STATUS_LABEL, shownStatus, absoluteUrl, canHandIn, canWithdraw, dueLabel, fetchAssignment, fileBadge, handInLabel, hwMeta, isOverdue, openPlanFile, planGone, sizeLabel, submitHomework, withdrawHomework, type MemberAssignment, type PlanDetailRes } from "../lib/plans";
 import { C } from "../lib/theme";
 
 type Look = "done" | "returned" | "todo" | "revoked";
 /** 一份作业的样子：交了 = 绿，退回重做 = 红，没交 = 不上色 */
-const lookOf = (a: MemberAssignment): Look => (a.status === "submitted" || a.status === "reviewed" ? "done" : a.status === "returned" ? "returned" : a.revoked ? "revoked" : "todo");
+const lookOf = (a: MemberAssignment): Look => { const st = shownStatus(a.status); return st === "submitted" || st === "reviewed" ? "done" : st === "returned" ? "returned" : a.revoked ? "revoked" : "todo"; };
 
-/** 下拉列表里的一行：作业名，交过的带上状态 */
 const SWIPE_HINT = "zcb.plan.unbindHint";
 function swipeHintPending(): boolean {
   try {
@@ -26,13 +26,12 @@ function swipeHintPending(): boolean {
   }
 }
 
-const optionLabel = (a: MemberAssignment) => (a.status === "todo" ? a.title : `${a.title}（${STATUS_LABEL[a.status]}）`);
-
 /**
- * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，一张卡片里直接平铺每份作业的文件（点文件打开，状态标在文件那一行，不单独显示作业名），
- * 底部「导出」「扫描上传」。扫描上传：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
- * 交完页面跟着刷新，交了的作业那几行标成绿色，没交的不上色（这两种不再贴「已交」「待交」标签）。交了、老师还没批阅的那份可以向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
- * 批改关着时，交过的作业下面多一行「我交的作业」，点开翻看自己交上去的照片。
+ * 成员不再有单独的「作业」页，全在这一页：待交 / 已交两个数，下面一份作业一张卡片：头部是序号 + 作业名 + 布置日期和文件数 + 自己的状态（待交 / 已交 / 退回重做），
+ * 文件缩进排在下面（点文件打开）。待交和退回的默认展开，交过的收起，点头部展开 / 收起；文件多于 3 个先显示 3 个。
+ * 底部「导出」「交作业」。交作业：拍照（连拍）或相册选好照片 → 选这次交的是哪一份作业 → 交给老师；
+ * 交完页面跟着刷新，交了的作业整张标成绿色，退回的标红。交了、老师还没批阅的那份可以整张向左滑，露出「解绑」：撤掉自己交的那份，回到没交，可以重新扫描上传。
+ * 批改关着时，交过的作业展开后最下面多一行「我交的作业」，点开翻看自己交上去的照片。
  *AI 批改开着（AI_GRADING）时下面多一行对 / 错 / 没做，点进去看自己那份的批改结果。
  */
 export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () => Promise<void> }) {
@@ -44,10 +43,11 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
   const [stage, setStage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [swiped, setSwiped] = useState<string | null>(null); // 左滑开着的那份作业
+  const [opened, setOpened] = useState<Record<string, boolean>>({}); // 手动展开 / 收起过的作业（没动过的：待交、退回的展开，交过的收起）
+  const [full, setFull] = useState<Record<string, boolean>>({}); // 文件全部展开了的作业
   const [hint, setHint] = useState(swipeHintPending); // 第一次有交过的作业：那一行自己滑出一小截，露一下「解绑」
-  usePageScroll(() => {
-    if (swiped) setSwiped(null);
-  });
+  const [cele, celebrate] = useCelebrate();
+  useSwipeCloseOnScroll(swiped, () => setSwiped(null));
 
   const todo = list.filter((a) => !a.revoked && (a.status === "todo" || a.status === "returned"));
   const handed = list.filter((a) => a.status === "submitted" || a.status === "reviewed").length;
@@ -63,7 +63,9 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
       setShots([]);
       setTarget(null);
       void Taro.vibrateShort({ type: "light" }).catch(() => undefined);
-      toast("交上去了", "success");
+      // 交上了：庆祝一下；这一份交完就没有待交的了，算「交齐」，纸屑多一些
+      const cleared = todo.every((a) => a.id === chosen.id);
+      celebrate({ title: "交上啦！", sub: cleared && list.length > 1 ? `${chosen.title} · 作业都交齐了` : chosen.title, big: cleared });
       await reload();
     } catch (e) {
       await Taro.showModal({ title: "没交上去", content: errorText(e), showCancel: false });
@@ -122,22 +124,24 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
     }
   };
 
-  // 颜色已经说清了交没交（绿 = 已交，不上色 = 待交），这两种不再重复贴标签；已阅 / 退回 / 已删除才标出来
-  const statusTag = (a: MemberAssignment, onTint = false) =>
-    !a.revoked && (a.status === "todo" || a.status === "submitted") ? null : a.revoked ? (
+  /** 头部右边自己的状态：待交 / 已交 / 已阅 / 退回重做 / 已删除 */
+  const statusTag = (a: MemberAssignment, st = shownStatus(a.status)) =>
+    a.revoked && st === "todo" ? (
       <Tag kind="neutral" icon={null}>
         已删除
       </Tag>
     ) : (
       <Tag
-        kind={a.status === "todo" ? "neutral" : a.status === "returned" ? "wrong" : "correct"}
-        icon={a.status === "todo" ? "clock" : a.status === "returned" ? "refresh" : undefined}
-        style={onTint && a.status !== "todo" ? { background: C.card } : undefined}
+        kind={st === "todo" ? "pending" : st === "returned" ? "wrong" : "correct"}
+        icon={st === "todo" ? "clock" : st === "returned" ? "refresh" : undefined}
+        style={st === "submitted" || st === "reviewed" ? { background: C.card } : undefined}
       >
-        {STATUS_LABEL[a.status]}
+        {STATUS_LABEL[st]}
       </Tag>
     );
   const firstSwipe = list.find(canWithdraw)?.id;
+  /** 这份作业在页面上的序号（卡片头部左边那个数） */
+  const noOf = (a: MemberAssignment) => list.length - list.findIndex((x) => x.id === a.id);
   const exportable = list.filter((a) => a.digitized || (a.files ?? []).length > 0);
 
   return (
@@ -146,21 +150,117 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         <Stat icon="clock" label="待交" value={todo.length} />
         <Stat icon="checkcircle" label="已交" value={handed} color={handed ? C.ok : undefined} />
       </View>
-      {/* 一张卡片，一份份作业（计划名在顶部标题栏，创建时间在页面头部创建人名字下面） */}
-      <View className="group">
-        {list.length === 0 && <Text className="plan-empty">还没有作业</Text>}
-        {list.map((a) => {
+      {list.length === 0 && (
+        <View className="group">
+          <View className="hw-empty">
+            <Icon name="document" size={34} color={C.tertiary} stroke={1.6} />
+            <Text className="hw-empty__title">还没有作业</Text>
+            <Text className="hw-empty__sub">老师布置后会出现在这里</Text>
+          </View>
+        </View>
+      )}
+      {/* 一份作业一张卡片（计划名在顶部标题栏，创建时间在页面头部创建人名字下面） */}
+      {list.map((a, i) => {
         const look = lookOf(a);
-        const waiting = a.status === "todo" || a.status === "returned";
+        const st = shownStatus(a.status);
+        const waiting = st === "todo" || st === "returned";
         const files = a.files ?? [];
-        const mine = a.status !== "todo";
-        // 批改关着：只有被退回 / 迟交 / 老师留了话才多一行，不点进批改结果
-        const note = AI_GRADING ? mine : a.status === "returned" || a.late || Boolean(a.comment);
-        // 交了、老师还没批阅：这一份可以向左滑出「解绑」
-        const wrap = (body: ReactNode) =>
-          canWithdraw(a) ? (
+        const mine = st !== "todo";
+        const open = opened[a.id] ?? (waiting && !a.revoked);
+        const shownFiles = open ? (full[a.id] ? files : files.slice(0, HW_PREVIEW)) : [];
+        const rest = files.length - HW_PREVIEW;
+        const overdue = waiting && isOverdue(a.dueAt);
+        const body: ReactNode = (
+          <>
+            <View className="hw-head" hoverClass="list-row--hover" onClick={tap(() => setOpened((o) => ({ ...o, [a.id]: !open })))}>
+              <View className="hw-no">
+                <Text>{list.length - i}</Text>
+              </View>
+              <View className="flex1 col minw0">
+                <Text className="hw-title ellipsis">{a.title}</Text>
+                <View className="hw-sub">
+                  <Text className="flex1 ellipsis" style={overdue ? { color: C.wrong } : undefined}>
+                    {hwMeta(a)}
+                    {waiting && a.dueAt ? ` · ${dueLabel(a.dueAt)}截止` : ""}
+                    {a.late ? " · 迟交" : ""}
+                  </Text>
+                </View>
+              </View>
+              {statusTag(a)}
+              <Icon name={open ? "chevron-up" : "chevron-down"} size={16} color={C.tertiary} stroke={2.4} />
+            </View>
+            {shownFiles.map((f) => (
+              <View key={f.id} className="list-row hw-file" hoverClass="list-row--hover" onClick={tap(() => void openPlanFile(f, files))}>
+                <View className="plan-file__icon plan-file__icon--sm">
+                  <Text>{fileBadge(f.mime)}</Text>
+                </View>
+                <View className="flex1 col gap2 minw0">
+                  <Text className="hw-file__name ellipsis">{f.name}</Text>
+                  <Text className="row__sub">{sizeLabel(f.size)}</Text>
+                </View>
+                <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
+              </View>
+            ))}
+            {open && rest > 0 && (
+              <View className="hw-foot" hoverClass="list-row--hover" onClick={tap(() => setFull((m) => ({ ...m, [a.id]: !m[a.id] })))}>
+                <Text>{full[a.id] ? "收起" : `其余 ${rest} 个文件`}</Text>
+                <Icon name={full[a.id] ? "chevron-up" : "chevron-down"} size={13} color={C.brand} stroke={2.4} />
+              </View>
+            )}
+            {/* 退回重做：一句提醒；老师留的话跟在后面 */}
+            {open && st === "returned" && (
+              <View className="hw-foot hw-foot--wrong">
+                <Text>老师退回了，重新交一次</Text>
+              </View>
+            )}
+            {open && a.comment && (
+              <View className={`hw-foot ${st === "returned" ? "hw-foot--wrong" : "hw-foot--mute"}`} style={{ height: "auto", padding: "10px 16px 10px 48px", alignItems: "flex-start" }}>
+                <Icon name="bubble" size={14} color={st === "returned" ? C.wrong : C.tertiary} stroke={2.2} style={{ marginTop: "3px" }} />
+                <Text className="flex1" style={{ fontWeight: 400, lineHeight: "20px" }}>
+                  {a.comment}
+                </Text>
+              </View>
+            )}
+            {/* 批改开着：交过的多一行对 / 错 / 没做，点进去看自己那份的批改结果 */}
+            {open && AI_GRADING && mine && (
+              <View className="hw-foot hw-foot--mute" hoverClass="list-row--hover" onClick={tap(() => void Taro.navigateTo({ url: `/pages/plan-task/index?id=${a.id}` }))}>
+                <View className="plan-counts flex1">
+                  {a.score ? (
+                    <>
+                      <Count icon="checkcircle" color={C.ok}>
+                        {a.score.correct}
+                      </Count>
+                      <Count icon="xcircle" color={C.wrong}>
+                        {a.score.wrong}
+                      </Count>
+                      <Count icon="minus" color={C.tertiary}>
+                        {a.score.blank}
+                      </Count>
+                    </>
+                  ) : (
+                    <Text>{st === "returned" ? "" : "批改中"}</Text>
+                  )}
+                </View>
+                <Text>批改结果</Text>
+                <Icon name="chevron-right" size={13} color={C.tertiary} stroke={2.4} />
+              </View>
+            )}
+            {/* 批改关着：交过的多一行「我交的作业」，点开翻看自己交上去的照片 */}
+            {open && !AI_GRADING && mine && (
+              <View className="hw-foot hw-foot--mute" hoverClass="list-row--hover" onClick={tap(() => void viewMine(a))}>
+                <Icon name="photo" size={14} color={C.secondary} stroke={2.2} />
+                <Text className="flex1">我交的作业</Text>
+                <Text>查看</Text>
+                <Icon name="chevron-right" size={13} color={C.tertiary} stroke={2.4} />
+              </View>
+            )}
+          </>
+        );
+        const cls = `hw hw--${look}`;
+        // 交了、老师还没批阅：这一份整张可以向左滑出「解绑」
+        return canWithdraw(a) ? (
+          <View key={a.id} className={cls}>
             <SwipeRow
-              inline
               label="解绑"
               icon="unlink"
               open={swiped === a.id}
@@ -178,102 +278,22 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
             >
               {body}
             </SwipeRow>
-          ) : (
-            body
-          );
-        return (
-          <View key={a.id} className="plan-hw">
-            {wrap(
-              <>
-            {/* 没有作业名那一行了：状态标在每个文件上（交了的整行标绿，退回的标红） */}
-            {files.map((f) => (
-              <View key={f.id} className={`list-row plan-row--${look}`} hoverClass="list-row--hover" onClick={tap(() => void openPlanFile(f, files))}>
-                <View className="plan-file__icon plan-file__icon--sm">
-                  <Text>{fileBadge(f.mime)}</Text>
-                </View>
-                <View className="flex1 col gap2 minw0">
-                  <Text className="row__title ellipsis">{f.name}</Text>
-                  <Text className="row__sub" style={waiting && isOverdue(a.dueAt) ? { color: C.wrong } : undefined}>
-                    {sizeLabel(f.size)}
-                    {waiting && a.dueAt ? ` · ${dueLabel(a.dueAt)}截止` : ""}
-                  </Text>
-                </View>
-                {statusTag(a, true)}
-                <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-              </View>
-            ))}
-            {files.length === 0 && (
-              <View className={`list-row plan-row--${look}`} onClick={tap(() => undefined)}>
-                <Text className="row__title ellipsis flex1">{a.title}</Text>
-                {statusTag(a, true)}
-              </View>
-            )}
-            {/* 批改关着：交过的多一行「我交的作业」，点开翻看自己交上去的照片 */}
-            {!AI_GRADING && mine && (
-              <View className={`plan-task plan-task--${look}`} hoverClass="list-row--hover" onClick={tap(() => void viewMine(a))}>
-                <View className="plan-task__head">
-                  <Icon name="photo" size={14} color={C.secondary} stroke={2.2} />
-                  <Text className="t-foot c-sec flex1">我交的作业</Text>
-                  <Text className="t-foot c-sec">查看</Text>
-                  <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-                </View>
-              </View>
-            )}
-            {/* 交过：一行小字是对 / 错 / 没做和老师的话，点进去看自己那份的批改结果 */}
-            {note && (
-              <View className={`plan-task plan-task--${look}`} hoverClass={AI_GRADING ? "list-row--hover" : "none"} onClick={tap(() => AI_GRADING && void Taro.navigateTo({ url: `/pages/plan-task/index?id=${a.id}` }))}>
-                <View className="plan-task__head" style={AI_GRADING || a.status === "returned" || a.late ? undefined : { display: "none" }}>
-                  <View className="plan-counts flex1">
-                    {!AI_GRADING ? (
-                      a.status === "returned" && <Text className="t-foot c-sec">老师退回了，重新交一次</Text>
-                    ) : a.score ? (
-                      <>
-                        <Count icon="checkcircle" color={C.ok}>
-                          {a.score.correct}
-                        </Count>
-                        <Count icon="xcircle" color={C.wrong}>
-                          {a.score.wrong}
-                        </Count>
-                        <Count icon="minus" color={C.tertiary}>
-                          {a.score.blank}
-                        </Count>
-                      </>
-                    ) : (
-                      <Text className="t-foot c-sec">{a.status === "returned" ? "老师退回了，重新交一次" : "批改中"}</Text>
-                    )}
-                    {a.late && <Text className="t-foot c-sec">迟交</Text>}
-                  </View>
-                  {AI_GRADING && (
-                    <>
-                      <Text className="t-foot c-sec">批改结果</Text>
-                      <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
-                    </>
-                  )}
-                </View>
-                {a.comment && (
-                  <View className="plan-count" style={{ alignItems: "flex-start" }}>
-                    <Icon name="bubble" size={14} color={a.status === "returned" ? C.wrong : C.tertiary} stroke={2.2} style={{ marginTop: "2px" }} />
-                    <Text className="t-foot flex1" style={{ color: a.status === "returned" ? C.wrong : C.secondary, fontWeight: 400 }}>
-                      {a.comment}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-              </>,
-            )}
+          </View>
+        ) : (
+          <View key={a.id} className={`${cls} group`}>
+            {body}
           </View>
         );
       })}
-      </View>
 
+      {cele}
       <View className="bottom-bar">
         <Button variant="outline" icon="printer" className={open.length ? undefined : "flex1"} disabled={exportable.length === 0} onClick={() => setExporting(true)}>
           导出
         </Button>
         {open.length > 0 && (
           <Button icon={shots.length ? "check" : "camera"} className="flex1" onClick={() => (shots.length ? setHanding(true) : setScanning(true))}>
-            {shots.length ? `交作业 · ${shots.length} 页` : "扫描上传"}
+            {shots.length ? `交作业 · ${shots.length} 页` : "交作业"}
           </Button>
         )}
       </View>
@@ -301,12 +321,14 @@ export function PlanMember({ data, reload }: { data: PlanDetailRes; reload: () =
         </View>
         <Text className="t-foot c-sec">交到哪一份作业</Text>
         {/* 下拉选择：点开是微信自带的滚轮，列出所有还能交的作业 */}
-        <Picker mode="selector" range={open.map(optionLabel)} value={Math.max(0, open.findIndex((a) => a.id === chosen?.id))} onChange={(e) => setTarget(open[Number(e.detail.value)]?.id ?? null)}>
+        <Picker mode="selector" range={open.map((a) => handInLabel(a, noOf(a)))} value={Math.max(0, open.findIndex((a) => a.id === chosen?.id))} onChange={(e) => setTarget(open[Number(e.detail.value)]?.id ?? null)}>
           <View className="field">
-            <Text className={`ellipsis flex1${chosen ? "" : " c-sec"}`}>{chosen ? chosen.title : "请选择作业"}</Text>
+            <Text className={`ellipsis flex1${chosen ? "" : " c-sec"}`}>{chosen ? handInLabel(chosen, noOf(chosen)) : "请选择作业"}</Text>
             <Icon name="chevron-down" size={16} color={C.tertiary} stroke={2.4} />
           </View>
         </Picker>
+        {/* 选中的那份：再说一遍是哪天布置的、里面几个文件，确认交的是整份作业 */}
+        {chosen && <Text className="t-foot c-sec">{`作业 ${noOf(chosen)} · ${hwMeta(chosen)}`}</Text>}
         {chosen?.status === "submitted" && <Text className="t-foot c-sec">这份交过了，再交会换掉上次那份</Text>}
         <Button icon="check" disabled={!chosen || shots.length === 0 || Boolean(stage)} onClick={() => void hand()}>
           交给老师

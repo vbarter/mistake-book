@@ -22,7 +22,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..auth_utils import current_user, login_required
 from ..avatars import avatar_url, avatar_urls
-from ..constants import SUBJECT_LABELS, SUBJECTS
+from ..constants import SUBJECTS
 from ..extensions import db
 from ..models import Plan, PlanAssignment, PlanFile, PlanMember, PlanSubmission, PlanTombstone, PlanView, User
 from .. import storage
@@ -292,31 +292,37 @@ def _owner_counts(plan: Plan, assignments: list[PlanAssignment]) -> dict[str, di
 # --------------------------------------------------------------------------- 计划
 
 
+def dated_title(day: datetime, taken: set[str]) -> str:
+    """按布置日期起的作业名「11月13日作业」；这个名字计划里已经有了就往后排「11月13日作业（2）」"""
+    base = f"{day.month}月{day.day}日作业"
+    title, n = base, 1
+    while title in taken:
+        n += 1
+        title = f"{base}（{n}）"
+    return title
+
+
+def _dated_title(plan_id: str, day: datetime, skip: str | None = None) -> str:
+    rows = PlanAssignment.query.filter_by(plan_id=plan_id).all()
+    return dated_title(day, {r.title for r in rows if r.id != skip})
+
+
 def _create_assignments(plan: Plan, data: dict) -> tuple[list[PlanAssignment], list[dict]]:
-    """布置：一个附件就是一份作业（同学一份一份地交、各有各的状态）；扫描件是同一份卷子的几页，合成一份。
-    返回的第一份是带扫描件的那份（有的话），客户端拿它去回填电子版、转发。"""
+    """布置：一次布置的所有文件（扫描件、上传的图片 / PDF / Word）算一份作业，同学整份交一次。
+    返回的列表只有这一份（接口里的 assignments 字段留着，老客户端按列表读）。"""
     files = _clean_files(data.get("files"), ("scan", "attachment"))
     if not files:
         abort(400, "先扫描或上传一个附件")
-    scans = [f for f in files if f["kind"] == "scan"]
-    units = ([scans] if scans else []) + [[f] for f in files if f["kind"] != "scan"]
     custom = str(data.get("title") or "").strip()[:120]
     now = datetime.now()
     due = data.get("dueAt")
     due = due[:32] if isinstance(due, str) and due else None
-    out: list[PlanAssignment] = []
-    uploads: list[dict] = []
-    for i, unit in enumerate(units):
-        named = unit[0]["name"].rsplit(".", 1)[0] if unit[0]["kind"] == "attachment" and unit[0]["name"] else ""
-        # 起的名字只在只有一份时用；一次布置了几份就各用各的文件名
-        title = (custom if len(units) == 1 else "") or named or custom or f"{now.month}月{now.day}日作业"
-        # 列表按创建时间倒序：往前错开一秒，页面上就和选文件的顺序一致
-        a = PlanAssignment(plan_id=plan.id, title=title[:120], due_at=due, created_at=now - timedelta(seconds=i))
-        db.session.add(a)
-        db.session.flush()
-        out.append(a)
-        uploads += _add_files(plan, a, unit)
-    return out, uploads
+    # 没起名字：一律按布置日期起名，不用文件名（作业名和文件名是两回事）；同一天布置了几份的，后面的带上（2）（3）
+    title = custom or _dated_title(plan.id, now)
+    a = PlanAssignment(plan_id=plan.id, title=title[:120], due_at=due, created_at=now)
+    db.session.add(a)
+    db.session.flush()
+    return [a], _add_files(plan, a, files)
 
 
 def _created_body(plan: Plan, assignments: list[PlanAssignment], uploads: list[dict]) -> dict:
@@ -574,16 +580,31 @@ def _joined_preview(plan: Plan) -> dict:
     return {"count": len(members), "list": [{"name": u.nickname or DEFAULT_NICKNAME, "avatar": avatars.get(u.id)} for u in shown]}
 
 
+def _preview_assignments(plan: Plan, wanted: str | None) -> tuple[list[dict], PlanAssignment | None]:
+    """
+    加入页上的作业清单（新的在上）：每份作业的名字、布置时间和它下面的文件。
+    还没加入的人也看得到，所以文件只给名字、类型、大小，不给打开的地址；加入后在计划页里才能打开。
+    第二项是卡片指向的那份（没指定、或者指的那份已经删了，就是最新一份），带 shared 记号。
+    """
+    rows = PlanAssignment.query.filter_by(plan_id=plan.id, revoked=False).order_by(PlanAssignment.created_at.desc()).all()
+    shared = next((a for a in rows if a.id == wanted), rows[0] if rows else None)
+    files: dict[str, list[dict]] = {a.id: [] for a in rows}
+    if rows:
+        q = PlanFile.query.filter(PlanFile.assignment_id.in_(list(files)), PlanFile.submission_id.is_(None))
+        for f in q.order_by(PlanFile.position, PlanFile.created_at).all():
+            files[f.assignment_id].append({"id": f.id, "kind": f.kind, "name": f.name, "mime": f.mime, "size": f.size or 0, "url": None})
+    return [{**_assignment_brief(a), "files": files[a.id], "shared": a is shared} for a in rows], shared
+
+
 @bp.get("/plans/invite/<code>")
 def invite_preview(code: str):
     """
-    卡片落地页用：不用登录，给计划名、创建人的称呼和头像、学科、这份作业的名字、已经加入的人。
+    卡片落地页用：不用登录，给计划名、创建人的称呼和头像、学科、作业清单（每份作业下面有哪些文件）、已经加入的人。
+    assignment 是卡片指向的那份（老客户端只认它）。
     带了登录信息时多给 role：owner = 自己建的，member = 已经在里面，null = 还没加入（要点一下确认才加入）。
     """
     plan = _invite_plan(code)
-    a = db.session.get(PlanAssignment, request.args.get("a") or "")
-    if a is None or a.plan_id != plan.id or a.revoked:
-        a = PlanAssignment.query.filter_by(plan_id=plan.id, revoked=False).order_by(PlanAssignment.created_at.desc()).first()
+    assignments, a = _preview_assignments(plan, request.args.get("a"))
     viewer, role = _viewer_id(), None
     if viewer and viewer == plan.owner_id:
         role = "owner"
@@ -592,6 +613,7 @@ def invite_preview(code: str):
     return jsonify({
         "plan": {"id": plan.id, "name": plan.name, "subject": plan.subject, "teacher": _teacher_name(plan), "teacherAvatar": avatar_url(plan.owner_id)},
         "assignment": _assignment_brief(a) if a else None,
+        "assignments": assignments,
         "members": _joined_preview(plan),
         "role": role,
     })
@@ -657,6 +679,47 @@ def create_assignment(plan_id: str):
     assignments, uploads = _create_assignments(plan, request.get_json(silent=True) or {})
     db.session.commit()
     return jsonify(_created_body(plan, assignments, uploads)), 201
+
+
+@bp.post("/plans/assignments/<assignment_id>/files")
+@login_required
+def add_assignment_files(assignment_id: str):
+    """创建人往已有的一份作业里加文件：登记文件，返回上传链接（传完照常调 files/uploaded 确认）"""
+    a, plan = _assignment_or_404(assignment_id)
+    _require_role(plan, "owner")
+    if a.revoked:
+        abort(409, "这份作业已经删除了")
+    files = _clean_files((request.get_json(silent=True) or {}).get("files"), ("scan", "attachment"))
+    if not files:
+        abort(400, "先扫描或上传一个附件")
+    have = _files_of(a.id, None)
+    if len(have) + len(files) > MAX_FILES:
+        abort(400, f"一份作业最多 {MAX_FILES} 个文件")
+    # 以前没起名字的单文件作业名字取自文件名：文件多了以后它不再代表整份作业，换成按布置日期的名字
+    if len(have) == 1 and have[0].kind == "attachment" and have[0].name and a.title == have[0].name.rsplit(".", 1)[0][:120]:
+        a.title = _dated_title(plan.id, a.created_at or datetime.now(), skip=a.id)
+    base = max((f.position or 0 for f in have), default=-1) + 1
+    for f in files:
+        f["position"] += base
+    uploads = _add_files(plan, a, files)
+    db.session.commit()
+    return jsonify({"assignment": _assignment_brief(a), "uploads": uploads}), 201
+
+
+@bp.delete("/plans/files/<file_id>")
+@login_required
+def delete_assignment_file(file_id: str):
+    """创建人删掉作业里的一个文件（加文件没传上去时客户端用它收拾）。作业至少留一个文件；同学交的文件不归这里管"""
+    row = db.session.get(PlanFile, file_id)
+    plan = db.session.get(Plan, row.plan_id) if row else None
+    if row is None or plan is None or row.submission_id:
+        abort(404, "文件不存在")
+    _require_role(plan, "owner")
+    if len(_files_of(row.assignment_id, None)) <= 1:
+        abort(409, "一份作业至少留一个文件")
+    _delete_files([row])
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @bp.post("/plans/files/uploaded")
@@ -983,22 +1046,32 @@ _LANDING = """<!doctype html>
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">
 <style>
 *{{box-sizing:border-box}}body{{margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;background:#F4F6FB;color:#1B2A4A;min-height:100vh;display:flex;flex-direction:column}}
-.top{{background:#1F3B73;color:#fff;padding:36px 24px 56px}}.brand{{font-size:14px;opacity:.8}}.who{{margin-top:18px;font-size:15px;opacity:.9}}
+.top{{background:#1F3B73;color:#fff;padding:28px 20px 52px}}.brand{{font-size:13px;opacity:.8}}.who{{margin-top:14px;font-size:15px;opacity:.92;display:flex;align-items:center;gap:10px}}
 h1{{margin:6px 0 0;font-size:24px;line-height:1.35}}
-.card{{margin:-32px 16px 0;background:#fff;border-radius:16px;padding:20px;box-shadow:0 6px 24px rgba(31,59,115,.08)}}
-.row{{display:flex;justify-content:space-between;padding:8px 0;font-size:15px}}.row span:first-child{{color:#7A869F}}
-.who{{display:flex;align-items:center;gap:10px}}.ava{{width:36px;height:36px;border-radius:18px;flex-shrink:0;object-fit:cover;background:#E8EEFB;color:#1F3B73;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}}
-.who .ava{{border:2px solid rgba(255,255,255,.7)}}.joined{{display:flex;align-items:center;gap:10px;padding:12px 0 2px;margin-top:6px;border-top:1px solid #EEF1F7;font-size:14px;color:#7A869F}}
-.stack{{display:flex;flex-shrink:0}}.stack .ava{{width:28px;height:28px;border-radius:14px;font-size:12px;border:2px solid #fff;margin-left:-8px}}.stack .ava:first-child{{margin-left:0}}
-.tag{{display:inline-block;background:#E8EEFB;color:#1F3B73;border-radius:6px;padding:2px 8px;font-size:13px}}
-.grow{{flex:1}}.bar{{padding:16px 16px calc(16px + env(safe-area-inset-bottom))}}
-.btn{{display:block;width:100%;border:0;border-radius:14px;background:#1F3B73;color:#fff;font-size:17px;font-weight:600;padding:16px;text-align:center;text-decoration:none}}
-.tip{{margin-top:12px;text-align:center;font-size:13px;color:#7A869F}}.tip a{{color:#1F3B73}}
+.ava{{width:36px;height:36px;border-radius:18px;flex-shrink:0;object-fit:cover;background:#E8EEFB;color:#1F3B73;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}}
+.who .ava{{border:2px solid rgba(255,255,255,.7)}}.joined{{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;opacity:.88}}
+.stack{{display:flex;flex-shrink:0}}.stack .ava{{width:26px;height:26px;border-radius:13px;font-size:11px;border:2px solid #1F3B73;margin-left:-8px}}.stack .ava:first-child{{margin-left:0}}
+.list{{margin:-32px 14px 0;display:flex;flex-direction:column;gap:10px}}
+.hw{{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 6px 24px rgba(31,59,115,.08)}}
+.hw summary{{display:flex;align-items:center;gap:10px;padding:12px 14px 12px 12px;list-style:none;cursor:pointer;-webkit-tap-highlight-color:transparent}}.hw summary::-webkit-details-marker{{display:none}}
+.no{{width:26px;height:26px;border-radius:8px;background:#1F3B73;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-start;margin-top:1px}}
+.main{{flex:1;min-width:0}}.t{{font-size:16px;line-height:22px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.sub{{font-size:12px;line-height:18px;color:#7A869F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.tag{{flex-shrink:0;background:#E8EEFB;color:#1F3B73;border-radius:12px;padding:0 8px;font-size:12px;line-height:24px;font-weight:600}}
+.chev{{flex-shrink:0;width:8px;height:8px;border-right:2px solid #A9B2C6;border-bottom:2px solid #A9B2C6;transform:rotate(45deg);margin:0 4px 4px 2px}}.hw[open] .chev{{transform:rotate(-135deg);margin:4px 4px 0 2px}}.hw.solo .chev{{display:none}}
+.f{{display:flex;align-items:center;gap:12px;min-height:50px;padding:8px 16px 8px 48px;border-top:1px solid #EEF1F7;background:#FAFBFD}}.f.more{{display:none}}.hw.all .f.more{{display:flex}}
+.badge{{width:34px;height:40px;border-radius:8px;background:#E8EEFB;color:#1F3B73;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}}
+.fn{{font-size:15px;line-height:20px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.fs{{font-size:12px;line-height:16px;color:#7A869F}}
+.lock{{flex-shrink:0;width:15px;height:15px;stroke:#B9C0D0;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}}
+.rest{{display:block;width:100%;border:0;border-top:1px solid #EEF1F7;background:#FAFBFD;text-align:left;min-height:42px;padding:0 16px 0 48px;font-size:14px;font-weight:600;color:#1F3B73;font-family:inherit}}.hw.all .rest{{display:none}}
+.none{{background:#fff;border-radius:14px;box-shadow:0 6px 24px rgba(31,59,115,.08);padding:36px 20px;text-align:center;font-size:13px;line-height:19px;color:#7A869F}}.none b{{display:block;font-size:16px;color:#1B2A4A;margin-bottom:6px}}
+.grow{{flex:1;min-height:16px}}.bar{{position:sticky;bottom:0;background:#F4F6FB;padding:12px 14px calc(14px + env(safe-area-inset-bottom))}}
+.btn{{display:block;width:100%;border:0;border-radius:14px;background:#1F3B73;color:#fff;font-size:17px;font-weight:600;padding:15px;text-align:center;text-decoration:none}}
+.tip{{margin-top:10px;text-align:center;font-size:13px;color:#7A869F}}.tip a{{color:#1F3B73}}
 .mask{{display:none;position:fixed;inset:0;background:rgba(10,20,45,.82);color:#fff;padding:28px;font-size:17px;line-height:1.7;text-align:right}}
 .mask.on{{display:block}}.mask b{{font-size:30px}}
 </style></head><body>
-<div class="top"><div class="brand">上壹课 · 学习计划</div><div class="who">{avatar}<span>{teacher} 邀请你加入</span></div><h1>{name}</h1></div>
-<div class="card">{subject}{assignment}{joined}</div>
+<div class="top"><div class="brand">上壹课 · 学习计划</div><div class="who">{avatar}<span>{teacher} 邀请你加入</span></div><h1>{name}</h1>{joined}</div>
+<div class="list">{assignments}</div>
 <div class="grow"></div>
 <div class="bar"><a class="btn" id="open" href="{deeplink}">打开上壹课，加入学习计划</a>
 <div class="tip" id="tip">{download}</div></div>
@@ -1006,11 +1079,61 @@ h1{{margin:6px 0 0;font-size:24px;line-height:1.35}}
 <script>
 (function(){{
   var wx=/MicroMessenger/i.test(navigator.userAgent),mask=document.getElementById('mask');
-  document.getElementById('open').addEventListener('click',function(e){{if(wx){{e.preventDefault();mask.className='mask on';}}}});
+  function go(e){{if(wx){{if(e)e.preventDefault();mask.className='mask on';}}else if(!e){{location.href={deeplink_js};}}}}
+  document.getElementById('open').addEventListener('click',go);
   mask.addEventListener('click',function(){{mask.className='mask';}});
+  // 文件在这里只看得到名字：点文件和点按钮一样，去上壹课加入后再打开；「其余 N 个文件」就地展开
+  document.addEventListener('click',function(e){{
+    var t=e.target,rest=t.closest&&t.closest('.rest'),file=t.closest&&t.closest('.f');
+    if(rest){{rest.parentNode.className+=' all';}}else if(file){{go();}}
+  }});
+  var solo=document.querySelector('.hw.solo summary');
+  if(solo)solo.addEventListener('click',function(e){{e.preventDefault();}});
   if(!wx){{setTimeout(function(){{location.href={deeplink_js};}},300);}}
 }})();
 </script></body></html>"""
+
+LANDING_FILES = 3  # 落地页上一份作业先显示几个文件，和客户端的 HW_PREVIEW 一致
+_LOCK = '<svg class="lock" viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>'
+
+
+def _size_text(n: int) -> str:
+    return f"{n / 1024 / 1024:.1f} MB" if n >= 1024 * 1024 else f"{max(1, round(n / 1024))} KB"
+
+
+def _file_badge(mime: str) -> str:
+    return "PDF" if mime == "application/pdf" else "DOC" if "word" in mime else "图片"
+
+
+def _landing_cards(assignments: list[dict]) -> str:
+    """落地页上的作业清单：和计划页同一种卡片（序号、作业名、日期和文件数，文件缩进排在下面），卡片指向的那份展开"""
+    from html import escape
+
+    if not assignments:
+        return '<div class="none"><b>老师还没有布置作业</b>可以先加入<br>老师布置后会出现在计划里</div>'
+    solo = len(assignments) == 1
+    out = []
+    for i, a in enumerate(assignments):
+        files = a["files"]
+        created = a["createdAt"] or ""
+        date = f"{int(created[5:7])}月{int(created[8:10])}日" if len(created) >= 10 else ""
+        if date and len(created) >= 16:  # 布置时间到分钟，和客户端卡片头部一致
+            date = f"{date} {created[11:16]}"
+        if date and created[:4] != str(datetime.now().year):
+            date = f"{created[:4]}年{date}"
+        sub = " · ".join(x for x in (date, f"{len(files)} 个文件", f"{_due_text(a['dueAt'])}截止" if a["dueAt"] else "") if x)
+        rows = "".join(
+            f'<div class="f{" more" if n >= LANDING_FILES else ""}"><span class="badge">{_file_badge(f["mime"])}</span>'
+            f'<div class="main"><div class="fn">{escape(f["name"])}</div><div class="fs">{_size_text(f["size"])}</div></div>{_LOCK}</div>'
+            for n, f in enumerate(files)
+        )
+        rest = f'<button class="rest" type="button">其余 {len(files) - LANDING_FILES} 个文件</button>' if len(files) > LANDING_FILES else ""
+        tag = '<span class="tag">这次布置</span>' if a["shared"] and not solo else ""
+        out.append(
+            f'<details class="hw{" solo" if solo else ""}"{" open" if a["shared"] else ""}><summary><span class="no">{len(assignments) - i}</span>'
+            f'<div class="main"><div class="t">{escape(a["title"])}</div><div class="sub">{escape(sub)}</div></div>{tag}<span class="chev"></span></summary>{rows}{rest}</details>'
+        )
+    return "".join(out)
 
 
 def _due_text(due_at: str) -> str:
@@ -1032,16 +1155,9 @@ def landing(code: str):
     plan = Plan.query.filter_by(invite_code=str(code or "").strip().lower()).first()
     if plan is None:
         return "<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><body style='font-family:sans-serif;padding:48px 24px;text-align:center;color:#1B2A4A'><h3>这张卡片已经失效</h3><p style='color:#7A869F'>请让老师重新转发一次</p>", 404
-    a = db.session.get(PlanAssignment, request.args.get("a") or "")
-    if a is None or a.plan_id != plan.id or a.revoked:
-        a = PlanAssignment.query.filter_by(plan_id=plan.id, revoked=False).order_by(PlanAssignment.created_at.desc()).first()
+    assignments, a = _preview_assignments(plan, request.args.get("a"))
     scheme = current_app.config.get("APP_URL_SCHEME") or "shangyike"
     deeplink = f"{scheme}://plans/join?code={plan.invite_code}" + (f"&a={a.id}" if a else "")
-    rows = ""
-    if a:
-        rows = f'<div class="row"><span>作业</span><span>{escape(a.title)}</span></div>'
-        if a.due_at:
-            rows += f'<div class="row"><span>截止</span><span>{escape(_due_text(a.due_at))}</span></div>'
 
     def ava(name: str, url: str | None) -> str:
         return f'<img class="ava" src="{escape(url)}" alt="">' if url else f'<span class="ava">{escape(name[-1:])}</span>'
@@ -1052,14 +1168,10 @@ def landing(code: str):
         stack = "".join(ava(m["name"], m["avatar"]) for m in people["list"][:5])
         joined = f'<div class="joined"><div class="stack">{stack}</div><span>已有 {people["count"]} 人加入</span></div>'
     dl = current_app.config.get("APP_DOWNLOAD_URL") or ""
-    download = f'还没装上壹课？<a href="{escape(dl)}">去下载</a>，装好后再点一次这张卡片' if dl else "还没装上壹课？先在应用商店搜索「上壹课」安装，再点一次这张卡片"
-    # 没有学科（新建不再选）或老的「综合」就不显示学科这一行
-    subject_row = f'<div class="row"><span>学科</span><span class="tag">{SUBJECT_LABELS[plan.subject]}</span></div>' if plan.subject in SUBJECT_LABELS else ""
-    if not (subject_row or rows or joined):
-        rows = '<div class="row"><span>作业</span><span>还没有布置</span></div>'  # 卡片不能是空的
+    download = f'还没装上壹课？<a href="{escape(dl)}">去下载</a>，装好后再点一次这个链接' if dl else "还没装上壹课？先在应用商店搜索「上壹课」安装，再点一次这个链接"
     html = _LANDING.format(
         title=escape(f"{_teacher_name(plan)}邀请你加入「{plan.name}」"), desc=escape(a.title if a else "打开上壹课加入学习计划"),
-        teacher=escape(_teacher_name(plan)), name=escape(plan.name), subject=subject_row,
-        assignment=rows, joined=joined, avatar=ava(_teacher_name(plan), avatar_url(plan.owner_id)), deeplink=escape(deeplink), deeplink_js=json.dumps(deeplink), download=download,
+        teacher=escape(_teacher_name(plan)), name=escape(plan.name),
+        assignments=_landing_cards(assignments), joined=joined, avatar=ava(_teacher_name(plan), avatar_url(plan.owner_id)), deeplink=escape(deeplink), deeplink_js=json.dumps(deeplink), download=download,
     )
     return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"}

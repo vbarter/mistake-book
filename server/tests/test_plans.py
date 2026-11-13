@@ -102,6 +102,32 @@ def test_create_validation(client, auth):
     assert "<span>学科</span>" not in page and "还没有布置" in page
 
 
+def test_invite_preview_lists_assignments_with_their_files(client, auth):
+    """加入页先看到作业名、再看到作业下面的文件：新的在上，卡片指向的那份带 shared；文件只给名字，不给打开的地址"""
+    out = _create(client, auth, title="第三单元练习", files=[SCAN, PDF])
+    pid, code, first = out["plan"]["id"], out["invite"]["code"], out["assignment"]["id"]
+    second = client.post(f"/api/plans/{pid}/assignments", json={"title": "周末卷", "files": [SCAN]}, headers=auth).get_json()["assignment"]["id"]
+    r = client.get(f"/api/plans/invite/{code}?a={first}").get_json()
+    assert [(a["title"], a["shared"], [f["name"] for f in a["files"]]) for a in r["assignments"]] == [
+        ("周末卷", False, ["第 1 页.jpg"]),
+        ("第三单元练习", True, ["第 1 页.jpg", "第三单元练习.pdf"]),
+    ]
+    assert r["assignment"]["id"] == first and all(f["url"] is None for a in r["assignments"] for f in a["files"])
+    # 没指定哪份：最新一份算这次布置的
+    r = client.get(f"/api/plans/invite/{code}").get_json()
+    assert r["assignment"]["id"] == second and [a["shared"] for a in r["assignments"]] == [True, False]
+    html = client.get(f"/api/plans/j/{code}?a={first}").get_data(as_text=True)
+    assert html.index("周末卷") < html.index("第三单元练习.pdf") and html.count("<details") == 2 and html.count("这次布置") == 1
+    assert "2 个文件" in html and "X-Amz" not in html and "/api/plans/files/" not in html
+    # 卡片头部是布置的时间，到分钟
+    import re
+    assert re.search(r"\d+月\d+日 \d{2}:\d{2} · 2 个文件", html)
+    # 删掉的作业不出现；指向它的旧卡片落到最新一份
+    assert client.delete(f"/api/plans/assignments/{first}", headers=auth).status_code == 200
+    r = client.get(f"/api/plans/invite/{code}?a={first}").get_json()
+    assert [a["title"] for a in r["assignments"]] == ["周末卷"] and r["assignment"]["id"] == second
+
+
 def test_invite_preview_and_landing_page(client, auth):
     out = _create(client, auth)
     code = out["invite"]["code"]
@@ -516,13 +542,12 @@ def test_dissolve_still_works_without_tombstone_table(client, auth):
         PlanTombstone.__table__.create(db.engine)
 
 
-def test_each_attachment_is_its_own_assignment(client, auth):
-    """一次布置几个附件：每个附件是一份作业，同学一份一份地交、各有各的状态；扫描件合成一份"""
+def test_one_publish_is_one_assignment_with_all_files(client, auth):
+    """一次布置几个文件（扫描件、PDF 混着）：算一份作业，同学整份交一次"""
     pdf2 = {**PDF, "clientId": "c3", "name": "物理一模.pdf"}
     out = _create(client, auth, files=[PDF, SCAN, pdf2], title="随便起的名字")
     pid, code = out["plan"]["id"], out["invite"]["code"]
-    # 第一份是带扫描件的那份（客户端拿它回填电子版），附件各用各的文件名
-    assert [a["title"] for a in out["assignments"]] == ["随便起的名字", "第三单元练习", "物理一模"]
+    assert [a["title"] for a in out["assignments"]] == ["随便起的名字"]
     assert out["assignment"]["id"] == out["assignments"][0]["id"]
     assert sorted(u["clientId"] for u in out["uploads"]) == ["c1", "c2", "c3"]
     _upload(client, auth, out["uploads"])
@@ -531,47 +556,53 @@ def test_each_attachment_is_its_own_assignment(client, auth):
     _join(client, student, code)
     mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
     assert [(a["title"], [f["name"] for f in a["files"]], a["status"]) for a in mine] == [
-        ("随便起的名字", ["第 1 页.jpg"], "todo"), ("第三单元练习", ["第三单元练习.pdf"], "todo"), ("物理一模", ["物理一模.pdf"], "todo"),
+        ("随便起的名字", ["第三单元练习.pdf", "第 1 页.jpg", "物理一模.pdf"], "todo"),
     ]
-    # 只交其中一份，另外两份还是待交
-    _submit(client, student, mine[1]["id"])
-    mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
-    assert [a["status"] for a in mine] == ["todo", "submitted", "todo"]
+    _submit(client, student, mine[0]["id"])
+    assert client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"][0]["status"] == "submitted"
 
-    # 只有一个附件时，起的名字照用；以后再布置也是一个附件一份
-    r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF], "title": "周末练习"}, headers=auth).get_json()
-    assert [a["title"] for a in r["assignments"]] == ["周末练习"]
+    # 没起名字：不管几个文件都按布置日期起名，不用文件名
+    r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF]}, headers=auth).get_json()
+    assert len(r["assignments"]) == 1 and "日作业" in r["assignment"]["title"]
     r = client.post(f"/api/plans/{pid}/assignments", json={"files": [PDF, pdf2]}, headers=auth).get_json()
-    assert [a["title"] for a in r["assignments"]] == ["第三单元练习", "物理一模"]
+    assert len(r["assignments"]) == 1 and "日作业" in r["assignment"]["title"]
 
 
-def test_split_script_for_old_multi_attachment_assignments(client, auth, app):
-    """以前一份作业带几个附件：脚本拆成一个附件一份，原来那份和已交的不动"""
-    from app.extensions import db
-    from app.models import PlanAssignment, PlanFile
-
-    from scripts.split_plan_assignments import split
-
-    out = _create(client, auth, files=[PDF])
+def test_owner_adds_files_to_existing_assignment(client, auth):
+    """创建人往已有的作业里加文件：进同一份作业，不会变成新作业；成员不能加；最多 30 个；没传上去的可以删掉"""
+    out = _create(client, auth)
     pid, aid, code = out["plan"]["id"], out["assignment"]["id"], out["invite"]["code"]
     _upload(client, auth, out["uploads"])
-    with app.app_context():  # 造一份老数据：同一份作业下再挂两个附件
-        for i, name in enumerate(["物理一模.pdf", "英语一模.pdf"], 1):
-            db.session.add(PlanFile(plan_id=pid, assignment_id=aid, kind="attachment", name=name, mime="application/pdf", ext="pdf", size=10, position=i, uploaded=True))
-        db.session.commit()
-    student, _ = _login(client, "13800000041", "小明")
+    student, _ = _login(client, "13800000051", "小明")
     _join(client, student, code)
-    _submit(client, student, aid)
 
-    with app.app_context():
-        assert [r["split"] for r in split()] == [["物理一模.pdf", "英语一模.pdf"]]
-        assert PlanAssignment.query.count() == 1  # 不加 apply 不改
-        split(apply=True)
-        assert split() == []  # 拆过了，再跑什么都不做
-    mine = client.get(f"/api/plans/{pid}", headers=student).get_json()["assignments"]
-    assert [(a["title"], [f["name"] for f in a["files"]], a["status"]) for a in mine] == [
-        ("第三单元练习", ["第三单元练习.pdf"], "submitted"), ("物理一模", ["物理一模.pdf"], "todo"), ("英语一模", ["英语一模.pdf"], "todo"),
-    ]
+    assert client.post(f"/api/plans/assignments/{aid}/files", json={"files": [PDF]}, headers=student).status_code == 403
+    assert client.post(f"/api/plans/assignments/{aid}/files", json={"files": []}, headers=auth).status_code == 400
+    r = client.post(f"/api/plans/assignments/{aid}/files", json={"files": [PDF, {**SCAN, "clientId": "c9", "name": "第 2 页.jpg"}]}, headers=auth)
+    assert r.status_code == 201, r.get_json()
+    added = r.get_json()["uploads"]
+    assert sorted(u["clientId"] for u in added) == ["c2", "c9"]
+    _upload(client, auth, added)
+    for h in (auth, student):
+        rows = client.get(f"/api/plans/{pid}", headers=h).get_json()["assignments"]
+        assert len(rows) == 1 and [f["name"] for f in rows[0]["files"]] == ["第 1 页.jpg", "第三单元练习.pdf", "第 2 页.jpg"]
+
+    # 一份作业最多 30 个文件
+    many = [{**SCAN, "clientId": f"m{i}"} for i in range(28)]
+    assert client.post(f"/api/plans/assignments/{aid}/files", json={"files": many}, headers=auth).status_code == 400
+
+    # 删掉一个文件：只有创建人能删，最后一个不能删
+    fid = added[0]["id"]
+    assert client.delete(f"/api/plans/files/{fid}", headers=student).status_code == 403
+    assert client.delete(f"/api/plans/files/{fid}", headers=auth).status_code == 200
+    assert client.delete(f"/api/plans/files/{added[1]['id']}", headers=auth).status_code == 200
+    left = client.get(f"/api/plans/{pid}", headers=auth).get_json()["assignments"][0]["files"]
+    assert [f["name"] for f in left] == ["第 1 页.jpg"]
+    assert client.delete(f"/api/plans/files/{left[0]['id']}", headers=auth).status_code == 409
+
+    # 删除了的作业不能再加
+    assert client.delete(f"/api/plans/assignments/{aid}", headers=auth).status_code == 200
+    assert client.post(f"/api/plans/assignments/{aid}/files", json={"files": [PDF]}, headers=auth).status_code == 404
 
 
 def test_member_withdraws_own_submission(client, auth):
@@ -608,3 +639,46 @@ def test_member_withdraws_own_submission(client, auth):
     assert client.delete(url, headers=s2).status_code == 200
     assert db.session.get(PlanAssignment, aid) is not None  # 王小明那份还在
     assert client.get(f"/api/plans/{pid}", headers=s2).get_json()["assignments"] == []
+
+
+def test_auto_title_follows_files(client, auth):
+    """以前没起名字的单文件作业名字就是文件名（这里用同名的标题模拟）：后来又加了文件，名字换成按布置日期的；别的名字不动"""
+    from datetime import datetime
+
+    stem = PDF["name"].rsplit(".", 1)[0]
+    r = client.post("/api/plans", json={"name": "名字跟着文件走", "title": stem, "files": [PDF]}, headers=auth).get_json()
+    pid, aid = r["plan"]["id"], r["assignment"]["id"]
+    assert r["assignment"]["title"] == stem
+    now = datetime.now()
+    r = client.post(f"/api/plans/assignments/{aid}/files", json={"files": [{**PDF, "clientId": "more1"}]}, headers=auth)
+    assert r.status_code == 201 and r.get_json()["assignment"]["title"] == f"{now.month}月{now.day}日作业"
+    named = client.post(f"/api/plans/{pid}/assignments", json={"title": "周末卷子", "files": [PDF]}, headers=auth).get_json()["assignment"]
+    r = client.post(f"/api/plans/assignments/{named['id']}/files", json={"files": [{**PDF, "clientId": "more2"}]}, headers=auth)
+    assert r.get_json()["assignment"]["title"] == "周末卷子"
+
+
+def test_dated_titles_numbered_and_rename_script(client, auth, app):
+    """同一天没起名字布置几份：后面的带（2）（3）。存量脚本：名字等于文件名的旧作业改成按日期的名字，自己起的不动，可以重复跑"""
+    import os
+    import sys
+    from datetime import datetime
+
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+    from rename_plan_assignments import rename
+
+    now = datetime.now()
+    day = f"{now.month}月{now.day}日作业"
+    stem = PDF["name"].rsplit(".", 1)[0]
+    r = client.post("/api/plans", json={"name": "改名", "files": [PDF]}, headers=auth).get_json()
+    pid = r["plan"]["id"]
+    assert r["assignment"]["title"] == day
+    post = lambda body: client.post(f"/api/plans/{pid}/assignments", json=body, headers=auth).get_json()["assignment"]
+    assert post({"files": [PDF]})["title"] == f"{day}（2）"
+    old1, old2, own = post({"title": stem, "files": [PDF]}), post({"title": stem, "files": [PDF]}), post({"title": "周末卷子", "files": [PDF]})
+    with app.app_context():
+        plan = [c for c in rename() if c["plan"] == pid]
+        assert [(c["assignment"], c["new"]) for c in plan] == [(old1["id"], f"{day}（3）"), (old2["id"], f"{day}（4）")]
+        assert db.session.get(PlanAssignment, old1["id"]).title == stem  # 不带 apply 不写库
+        rename(apply=True)
+        assert [db.session.get(PlanAssignment, i).title for i in (old1["id"], old2["id"], own["id"])] == [f"{day}（3）", f"{day}（4）", "周末卷子"]
+        assert [c for c in rename(apply=True) if c["plan"] == pid] == []
