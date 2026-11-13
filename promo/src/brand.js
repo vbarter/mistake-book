@@ -46,6 +46,10 @@ const LINE = {
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2",
   search: "M11 17a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM20 20l-4.500-4.500",
   arrows: "M4 9h12l-3-3M20 15H8l3 3",
+  lock: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4",
+  "chevron-down": "M6 9l6 6 6-6",
+  "chevron-up": "M6 15l6-6 6 6",
+  photo: "M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M16 10.500a1.500 1.500 0 1 0 0-3 1.500 1.500 0 0 0 0 3z",
   camera: "M4 8h3l2-3h6l2 3h3v11H4zM12 16.500a3.500 3.500 0 1 0 0-7 3.500 3.500 0 0 0 0 7z",
 };
 export const line = (name, size = 20, color = C.label, stroke = 2) =>
@@ -58,8 +62,10 @@ export const wechat = (size = 18, color = "#07c160") =>
 /** 试卷小人。scene：hero 拿铅笔 · chart 举柱状图 · empty 打招呼。parts 拆成几组，方便分别做动画 */
 export function buddy(scene = "hero", size = 160) {
   const K = { paper: "#ffffff", paper2: "#dfe6f6", line: C.brand, ink: "#1c2a4a", cheek: "#ffb4a8", tie: C.tie, star: C.gold, ok: "#1e9e5a", okBg: "#dcf5e7", shadow: "rgba(31,59,115,.16)", brand: C.brand };
-  const hand =
-    scene === "empty"
+  const cheer = scene === "cheer";
+  const hand = cheer
+    ? `<path d="M112 80q14-8 16-24" stroke="${K.line}" stroke-width="5" stroke-linecap="round"/>`
+    : scene === "empty"
       ? `<path class="bd-hand" d="M112 78q14-6 16-20" stroke="${K.line}" stroke-width="5" stroke-linecap="round"/>`
       : `<path d="M112 84q10 2 14-6" stroke="${K.line}" stroke-width="5" stroke-linecap="round"/>`;
   const prop =
@@ -75,19 +81,22 @@ export function buddy(scene = "hero", size = 160) {
     `<rect x="52" y="22" width="68" height="88" rx="12" fill="${K.paper2}" transform="rotate(8 86 66)"/>` +
     `<rect x="40" y="26" width="72" height="96" rx="14" fill="${K.paper}" stroke="${K.line}" stroke-width="2.5"/>` +
     `<path d="M52 42h36M52 52h48M52 62h28" stroke="${K.ink}" stroke-width="4" stroke-linecap="round" opacity=".18"/>` +
-    `<g class="bd-eyes"><ellipse cx="64" cy="86" rx="4" ry="5" fill="${K.ink}"/><ellipse cx="88" cy="86" rx="4" ry="5" fill="${K.ink}"/></g>` +
-    `<path d="M70 98q6 6 12 0" stroke="${K.ink}" stroke-width="3" stroke-linecap="round"/>` +
+    (cheer
+      ? `<g class="bd-eyes"><path d="M60 87q4-6 8 0M84 87q4-6 8 0" stroke="${K.ink}" stroke-width="3" stroke-linecap="round"/></g><path d="M68 97q8 9 16 0z" fill="${K.ink}"/>`
+      : `<g class="bd-eyes"><ellipse cx="64" cy="86" rx="4" ry="5" fill="${K.ink}"/><ellipse cx="88" cy="86" rx="4" ry="5" fill="${K.ink}"/></g>` +
+        `<path d="M70 98q6 6 12 0" stroke="${K.ink}" stroke-width="3" stroke-linecap="round"/>`) +
     `<circle cx="56" cy="96" r="5" fill="${K.cheek}"/><circle cx="96" cy="96" r="5" fill="${K.cheek}"/>` +
     `<path d="M58 122l18-12 18 12" fill="${K.line}"/>` +
     `<path d="M70 110l6 5 6-5" fill="#ffffff" stroke="${K.line}" stroke-width="1.5" stroke-linejoin="round"/>` +
     `<path d="M76 114l-4 3 2 4-3 9 5 4 5-4-3-9 2-4z" fill="${K.tie}"/>` +
     hand +
-    `<path d="M40 88q-10 4-12 14" stroke="${K.line}" stroke-width="5" stroke-linecap="round"/>` +
+    `<path d="${cheer ? "M40 80q-14-8-16-24" : "M40 88q-10 4-12 14"}" stroke="${K.line}" stroke-width="5" stroke-linecap="round"/>` +
     prop +
     `</g>` +
+    (cheer ? "" :
     `<g class="bd-f1"><circle cx="26" cy="40" r="11" fill="${K.okBg}"/><path d="M21 40l4 4 7-8" stroke="${K.ok}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></g>` +
     `<path class="bd-f2" d="M136 20l2.500 6 6 2.500-6 2.500-2.500 6-2.500-6-6-2.500 6-2.500z" fill="${K.star}"/>` +
-    `<path class="bd-f3" d="M22 112l1.800 4.200 4.200 1.800-4.200 1.800-1.800 4.200-1.800-4.200-4.200-1.800 4.200-1.800z" fill="${scene === "hero" ? "#8fa6dc" : K.brand}"/>` +
+    `<path class="bd-f3" d="M22 112l1.800 4.200 4.200 1.800-4.200 1.800-1.800 4.200-1.800-4.200-4.200-1.800 4.200-1.800z" fill="${scene === "hero" ? "#8fa6dc" : K.brand}"/>`) +
     `</svg>`
   );
 }

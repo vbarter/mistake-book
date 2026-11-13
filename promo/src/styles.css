@@ -294,3 +294,120 @@ i { font-style: normal; }
 .e-search__box b { font-weight: 900; letter-spacing: 2px; }
 .e-caret { width: 2.500px; height: 26px; background: #1f3b73; margin-left: -4px; }
 .e-fade { position: absolute; inset: 0; background: #050a1a; opacity: 0; z-index: 60; }
+
+/* ───── 学习计划、交作业（照小程序 app.scss 的 .group / .hw / .stats / .sheet / .cele） ───── */
+.fs { position: absolute; inset: 0; }
+.tap { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); border: 2.500px solid rgba(20, 30, 60, 0.55); box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.35); opacity: 0; z-index: 40; pointer-events: none; }
+.group { background: #fff; border-radius: 12px; overflow: hidden; }
+.plan-join { padding: 14px 14px 12px; }
+.plan-join__name { font-size: 20px; line-height: 26px; font-weight: 800; }
+.plan-join__members { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #ececf0; }
+.plan-join__label { font-size: 13px; line-height: 18px; font-weight: 600; color: #5b5b63; padding: 2px 6px 0; margin-bottom: -6px; }
+.plan-join__tip { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 12px; line-height: 16px; color: #8e8e93; }
+.avatar-stack { display: flex; }
+.avatar-stack .avatar { width: 24px; height: 24px; font-size: 11px; margin-left: -8px; border: 2px solid #fff; box-sizing: content-box; }
+.avatar-stack .avatar:first-child { margin-left: 0; }
+.hw-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 12px 12px; }
+.hw-no { width: 26px; height: 26px; border-radius: 8px; background: #1f3b73; color: #fff; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; align-self: flex-start; margin-top: 1px; }
+.hw-title { font-size: 16px; line-height: 22px; font-weight: 700; }
+.hw-sub { font-size: 12px; line-height: 18px; color: #5b5b63; white-space: nowrap; }
+.hw-file { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 16px 8px 48px; border-top: 1px solid #ececf0; }
+.hw-file__name { font-size: 15px; line-height: 20px; font-weight: 500; }
+.hw-file small { display: block; font-size: 12px; color: #5b5b63; }
+.plan-file__icon { width: 34px; height: 40px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #e6ebf5; color: #1f3b73; font-size: 11px; font-weight: 800; }
+.flex1 { flex: 1; min-width: 0; }
+.ptag { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.ptag--info { background: #e6ebf5; color: #1f3b73; }
+.ptag--pending { background: #fff0e3; color: #b35300; }
+.ptag--ok { background: #fff; color: #1e7a47; }
+.hw--done .hw-head { background: #e3f5ea; }
+.bottom-bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 16px 34px; background: rgba(243, 244, 248, 0.96); border-top: 0.500px solid #e0e0e6; display: flex; gap: 10px; z-index: 12; }
+.bottom-bar--col { flex-direction: column; gap: 8px; }
+.bottom-bar .btn { position: relative; height: 50px; box-shadow: none; }
+.btn--outline { background: #fff; color: #1f3b73; border: 1px solid #d1d1d6; padding: 0 20px; }
+.plan-head { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+.plan-iconbtn { width: 34px; height: 34px; border-radius: 17px; background: #fff; border: 1px solid #ececf0; display: flex; align-items: center; justify-content: center; }
+.stats { display: flex; gap: 8px; }
+.stat { flex: 1; background: #fff; border-radius: 14px; padding: 10px 12px; }
+.stat small { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #5b5b63; }
+.stat b { display: block; font-size: 22px; line-height: 26px; font-weight: 800; }
+.toastw { position: absolute; left: 0; right: 0; top: 56%; display: flex; justify-content: center; z-index: 45; }
+.toast { padding: 10px 16px; border-radius: 10px; background: rgba(30, 30, 34, 0.88); color: #fff; font-size: 14px; white-space: nowrap; z-index: 45; }
+.sheetx { position: absolute; inset: 0; z-index: 30; visibility: hidden; }
+.sheet__mask { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); }
+.sheet__panel { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 20px 20px 0 0; padding: 10px 16px 40px; display: flex; flex-direction: column; gap: 12px; }
+.sheet__grabber { width: 36px; height: 5px; border-radius: 3px; background: #e5e5ea; margin: 0 auto 4px; }
+.sheet__title { font-size: 20px; line-height: 25px; font-weight: 600; }
+.add-grid { display: flex; gap: 10px; }
+.add-tile { position: relative; flex: 1; padding: 16px; border-radius: 18px; background: #f2f2f7; font-size: 17px; font-weight: 600; }
+.add-tile__icon { width: 48px; height: 48px; margin-bottom: 10px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: #1f3b73; }
+.plan-thumbs { display: flex; gap: 10px; }
+.plan-thumb { position: relative; width: 44px; height: 58px; border-radius: 6px; background: #fbfaf5; border: 1px solid #d1d1d6; overflow: hidden; }
+.plan-thumb .mini { width: 360px; height: 500px; transform: scale(0.122); transform-origin: 0 0; }
+.plan-thumb__wrap { position: relative; }
+.plan-thumb__x { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 10px; background: #1c1c1e; display: flex; align-items: center; justify-content: center; z-index: 2; }
+.plan-thumb__add { width: 44px; height: 58px; border-radius: 6px; border: 1.500px dashed #1f3b73; background: #e6ebf5; display: flex; align-items: center; justify-content: center; }
+.field { position: relative; display: flex; align-items: center; justify-content: space-between; height: 44px; border-radius: 10px; background: #f2f2f7; padding: 0 12px; font-size: 16px; }
+.dialog { position: absolute; inset: 0; z-index: 35; display: flex; align-items: center; justify-content: center; visibility: hidden; }
+.dialog__mask { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
+.dialog__box { position: relative; width: 290px; border-radius: 14px; background: #fff; text-align: center; overflow: hidden; }
+.dialog__box h6 { padding: 26px 22px 0; font-size: 17px; font-weight: 700; }
+.dialog__box p { padding: 12px 24px 24px; font-size: 15px; line-height: 22px; color: #5b5b63; }
+.dialog__btns { display: flex; border-top: 0.500px solid #d1d1d6; }
+.dialog__btns span { position: relative; flex: 1; height: 52px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; }
+.dialog__btns span + span { border-left: 0.500px solid #d1d1d6; color: #1f3b73; }
+.asheet .sheet__panel { padding: 0 0 34px; gap: 0; background: #f7f7f7; border-radius: 14px 14px 0 0; }
+.asheet .sheet__panel div { position: relative; height: 56px; display: flex; align-items: center; justify-content: center; background: #fff; font-size: 17px; border-top: 0.500px solid #ececf0; }
+.asheet .sheet__panel div:last-child { margin-top: 8px; }
+.cele { position: absolute; inset: 0; z-index: 38; visibility: hidden; }
+.cele__veil { position: absolute; inset: 0; background: rgba(243, 244, 248, 0.86); }
+.cele__center { position: absolute; left: 0; right: 0; top: 28%; display: flex; flex-direction: column; align-items: center; }
+.cele__title { margin-top: 6px; font-size: 22px; font-weight: 800; }
+.cele__sub { margin-top: 6px; font-size: 14px; color: #5b5b63; }
+.cele__burst { position: absolute; left: 50%; top: 28%; margin-top: 100px; width: 0; height: 0; }
+.cele__bit { position: absolute; left: 0; top: 0; }
+
+/* 微信聊天（示意） */
+.wx { background: #ededed; }
+.wx__nav { position: absolute; left: 0; right: 0; top: 0; height: 94px; padding: 50px 16px 0; display: flex; align-items: center; background: #ededed; border-bottom: 0.500px solid #d9d9d9; font-size: 17px; font-weight: 600; }
+.wx__nav span { flex: 1; text-align: center; }
+.wx__list { position: absolute; left: 0; right: 0; top: 110px; padding: 0 12px; display: flex; flex-direction: column; gap: 16px; }
+.wx__time { align-self: center; font-size: 12px; color: #9a9a9a; }
+.wx__msg { display: flex; gap: 10px; align-items: flex-start; }
+.wx__msg .avatar { width: 40px; height: 40px; border-radius: 6px; font-size: 16px; }
+.wx__who { font-size: 12px; color: #8a8a8a; margin-bottom: 3px; }
+.wx__bubble { max-width: 250px; padding: 10px 12px; border-radius: 6px; background: #fff; font-size: 16px; line-height: 23px; }
+.wx__card { position: relative; width: 236px; border-radius: 8px; background: #fff; overflow: hidden; padding: 10px 12px 0; }
+.wx__card-app { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8a8a8a; }
+.wx__card-title { margin: 6px 0 8px; font-size: 14px; line-height: 20px; }
+.wx__card-cover { position: relative; height: 150px; border-radius: 4px; overflow: hidden; background: linear-gradient(160deg, #2b4f96 0%, #1f3b73 70%); color: #fff; padding: 16px; }
+.wx__card-cover b { display: block; font-size: 19px; font-weight: 800; }
+.wx__card-cover small { display: block; margin-top: 4px; font-size: 12px; opacity: 0.8; }
+.wx__card-foot { display: flex; align-items: center; gap: 4px; height: 28px; margin-top: 8px; border-top: 0.500px solid #ececec; font-size: 11px; color: #8a8a8a; }
+.wx__input { position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: #f7f7f7; border-top: 0.500px solid #d9d9d9; padding: 10px 14px; }
+.wx__input i { display: block; height: 38px; border-radius: 6px; background: #fff; }
+
+/* 学生片：开场、步骤、落版 */
+.s-open { position: absolute; left: 46px; right: 30px; top: 150px; color: #fff; }
+.s-open p { font-size: 30px; font-weight: 500; letter-spacing: 2px; opacity: 0.85; }
+.s-open h1 { margin-top: 10px; font-size: 54px; line-height: 70px; font-weight: 900; letter-spacing: 1px; white-space: nowrap; }
+.s-open h1 em { font-style: normal; color: #ffb547; }
+.s-steps { position: absolute; left: 46px; right: 46px; top: 420px; display: flex; flex-direction: column; gap: 18px; }
+.s-step { display: flex; align-items: center; gap: 18px; padding: 18px 22px; border-radius: 26px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.16); color: #fff; }
+.s-step b { width: 54px; height: 54px; border-radius: 18px; background: #ffb547; color: #3d2600; font-size: 28px; font-weight: 900; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.s-step strong { display: block; font-size: 28px; font-weight: 900; letter-spacing: 1px; }
+.s-step small { display: block; margin-top: 2px; font-size: 17px; opacity: 0.8; }
+.s-step .ic { margin-left: auto; width: 60px; height: 60px; border-radius: 20px; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.prog { position: absolute; left: 44px; top: 44px; display: flex; gap: 8px; z-index: 6; }
+.prog i { width: 44px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.25); overflow: hidden; }
+.prog i u { display: block; height: 100%; background: #ffb547; border-radius: 3px; }
+.prog--dark i { background: rgba(31, 59, 115, 0.15); }
+.prog--dark i u { background: #1f3b73; }
+.e-steps { position: absolute; left: 50px; right: 50px; top: 628px; display: flex; flex-direction: column; gap: 10px; }
+.e-steps div { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 18px 0 8px; border-radius: 23px; background: rgba(255, 255, 255, 0.13); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; font-size: 19px; font-weight: 700; }
+.e-steps b { width: 30px; height: 30px; border-radius: 15px; background: #ffb547; color: #3d2600; font-size: 16px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+.e-steps small { margin-left: auto; font-size: 14px; font-weight: 500; opacity: 0.8; }
+.float.fj { right: 12px; top: 250px; }
+.float.fh { left: 12px; top: 250px; }
+.float.fc { right: 12px; top: 250px; }
+.plan-join__members .t-foot { white-space: nowrap; }

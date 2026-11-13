@@ -6,8 +6,9 @@ import "@fontsource/noto-sans-sc/900.css";
 import "./styles.css";
 import { rng } from "./engine.js";
 import overview from "./films/overview.js";
+import student from "./films/student.js";
 
-const FILMS = { overview };
+const FILMS = { overview, student };
 
 /** 一层很淡的噪点，压住深色渐变的色带 */
 function grain() {

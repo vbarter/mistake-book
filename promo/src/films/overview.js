@@ -300,7 +300,7 @@ export default function build(root) {
     add({
       id: "plan", from: ACTS.plan[0], to: ACTS.plan[1], origin: "50% 55%",
       html: `<div class="bg bg--night"></div>${orbs([[90, 280, 180, "#2b4f96", 0.6], [470, 800, 190, "#1e7a47", 0.25]])}${sparks(8, 23)}
-        ${caption("06", "学习计划", "老师布置，<em>拍照就交</em>", "微信一键转发，批改结果自动回填")}
+        ${caption("06", "学习计划", "老师布置，<em>拍照就交</em>", "微信一键转发，同学点开卡片就加入")}
         ${phone(screen)}
         <div class="float f4">${wechat(34)}<div>转发到微信群<small>同学点开卡片就加入</small></div></div><div class="vig"></div>`,
       update(lt, t, ctx) {
