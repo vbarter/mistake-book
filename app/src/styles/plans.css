@@ -53,6 +53,17 @@
 
 /* 作业页 */
 .plan-photo { width: 100%; border-radius: 12px; background: var(--fill); display: block; }
+/* 看交上来的作业：文件名一排，文件左右滑着换，占满剩下的一屏 */
+.plan-swipe__names { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+.plan-swipe__names::-webkit-scrollbar { display: none; }
+.plan-swipe__names .chip { flex-shrink: 0; max-width: 70%; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 32px; }
+.plan-swipe { position: relative; flex: 1; min-height: 320px; border-radius: 14px; overflow: hidden; background: var(--card); display: flex; }
+.plan-swipe__track { flex: 1; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.plan-swipe__track::-webkit-scrollbar { display: none; }
+.plan-swipe__page { position: relative; flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; display: flex; align-items: center; justify-content: center; }
+.plan-swipe__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.plan-swipe__doc { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 24px; text-align: center; }
+.plan-swipe__count { position: absolute; right: 10px; bottom: 10px; padding: 2px 9px; border-radius: 11px; background: rgba(0, 0, 0, 0.5); color: #fff; font-size: 12px; line-height: 18px; font-weight: 600; pointer-events: none; }
 .plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; }
 .plan-q { height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; background: var(--fill-light); color: var(--secondary); position: relative; }
 .plan-q--correct { background: var(--mastered-bg); color: var(--mastered); }

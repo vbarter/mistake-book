@@ -9,7 +9,7 @@ import { Avatar, Button, IconSegmented, Sheet, Stat, Tag } from "../../component
 import { SwipeRow, swipeGuard } from "../../components/SwipeRow";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { AI_GRADING, HW_PREVIEW, RETURN_REDO, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
+import { AI_GRADING, HW_PREVIEW, MARK_REVIEWED, RETURN_REDO, bumpPlans, createdLabel, deletePlan, dueLabel, fetchPlan, fileBadge, hwMeta, memberName, memberState, openPlanFile, planGone, removeMember, revokeAssignment, sizeLabel, updatePlan, type MemberItem, type MemberState, type OwnerAssignment, type PlanDetailRes, type PlanMemberRow } from "../../lib/plans";
 import { C, useThemeClass } from "../../lib/theme";
 
 const leave = () => {
@@ -28,9 +28,11 @@ function swipeHintPending(): boolean {
 
 type Filter = "all" | Exclude<MemberState, "none">;
 
-/** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅 */
+/** 一个成员在一份作业上的状态：没看 / 未交 / 退回 / 待阅 / 已阅（已阅开关关着时，交了的都是「已交」） */
 const itemTag = (it: MemberItem) =>
-  it.status === "submitted" ? (
+  !MARK_REVIEWED && (it.status === "submitted" || it.status === "reviewed") ? (
+    <Tag kind="correct">已交</Tag>
+  ) : it.status === "submitted" ? (
     <Tag kind="info" icon="pencil">
       待阅
     </Tag>
