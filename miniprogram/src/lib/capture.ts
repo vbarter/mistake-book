@@ -18,12 +18,30 @@ async function choose(source: Source, count: number): Promise<string[]> {
   } catch (e) {
     const msg = String((e as { errMsg?: string }).errMsg || "");
     if (/cancel/i.test(msg)) return [];
+    // 这几种失败看起来都像「没权限」，但原因和解决办法完全不同，分开说，并带上微信的原话方便排查：
+    // 1) 后台隐私保护指引没声明（errno 112，not declared）：用户做什么都没用，直接说明
+    if (/not declared|privacy api banned/i.test(msg)) {
+      void Taro.showModal({ title: "暂时用不了", content: errorText(e), showCancel: false });
+      return [];
+    }
+    // 2) 用户没同意微信弹出的隐私保护指引（errno 103 / 104）：小程序「设置」里没有这个开关，去了也没用。
+    //    再点一次会重新弹（距上次拒绝不足 10 秒不弹）
+    if (/privacy/i.test(msg) || [103, 104].includes(Number((e as { errno?: number }).errno))) {
+      void Taro.showModal({ title: "需要先同意隐私保护指引", content: `稍等几秒再点一次，在微信弹出的窗口里选「同意」就能用了。\n（${msg}）`, showCancel: false });
+      return [];
+    }
+    // 3) 手机系统没让微信用相机 / 相册：要去手机的系统设置里开，小程序「设置」里也没有
+    if (/system permission/i.test(msg)) {
+      void Taro.showModal({ title: "微信没有相机 / 相册权限", content: `请在手机的系统设置里，允许微信使用相机和照片。\n（${msg}）`, showCancel: false });
+      return [];
+    }
+    // 4) 在小程序里拒绝过授权：去小程序「设置」里打开
     if (/auth|deny|permission/i.test(msg)) {
-      const r = await Taro.showModal({ title: "需要相机 / 相册权限", content: "去设置里打开权限后再试。", confirmText: "去设置" });
+      const r = await Taro.showModal({ title: "需要相机 / 相册权限", content: `去设置里打开权限后再试。\n（${msg}）`, confirmText: "去设置" });
       if (r.confirm) void Taro.openSetting();
       return [];
     }
-    throw e;
+    throw new Error(errorText(e)); // 微信抛的是 { errMsg } 对象，调用方直接 toast 会变成 [object Object]
   }
 }
 
