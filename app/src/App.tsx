@@ -44,7 +44,6 @@ import Assignment from "./pages/plans/Assignment";
 import Submission from "./pages/plans/Submission";
 import HomeworkToday from "./pages/homework/Today";
 import HomeworkConfirm from "./pages/homework/Confirm";
-import HomeworkRemind from "./pages/homework/Remind";
 import HomeworkItem from "./pages/homework/Item";
 import HomeworkFocus from "./pages/homework/Focus";
 import { HomeworkAlarm } from "./components/HomeworkAlarm";
@@ -276,7 +275,8 @@ export default function App() {
           <Route path="/plans/:planId/new" element={<PlanNew />} />
           <Route path="/homework" element={<HomeworkToday />} />
           <Route path="/homework/confirm" element={<HomeworkConfirm />} />
-          <Route path="/homework/remind" element={<HomeworkRemind />} />
+          {/* 提醒时间并进了清单页：旧链接直接回清单 */}
+          <Route path="/homework/remind" element={<RemindMoved />} />
           <Route path="/homework/focus/:id" element={<HomeworkFocus />} />
           <Route path="/homework/:id" element={<HomeworkItem />} />
         </Route>
@@ -290,4 +290,10 @@ export default function App() {
 function SplashReplay() {
   const nav = useNavigate();
   return <Suspense fallback={null}><Splash onDone={() => (window.history.length > 1 ? nav(-1) : nav("/", { replace: true }))} /></Suspense>;
+}
+
+/** 「提醒时间」页并进了清单页，旧地址带着日期转过去 */
+function RemindMoved() {
+  const { search } = useLocation();
+  return <Navigate to={`/homework${search}`} replace />;
 }

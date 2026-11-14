@@ -68,7 +68,7 @@ export default function Confirm() {
       if (d.merged) toast(mergedText(d));
       leaving.current = true;
       setDraft([], []);
-      nav(`/homework/remind${day ? `?day=${day}` : ""}`, { replace: true });
+      nav(`/homework${day ? `?day=${day}` : ""}`, { replace: true });
     } catch (e) {
       toastError(e);
     } finally {
@@ -139,7 +139,7 @@ export default function Confirm() {
           </div>
         )}
         <div className="bottom-bar">
-          <Button disabled={busy || all.length === 0} style={{ flex: 1 }} onClick={next}>{total ? `下一步：设置提醒时间 · ${total} 项` : "都已在清单里，下一步"}</Button>
+          <Button disabled={busy || all.length === 0} style={{ flex: 1 }} onClick={next}>{total ? `加入清单 · ${total} 项` : "都已在清单里，回清单"}</Button>
         </div>
       </div>
     </div>

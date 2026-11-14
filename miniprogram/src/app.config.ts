@@ -24,7 +24,6 @@ export default defineAppConfig({
     "pages/plan-join/index",
     "pages/homework/index",
     "pages/homework-confirm/index",
-    "pages/homework-remind/index",
     "pages/homework-item/index",
     "pages/homework-focus/index",
   ],

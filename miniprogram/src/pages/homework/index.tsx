@@ -3,7 +3,7 @@ import { Input, Text, View } from "@tarojs/components";
 import Taro, { useDidShow, usePullDownRefresh, useRouter } from "@tarojs/taro";
 import { Buddy } from "../../components/Buddy";
 import { ColorIcon } from "../../components/ColorIcon";
-import { HomeworkLoginGate, RemindChip, useTick } from "../../components/homework";
+import { HomeworkLoginGate, RemindChip, RemindSheet, StartClock, useTick } from "../../components/homework";
 import { Icon } from "../../components/Icon";
 import { Button, SubjectTile } from "../../components/ui";
 import { errorText } from "../../lib/api";
@@ -200,6 +200,10 @@ function EmptyDay() {
 }
 
 function ItemList({ data, now }: { data: HwDay; now: number }) {
+  const [editing, setEditing] = useState<HwItem | null>(null);
+  const groups = groupBySubject(data.items);
+  const flat = groups.flatMap((g) => g.items);
+  const canTime = data.day >= data.today;
   const toggle = async (it: HwItem) => {
     try {
       await act(it.id, it.status === "done" ? "undo" : "finish");
@@ -209,7 +213,8 @@ function ItemList({ data, now }: { data: HwDay; now: number }) {
   };
   return (
     <>
-      {groupBySubject(data.items).map((g) => (
+      {canTime && <StartClock data={data} />}
+      {groups.map((g) => (
         <View key={g.subject}>
           <View className="hw-sech">
             <SubjectTile subject={tileSubject(g.subject)} size="xs" />
@@ -233,16 +238,25 @@ function ItemList({ data, now }: { data: HwDay; now: number }) {
                       </View>
                     )}
                   </View>
-                  <RemindChip item={it} now={now} />
+                  {it.status === "todo" && canTime ? (
+                    <View className="hw-rmdbtn" hoverClass="hw-press" onClick={() => setEditing(it)}>
+                      <RemindChip item={it} now={now} action />
+                    </View>
+                  ) : (
+                    <RemindChip item={it} now={now} />
+                  )}
                 </View>
               );
             })}
           </View>
         </View>
       ))}
-      <Text className="t-cap c-sec" style={{ padding: "8px 4px" }}>
-        点右边的时间可以改；不想等可以直接开始。
-      </Text>
+      {canTime && data.items.some((it) => it.status === "todo") && (
+        <Text className="t-cap c-sec" style={{ padding: "8px 4px" }}>
+          改顶部的开始时间，每一项跟着重排；某一项要单独改，点它右边的时间。
+        </Text>
+      )}
+      <RemindSheet item={editing} first={!!editing && flat[0]?.id === editing.id} onClose={() => setEditing(null)} />
     </>
   );
 }
@@ -273,14 +287,9 @@ function MainAction({ data }: { data: HwDay }) {
     }
   };
   return (
-    <View className="row-center" style={{ gap: "8px" }}>
-      <Button icon="play" className="flex1" disabled={busy} onClick={() => void start()}>
-        {`${s.nextAt ? "不等了，现在开始" : "现在就开始"}${s.left === 1 ? "最后一项" : `第 ${orderOf(data.items, next.id)} 项`}`}
-      </Button>
-      <Button variant="tinted" style={{ width: "52px", flex: "0 0 52px", padding: 0 }} onClick={() => void go(`/pages/homework-remind/index?day=${data.day}`)}>
-        <ColorIcon name="remind" size={26} />
-      </Button>
-    </View>
+    <Button icon="play" disabled={busy} onClick={() => void start()}>
+      {`${s.nextAt ? "不等了，现在开始" : "现在就开始"}${s.left === 1 ? "最后一项" : `第 ${orderOf(data.items, next.id)} 项`}`}
+    </Button>
   );
 }
 

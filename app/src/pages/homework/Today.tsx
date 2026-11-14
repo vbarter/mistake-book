@@ -11,7 +11,7 @@ import {
 } from "../../lib/homework";
 import { pickImages, takePhoto } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
-import { RemindChip, useTick } from "./shared";
+import { RemindChip, RemindSheet, StartClock, useTick } from "./shared";
 
 /** 今天作业计划：清单（没有事项时是录入页），底下一直有录入条 */
 export default function Today() {
@@ -162,6 +162,7 @@ function EmptyDay() {
 
 function ItemList({ data, now }: { data: HwDay; now: number }) {
   const nav = useNavigate();
+  const [editing, setEditing] = useState<HwItem | null>(null);
   const toggle = async (it: HwItem) => {
     try {
       await act(it.id, it.status === "done" ? "undo" : "finish");
@@ -170,8 +171,11 @@ function ItemList({ data, now }: { data: HwDay; now: number }) {
     }
   };
   const groups = groupBySubject(data.items);
+  const flat = groups.flatMap((g) => g.items);
+  const canTime = data.day >= data.today;
   return (
     <>
+      {canTime && <StartClock data={data} />}
       {groups.map((g) => (
         <section key={g.subject}>
           <div className="hw-sech">
@@ -198,13 +202,22 @@ function ItemList({ data, now }: { data: HwDay; now: number }) {
                     </span>
                   )}
                 </button>
-                <RemindChip item={it} now={now} />
+                {it.status === "todo" && canTime ? (
+                  <button className="hw-rmdbtn" aria-label={`改「${it.title}」的提醒时间`} onClick={() => setEditing(it)}>
+                    <RemindChip item={it} now={now} action />
+                  </button>
+                ) : (
+                  <RemindChip item={it} now={now} />
+                )}
               </div>
             ))}
           </div>
         </section>
       ))}
-      <span className="t-cap c-sec" style={{ padding: "8px 4px" }}>点右边的时间可以改；不想等可以直接开始。</span>
+      {canTime && data.items.some((it) => it.status === "todo") && (
+        <span className="t-cap c-sec" style={{ padding: "8px 4px" }}>改顶部的开始时间，每一项跟着重排；某一项要单独改，点它右边的时间。</span>
+      )}
+      <RemindSheet item={editing} first={!!editing && flat[0]?.id === editing.id} onClose={() => setEditing(null)} />
     </>
   );
 }
@@ -235,14 +248,9 @@ function MainAction({ data }: { data: HwDay }) {
   const waiting = !!s.nextAt;
   const idx = orderOf(data.items, next.id);
   return (
-    <div style={{ display: "flex", gap: 8 }}>
-      <Button icon="play" disabled={busy} style={{ flex: 1 }} onClick={start}>
-        {waiting ? "不等了，现在开始" : "现在就开始"}{s.left === 1 ? "最后一项" : `第 ${idx} 项`}
-      </Button>
-      <Button variant="tinted" ariaLabel="设置提醒时间" onClick={() => nav(`/homework/remind?day=${data.day}`, { replace: true })} style={{ flex: "0 0 52px", padding: 0 }}>
-        <ColorIcon name="remind" size={26} />
-      </Button>
-    </div>
+    <Button icon="play" disabled={busy} onClick={start}>
+      {waiting ? "不等了，现在开始" : "现在就开始"}{s.left === 1 ? "最后一项" : `第 ${idx} 项`}
+    </Button>
   );
 }
 
