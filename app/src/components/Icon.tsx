@@ -7,9 +7,16 @@ export type IconName =
   | "viewfinder" | "loop" | "family" | "shield" | "brain"
   | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation"
   | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "eye" | "eye-off" | "rotate"
-  | "bolt" | "bolt-off" | "undo" | "corners" | "link" | "unlink";
+  | "bolt" | "bolt-off" | "undo" | "corners" | "link" | "unlink"
+  | "play" | "pause" | "timer" | "help" | "bulb" | "skip";
 
 const paths: Record<IconName, string> = {
+  play: "M8 5.5v13l10.5-6.5z",
+  pause: "M8 5v14M16 5v14",
+  timer: "M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 1.5M10 2.5h4M19 5.5l1.5 1.5",
+  help: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01",
+  bulb: "M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.4.3.5.7.5 1.1v.5h6V15c0-.4.2-.8.5-1.1A6 6 0 0 0 12 3z",
+  skip: "M5 5.5v13l9-6.5zM18 5v14",
   bolt: "M13 3 5 13.5h6l-1 7.5 8-10.5h-6z",
   "bolt-off": "M13 3 5 13.5h6l-1 7.5 8-10.5h-6zM3 3l18 18",
   undo: "M9 7 4.5 11.5 9 16M4.5 11.5H15a4.5 4.5 0 0 1 0 9h-3",
