@@ -126,7 +126,7 @@ export default function HomeworkItem() {
         <Button disabled={busy || !title.trim()} onClick={() => void run(() => updateItem(item.id, { title: title.trim() }), () => setEdit(false))}>
           保存
         </Button>
-        <Button variant="danger" disabled={busy} onClick={() => void run(() => deleteItem(item.id), () => void Taro.navigateBack())}>
+        <Button variant="danger" disabled={busy} onClick={() => void run(() => deleteItem(item.id), () => void Taro.redirectTo({ url: "/pages/homework/index" }))}>
           删除这一项
         </Button>
       </Sheet>

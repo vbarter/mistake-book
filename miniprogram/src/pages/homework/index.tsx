@@ -16,7 +16,8 @@ import {
 import { toast } from "../../lib/hooks";
 import { C, useThemeClass } from "../../lib/theme";
 
-const go = (url: string) => Taro.navigateTo({ url });
+/** 作业流程里的页面互相都用 redirectTo：页面栈一直是「首页 → 当前这一页」，不管走到哪一步，返回都直接回首页 */
+const go = (url: string) => Taro.redirectTo({ url });
 
 /** 今天作业计划（和 App 一致）：清单（没有事项时是录入页），底下一直有录入条；到点自动开始的项弹全屏提醒 */
 export default function Homework() {

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Input, Text, View } from "@tarojs/components";
-import Taro, { useRouter } from "@tarojs/taro";
+import Taro, { useRouter, useUnload } from "@tarojs/taro";
 import { ColorIcon } from "../../components/ColorIcon";
 import { Icon } from "../../components/Icon";
 import { Button, Empty, SubjectTile } from "../../components/ui";
@@ -18,6 +18,14 @@ export default function HomeworkConfirm() {
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const leaving = useRef(false);
+  // 不管从哪儿离开（左上角返回、系统返回键），已经录入的先存进清单，不丢（和 App 一致）
+  const pending = useRef<() => Parameters<typeof addItems>[0]>(() => []);
+  useUnload(() => {
+    if (leaving.current) return;
+    const items = pending.current();
+    setDraft([], []);
+    if (items.length) addItems(items, day).then(() => toast(`已存进清单，${items.length} 项`)).catch((e) => toast(errorText(e)));
+  });
 
   if (!draft.length && !planDue.length && !leaving.current) {
     return (
@@ -40,15 +48,14 @@ export default function HomeworkConfirm() {
     .filter((p) => picked[p.assignmentId])
     .map((p) => ({ key: newKey(), title: p.title, subject: p.subject ?? "other", est: 25, source: "plan", planAssignmentId: p.assignmentId, teacher: p.teacher }));
   const total = draft.filter((d) => d.title.trim()).length + extra.length;
+  /** 按页面上看到的顺序（按学科分好）存，排时间、「接着上一项」都按这个顺序 */
+  const toSave = () => groupBySubject([...draft.filter((d) => d.title.trim()), ...extra]).flatMap((g) => g.items).map(({ key: _key, teacher: _t, ...rest }) => rest);
+  pending.current = toSave;
 
   const next = async () => {
     setBusy(true);
     try {
-      // 按页面上看到的顺序（按学科分好）存，排时间、「接着上一项」都按这个顺序
-      const items = groupBySubject([...draft.filter((d) => d.title.trim()), ...extra])
-        .flatMap((g) => g.items)
-        .map(({ key: _key, teacher: _t, ...rest }) => rest);
-      await addItems(items, day);
+      await addItems(toSave(), day);
       leaving.current = true;
       setDraft([], []);
       void Taro.redirectTo({ url: `/pages/homework-remind/index${day ? `?day=${day}` : ""}` });

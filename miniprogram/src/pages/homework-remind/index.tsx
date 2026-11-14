@@ -10,7 +10,8 @@ import { toast } from "../../lib/hooks";
 import { defaultStart, groupBySubject, liveNow, hwSubjectLabel, loadDay, orderOf, schedule, tileSubject, useHomework, type HwItem } from "../../lib/homework";
 import { C, useThemeClass } from "../../lib/theme";
 
-const back = () => void Taro.navigateBack().catch(() => Taro.redirectTo({ url: "/pages/homework/index" }));
+/** 「保存」回清单；左上角返回直接回首页（页面栈里只有首页和这一页） */
+const toList = () => void Taro.redirectTo({ url: "/pages/homework/index" });
 
 /** 06 提醒时间（和 App 一致）：顶部一个时钟定开始时间，一进来就按预计用时把每一项排好，改时钟立刻重排；每一项也可以单独改 */
 export default function HomeworkRemind() {
@@ -115,7 +116,7 @@ export default function HomeworkRemind() {
         </View>
       ))}
       <View className="bottom-bar">
-        <Button className="flex1" onClick={back}>
+        <Button className="flex1" onClick={toList}>
           {first && data.summary.nextAt ? `保存 · ${data.summary.nextAt} 自动开始第 ${orderOf(data.items, first.id)} 项` : "保存"}
         </Button>
       </View>

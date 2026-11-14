@@ -5,7 +5,7 @@ import { Icon } from "../../components/Icon";
 import { Button, InlineNav } from "../../components/ui";
 import { SubjectTile } from "../../components/v2";
 import { addItems, groupBySubject, HW_SUBJECTS, hwSubjectLabel, newKey, tileSubject, useHomework, type DraftItem } from "../../lib/homework";
-import { toastError } from "../../store/banner";
+import { toast, toastError } from "../../store/banner";
 
 /** 05 识别结果：确认和修改。点一项可以改字、换学科；× 删除；学习计划里还没对上的作业可以勾上一起加 */
 export default function Confirm() {
@@ -35,13 +35,31 @@ export default function Confirm() {
     .filter((p) => picked[p.assignmentId])
     .map((p) => ({ key: newKey(), title: p.title, subject: p.subject ?? "other", est: 25, source: "plan", planAssignmentId: p.assignmentId, teacher: p.teacher }));
   const total = draft.filter((d) => d.title.trim()).length + extra.length;
+  /** 按页面上看到的顺序（按学科分好）存，排时间、「接着上一项」都按这个顺序 */
+  const toSave = () => groupBySubject([...draft.filter((d) => d.title.trim()), ...extra]).flatMap((g) => g.items).map(({ key: _key, teacher: _t, ...rest }) => rest);
+
+  // 不管从哪儿离开（返回首页、系统返回键），已经录入的先存进清单，不丢
+  const pending = useRef(toSave);
+  pending.current = toSave;
+  const alive = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      // 等一拍再存：开发模式下 StrictMode 会先卸载再装回来，装回来了就不是真的离开
+      setTimeout(() => {
+        if (alive.current || leaving.current) return;
+        const items = pending.current();
+        setDraft([], []);
+        if (items.length) addItems(items, day).then(() => toast(`已存进清单，${items.length} 项`)).catch(toastError);
+      }, 0);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const next = async () => {
     setBusy(true);
     try {
-      // 按页面上看到的顺序（按学科分好）存，排时间、「接着上一项」都按这个顺序
-      const items = groupBySubject([...draft.filter((d) => d.title.trim()), ...extra]).flatMap((g) => g.items).map(({ key: _key, teacher: _t, ...rest }) => rest);
-      await addItems(items, day);
+      await addItems(toSave(), day);
       leaving.current = true;
       setDraft([], []);
       nav(`/homework/remind${day ? `?day=${day}` : ""}`, { replace: true });
@@ -54,7 +72,7 @@ export default function Confirm() {
 
   return (
     <div className="screen">
-      <InlineNav title="确认清单" back backLabel="取消" onBack={() => { leaving.current = true; setDraft([], []); nav(-1); }} />
+      <InlineNav title="确认清单" back backLabel="首页" onBack={() => nav("/home", { replace: true })} />
       <div className="screen__content screen__content--modal" style={{ paddingTop: 4, gap: 4 }}>
         <div className="hw-banner">
           <ColorIcon name="todo" size={40} />
