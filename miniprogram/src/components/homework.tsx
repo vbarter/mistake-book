@@ -7,7 +7,8 @@ import { Button, Empty, Sheet } from "./ui";
 import { ensureLogin } from "../lib/auth";
 import { errorText } from "../lib/api";
 import { toast } from "../lib/hooks";
-import { focusRingSvg, liveUsed, mmss, updateItem, useHomework, type HwItem } from "../lib/homework";
+import { C } from "../lib/theme";
+import { focusRingSvg, liveNow, liveUsed, mmss, suggestRemind, updateItem, useHomework, type HwItem } from "../lib/homework";
 
 /** 每秒刷新一次（秒表用） */
 export function useTick(active = true, ms = 1000): number {
@@ -34,7 +35,8 @@ export function HomeworkLoginGate() {
 }
 
 /** 清单右边那颗：提醒时间 / 接着上一项 / 已过 / 计时中 / 做完的用时 */
-export function RemindChip({ item, now }: { item: HwItem; now: number }) {
+/** action：在「提醒时间」页，点它就是去设提醒，没设的写「设提醒」；别的页面只说状态「未设提醒」（和 App 一致） */
+export function RemindChip({ item, now, action }: { item: HwItem; now: number; action?: boolean }) {
   const { fetchedAt } = useHomework();
   if (item.status === "done") {
     return (
@@ -53,7 +55,16 @@ export function RemindChip({ item, now }: { item: HwItem; now: number }) {
     );
   }
   if (item.chain) return <Text className="hw-rmd hw-rmd--off">接着上一项</Text>;
-  if (!item.remindAt) return <Text className="hw-rmd hw-rmd--off">不提醒</Text>;
+  if (!item.remindAt) {
+    return action ? (
+      <View className="hw-rmd hw-rmd--set">
+        <Icon name="plus" size={12} color={C.brand} stroke={2.8} />
+        <Text>设提醒</Text>
+      </View>
+    ) : (
+      <Text className="hw-rmd hw-rmd--off">未设提醒</Text>
+    );
+  }
   return (
     <View className={`hw-rmd${item.late ? " hw-rmd--late" : ""}`}>
       <ColorIcon name="remind" size={18} />
@@ -65,12 +76,13 @@ export function RemindChip({ item, now }: { item: HwItem; now: number }) {
   );
 }
 
-/** 给一项改提醒时间：几点、接着上一项、不提醒 */
+/** 给一项设提醒时间：几点（先填好一个合适的时间）、接着上一项；设过的可以取消提醒（和 App 一致） */
 export function RemindSheet({ item, first, onClose }: { item: HwItem | null; first?: boolean; onClose: () => void }) {
+  const { data, fetchedAt } = useHomework();
   const [time, setTime] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (item) setTime(item.remindAt ?? "");
+    if (item && data) setTime(suggestRemind(data.items, item, liveNow(data.now, fetchedAt), data.day === data.today));
   }, [item]);
   const save = async (patch: { remindAt?: string | null; chain?: boolean }) => {
     if (!item) return;
@@ -84,8 +96,9 @@ export function RemindSheet({ item, first, onClose }: { item: HwItem | null; fir
       setBusy(false);
     }
   };
+  const set = !!item && (!!item.remindAt || item.chain);
   return (
-    <Sheet open={!!item} onClose={onClose} title="什么时候开始">
+    <Sheet open={!!item} onClose={onClose} title="提醒时间">
       {item && (
         <View className="hw-time">
           <Text className="t-sub ellipsis">{item.title}</Text>
@@ -96,18 +109,22 @@ export function RemindSheet({ item, first, onClose }: { item: HwItem | null; fir
           </Picker>
           <Text className="t-cap c-sec">到点提醒，并自动开始计时</Text>
           <Button disabled={busy || !time} onClick={() => save({ remindAt: time })}>
-            {time ? `${time} 开始` : "选一个时间"}
+            {time ? `${time} 提醒我` : "选一个时间"}
           </Button>
-          <View className="row-center" style={{ gap: "10px" }}>
-            {!first && (
-              <Button variant="tinted" className="flex1" disabled={busy} onClick={() => save({ chain: true })}>
-                接着上一项
-              </Button>
-            )}
-            <Button variant="plain" className="flex1" disabled={busy} onClick={() => save({ remindAt: null, chain: false })}>
-              不提醒
-            </Button>
-          </View>
+          {(!first || set) && (
+            <View className="row-center" style={{ gap: "10px" }}>
+              {!first && (
+                <Button variant="tinted" className="flex1" disabled={busy} onClick={() => save({ chain: true })}>
+                  接着上一项
+                </Button>
+              )}
+              {set && (
+                <Button variant="plain" className="flex1" disabled={busy} onClick={() => save({ remindAt: null, chain: false })}>
+                  取消提醒
+                </Button>
+              )}
+            </View>
+          )}
         </View>
       )}
     </Sheet>

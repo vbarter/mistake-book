@@ -937,6 +937,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 /* 右边的提醒时间 */
 .hw-rmd { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px 0 5px; border-radius: 13px; background: $brand-tint; color: $brand; font-size: 13px; font-weight: 700; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .hw-rmd--off { background: $fill-light; color: $tertiary; font-weight: 500; padding: 0 9px; }
+.hw-rmd--set { background: transparent; color: $brand; padding: 0 10px 0 8px; border: 1.5px solid $brand-tint; box-sizing: border-box; }
 .hw-rmd--late { background: $accent-bg; color: $accent-on; }
 .hw-rmd--run { background: $brand; color: #fff; padding: 0 10px; }
 .hw-used { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: $secondary; flex-shrink: 0; }

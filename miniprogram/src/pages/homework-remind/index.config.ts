@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "设置提醒时间" });
+export default definePageConfig({ navigationBarTitleText: "提醒时间" });

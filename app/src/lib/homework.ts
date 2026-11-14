@@ -292,6 +292,41 @@ export function remindText(item: HwItem): string {
   return item.remindAt ?? "";
 }
 
+/** 「HH:MM」⇄ 分钟 */
+const toMin = (hm: string) => { const [h, m] = hm.split(":").map(Number); return h * 60 + m; };
+const toHm = (mins: number) => `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+
+/** 「从几点开始」的默认值：现在往后 5 分钟、凑到 5 的倍数（serverNow 是服务端给的北京时间） */
+export function defaultStart(serverNow: string): string {
+  return toHm(Math.min(23 * 60 + 55, Math.ceil((toMin(serverNow.slice(11, 16)) + 5) / 5) * 5));
+}
+
+/** 服务端给的「现在」（北京时间 YYYY-MM-DDTHH:MM），加上拿到数据以后过去的时间 */
+export function liveNow(serverNow: string, fetchedAt: number): string {
+  const t = new Date(Date.parse(serverNow.slice(0, 16)) + Math.max(0, Date.now() - (fetchedAt || Date.now())));
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}T${p(t.getHours())}:${p(t.getMinutes())}`;
+}
+
+/**
+ * 给一项设提醒时，弹层里先填好的时间：设过就用设过的；
+ * 没设过，前面最近一项有提醒时间的话接在它做完之后（提醒时间 + 预计用时），再不早于现在；都没有就是现在往后 5 分钟。
+ * 不是今天的清单（提前排明天）没有「现在」，没有可接的就填 18:00。
+ */
+export function suggestRemind(items: HwItem[], item: HwItem, serverNow: string, today: boolean): string {
+  if (item.remindAt) return item.remindAt;
+  const flat = groupBySubject(items).flatMap((g) => g.items);
+  let end: number | null = null;
+  for (const it of flat) {
+    if (it.id === item.id) break;
+    if (it.remindAt) end = toMin(it.remindAt) + it.est;
+    else if (it.chain && end !== null) end += it.est;
+  }
+  const now = today ? toMin(defaultStart(serverNow)) : null;
+  const pick = end === null ? now : now === null ? end : Math.max(end, now);
+  return pick === null ? "18:00" : toHm(Math.min(23 * 60 + 55, Math.ceil(pick / 5) * 5));
+}
+
 /* ---------------------------------------------------------------- 计时页的粉笔圆环 */
 
 /** 计时页黑板上粉笔字的三种颜色（和 assets/chalk/num 里烘好的数字一致）：白、超时黄、做完绿 */
