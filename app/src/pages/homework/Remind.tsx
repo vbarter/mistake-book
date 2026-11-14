@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ColorIcon } from "../../components/ColorIcon";
+import { Icon } from "../../components/Icon";
 import { Button, InlineNav, Spinner } from "../../components/ui";
 import { SubjectTile } from "../../components/v2";
-import { defaultStart, groupBySubject, hwSubjectLabel, loadDay, orderOf, schedule, tileSubject, useHomework, type HwItem } from "../../lib/homework";
+import { defaultStart, groupBySubject, liveNow, hwSubjectLabel, loadDay, orderOf, schedule, tileSubject, useHomework, type HwItem } from "../../lib/homework";
 import { toastError } from "../../store/banner";
 import { RemindChip, RemindSheet, useTick } from "./shared";
 
 /** 现在往后取整到 5 分钟，再加 5 分钟：给孩子一点准备时间 */
 
-/** 06 设置提醒时间：一键从几点开始按预计用时排好；每一项也可以单独改 */
+/** 06 提醒时间：顶部一个时钟定开始时间，一进来就按预计用时把每一项排好，改时钟立刻重排；每一项也可以单独改 */
 export default function Remind() {
   const nav = useNavigate();
   const [params] = useSearchParams();
@@ -25,10 +26,18 @@ export default function Remind() {
   const todo = useMemo(() => data?.items.filter((it) => it.status === "todo") ?? [], [data]);
   const auto = todo.some((it) => it.remindAt || it.chain);
   const firstAt = todo.find((it) => it.remindAt)?.remindAt;
+  const fetchedAt = useHomework((s) => s.fetchedAt);
   const [from, setFrom] = useState("");
   useEffect(() => {
-    if (data && !from) setFrom(firstAt ?? defaultStart(data.now));
-  }, [data, firstAt, from]);
+    if (data && !from) setFrom(firstAt ?? (data.day === data.today ? defaultStart(liveNow(data.now, fetchedAt)) : "18:00"));
+  }, [data, firstAt, from, fetchedAt]);
+  // 一进来就按顶部的开始时间把每一项排好（一项都还没设提醒时）；不想要可以关掉开关，或单独改某一项
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (!data || !from || autoTried.current || (day && data.day !== day)) return;
+    autoTried.current = true;
+    if (todo.length && !auto) void run(from);
+  }, [data, from]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (start: string | null) => {
     setBusy(true);
@@ -58,9 +67,13 @@ export default function Remind() {
             </span>
           </div>
           <div className="hw-auto__row">
-            从
-            <input type="time" value={from} onChange={(e) => { setFrom(e.target.value); if (auto && e.target.value) void run(e.target.value); }} aria-label="从几点开始" />
-            开始，按用时排好
+            <label className="hw-clock">
+              <Icon name="clock" size={18} stroke={2.4} />
+              <b>{from}</b>
+              {/* 透明的系统时间选择盖在上面：显示统一是 24 小时制，不跟系统的上午 / 下午格式走 */}
+              <input type="time" value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value) void run(e.target.value); }} aria-label="开始时间" />
+            </label>
+            <span className="hw-auto__txt"><b>开始</b>每一项按预计用时自动排好</span>
             <button className={`hw-switch${auto ? " hw-switch--on" : ""}`} role="switch" aria-checked={auto} aria-label="自动排时间" disabled={busy || !todo.length} onClick={() => run(auto ? null : from)} />
           </div>
         </div>
