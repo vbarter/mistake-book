@@ -77,6 +77,25 @@ def test_parse_endpoint(client):
     assert client.post("/api/homework/parse", json={}, headers=h).status_code == 400
 
 
+def test_parse_falls_back_to_rules_when_ai_fails(client, monkeypatch):
+    """大模型额度不足等失败时：打了字的用规则拆，只有照片的才报错"""
+    from app.ai import AIError, get_provider
+
+    provider = get_provider()
+
+    def boom(text, images):
+        raise AIError("AI 服务额度不足或无权限，请联系管理员充值")
+
+    monkeypatch.setattr(provider, "parse_homework", boom)
+    h, _ = _login(client, "13800000011")
+    r = client.post("/api/homework/parse", json={"text": "数学：1.口算第 23 页 2.练习册", "day": DAY}, headers=h)
+    assert r.status_code == 200
+    assert [i["title"] for i in r.get_json()["items"]] == ["口算第 23 页", "练习册"]
+    png = "data:image/png;base64,iVBORw0KGgo="
+    r = client.post("/api/homework/parse", json={"images": [png], "day": DAY}, headers=h)
+    assert r.status_code == 502 and "打字" in r.get_json()["message"]
+
+
 def test_add_schedule_and_auto_start(app, client):
     clock = Clock(app, "18:40")
     h, _ = _login(client, "13800000002")

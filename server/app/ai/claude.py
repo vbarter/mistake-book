@@ -690,6 +690,8 @@ class ClaudeProvider(AIProvider):
             raise AIError("AI 服务的密钥无效，请检查 ANTHROPIC_API_KEY") from e
         except anthropic.PermissionDeniedError as e:
             log.warning("anthropic 403: %s", e.message)
+            if "额度" in str(e.message) or "quota" in str(e.message).lower():
+                raise AIError("AI 服务余额不足，请联系管理员充值") from e
             raise AIError("AI 服务额度不足或无权限，请联系管理员充值") from e
         except anthropic.RateLimitError as e:
             raise AIError("AI 服务正忙，请稍后再试") from e
@@ -1063,6 +1065,16 @@ class ClaudeProvider(AIProvider):
 
         content: list[dict] = []
         for i, img in enumerate(images):
+            # 和扫描试卷一样走纯文字链路：DeepSeek 不看图时先 OCR，文字交给 DeepSeek（中转通道不可用时照片也能拆）；OCR 失败的那张照旧带照片
+            words = ""
+            if self.text_only and ocr.enabled():
+                try:
+                    words = ocr.ocr_image(img.data, img.media_type).strip()
+                except Exception as e:  # noqa: BLE001
+                    log.warning("homework ocr failed on photo %s, send image instead: %s", i, e)
+            if words:
+                content.append({"type": "text", "text": f"第 {i + 1} 张照片（OCR 识别出的文字，行序可能有错）：\n{words}"})
+                continue
             content.append({"type": "text", "text": f"第 {i + 1} 张照片："})
             content.append({"type": "image", "source": {"type": "base64", "media_type": img.media_type, "data": base64.standard_b64encode(img.data).decode("utf-8")}})
         if text.strip():

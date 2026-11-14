@@ -291,3 +291,32 @@ def test_reasoning_effort_env(make, value, sent):
     provider = make([_sse('{"ok": true}')], DEEPSEEK_REASONING_EFFORT=value)
     provider._call("sys", [TEXT], {"type": "object"})
     assert json.loads(provider.requests[0].content).get("reasoning_effort") == sent
+
+
+def test_homework_photo_goes_to_deepseek_as_ocr_text(make, monkeypatch):
+    """作业照片：DeepSeek 不看图时先 OCR，只把文字交给 DeepSeek（中转通道没钱时照片也能拆）；OCR 失败的照旧带照片"""
+    from app.ai import ocr
+    from app.ai.base import Crop
+
+    provider = make([])
+    calls = []
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        calls.append({"content": content, "channels": provider._channels(content)})
+        return {"items": [{"title": "U5-6 拓学单", "subject": "english", "est": 25}]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    monkeypatch.setattr("app.ai.claude.ocr.enabled", lambda: True)
+    monkeypatch.setattr(ocr, "ocr_page", lambda *a, **kw: ocr.OcrPage(text="周五英语：1.订签校默 2.U5-6拓学单"))
+    items = provider.parse_homework("", [Crop(data=b"img")])
+    assert items[0]["title"] == "U5-6 拓学单"
+    assert not any(c.get("type") == "image" for c in calls[0]["content"])
+    assert "订签校默" in "\n".join(c.get("text", "") for c in calls[0]["content"])
+    assert calls[0]["channels"][0] == "deepseek"
+
+    def fail(*a, **kw):
+        raise ocr.OCRError("offline")
+
+    monkeypatch.setattr(ocr, "ocr_page", fail)
+    provider.parse_homework("", [Crop(data=b"img")])
+    assert any(c.get("type") == "image" for c in calls[1]["content"]) and calls[1]["channels"] == ["anthropic"]
