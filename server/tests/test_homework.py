@@ -172,6 +172,9 @@ def test_edit_and_delete(app, client):
     assert day["items"][0]["title"] == "拓学本 第 42-43 页" and day["items"][0]["remindAt"] == "20:25"
     assert client.patch(f"/api/homework/items/{item}", json={"remindAt": "25:00"}, headers=h).status_code == 400
     assert client.patch(f"/api/homework/items/{item}", json={"subject": "art"}, headers=h).status_code == 400
+    # 小程序没有 PATCH，用 PUT 改
+    put = client.put(f"/api/homework/items/{item}", json={"chain": True}, headers=h).get_json()["items"][0]
+    assert put["chain"] is True and put["remindAt"] is None
     assert client.delete(f"/api/homework/items/{item}", headers=other).status_code == 404
     day = client.delete(f"/api/homework/items/{item}", headers=h).get_json()
     assert day["items"] == []

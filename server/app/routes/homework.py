@@ -364,7 +364,7 @@ def add_items():
     return jsonify(_day_payload(user.id, day)), 201
 
 
-@bp.patch("/homework/items/<item_id>")
+@bp.route("/homework/items/<item_id>", methods=["PATCH", "PUT"])  # 小程序的 wx.request 没有 PATCH
 @login_required
 def update_item(item_id: str):
     """改字、换学科、改提醒时间 / 接着上一项、调整顺序"""
