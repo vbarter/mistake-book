@@ -24,7 +24,7 @@ from ..ai import AIError, get_provider
 from ..ai.base import Crop
 from ..auth_utils import current_user, login_required
 from ..extensions import db
-from ..homework_parse import HOMEWORK_SUBJECTS, MAX_ITEMS, MAX_TITLE, estimate, guess_subject, normalize, same_homework
+from ..homework_parse import HOMEWORK_SUBJECTS, MAX_ITEMS, MAX_TITLE, estimate, guess_subject, normalize, same_homework, split_text
 from ..models import HomeworkItem, Plan, PlanAssignment, PlanMember, PlanSubmission
 
 bp = Blueprint("homework", __name__)
@@ -301,7 +301,11 @@ def parse():
     try:
         items = get_provider().parse_homework(text, images)
     except AIError as e:
-        abort(502, str(e))
+        # 大模型不可用（额度、密钥、网络）：打了字的照样用规则拆，不让录入卡住；只有照片时才报错
+        log.warning("homework parse AI failed, fallback to rules: %s", e)
+        if not text.strip():
+            abort(502, str(e) if "打字" in str(e) else f"{e}；可以先直接打字添加")
+        items = split_text(text)
     items = normalize(items, text)
     day = _day_arg(data.get("day"))
     due = plan_due(user.id, day)
