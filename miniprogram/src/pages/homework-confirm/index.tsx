@@ -63,7 +63,7 @@ export default function HomeworkConfirm() {
       leaving.current = true;
       setDraft([], []);
       // 小程序跳页会把刚弹的提示盖掉：跳过去以后再提示
-      void Taro.redirectTo({ url: `/pages/homework-remind/index${day ? `?day=${day}` : ""}` }).then(() => { if (d.merged) toast(`已合并 ${d.merged} 项重复`); /* 小程序的提示只放得下两行，不列名字 */ });
+      void Taro.redirectTo({ url: `/pages/homework/index${day ? `?day=${day}` : ""}` }).then(() => { if (d.merged) toast(`已合并 ${d.merged} 项重复`); /* 小程序的提示只放得下两行，不列名字 */ });
     } catch (e) {
       toast(errorText(e));
     } finally {
@@ -152,7 +152,7 @@ export default function HomeworkConfirm() {
       )}
       <View className="bottom-bar">
         <Button className="flex1" disabled={busy || all.length === 0} onClick={() => void next()}>
-          {total ? `下一步：设置提醒时间 · ${total} 项` : "都已在清单里，下一步"}
+          {total ? `加入清单 · ${total} 项` : "都已在清单里，回清单"}
         </Button>
       </View>
     </View>
