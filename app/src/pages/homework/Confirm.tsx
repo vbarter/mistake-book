@@ -4,7 +4,7 @@ import { ColorIcon } from "../../components/ColorIcon";
 import { Icon } from "../../components/Icon";
 import { Button, InlineNav } from "../../components/ui";
 import { SubjectTile } from "../../components/v2";
-import { addItems, groupBySubject, HW_SUBJECTS, hwSubjectLabel, newKey, tileSubject, useHomework, type DraftItem } from "../../lib/homework";
+import { addItems, dupDrafts, groupBySubject, mergedText, HW_SUBJECTS, hwSubjectLabel, newKey, tileSubject, useHomework, type DraftItem } from "../../lib/homework";
 import { toast, toastError } from "../../store/banner";
 
 /** 05 识别结果：确认和修改。点一项可以改字、换学科；× 删除；学习计划里还没对上的作业可以勾上一起加 */
@@ -15,6 +15,7 @@ export default function Confirm() {
   const draft = useHomework((s) => s.draft);
   const planDue = useHomework((s) => s.planDue);
   const setDraft = useHomework((s) => s.setDraft);
+  const day0 = useHomework((s) => s.data);
   const [editing, setEditing] = useState<string | null>(null);
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
@@ -34,7 +35,11 @@ export default function Confirm() {
   const extra: DraftItem[] = planDue
     .filter((p) => picked[p.assignmentId])
     .map((p) => ({ key: newKey(), title: p.title, subject: p.subject ?? "other", est: 25, source: "plan", planAssignmentId: p.assignmentId, teacher: p.teacher }));
-  const total = draft.filter((d) => d.title.trim()).length + extra.length;
+  // 和清单里已有的（含已做完的）文字一样的，加的时候会合并掉：先在这里标出来
+  const existing = day0 && (day ? day0.day === day : day0.day === day0.today) ? day0.items : [];
+  const dups = dupDrafts([...draft, ...extra], existing);
+  const all = [...draft.filter((d) => d.title.trim()), ...extra];
+  const total = all.filter((d) => !dups.has(d.key)).length;
   /** 按页面上看到的顺序（按学科分好）存，排时间、「接着上一项」都按这个顺序 */
   const toSave = () => groupBySubject([...draft.filter((d) => d.title.trim()), ...extra]).flatMap((g) => g.items).map(({ key: _key, teacher: _t, ...rest }) => rest);
 
@@ -51,7 +56,7 @@ export default function Confirm() {
         if (alive.current || leaving.current) return;
         const items = pending.current();
         setDraft([], []);
-        if (items.length) addItems(items, day).then(() => toast(`已存进清单，${items.length} 项`)).catch(toastError);
+        if (items.length) addItems(items, day).then((d) => toast(`已存进清单，${items.length - (d.merged ?? 0)} 项${d.merged ? `；${mergedText(d)}` : ""}`)).catch(toastError);
       }, 0);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -59,7 +64,8 @@ export default function Confirm() {
   const next = async () => {
     setBusy(true);
     try {
-      await addItems(toSave(), day);
+      const d = await addItems(toSave(), day);
+      if (d.merged) toast(mergedText(d));
       leaving.current = true;
       setDraft([], []);
       nav(`/homework/remind${day ? `?day=${day}` : ""}`, { replace: true });
@@ -78,7 +84,7 @@ export default function Confirm() {
           <ColorIcon name="todo" size={40} />
           <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <b>识别出 {draft.length} 项，已按学科分好</b>
-            <span>点一项可以改字、换学科；点 × 删掉</span>
+            <span>{dups.size ? `其中 ${dups.size} 项清单里已经有了，会自动合并` : "点一项可以改字、换学科；点 × 删掉"}</span>
           </span>
         </div>
         {groupBySubject(draft).map((g) => (
@@ -108,6 +114,7 @@ export default function Confirm() {
                   <div key={d.key} className="hw-row">
                     <button className="hw-main" style={{ textAlign: "left" }} onClick={() => setEditing(d.key)}>
                       <span className="hw-title ellipsis">{d.title || "（空）"}</span>
+                      {dups.has(d.key) && <span className="hw-sub"><span className="hw-dup">清单里已有，会合并</span></span>}
                       {d.planAssignmentId && <span className="hw-sub"><span className="hw-teacher"><Icon name="graduation" size={11} stroke={2.4} />对上了{d.teacher || "老师"}布置的作业</span></span>}
                     </button>
                     <button className="hw-x" aria-label="删除" onClick={() => remove(d.key)}><Icon name="xmark" size={13} stroke={2.6} /></button>
@@ -132,7 +139,7 @@ export default function Confirm() {
           </div>
         )}
         <div className="bottom-bar">
-          <Button disabled={busy || total === 0} style={{ flex: 1 }} onClick={next}>下一步：设置提醒时间 · {total} 项</Button>
+          <Button disabled={busy || all.length === 0} style={{ flex: 1 }} onClick={next}>{total ? `下一步：设置提醒时间 · ${total} 项` : "都已在清单里，下一步"}</Button>
         </div>
       </div>
     </div>

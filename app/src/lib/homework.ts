@@ -58,6 +58,9 @@ export interface HwDay {
   summary: HwSummary;
   /** 首页打卡：当天清单全做完算打一次卡（只算今天往前，和 day 参数无关） */
   checkin?: HwCheckin;
+  /** 加入清单时：文字和已有的一样、合并掉没加的有几项，是哪几项 */
+  merged?: number;
+  mergedTitles?: string[];
 }
 
 export interface HwCheckin {
@@ -363,3 +366,33 @@ export function focusRingSvg(o: { used: number; est: number; paused: boolean; do
   const tip = o.done || o.paused ? "" : over ? knob(extra, CHALK.o) : knob(ratio, o.tie);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="232" height="232" viewBox="0 0 232 232" fill="none"><g${o.filter ? ` filter="url(#${o.filter})"` : ""}>${g}</g>${tip}</svg>`;
 }
+
+/* ---------------------------------------------------------------- 重复录入合并 */
+
+/** 判重的写法（和服务端 homework_parse.dup_key 一致）：全角半角统一、去掉开头编号、空格标点、大小写。只认完全一样 */
+export function dupKey(title: string): string {
+  const s = typeof title.normalize === "function" ? title.normalize("NFKC") : title;
+  return s
+    .trim()
+    .replace(/^\s*(?:\d{1,2}|[一二三四五六七八九十]{1,2})\s*[.、．)）]\s*/, "")
+    .replace(/^(?:再|然后|还要|还有|另外)/, "")
+    .replace(/[\s\-–_·.,，。:：、()（）《》“”"']+/g, "")
+    .toLowerCase();
+}
+
+/** 确认页里哪些草稿会被合并：和清单里已有的（含已做完的）或前面的草稿文字一样。返回这些草稿的 key */
+export function dupDrafts(draft: { key: string; title: string }[], existing: { title: string }[]): Set<string> {
+  const seen = new Set(existing.map((it) => dupKey(it.title)).filter(Boolean));
+  const out = new Set<string>();
+  for (const d of draft) {
+    const k = dupKey(d.title);
+    if (!k) continue;
+    if (seen.has(k)) out.add(d.key);
+    else seen.add(k);
+  }
+  return out;
+}
+
+/** 加入清单后的提示：「已合并 2 项重复：复习、英语拓学单」 */
+export const mergedText = (d: { merged?: number; mergedTitles?: string[] }) =>
+  d.merged ? `已合并 ${d.merged} 项重复：${[...new Set(d.mergedTitles ?? [])].slice(0, 3).join("、")}${(d.mergedTitles?.length ?? 0) > 3 ? " 等" : ""}` : "";
