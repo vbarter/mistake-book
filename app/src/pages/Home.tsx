@@ -27,7 +27,7 @@ const DAY_MS = 86400000;
 
 /**
  * 首页（黑板四宫格，界面稿见项目文件 screenshots/home-blackboard/）：
- * 顶部品牌名、「今天，学一点」和连续打卡天数；本周打卡条；四块黑板入口「今天作业计划」「学习计划」「错题收集」「试卷擦除」，
+ * 顶部品牌名、「今天，学一点」和连续打卡天数；本周打卡条；四块黑板入口「待办事项」「学习计划」「错题收集」「试卷擦除」，
  * 黑板颜色跟主题走（--hero-a / --hero-b），粉笔字是烘好的透明图（assets/chalk/，tools/chalk-titles.mjs 生成），小人是角色图标（RoleIcon）；
  * 下面是识别进度、没扫出来的小喇叭通知、今天作业计划的下一项、近 30 天错题数。
  * 打卡：当天作业计划全部做完算打一次卡（服务端 GET /api/homework 带的 checkin）。
@@ -122,7 +122,7 @@ export default function Home() {
         <WeekStrip checkin={checkin} now={now} onClick={() => nav("/homework")} />
 
         <div className="hb__grid rise" style={{ ["--i" as string]: 0 }}>
-          <Board role="todo" chalk={chalkTodo} doodle="sun" badge={todoBadge} label="今天作业计划" onClick={() => nav("/homework")} />
+          <Board role="todo" chalk={chalkTodo} doodle="sun" badge={todoBadge} label="待办事项" onClick={() => nav("/homework")} />
           <Board role="plan" chalk={chalkPlan} doodle="star" badge={planBadge} label="学习计划" onClick={() => nav("/plans")} />
           <Board role="wrong" chalk={chalkWrong} doodle="star" badge={wrongBadge} label="错题收集" onClick={add.open} />
           <Board role="erase" chalk={chalkErase} doodle="sun" math="6 ÷ 2 =" label="试卷擦除" onClick={erase} />
