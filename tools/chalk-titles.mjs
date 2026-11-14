@@ -14,7 +14,7 @@ if (!FONT) throw new Error("要给字体文件路径");
 // 画布 156×80（CSS px），按 3 倍出图。副标题偏右，左下角让给小人。
 const W = 156, H = 80, SCALE = 3;
 const CARDS = [
-  { id: "todo", title: "今天作业计划", sub: "今天要完成" },
+  { id: "todo", title: "待办事项", sub: "今天要完成" },
   { id: "plan", title: "学习计划", sub: "长期安排" },
   { id: "wrong", title: "错题收集", sub: "拍照收错题" },
   { id: "erase", title: "试卷擦除", sub: "擦掉再做一遍" },

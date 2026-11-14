@@ -26,7 +26,7 @@ const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
  * 首页（和 App 一致，界面稿见项目文件 screenshots/home-blackboard/）：顶部品牌名、「今天，学一点」和连续打卡天数；本周打卡条；
- * 四块黑板入口「今天作业计划」「学习计划」「错题收集」「试卷擦除」（板面颜色跟主题走，粉笔字是 assets/chalk/ 里烘好的透明图，小人是 lib/roleIcons.ts 的角色图标）；
+ * 四块黑板入口「待办事项」「学习计划」「错题收集」「试卷擦除」（板面颜色跟主题走，粉笔字是 assets/chalk/ 里烘好的透明图，小人是 lib/roleIcons.ts 的角色图标）；
  * 下面是识别进度、没扫出来的小喇叭通知、今天作业计划的下一项、近 30 天错题数。打卡：当天作业计划全部做完算打一次卡（GET /api/homework 带的 checkin）。
  */
 export default function Home() {

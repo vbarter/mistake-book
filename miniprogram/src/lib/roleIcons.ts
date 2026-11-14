@@ -1,5 +1,5 @@
 /**
- * 角色图标：首页四块黑板上的「试卷小人」，各拿一样东西（今天作业计划拿夹板清单、学习计划拿台历、错题收集拿打叉的卷子、试卷擦除举板擦）；
+ * 角色图标：首页四块黑板上的「试卷小人」，各拿一样东西（待办事项拿夹板清单、学习计划拿台历、错题收集拿打叉的卷子、试卷擦除举板擦）；
  * 计时页再用三张：focus 捧着秒表、stuck 秒表超了冒问号、done 举起打勾的小旗。
  * 身体和插画 Buddy（App components/Illustration.tsx、小程序 components/Buddy.tsx）是同一张画，只是整体左移 16 给道具让位。160×160 画布。
  * 两套主题 × 深浅色各一份配色，和 tokens.css 的 --ill-* 同一套值。设计稿和 SVG 素材在项目文件 screenshots/home-blackboard/。
@@ -16,7 +16,7 @@ const PALETTES: Record<string, Palette> = {
   pop:            { paper: "#ffffff", paper2: "#ffd6e2", line: "#f4608f", ink: "#4a2a36", cheek: "#ffb4a8", tie: "#00aeec", star: "#ffc53d", ok: "#00aeec", okbg: "#d3f1fd", shadow: "rgba(120,40,70,.12)", wrong: "#f4608f", wrongbg: "#ffe3ec", soft: "#d3f1fd" },
   "pop-dark":     { paper: "#f4f6ff", paper2: "#5a2c3d", line: "#ff8fb0", ink: "#2a1a22", cheek: "#ff9d90", tie: "#5cc8f0", star: "#ffc53d", ok: "#00aeec", okbg: "#d3f1fd", shadow: "rgba(0,0,0,.45)", wrong: "#f4608f", wrongbg: "#ffe3ec", soft: "#d3f1fd" },
 };
-export const ROLE_NAMES: Record<RoleName, string> = { todo: "今天作业计划", plan: "学习计划", wrong: "错题收集", erase: "试卷擦除", focus: "计时中", stuck: "卡住了", done: "做完了" };
+export const ROLE_NAMES: Record<RoleName, string> = { todo: "待办事项", plan: "学习计划", wrong: "错题收集", erase: "试卷擦除", focus: "计时中", stuck: "卡住了", done: "做完了" };
 
 function inner(scene: RoleName, p: Palette, shadow: boolean): string {
   const S = `stroke="${p.line}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"`;
