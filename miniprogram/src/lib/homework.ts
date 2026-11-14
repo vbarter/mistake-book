@@ -260,3 +260,40 @@ export function defaultStart(serverNow: string): string {
   const mins = Math.min(23 * 60 + 55, Math.ceil((h * 60 + m + 5) / 5) * 5);
   return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
 }
+
+/* ---------------------------------------------------------------- 计时页的粉笔圆环 */
+
+/** 计时页黑板上粉笔字的三种颜色（和 assets/chalk/num 里烘好的数字一致）：白、超时黄、做完绿 */
+export const CHALK = { w: "#ffffff", o: "#ffe08a", g: "#b9f2cf" } as const;
+export type ChalkTone = keyof typeof CHALK;
+
+/**
+ * 计时页的圆环（232×232）：外圈 60 个刻度（5 分钟一根长的），里面一道淡淡的底，进度是一道粉笔线，头上一颗领带色的点。
+ * 超时：整圈变淡，多出来的部分用黄粉笔再画一段。filter 传一个 SVG 滤镜 id 就加粉笔颗粒（App 用；小程序的图片里不加）。
+ * App 和小程序各一份，内容保持一致。
+ */
+export function focusRingSvg(o: { used: number; est: number; paused: boolean; done: boolean; tie: string; filter?: string }): string {
+  const C = 116, R = 92, est = Math.max(60, o.est);
+  const ratio = o.done ? 1 : Math.min(1, o.used / est);
+  const extra = !o.done && o.used > est ? Math.min(1, (o.used - est) / est) : 0;
+  const over = extra > 0;
+  const at = (a: number, r: number) => [(C + Math.sin(a) * r).toFixed(1), (C - Math.cos(a) * r).toFixed(1)];
+  let ticks = "";
+  for (let i = 0; i < 60; i++) {
+    const a = (i / 60) * Math.PI * 2, long = i % 5 === 0;
+    const [x1, y1] = at(a, 108), [x2, y2] = at(a, long ? 100 : 104);
+    ticks += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#fff" stroke-width="${long ? 2.4 : 1.4}" stroke-linecap="round" opacity="${i / 60 < ratio ? 0.75 : 0.28}"/>`;
+  }
+  const len = 2 * Math.PI * R;
+  const arc = (part: number, color: string, op: number) =>
+    part > 0 ? `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="${color}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${(len * part).toFixed(1)} ${len.toFixed(1)}" transform="rotate(-90 ${C} ${C})" opacity="${op}"/>` : "";
+  const knob = (part: number, color: string) => {
+    const [x, y] = at(part * Math.PI * 2, R);
+    return `<circle cx="${x}" cy="${y}" r="8" fill="${color}" stroke="#fff" stroke-width="2.5"/>`;
+  };
+  const main = o.done ? CHALK.g : CHALK.w;
+  const g = `${ticks}<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#fff" stroke-width="11" opacity=".14"/>` +
+    arc(ratio, main, o.paused ? 0.5 : over ? 0.55 : 0.95) + (over ? arc(extra, CHALK.o, 1) : "");
+  const tip = o.done || o.paused ? "" : over ? knob(extra, CHALK.o) : knob(ratio, o.tie);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="232" height="232" viewBox="0 0 232 232" fill="none"><g${o.filter ? ` filter="url(#${o.filter})"` : ""}>${g}</g>${tip}</svg>`;
+}
