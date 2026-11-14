@@ -24,7 +24,9 @@ function roleUri(role: RoleName, theme: ThemeName): string {
   if (!u) roleCache.set(key, (u = svgUri(roleIconSvg(role, theme, false, false))));
   return u;
 }
-const close = () => void Taro.navigateBack().catch(() => Taro.redirectTo({ url: "/pages/homework/index" }));
+/** 「收起」回首页（页面栈里只有首页和这一页）；做完了弹层里的「回清单」回清单 */
+const close = () => void Taro.navigateBack().catch(() => Taro.switchTab({ url: "/pages/home/index" }));
+const toList = () => void Taro.redirectTo({ url: "/pages/homework/index" });
 
 /** 10 计时中 · 11 做完了（停表、完成拍照）· 13 超时（卡住了怎么办），和 App 一致：整块计时区是一块黑板，粉笔数字是烘好的图（tools/chalk-digits.mjs）。整页自己画（navigationStyle: custom） */
 export default function HomeworkFocus() {
@@ -92,7 +94,7 @@ export default function HomeworkFocus() {
       if (next) {
         await act(next.id, "start");
         void Taro.redirectTo({ url: `/pages/homework-focus/index?id=${next.id}` });
-      } else close();
+      } else toList();
     });
   const left = Math.ceil((estSec - used) / 60);
   const paused = cur.status === "paused";
@@ -259,7 +261,7 @@ function FinishSheet({ item }: { item: HwItem }) {
       else if (startNext && next) {
         await act(next.id, "start");
         void Taro.redirectTo({ url: `/pages/homework-focus/index?id=${next.id}` });
-      } else close();
+      } else toList();
     } catch (e) {
       toast(errorText(e));
     } finally {

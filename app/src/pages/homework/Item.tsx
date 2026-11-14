@@ -26,7 +26,7 @@ export default function Item() {
   if (!item) {
     return (
       <div className="screen">
-        <InlineNav title="" back backLabel="清单" onBack={() => nav("/homework", { replace: true })} />
+        <InlineNav title="" back backLabel="首页" onBack={() => nav("/home", { replace: true })} />
         <div className="empty"><span className="empty__title">这一项不在了</span></div>
       </div>
     );
@@ -50,8 +50,8 @@ export default function Item() {
       <InlineNav
         title={`第 ${orderOf(data.items, item.id)} 项 / 共 ${data.items.length} 项`}
         back
-        backLabel="清单"
-        onBack={() => nav("/homework", { replace: true })}
+        backLabel="首页"
+        onBack={() => nav("/home", { replace: true })}
         right={<button className="nav-btn" onClick={() => { setTitle(item.title); setEdit(true); }}>修改</button>}
       />
       <div className="screen__content screen__content--modal" style={{ paddingTop: 8, gap: 12 }}>

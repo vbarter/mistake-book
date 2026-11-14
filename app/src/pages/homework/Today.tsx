@@ -49,7 +49,7 @@ export default function Today() {
       }
       setDraft(res.items, res.planDue);
       setText("");
-      nav(`/homework/confirm${shown ? `?day=${shown.day}` : ""}`);
+      nav(`/homework/confirm${shown ? `?day=${shown.day}` : ""}`, { replace: true });
     } catch (e) {
       toastError(e);
     } finally {
@@ -189,7 +189,7 @@ function ItemList({ data, now }: { data: HwDay; now: number }) {
                 >
                   {it.status === "done" && <Icon name="check" size={14} stroke={3} />}
                 </button>
-                <button className="hw-main" style={{ textAlign: "left" }} onClick={() => nav(it.status === "running" || it.status === "paused" ? `/homework/focus/${it.id}` : `/homework/${it.id}`)}>
+                <button className="hw-main" style={{ textAlign: "left" }} onClick={() => nav(it.status === "running" || it.status === "paused" ? `/homework/focus/${it.id}` : `/homework/${it.id}`, { replace: true })}>
                   <span className="hw-title ellipsis">{it.title}</span>
                   {(it.planAssignmentId || (it.status === "done" && it.used > it.est * 60)) && (
                     <span className="hw-sub">
@@ -217,7 +217,7 @@ function MainAction({ data }: { data: HwDay }) {
   if (s.allDone) return null;
   if (s.currentId) {
     const cur = data.items.find((it) => it.id === s.currentId)!;
-    return <Button icon="timer" onClick={() => nav(`/homework/focus/${cur.id}`)}>{cur.status === "paused" ? "继续" : "回到计时"}：{cur.title}</Button>;
+    return <Button icon="timer" onClick={() => nav(`/homework/focus/${cur.id}`, { replace: true })}>{cur.status === "paused" ? "继续" : "回到计时"}：{cur.title}</Button>;
   }
   const next = nextTodo(data.items);
   if (!next) return null;
@@ -225,7 +225,7 @@ function MainAction({ data }: { data: HwDay }) {
     setBusy(true);
     try {
       await act(next.id, "start");
-      nav(`/homework/focus/${next.id}`);
+      nav(`/homework/focus/${next.id}`, { replace: true });
     } catch (e) {
       toastError(e);
     } finally {
@@ -239,7 +239,7 @@ function MainAction({ data }: { data: HwDay }) {
       <Button icon="play" disabled={busy} style={{ flex: 1 }} onClick={start}>
         {waiting ? "不等了，现在开始" : "现在就开始"}{s.left === 1 ? "最后一项" : `第 ${idx} 项`}
       </Button>
-      <Button variant="tinted" ariaLabel="设置提醒时间" onClick={() => nav(`/homework/remind?day=${data.day}`)} style={{ flex: "0 0 52px", padding: 0 }}>
+      <Button variant="tinted" ariaLabel="设置提醒时间" onClick={() => nav(`/homework/remind?day=${data.day}`, { replace: true })} style={{ flex: "0 0 52px", padding: 0 }}>
         <ColorIcon name="remind" size={26} />
       </Button>
     </div>

@@ -56,7 +56,7 @@ export default function Remind() {
 
   return (
     <div className="screen">
-      <InlineNav title="提醒时间" back backLabel="返回" onBack={() => nav("/homework", { replace: true })} />
+      <InlineNav title="提醒时间" back backLabel="首页" onBack={() => nav("/home", { replace: true })} />
       <div className="screen__content screen__content--modal" style={{ paddingTop: 4, gap: 4 }}>
         <div className="hw-auto">
           <div className="hw-auto__h">

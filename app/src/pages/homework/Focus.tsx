@@ -76,7 +76,7 @@ function Focus() {
   if (!item && !finished) {
     return (
       <div className="fz">
-        <div className="fz__nav"><button className="fz__close" onClick={() => nav("/homework", { replace: true })}><Icon name="chevron-down" size={16} stroke={2.6} />收起</button></div>
+        <div className="fz__nav"><button className="fz__close" onClick={() => nav("/home", { replace: true })}><Icon name="chevron-down" size={16} stroke={2.6} />收起</button></div>
         <Empty icon="document" title="这一项不在了" />
       </div>
     );
@@ -93,7 +93,9 @@ function Focus() {
       setBusy(false);
     }
   };
-  const close = () => nav("/homework", { replace: true });
+  /** 「收起」回首页；做完了弹层里的「回清单」回清单 */
+  const close = () => nav("/home", { replace: true });
+  const toList = () => nav("/homework", { replace: true });
   const finish = () =>
     run(async () => {
       const snap = { ...cur, used };
@@ -109,7 +111,7 @@ function Focus() {
       if (next) {
         await act(next.id, "start");
         nav(`/homework/focus/${next.id}`, { replace: true });
-      } else close();
+      } else toList();
     });
   const left = Math.ceil((estSec - used) / 60);
   const paused = cur.status === "paused";
@@ -204,7 +206,7 @@ function Focus() {
         <Button variant="plain" disabled={busy} onClick={skip}>先跳过，做下一项</Button>
       </Sheet>
 
-      {finished && <FinishSheet item={finished} onDone={close} />}
+      {finished && <FinishSheet item={finished} onDone={toList} />}
     </div>
   );
 }
