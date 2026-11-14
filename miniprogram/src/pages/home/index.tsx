@@ -1,18 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
-import { Text, View } from "@tarojs/components";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Image, Text, View } from "@tarojs/components";
 import Taro, { useDidShow, usePullDownRefresh } from "@tarojs/taro";
 import { AvatarPrompt } from "../../components/AvatarPrompt";
-import { Buddy } from "../../components/Buddy";
 import { ColorIcon } from "../../components/ColorIcon";
 import { Icon, base64 } from "../../components/Icon";
-import { Avatar, Progress, SubjectTile, useMenuButton } from "../../components/ui";
-import { hourMin, loadDay, nextTodo, tileSubject, useHomework } from "../../lib/homework";
+import { Progress, SubjectTile, subjectColors, useMenuButton } from "../../components/ui";
+import type { ThemeName } from "../../lib/colorIcons";
+import { allErrors } from "../../lib/errors";
+import { SUBJECT_LABEL } from "../../lib/format";
+import { loadDay, nextTodo, tileSubject, useHomework, type HwCheckin } from "../../lib/homework";
+import { analyze, inRange } from "../../lib/insights";
+import { roleIconSvg, type RoleName } from "../../lib/roleIcons";
 import { captureInto } from "../../lib/capture";
 import { useDataVersion, useTabBar } from "../../lib/hooks";
 import { pollPendingJobs } from "../../lib/jobs";
-import { currentUser, isLoggedIn } from "../../lib/auth";
+import { isLoggedIn } from "../../lib/auth";
 import { toast } from "../../lib/hooks";
-import { MARK_REVIEWED, PLANS_EVENT, createdLabel, fetchPlans, type PlanInfo, type PlanSummary } from "../../lib/plans";
+import { MARK_REVIEWED, PLANS_EVENT, fetchPlans, type PlanSummary } from "../../lib/plans";
 import { isScanErrorSeen, markScanErrorSeen } from "../../lib/scanNotice";
 import { listFolders } from "../../lib/store";
 import { C, useTheme, useThemeClass } from "../../lib/theme";
@@ -21,33 +25,21 @@ import { useShare, useShareTimelineToo } from "../../lib/share";
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 /**
- * 首页（和 App 一致）：头图（问候、小人、一句提示），下面依次是两个入口「错题收集」「试卷擦除」、识别进度、
- * 没扫出来的小喇叭通知、学习计划（每个计划一行：名字、身份图标、创建时间）。错题统计和导出错题本在「分析」页。
+ * 首页（和 App 一致，界面稿见项目文件 screenshots/home-blackboard/）：顶部品牌名、「今天，学一点」和连续打卡天数；本周打卡条；
+ * 四块黑板入口「今天作业计划」「学习计划」「错题收集」「试卷擦除」（板面颜色跟主题走，粉笔字是 assets/chalk/ 里烘好的透明图，小人是 lib/roleIcons.ts 的角色图标）；
+ * 下面是识别进度、没扫出来的小喇叭通知、今天作业计划的下一项、近 30 天错题数。打卡：当天作业计划全部做完算打一次卡（GET /api/homework 带的 checkin）。
  */
-/** 头图上的装饰：几颗星星和淡淡的圆弧（画成背景图，靠左下角对齐） */
-const HERO_DECO = (() => {
-  const star = "M0-8l2.2 5.8L8 0 2.2 2.2 0 8l-2.2-5.8L-8 0l5.8-2.2z";
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="390" height="236" viewBox="0 0 390 236" fill="none">` +
-    `<path transform="translate(236 150)" d="${star}" fill="#ffc53d"/><path transform="translate(206 176) scale(.7)" d="${star}" fill="#fff" opacity=".5"/>` +
-    `<path transform="translate(24 196) scale(.6)" d="${star}" fill="#fff" opacity=".35"/><path transform="translate(176 196) scale(.5)" d="${star}" fill="#ffc53d" opacity=".8"/>` +
-    `<path d="M-10 226c60-34 120-34 190-8" stroke="#fff" stroke-opacity=".07" stroke-width="22" stroke-linecap="round"/></svg>`;
-  return `data:image/svg+xml;base64,${base64(svg)}`;
-})();
-
 export default function Home() {
   const tc = useThemeClass();
-  const theme = useTheme();
   useShare();
   useShareTimelineToo();
   useTabBar(0);
   const [version, refresh] = useDataVersion();
   const folders = useMemo(() => listFolders(), [version]);
-  const nickname = useMemo(() => currentUser()?.nickname ?? "", [version]);
 
   // 学习计划的汇总：没登录、没网时这一行照样在，只是不带数字
   const [plans, setPlans] = useState<PlanSummary | null>(null);
-  const [planList, setPlanList] = useState<PlanInfo[]>([]);
+  const [planCount, setPlanCount] = useState<number | null>(null);
   const [plansVersion, setPlansVersion] = useState(0);
   useEffect(() => {
     const on = () => setPlansVersion((x) => x + 1);
@@ -59,20 +51,16 @@ export default function Home() {
   useEffect(() => {
     if (!isLoggedIn()) {
       setPlans(null);
-      setPlanList([]);
+      setPlanCount(null);
       return;
     }
     fetchPlans()
       .then((r) => {
         setPlans(r.summary);
-        setPlanList(r.plans);
+        setPlanCount(r.plans.length);
       })
       .catch(() => undefined);
   }, [version, plansVersion]);
-  // 首页直接列几个学习计划：有作业待交 / 待批阅的排前面，其余按新旧，最多 3 个（和 App 一致）
-  const pending = (p: PlanInfo) => (p.role === "owner" ? (MARK_REVIEWED ? p.toReview ?? 0 : 0) : p.todo ?? 0);
-  const topPlans = [...planList].sort((a, b) => Number(pending(b) > 0) - Number(pending(a) > 0) || (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 3);
-
   usePullDownRefresh(async () => {
     await pollPendingJobs();
     refresh();
@@ -96,8 +84,6 @@ export default function Home() {
   };
 
   const now = new Date();
-  const h = now.getHours();
-  const hello = h < 5 ? "夜深了" : h < 11 ? "早上好" : h < 13 ? "中午好" : h < 18 ? "下午好" : "晚上好";
   const today = `${now.getMonth() + 1}月${now.getDate()}日 周${WEEKDAY[now.getDay()]}`;
 
   const collect = async () => {
@@ -132,66 +118,70 @@ export default function Home() {
   };
 
   const mb = useMenuButton();
-  // 头图里那颗提示：有作业先说作业，一份试卷都没有时提醒拍第一张
-  const pill = plans && plans.todo > 0 ? { n: plans.todo, text: "份作业待交", go: () => go("/pages/plans/index") }
-    : MARK_REVIEWED && plans && plans.toReview > 0 ? { n: plans.toReview, text: "份等你批阅", go: () => go("/pages/plans/index") }
-    : papers.length === 0 ? { n: 0, text: "拍下第一张试卷", go: collect }
-    : null;
+  const theme = useTheme();
+  // 黑板做成正方形：两块并排，屏宽减去两边 16 和中间 12
+  const boardH = Math.min(200, Math.round((Taro.getSystemInfoSync().windowWidth - 44) / 2));
 
-  // 计划行只留头像、名字、身份图标和创建时间：状态文字和右边的进度标记都拿掉了，进计划里再看
-  const planRow = (p: PlanInfo) => {
-    const owner = p.role === "owner";
-    const created = createdLabel(p.createdAt);
-    return (
-      <View key={p.id} className="h4__plan" hoverClass="h4--hover" onClick={() => go(`/pages/plan/index?id=${p.id}`)}>
-        <Avatar name={p.teacher} url={p.teacherAvatar} size={44} />
-        <View className="h4__main">
-          <Text className="h4__name ellipsis">{p.name}</Text>
-          <View className="h4__sub">
-            {/* 插旗是我建的，进门是我加入的 */}
-            <ColorIcon name={owner ? "plan-mine" : "plan-joined"} size={18} />
-            <Text className="h4__time ellipsis">{created || (owner ? "我建的" : p.teacher)}</Text>
-          </View>
-        </View>
-      </View>
-    );
-  };
+  // 错题：近 30 天几道、错得最多的三科（和「分析」页同一套算法），本周一以来新收了几道
+  const errors = useMemo(() => allErrors(folders), [folders]);
+  const month = useMemo(() => inRange(errors, "30d"), [errors]);
+  const topSubjects = useMemo(() => analyze(month).subjects.slice(0, 3), [month]);
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)).getTime();
+  const weekNew = errors.filter((e) => new Date(e.scannedAt).getTime() >= monday).length;
+
+  const { data: hw } = useHomework();
+  useDidShow(() => {
+    if (isLoggedIn()) loadDay().catch(() => undefined); // 打卡和下一项都从这里来
+  });
+  const hs = hw && hw.day === hw.today ? hw.summary : null;
+  const checkin = (isLoggedIn() && hw?.checkin) || null;
+
+  // 四块黑板右下角的粉笔圈：一个最要紧的数
+  const todoBadge = !hs || !hs.total ? "去添加" : hs.allDone ? "全做完" : <>还剩<Text className="bb__numb">{hs.left}</Text>项</>;
+  const planBadge = plans && plans.todo > 0 ? <><Text className="bb__numb">{plans.todo}</Text>份待交</>
+    : MARK_REVIEWED && plans && plans.toReview > 0 ? <><Text className="bb__numb">{plans.toReview}</Text>份待批</>
+    : planCount ? <><Text className="bb__numb">{planCount}</Text>个计划</>
+    : planCount === 0 ? "去新建" : null;
+  const wrongBadge = weekNew > 0 ? <>本周<Text className="bb__numb">+{weekNew}</Text></> : "拍一张";
+  const goHomework = () => go("/pages/homework/index");
 
   return (
     <View className={"home4" + tc}>
       <AvatarPrompt version={version} />
-      <View className="h4__hero" style={{ height: `${mb.bottom + 148}px`, paddingTop: `${mb.top}px`, backgroundImage: `url("${HERO_DECO}"), linear-gradient(160deg, var(--hero-a) 0%, var(--hero-b) 70%)` }}>
-        <View className="h4__spot" />
-        <Buddy scene={scanning.length ? "scan" : papers.length === 0 ? "empty" : "hero"} size={150} style={{ position: "absolute", right: "8px", bottom: "30px" }} />
-        <View className="h4__brand" style={{ height: `${mb.height}px` }}>
-          <View className="h4__logo">
-            <Icon name="check" size={17} color={theme === "pop" ? "#fb7299" : "#1f3b73"} stroke={3} />
+      <View className="hb__head" style={{ paddingTop: `${mb.top}px` }}>
+        <View className="hb__brand" style={{ height: `${mb.height}px` }}>
+          <View className="hb__logo">
+            <Icon name="check" size={18} color="#ffffff" stroke={3} />
           </View>
-          <Text className="h4__bname">上壹课</Text>
-          <Text className="h4__date">{today}</Text>
+          <Text className="hb__name">上壹课</Text>
+          <Text className="hb__date">{today}</Text>
         </View>
-        <Text className="h4__hi ellipsis">
-          {hello}
-          {nickname ? `，${nickname}` : ""}
-        </Text>
-        {pill && (
-          <View className="h4__pill" hoverClass="h4--hover" onClick={pill.go}>
-            <View className="h4__pilln">{pill.n > 0 ? <Text>{pill.n}</Text> : <Icon name="camera" size={12} color="#5a3600" stroke={2.6} />}</View>
-            <Text>{pill.text}</Text>
+        <View className="hb__row">
+          <View className="hb__slogan">
+            <Text>今天，学一点</Text>
+            <Image className="hb__swoosh" src={swooshUri(theme)} mode="aspectFit" />
           </View>
-        )}
+          <View className="hb__streak" hoverClass="h4--hover" onClick={goHomework}>
+            <Icon name="sparkles" size={15} color={C.tie} stroke={2.2} />
+            {checkin && checkin.streak > 0 ? (
+              <Text>
+                连续打卡 <Text className="hb__streakb">{checkin.streak}</Text> 天
+              </Text>
+            ) : (
+              <Text>今天来打卡</Text>
+            )}
+          </View>
+        </View>
       </View>
 
-      <View className="h4">
-        <View className="h4__acts rise">
-          <View className="h4__act h4__act--a" hoverClass="h4--hover" onClick={collect}>
-            <ColorIcon name="collect" size={72} className="h4__art" />
-            <Text className="h4__actt">错题收集</Text>
-          </View>
-          <View className="h4__act h4__act--b" hoverClass="h4--hover" onClick={erase}>
-            <ColorIcon name="erase" size={72} className="h4__art" />
-            <Text className="h4__actt">试卷擦除</Text>
-          </View>
+      <View className="hb">
+        <WeekStrip checkin={checkin} now={now} onClick={goHomework} />
+
+        <View className="hb__grid rise">
+          <Board role="todo" doodle="sun" badge={todoBadge} height={boardH} onClick={goHomework} />
+          <Board role="plan" doodle="star" badge={planBadge} height={boardH} onClick={() => go("/pages/plans/index")} />
+          <Board role="wrong" doodle="star" badge={wrongBadge} height={boardH} onClick={collect} />
+          <Board role="erase" doodle="sun" math="6 ÷ 2 =" height={boardH} onClick={erase} />
         </View>
 
         {scanning.length > 0 && (
@@ -217,78 +207,128 @@ export default function Home() {
           </View>
         )}
 
-        <HomeworkCard />
+        <NextUp />
 
-        <View className="rise rise--2">
-          <View className="h4__sech">
-            <Text className="h4__sect" onClick={() => go("/pages/plans/index")}>学习计划</Text>
-            <View className="h4__add" hoverClass="h4--hover" onClick={() => go("/pages/plan-new/index")}>
-              <Icon name="plus" size={13} color="#ffffff" stroke={3} />
-              <Text>新建</Text>
+        <View className="hb__stat rise rise--2" hoverClass="h4--hover" onClick={() => void Taro.switchTab({ url: "/pages/rank/index" })}>
+          <Text className="hb__statn">{month.length}</Text>
+          <View className="hb__statt">
+            <Text>道错题</Text>
+            <Text className="hb__stats ellipsis">{month.length ? `近 30 天 · ${topSubjects.map(([s, l]) => `${SUBJECT_LABEL[s]} ${l.length}`).join(" · ")}` : "近 30 天没有新错题"}</Text>
+          </View>
+          {topSubjects.length > 0 && (
+            <View className="hb__bars">
+              {topSubjects.map(([s, l]) => (
+                <View key={s} className="hb__bar" style={{ height: `${Math.max(6, Math.round((l.length / topSubjects[0][1].length) * 30))}px`, background: subjectColors(s).color }} />
+              ))}
             </View>
-          </View>
-          <View className="h4__plans">
-            {topPlans.length > 0 ? (
-              topPlans.map(planRow)
-            ) : (
-              <View className="h4__empty" hoverClass="h4--hover" onClick={() => go("/pages/plans/index")}>
-                <ColorIcon name="plan" size={40} />
-                <Text>还没有学习计划</Text>
-              </View>
-            )}
-            {planList.length > topPlans.length && (
-              <View className="h4__more" hoverClass="h4--hover" onClick={() => go("/pages/plans/index")}>
-                <Text>全部 {planList.length} 个 ›</Text>
-              </View>
-            )}
-          </View>
+          )}
+          <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
         </View>
       </View>
     </View>
   );
 }
 
-/** 首页的「今天作业计划」卡片（和 App 一致）：没有事项时引导添加；做到一半显示进度和下一项；做完了显示用时 */
-function HomeworkCard() {
+const DAY_MS = 86400000;
+
+/** 「今天，学一点」下面那道领带色的弧线 */
+const swooshUri = (theme: string) =>
+  `data:image/svg+xml;base64,${base64(`<svg xmlns="http://www.w3.org/2000/svg" width="56" height="7" viewBox="0 0 56 7" fill="none"><path d="M2 5C14 1.5 34 1 54 3.5" stroke="${theme === "pop" ? "#0095c8" : "#a3303f"}" stroke-width="2.4" stroke-linecap="round"/></svg>`)}`;
+
+/** 本周打卡条（和 App 一致）：周一到周日，打了卡的打勾，今天高亮。没登录、没网时七天都空着 */
+function WeekStrip({ checkin, now, onClick }: { checkin: HwCheckin | null; now: Date; onClick: () => void }) {
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const todayIdx = (now.getDay() + 6) % 7;
+  return (
+    <View className="hb__wk" hoverClass="h4--hover" onClick={onClick}>
+      <View className="hb__wkl">
+        <Text className="hb__wkls">本周打卡</Text>
+        <Text className="hb__wklb">
+          <Text className="hb__wkli">{checkin?.weekDone ?? 0}</Text>天
+        </Text>
+      </View>
+      <View className="hb__wkdays">
+        {Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(monday.getTime() + i * DAY_MS);
+          const done = !!checkin?.week[i]?.done;
+          const today = i === todayIdx;
+          const cls = [today && "today", done && "done", i > todayIdx && "later"].filter(Boolean).join(" ");
+          return (
+            <View key={i} className={`hb__wkd ${cls}`}>
+              <View className="hb__wkc">{done ? <Icon name="check" size={14} color={today ? "#ffffff" : C.brand} stroke={3} /> : <Text>{d.getDate()}</Text>}</View>
+              <Text>{today ? "今天" : WEEKDAY[(i + 1) % 7]}</Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const DOODLE = {
+  sun: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg>`,
+  star: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/></svg>`,
+};
+const doodleUri = (k: keyof typeof DOODLE) => `data:image/svg+xml;base64,${base64(DOODLE[k])}`;
+const roleCache = new Map<string, string>();
+function roleUri(role: RoleName, theme: ThemeName): string {
+  const key = `${theme}|${role}`;
+  let u = roleCache.get(key);
+  if (!u) {
+    u = `data:image/svg+xml;base64,${base64(roleIconSvg(role, theme, false, false))}`; // 图里没有中文，可以直接用最简单的 base64
+    roleCache.set(key, u);
+  }
+  return u;
+}
+
+/** 一块黑板（和 App 一致）：粉笔字（烘好的图）、角落的小涂鸦、左下角的角色小人、右下角粉笔圈里一个数 */
+function Board({ role, doodle, badge, math, height, onClick }: { role: RoleName; doodle: keyof typeof DOODLE; badge?: ReactNode; math?: string; height: number; onClick: () => void }) {
+  const theme = useTheme();
+  return (
+    <View className="bb" style={{ height: `${height}px` }} hoverClass="bb--hover" onClick={onClick}>
+      <View className="bb__face">
+        <Image className="bb__tag" src="/assets/chalk/tag.png" mode="aspectFit" />
+        <Image className={`bb__doodle bb__doodle--${doodle}`} src={doodleUri(doodle)} mode="aspectFit" />
+        <Image className="bb__chalk" src={`/assets/chalk/${role}.png`} mode="aspectFit" />
+        {badge ? <View className="bb__num">{badge}</View> : math ? <Text className="bb__math">{math}</Text> : null}
+        <Image className="bb__buddy" src={roleUri(role, theme)} mode="aspectFit" />
+      </View>
+      <View className="bb__tray">
+        <View className="bb__trayi" />
+        <View className="bb__trayi bb__trayi--tie" />
+      </View>
+    </View>
+  );
+}
+
+/** 今天作业计划的下一项（或正在做的那项，和 App 一致）：点「开始 / 继续」直接去做。没有清单或全做完了就不显示 */
+function NextUp() {
   const { data } = useHomework();
-  useDidShow(() => {
-    if (isLoggedIn()) loadDay().catch(() => undefined);
-  });
   const today = data && data.day === data.today ? data : null;
   const s = today?.summary;
-  const next = today ? (today.items.find((it) => it.id === s?.currentId) ?? (s?.nextId ? today.items.find((it) => it.id === s.nextId) : null) ?? nextTodo(today.items)) : null;
-  const sub = !s || !s.total ? "打一句、拍一张，自动列清单" : s.allDone ? `${s.total} 项全做完了 · 用了 ${hourMin(s.used)}` : `做完 ${s.done} 项，还剩 ${s.left} 项`;
-  const go = !s || !s.total ? "添加" : s.allDone ? "看看" : s.done || s.currentId ? "继续" : "查看";
+  if (!today || !s || !s.total || s.allDone) return null;
+  const next = today.items.find((it) => it.id === s.currentId) ?? (s.nextId ? today.items.find((it) => it.id === s.nextId) : null) ?? nextTodo(today.items);
+  if (!next) return null;
+  const doing = next.status === "running" || next.status === "paused";
+  const meta = doing ? "正在做" : next.remindAt ? `下一项 · ${next.remindAt} 开始` : `下一项 · 约 ${next.est} 分钟`;
   return (
-    <View className="h4__hw rise rise--1" hoverClass="card--pressed" onClick={() => void Taro.navigateTo({ url: "/pages/homework/index" })}>
-      <View className="h4__hwtop">
-        <ColorIcon name="todo" size={40} />
-        <View className="minw0 flex1">
-          <Text className="h4__hwb">今天作业计划</Text>
-          <Text className="h4__hws ellipsis">{sub}</Text>
-        </View>
-        <View className="h4__hwgo">
-          <Text className="h4__hwgot">{go}</Text>
-          <Icon name="chevron-right" size={12} color="#ffffff" stroke={2.6} />
-        </View>
+    <View
+      className="hb__next rise rise--1"
+      hoverClass="h4--hover"
+      onClick={() => void Taro.navigateTo({ url: doing ? `/pages/homework-focus/index?id=${next.id}` : `/pages/homework-item/index?id=${next.id}` })}
+    >
+      <SubjectTile subject={tileSubject(next.subject)} size="sm" />
+      <View className="hb__nextm">
+        <Text className="hb__nexts ellipsis">今天作业计划 · {meta}</Text>
+        <Text className="hb__nextb ellipsis">{next.title}</Text>
       </View>
-      {s && s.total > 0 && !s.allDone && (
-        <View className="hw-bar" style={{ margin: 0 }}>
-          <View className="hw-bar__in" style={{ width: `${(s.done / s.total) * 100}%` }} />
-        </View>
-      )}
-      {next && s && !s.allDone && (
-        <View className="h4__hwnext">
-          <SubjectTile subject={tileSubject(next.subject)} size="xs" />
-          <Text className="ellipsis flex1">
-            {next.status === "todo" ? "下一项" : "正在做"} {next.title}
-          </Text>
-          {next.status === "todo" && next.remindAt && (
-            <View className="hw-rmd">
-              <ColorIcon name="remind" size={18} />
-              <Text>{next.remindAt}</Text>
-            </View>
-          )}
+      <View className="hb__go">
+        <Text>{doing ? "继续" : "开始"}</Text>
+        <Icon name="chevron-right" size={13} color="#ffffff" stroke={2.6} />
+      </View>
+      {s.done > 0 && (
+        <View className="hb__nextbar">
+          <View className="hb__nextbari" style={{ width: `${(s.done / s.total) * 100}%` }} />
         </View>
       )}
     </View>

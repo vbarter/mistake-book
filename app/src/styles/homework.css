@@ -173,14 +173,6 @@
 .hw-bars__t i.hw-bars--over { background: var(--due); }
 .hw-bars__t b { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--label); opacity: 0.6; }
 
-/* 首页卡片 */
-.h4__hw { display: flex; flex-direction: column; gap: 10px; width: 100%; text-align: left; padding: 14px; background: var(--card); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
-.h4__hwtop { display: flex; align-items: center; gap: 12px; }
-.h4__hwtop b { font-size: 16px; color: var(--label); display: block; }
-.h4__hwtop span { font-size: 12px; color: var(--secondary); }
-.h4__hwgo { margin-left: auto; height: 30px; padding: 0 12px; border-radius: 15px; background: var(--brand); color: #fff; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
-.h4__hwnext { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--fill-light); font-size: 13px; color: var(--label); }
-.h4__hwnext .hw-rmd { margin-left: auto; }
 @keyframes hw-spin { to { transform: rotate(360deg); } }
 .hw-focus .sheet { color: var(--label); }
 .hw-ring__t, .hw-alarm__time { line-height: 1.05; }
