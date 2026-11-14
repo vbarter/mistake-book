@@ -7,7 +7,7 @@ import { Button, Empty, Sheet } from "./ui";
 import { ensureLogin } from "../lib/auth";
 import { errorText } from "../lib/api";
 import { toast } from "../lib/hooks";
-import { liveUsed, mmss, updateItem, useHomework, type HwItem } from "../lib/homework";
+import { focusRingSvg, liveUsed, mmss, updateItem, useHomework, type HwItem } from "../lib/homework";
 
 /** 每秒刷新一次（秒表用） */
 export function useTick(active = true, ms = 1000): number {
@@ -114,14 +114,7 @@ export function RemindSheet({ item, first, onClose }: { item: HwItem | null; fir
   );
 }
 
-/** 计时的圆环（小程序没有内联 SVG：画成 SVG 图片） */
-export function Ring({ ratio, size = 260 }: { ratio: number; size?: number }) {
-  const R = 118;
-  const C = 2 * Math.PI * R;
-  const off = (C * (1 - Math.max(0, Math.min(1, ratio)))).toFixed(1);
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260"><g transform="rotate(-90 130 130)">` +
-    `<circle cx="130" cy="130" r="${R}" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="12"/>` +
-    `<circle cx="130" cy="130" r="${R}" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off}"/></g></svg>`;
-  return <Image src={`data:image/svg+xml;base64,${base64(svg)}`} style={{ width: `${size}px`, height: `${size}px`, position: "absolute", left: 0, top: 0 }} />;
+/** 计时页黑板上的粉笔圆环（小程序没有内联 SVG：画成 SVG 图片，232×232）。画法在 lib/homework.ts focusRingSvg，和 App 一致 */
+export function FocusRing({ used, est, paused, done, tie }: { used: number; est: number; paused: boolean; done: boolean; tie: string }) {
+  return <Image className="fb__ringimg" src={`data:image/svg+xml;base64,${base64(focusRingSvg({ used, est, paused, done, tie }))}`} />;
 }
