@@ -24,7 +24,7 @@ from ..ai import AIError, get_provider
 from ..ai.base import Crop
 from ..auth_utils import current_user, login_required
 from ..extensions import db
-from ..homework_parse import HOMEWORK_SUBJECTS, MAX_ITEMS, MAX_TITLE, estimate, guess_subject, normalize, same_homework, split_text
+from ..homework_parse import HOMEWORK_SUBJECTS, MAX_ITEMS, MAX_TITLE, dup_key, estimate, guess_subject, normalize, same_homework, split_text
 from ..models import HomeworkItem, Plan, PlanAssignment, PlanMember, PlanSubmission
 
 bp = Blueprint("homework", __name__)
@@ -373,7 +373,9 @@ def _clean_new(raw: dict) -> dict:
 @bp.post("/homework/items")
 @login_required
 def add_items():
-    """加入清单（一项或多项），排在当天清单的最后。返回整份清单"""
+    """加入清单（一项或多项），排在当天清单的最后。返回整份清单。
+    和当天已有的项（含已做完的）、或这一批里前面的项文字一样（dup_key 相同）的不再加，算合并：
+    返回里 merged 是合并了几项，mergedTitles 是哪几项；新来的对上了学习计划、已有的还没对上，就把计划补到已有那项上。"""
     user = current_user()
     data = request.get_json(silent=True) or {}
     day = _day_arg(data.get("day"))
@@ -384,13 +386,26 @@ def add_items():
     if len(existing) + len(raw) > MAX_ITEMS * 2:
         abort(400, "一天的作业太多了，先删掉一些")
     pos = max((it.position or 0 for it in existing), default=-1) + 1
+    seen = {dup_key(it.title): it for it in existing}
+    merged: list[str] = []
     for r in raw:
         if not isinstance(r, dict):
             abort(400, "格式不对")
-        db.session.add(HomeworkItem(user_id=user.id, day=day, position=pos, **_clean_new(r)))
+        fields = _clean_new(r)
+        key = dup_key(fields["title"])
+        if key and key in seen:
+            same = seen[key]
+            if fields["plan_assignment_id"] and not same.plan_assignment_id:
+                same.plan_assignment_id = fields["plan_assignment_id"]
+            merged.append(fields["title"])
+            continue
+        item = HomeworkItem(user_id=user.id, day=day, position=pos, **fields)
+        db.session.add(item)
+        if key:
+            seen[key] = item
         pos += 1
     db.session.commit()
-    return jsonify(_day_payload(user.id, day)), 201
+    return jsonify({**_day_payload(user.id, day), "merged": len(merged), "mergedTitles": merged}), 201
 
 
 @bp.route("/homework/items/<item_id>", methods=["PATCH", "PUT"])  # 小程序的 wx.request 没有 PATCH

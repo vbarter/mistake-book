@@ -6,14 +6,14 @@ import { Icon } from "../../components/Icon";
 import { Button, Empty, SubjectTile } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { addItems, groupBySubject, HW_SUBJECTS, hwSubjectLabel, newKey, setDraft, tileSubject, useHomework, type DraftItem } from "../../lib/homework";
+import { addItems, dupDrafts, groupBySubject, HW_SUBJECTS, hwSubjectLabel, newKey, setDraft, tileSubject, useHomework, type DraftItem } from "../../lib/homework";
 import { C, useThemeClass } from "../../lib/theme";
 
 /** 05 识别结果：确认和修改（和 App 一致）。点一项改字、换学科；× 删除；学习计划里还没对上的作业可以勾上一起加 */
 export default function HomeworkConfirm() {
   const tc = useThemeClass();
   const day = useRouter().params.day || undefined;
-  const { draft, planDue } = useHomework();
+  const { draft, planDue, data: day0 } = useHomework();
   const [editing, setEditing] = useState<string | null>(null);
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
@@ -24,7 +24,7 @@ export default function HomeworkConfirm() {
     if (leaving.current) return;
     const items = pending.current();
     setDraft([], []);
-    if (items.length) addItems(items, day).then(() => toast(`已存进清单，${items.length} 项`)).catch((e) => toast(errorText(e)));
+    if (items.length) addItems(items, day).then((d) => toast(`已存进清单 ${items.length - (d.merged ?? 0)} 项${d.merged ? `，合并 ${d.merged} 项重复` : ""}`)).catch((e) => toast(errorText(e)));
   });
 
   if (!draft.length && !planDue.length && !leaving.current) {
@@ -47,7 +47,11 @@ export default function HomeworkConfirm() {
   const extra: DraftItem[] = planDue
     .filter((p) => picked[p.assignmentId])
     .map((p) => ({ key: newKey(), title: p.title, subject: p.subject ?? "other", est: 25, source: "plan", planAssignmentId: p.assignmentId, teacher: p.teacher }));
-  const total = draft.filter((d) => d.title.trim()).length + extra.length;
+  // 和清单里已有的（含已做完的）文字一样的，加的时候会合并掉：先在这里标出来（和 App 一致）
+  const existing = day0 && (day ? day0.day === day : day0.day === day0.today) ? day0.items : [];
+  const dups = dupDrafts([...draft, ...extra], existing);
+  const all = [...draft.filter((d) => d.title.trim()), ...extra];
+  const total = all.filter((d) => !dups.has(d.key)).length;
   /** 按页面上看到的顺序（按学科分好）存，排时间、「接着上一项」都按这个顺序 */
   const toSave = () => groupBySubject([...draft.filter((d) => d.title.trim()), ...extra]).flatMap((g) => g.items).map(({ key: _key, teacher: _t, ...rest }) => rest);
   pending.current = toSave;
@@ -55,10 +59,11 @@ export default function HomeworkConfirm() {
   const next = async () => {
     setBusy(true);
     try {
-      await addItems(toSave(), day);
+      const d = await addItems(toSave(), day);
       leaving.current = true;
       setDraft([], []);
-      void Taro.redirectTo({ url: `/pages/homework-remind/index${day ? `?day=${day}` : ""}` });
+      // 小程序跳页会把刚弹的提示盖掉：跳过去以后再提示
+      void Taro.redirectTo({ url: `/pages/homework-remind/index${day ? `?day=${day}` : ""}` }).then(() => { if (d.merged) toast(`已合并 ${d.merged} 项重复`); /* 小程序的提示只放得下两行，不列名字 */ });
     } catch (e) {
       toast(errorText(e));
     } finally {
@@ -72,7 +77,7 @@ export default function HomeworkConfirm() {
         <ColorIcon name="todo" size={40} />
         <View className="col gap2">
           <Text className="hw-banner__b">识别出 {draft.length} 项，已按学科分好</Text>
-          <Text className="hw-banner__s">点一项可以改字、换学科；点 × 删掉</Text>
+          <Text className="hw-banner__s">{dups.size ? `其中 ${dups.size} 项清单里已经有了，会自动合并` : "点一项可以改字、换学科；点 × 删掉"}</Text>
         </View>
       </View>
       {groupBySubject(draft).map((g) => (
@@ -109,6 +114,11 @@ export default function HomeworkConfirm() {
                 <View key={d.key} className="hw-row">
                   <View className="hw-main" onClick={() => setEditing(d.key)}>
                     <Text className="hw-title ellipsis">{d.title || "（空）"}</Text>
+                    {dups.has(d.key) && (
+                      <View className="hw-sub">
+                        <Text className="hw-dup">清单里已有，会合并</Text>
+                      </View>
+                    )}
                     {d.planAssignmentId && (
                       <View className="hw-sub">
                         <Text className="hw-teacher">对上了{d.teacher || "老师"}布置的作业</Text>
@@ -141,8 +151,8 @@ export default function HomeworkConfirm() {
         </View>
       )}
       <View className="bottom-bar">
-        <Button className="flex1" disabled={busy || total === 0} onClick={() => void next()}>
-          {`下一步：设置提醒时间 · ${total} 项`}
+        <Button className="flex1" disabled={busy || all.length === 0} onClick={() => void next()}>
+          {total ? `下一步：设置提醒时间 · ${total} 项` : "都已在清单里，下一步"}
         </Button>
       </View>
     </View>

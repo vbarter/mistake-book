@@ -27,6 +27,7 @@
 .hw-title { font-size: 15.5px; font-weight: 600; color: var(--label); }
 .hw-row--done .hw-title { color: var(--tertiary); text-decoration: line-through; font-weight: 500; }
 .hw-sub { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 11.5px; color: var(--secondary); }
+.hw-dup { color: var(--due); font-weight: 600; }
 .hw-teacher { color: var(--wrong); display: inline-flex; align-items: center; gap: 3px; }
 .hw-over { color: var(--due); font-weight: 600; }
 

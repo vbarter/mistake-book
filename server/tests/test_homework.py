@@ -281,3 +281,34 @@ def test_checkin_streak_and_week(app, client):
     # 别人的不算，空的一天不算
     h2, _ = _login(client, "13800000014")
     assert _get(client, h2)["checkin"] == {"streak": 0, "today": False, "week": [{**w, "done": False} for w in c["week"]], "weekDone": 0}
+
+
+def test_add_merges_duplicates(app, client):
+    """重复拍同一份作业：文字一样的（含编号、空格、标点、全角半角不同）不再加，合并并告诉前端合并了几项"""
+    h, _ = _login(client, "13800000201")
+    d = _add(client, h, [{"title": "复习", "subject": "other"}, {"title": "英语拓学单", "subject": "english"}])
+    with app.app_context():
+        db.session.get(HomeworkItem, _by(d, "复习")["id"]).status = "done"
+        db.session.commit()
+
+    r = _add(client, h, [
+        {"title": "1. 复习", "subject": "other"},          # 和已做完的一样
+        {"title": "英语 拓学单。", "subject": "english"},   # 空格标点不同
+        {"title": "ＵＮＩＴ５ 单词"},                       # 新的
+        {"title": "unit5单词"},                             # 和这一批里前一项一样
+        {"title": "复习 U4"},                               # 只是包含，不算重复
+    ])
+    assert r["merged"] == 3
+    assert r["mergedTitles"] == ["1. 复习", "英语 拓学单。", "unit5单词"]
+    titles = [it["title"] for it in r["items"]]
+    assert titles.count("复习") == 1 and titles.count("英语拓学单") == 1
+    assert "复习 U4" in titles and len(r["items"]) == 4
+    assert _by(r, "复习")["status"] == "done"  # 已做完的不动
+
+
+def test_add_merge_links_plan(app, client):
+    h, _ = _login(client, "13800000202")
+    _add(client, h, [{"title": "U5 拓学单", "subject": "english"}])
+    r = _add(client, h, [{"title": "U5拓学单", "subject": "english", "planAssignmentId": "pa123"}])
+    assert r["merged"] == 1
+    assert _by(r, "U5 拓学单")["planAssignmentId"] == "pa123"

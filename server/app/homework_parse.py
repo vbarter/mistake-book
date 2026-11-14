@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from .constants import SUBJECTS
 
@@ -145,6 +146,11 @@ def normalize(items: list, fallback_text: str = "") -> list[dict]:
 
 def _norm_name(s: str) -> str:
     return re.sub(r"[\s\-–_·.,，。:：、()（）《》“”\"']+", "", s or "").lower()
+
+
+def dup_key(title: str) -> str:
+    """判重用的写法：全角半角统一、去掉开头的编号、空格和标点、大小写。两项这个一样就算同一项作业（只认完全一样，「复习」和「复习 U4」不算）"""
+    return _norm_name(clean_title(unicodedata.normalize("NFKC", title or "")))
 
 
 def same_homework(a: str, b: str) -> bool:
