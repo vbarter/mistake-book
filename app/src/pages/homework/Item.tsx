@@ -90,9 +90,9 @@ export default function Item() {
             <ColorIcon name="remind" size={40} />
             <span>
               <b>提醒时间</b>
-              <span>{item.chain ? "上一项做完就自动开始计时" : item.remindAt ? "到点提醒，并自动开始计时" : "不提醒，自己点开始"}</span>
+              <span>{item.chain ? "上一项做完就自动开始计时" : item.remindAt ? "到点提醒，并自动开始计时" : "还没设提醒，点这里设一个"}</span>
             </span>
-            <strong>{item.chain ? "接着上一项" : item.remindAt ?? "不提醒"}</strong>
+            <strong>{item.chain ? "接着上一项" : item.remindAt ?? "去设置"}</strong>
             <Icon name="chevron-right" size={14} stroke={2.4} style={{ color: "var(--tertiary)" }} />
           </button>
         )}

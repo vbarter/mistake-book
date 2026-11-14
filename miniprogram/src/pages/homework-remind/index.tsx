@@ -93,7 +93,7 @@ export default function HomeworkRemind() {
                   <Text className="hw-title ellipsis">{it.title}</Text>
                   <Text className="hw-sub">预计 {it.est} 分钟</Text>
                 </View>
-                <RemindChip item={it} now={now} />
+                <RemindChip item={it} now={now} action={it.status === "todo"} />
               </View>
             ))}
           </View>

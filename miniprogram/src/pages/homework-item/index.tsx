@@ -89,9 +89,9 @@ export default function HomeworkItem() {
           <ColorIcon name="remind" size={40} />
           <View>
             <Text className="hw-rc__b">提醒时间</Text>
-            <Text className="hw-rc__s">{item.chain ? "上一项做完就自动开始计时" : item.remindAt ? "到点提醒，并自动开始计时" : "不提醒，自己点开始"}</Text>
+            <Text className="hw-rc__s">{item.chain ? "上一项做完就自动开始计时" : item.remindAt ? "到点提醒，并自动开始计时" : "还没设提醒，点这里设一个"}</Text>
           </View>
-          <Text className="hw-rc__strong">{item.chain ? "接着上一项" : item.remindAt ?? "不提醒"}</Text>
+          <Text className="hw-rc__strong">{item.chain ? "接着上一项" : item.remindAt ?? "去设置"}</Text>
           <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
         </View>
       )}
