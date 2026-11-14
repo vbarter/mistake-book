@@ -253,3 +253,31 @@ def test_merge_and_delete_account(app, client):
     assert HomeworkItem.query.filter_by(user_id=uid).count() == 1
     assert client.delete("/api/auth/me", headers=h).status_code == 200
     assert HomeworkItem.query.filter_by(user_id=uid).count() == 0
+
+
+def test_checkin_streak_and_week(app, client):
+    """首页打卡：一天的清单全做完算打卡；今天没做完不算断，从昨天往前数；本周一到周日逐天标出来。DAY 是周五"""
+    Clock(app, "18:00")
+    h, uid = _login(client, "13800000013")
+    def put(day, statuses):
+        for i, st in enumerate(statuses):
+            db.session.add(HomeworkItem(user_id=uid, day=day, title=f"{day}-{i}", position=i, status=st))
+        db.session.commit()
+    put("2026-11-09", ["done", "done"])  # 周一
+    put("2026-11-10", ["done", "todo"])  # 周二 没做完，断了
+    put("2026-11-11", ["done"])          # 周三
+    put("2026-11-12", ["done", "done"])  # 周四
+    put(DAY, ["todo"])                   # 今天（周五）还没做完
+    c = _get(client, h)["checkin"]
+    assert c["streak"] == 2 and c["today"] is False and c["weekDone"] == 3
+    assert [w["done"] for w in c["week"]] == [True, False, True, True, False, False, False]
+    assert c["week"][0]["day"] == "2026-11-09" and c["week"][6]["day"] == "2026-11-15"
+    # 今天做完了：连上今天
+    item = HomeworkItem.query.filter_by(user_id=uid, day=DAY).first()
+    item.status = "done"
+    db.session.commit()
+    c = _get(client, h)["checkin"]
+    assert c["streak"] == 3 and c["today"] is True and c["weekDone"] == 4
+    # 别人的不算，空的一天不算
+    h2, _ = _login(client, "13800000014")
+    assert _get(client, h2)["checkin"] == {"streak": 0, "today": False, "week": [{**w, "done": False} for w in c["week"]], "weekDone": 0}

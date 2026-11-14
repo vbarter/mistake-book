@@ -53,6 +53,18 @@ export interface HwDay {
   now: string;
   items: HwItem[];
   summary: HwSummary;
+  /** 首页打卡：当天清单全做完算打一次卡（只算今天往前，和 day 参数无关） */
+  checkin?: HwCheckin;
+}
+
+export interface HwCheckin {
+  /** 连续打卡天数；今天还没做完不算断，从昨天往前数 */
+  streak: number;
+  /** 今天打卡了没有 */
+  today: boolean;
+  /** 本周一到周日 */
+  week: { day: string; done: boolean }[];
+  weekDone: number;
 }
 
 export interface DraftItem {

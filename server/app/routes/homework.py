@@ -213,13 +213,38 @@ def _summary(items: list[HomeworkItem], now: datetime) -> dict:
     }
 
 
+def checkin(user_id: str, today: str) -> dict:
+    """首页的打卡：某天清单里的事项全做完算打一次卡。
+    streak 是连续打卡天数（今天还没做完不算断，从昨天往前数）；week 是本周一到周日每天打没打卡。"""
+    rows = (
+        db.session.query(HomeworkItem.day, db.func.count(HomeworkItem.id), db.func.sum(db.case((HomeworkItem.status == "done", 1), else_=0)))
+        .filter(HomeworkItem.user_id == user_id, HomeworkItem.day <= today)
+        .group_by(HomeworkItem.day)
+        .all()
+    )
+    done = {d for d, total, n in rows if total and int(n or 0) == int(total)}
+    t = date.fromisoformat(today)
+    cur = t if today in done else t - timedelta(days=1)
+    streak = 0
+    while cur.isoformat() in done:
+        streak += 1
+        cur -= timedelta(days=1)
+    monday = t - timedelta(days=t.weekday())
+    week = [{"day": (monday + timedelta(days=i)).isoformat(), "done": (monday + timedelta(days=i)).isoformat() in done} for i in range(7)]
+    return {"streak": streak, "today": today in done, "week": week, "weekDone": sum(1 for w in week if w["done"])}
+
+
 def _day_payload(user_id: str, day: str) -> dict:
     now = now_local()
     items = _items(user_id, day)
     if advance(items, now):
         db.session.commit()
     store = storage.get_storage() if any(it.photos for it in items) else None
-    return {"day": day, "today": _today(), "now": _iso(now), "items": [_view(it, now, items, store) for it in items], "summary": _summary(items, now)}
+    today = _today()
+    return {
+        "day": day, "today": today, "now": _iso(now), "items": [_view(it, now, items, store) for it in items], "summary": _summary(items, now),
+        "checkin": checkin(user_id, today),
+    }
 
 
 def _own(item_id: str) -> HomeworkItem:
