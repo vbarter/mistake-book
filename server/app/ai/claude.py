@@ -1061,26 +1061,34 @@ class ClaudeProvider(AIProvider):
         return boxes
 
     def parse_homework(self, text: str, images: list[Crop]) -> list[dict]:
+        """拆作业只走 DeepSeek（配了的话）：照片先 OCR 成文字，不发图片、不回退到中转通道。
+        DeepSeek 开了看图（DEEPSEEK_VISION）时照片直接给它；没配 DeepSeek 时才用中转通道。"""
         from ..homework_parse import normalize
 
+        use_deepseek = self.deepseek is not None
         content: list[dict] = []
         for i, img in enumerate(images):
-            # 和扫描试卷一样走纯文字链路：DeepSeek 不看图时先 OCR，文字交给 DeepSeek（中转通道不可用时照片也能拆）；OCR 失败的那张照旧带照片
-            words = ""
-            if self.text_only and ocr.enabled():
-                try:
-                    words = ocr.ocr_image(img.data, img.media_type).strip()
-                except Exception as e:  # noqa: BLE001
-                    log.warning("homework ocr failed on photo %s, send image instead: %s", i, e)
-            if words:
-                content.append({"type": "text", "text": f"第 {i + 1} 张照片（OCR 识别出的文字，行序可能有错）：\n{words}"})
+            image_block = {"type": "image", "source": {"type": "base64", "media_type": img.media_type, "data": base64.standard_b64encode(img.data).decode("utf-8")}}
+            if not use_deepseek or self.deepseek.vision:
+                content += [{"type": "text", "text": f"第 {i + 1} 张照片："}, image_block]
                 continue
-            content.append({"type": "text", "text": f"第 {i + 1} 张照片："})
-            content.append({"type": "image", "source": {"type": "base64", "media_type": img.media_type, "data": base64.standard_b64encode(img.data).decode("utf-8")}})
+            if not ocr.enabled():
+                raise AIError("照片识字没开，先打字添加吧")
+            try:
+                words = ocr.ocr_image(img.data, img.media_type).strip()
+            except Exception as e:  # noqa: BLE001
+                log.warning("homework ocr failed on photo %s: %s", i, e)
+                raise AIError("照片没认出来，换一张清楚点的，或者直接打字") from e
+            if not words:
+                raise AIError("照片里没认出文字，换一张清楚点的，或者直接打字")
+            content.append({"type": "text", "text": f"第 {i + 1} 张照片（OCR 识别出的文字，行序可能有错）：\n{words}"})
         if text.strip():
             content.append({"type": "text", "text": f"文字：\n{text.strip()}"})
         content.append({"type": "text", "text": HOMEWORK_PROMPT})
-        data = self._call(HOMEWORK_SYSTEM, content, HOMEWORK_SCHEMA, max_tokens=4000)
+        if use_deepseek:
+            data = self._call_deepseek(HOMEWORK_SYSTEM, content, HOMEWORK_SCHEMA, max_tokens=4000)
+        else:
+            data = self._call(HOMEWORK_SYSTEM, content, HOMEWORK_SCHEMA, max_tokens=4000)
         return normalize(data.get("items") or [], text)
 
     def tag_topics(self, sheets: list[DigitizedPage], grade: str, batch: int = 30) -> int:

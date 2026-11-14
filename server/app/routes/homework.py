@@ -304,7 +304,7 @@ def parse():
         # 大模型不可用（额度、密钥、网络）：打了字的照样用规则拆，不让录入卡住；只有照片时才报错
         log.warning("homework parse AI failed, fallback to rules: %s", e)
         if not text.strip():
-            abort(502, f"{e}；可以先直接打字添加")
+            abort(502, str(e) if "打字" in str(e) else f"{e}；可以先直接打字添加")
         items = split_text(text)
     items = normalize(items, text)
     day = _day_arg(data.get("day"))

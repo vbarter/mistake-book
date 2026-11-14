@@ -293,30 +293,43 @@ def test_reasoning_effort_env(make, value, sent):
     assert json.loads(provider.requests[0].content).get("reasoning_effort") == sent
 
 
-def test_homework_photo_goes_to_deepseek_as_ocr_text(make, monkeypatch):
-    """作业照片：DeepSeek 不看图时先 OCR，只把文字交给 DeepSeek（中转通道没钱时照片也能拆）；OCR 失败的照旧带照片"""
-    from app.ai import ocr
+def test_homework_parse_uses_only_deepseek(make, monkeypatch):
+    """拆作业只走 DeepSeek：照片先 OCR 成文字，不发图片、不回退到中转通道"""
+    from app.ai import AIError, ocr
     from app.ai.base import Crop
 
     provider = make([])
     calls = []
 
-    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
-        calls.append({"content": content, "channels": provider._channels(content)})
+    def fake_deepseek(system, content, schema, max_tokens=16000, on_text=None):
+        calls.append(content)
         return {"items": [{"title": "U5-6 拓学单", "subject": "english", "est": 25}]}
 
-    monkeypatch.setattr(provider, "_call", fake_call)
+    def no_relay(*a, **kw):
+        raise AssertionError("不该走中转通道")
+
+    monkeypatch.setattr(provider, "_call_deepseek", fake_deepseek)
+    monkeypatch.setattr(provider, "_call_anthropic", no_relay)
     monkeypatch.setattr("app.ai.claude.ocr.enabled", lambda: True)
     monkeypatch.setattr(ocr, "ocr_page", lambda *a, **kw: ocr.OcrPage(text="周五英语：1.订签校默 2.U5-6拓学单"))
-    items = provider.parse_homework("", [Crop(data=b"img")])
+    items = provider.parse_homework("还有口算", [Crop(data=b"img")])
     assert items[0]["title"] == "U5-6 拓学单"
-    assert not any(c.get("type") == "image" for c in calls[0]["content"])
-    assert "订签校默" in "\n".join(c.get("text", "") for c in calls[0]["content"])
-    assert calls[0]["channels"][0] == "deepseek"
+    texts = "\n".join(c.get("text", "") for c in calls[0])
+    assert not any(c.get("type") == "image" for c in calls[0]) and "订签校默" in texts and "还有口算" in texts
 
+    # OCR 失败：报错（接口那边打了字的会用规则拆），不改发照片给中转
     def fail(*a, **kw):
         raise ocr.OCRError("offline")
 
     monkeypatch.setattr(ocr, "ocr_page", fail)
-    provider.parse_homework("", [Crop(data=b"img")])
-    assert any(c.get("type") == "image" for c in calls[1]["content"]) and calls[1]["channels"] == ["anthropic"]
+    with pytest.raises(AIError):
+        provider.parse_homework("", [Crop(data=b"img")])
+    assert len(calls) == 1
+
+    # DeepSeek 自己失败也不回退到中转
+    def ds_fail(*a, **kw):
+        raise AIError("AI 服务正忙，请稍后再试")
+
+    monkeypatch.setattr(provider, "_call_deepseek", ds_fail)
+    with pytest.raises(AIError):
+        provider.parse_homework("数学：口算", [])
