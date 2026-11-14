@@ -1,12 +1,13 @@
 /**
- * 角色图标：首页四块黑板上的「试卷小人」，各拿一样东西（今天作业计划拿夹板清单、学习计划拿台历、错题收集拿打叉的卷子、试卷擦除举板擦）。
+ * 角色图标：首页四块黑板上的「试卷小人」，各拿一样东西（今天作业计划拿夹板清单、学习计划拿台历、错题收集拿打叉的卷子、试卷擦除举板擦）；
+ * 计时页再用三张：focus 捧着秒表、stuck 秒表超了冒问号、done 举起打勾的小旗。
  * 身体和插画 Buddy（App components/Illustration.tsx、小程序 components/Buddy.tsx）是同一张画，只是整体左移 16 给道具让位。160×160 画布。
  * 两套主题 × 深浅色各一份配色，和 tokens.css 的 --ill-* 同一套值。设计稿和 SVG 素材在项目文件 screenshots/home-blackboard/。
  * 这个文件 App 和小程序各放一份，内容保持一致（app/src/lib/roleIcons.ts ↔ miniprogram/src/lib/roleIcons.ts）。
  */
 import type { ThemeName } from "./colorIcons";
 
-export type RoleName = "todo" | "plan" | "wrong" | "erase";
+export type RoleName = "todo" | "plan" | "wrong" | "erase" | "focus" | "stuck" | "done";
 interface Palette { paper: string; paper2: string; line: string; ink: string; cheek: string; tie: string; star: string; ok: string; okbg: string; shadow: string; wrong: string; wrongbg: string; soft: string }
 
 const PALETTES: Record<string, Palette> = {
@@ -15,15 +16,15 @@ const PALETTES: Record<string, Palette> = {
   pop:            { paper: "#ffffff", paper2: "#ffd6e2", line: "#f4608f", ink: "#4a2a36", cheek: "#ffb4a8", tie: "#00aeec", star: "#ffc53d", ok: "#00aeec", okbg: "#d3f1fd", shadow: "rgba(120,40,70,.12)", wrong: "#f4608f", wrongbg: "#ffe3ec", soft: "#d3f1fd" },
   "pop-dark":     { paper: "#f4f6ff", paper2: "#5a2c3d", line: "#ff8fb0", ink: "#2a1a22", cheek: "#ff9d90", tie: "#5cc8f0", star: "#ffc53d", ok: "#00aeec", okbg: "#d3f1fd", shadow: "rgba(0,0,0,.45)", wrong: "#f4608f", wrongbg: "#ffe3ec", soft: "#d3f1fd" },
 };
-export const ROLE_NAMES: Record<RoleName, string> = { todo: "今天作业计划", plan: "学习计划", wrong: "错题收集", erase: "试卷擦除" };
+export const ROLE_NAMES: Record<RoleName, string> = { todo: "今天作业计划", plan: "学习计划", wrong: "错题收集", erase: "试卷擦除", focus: "计时中", stuck: "卡住了", done: "做完了" };
 
 function inner(scene: RoleName, p: Palette, shadow: boolean): string {
   const S = `stroke="${p.line}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"`;
   const arm = (d: string) => `<path d="${d}" stroke="${p.line}" stroke-width="5" stroke-linecap="round" fill="none"/>`;
-  const happy = scene === "erase";
+  const happy = scene === "erase" || scene === "done";
   const face = happy
     ? `<path d="M60 87q4-6 8 0M84 87q4-6 8 0" stroke="${p.ink}" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M68 97q8 9 16 0z" fill="${p.ink}"/>`
-    : scene === "wrong"
+    : scene === "wrong" || scene === "stuck"
     ? `<ellipse cx="64" cy="86" rx="4" ry="5" fill="${p.ink}"/><ellipse cx="88" cy="86" rx="4" ry="5" fill="${p.ink}"/><path d="M70 97q6 8 12 0z" fill="${p.ink}"/>`
     : `<ellipse cx="64" cy="86" rx="4" ry="5" fill="${p.ink}"/><ellipse cx="88" cy="86" rx="4" ry="5" fill="${p.ink}"/><path d="M70 98q6 6 12 0" stroke="${p.ink}" stroke-width="3" stroke-linecap="round" fill="none"/>`;
   const body = `<g transform="translate(-16 0)">
@@ -73,6 +74,37 @@ function inner(scene: RoleName, p: Palette, shadow: boolean): string {
     </g>` + arm("M96 94q4 6 9 7") +
       `<g transform="rotate(30 16 100)"><rect x="9.5" y="72" width="9" height="30" rx="3" fill="${p.wrong}"/><path d="M9.5 102l4.5 9 4.5-9z" fill="${p.ink}" opacity=".75"/></g>` + arm("M24 90q-8 4-10 12") +
       `<path d="M134 44l3-7M143 50l7-4M126 42l-1-7" stroke="${p.star}" stroke-width="3" stroke-linecap="round"/>`;
+    return wrap(body + prop, p, shadow);
+  }
+  // 计时页三张：捧着秒表、秒表超了冒问号、举起打勾的小旗
+  const watch = (cx: number, cy: number, r: number, hand: string, c: string) => `<g>
+      <rect x="${cx - 5}" y="${cy - r - 9}" width="10" height="7" rx="2.5" fill="${p.line}"/>
+      <path d="M${cx + r * 0.62} ${cy - r * 0.86}l5-5" stroke="${p.line}" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="${p.paper}" ${S}/>
+      <circle cx="${cx}" cy="${cy}" r="${r - 5}" fill="none" stroke="${p.paper2}" stroke-width="3"/>
+      <path d="M${cx} ${cy - r + 5}A${r - 5} ${r - 5} 0 0 1 ${cx + (r - 5)} ${cy}" stroke="${c}" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M${cx} ${cy}${hand}" stroke="${p.ink}" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="${cx}" cy="${cy}" r="2.6" fill="${p.ink}"/>
+    </g>`;
+  if (scene === "focus") {
+    prop = `<g transform="rotate(8 126 92)">${watch(126, 92, 20, "l9-6", p.tie)}</g>` + arm("M96 96q4 6 10 6") +
+      `<g transform="rotate(30 16 100)"><rect x="9.5" y="72" width="9" height="30" rx="3" fill="${p.tie}"/><path d="M9.5 102l4.5 9 4.5-9z" fill="${p.ink}" opacity=".75"/></g>` + arm("M24 90q-8 4-10 12") +
+      spark(148, 50, 0.8, p.star);
+    return wrap(body + prop, p, shadow);
+  }
+  if (scene === "stuck") {
+    prop = `<g transform="rotate(-6 126 96)">${watch(126, 96, 20, "l-2-11", p.wrong)}</g>` + arm("M96 98q4 6 10 4") + armL +
+      `<path d="M130 40q0-9 8-9t8 8q0 6-8 8v5" stroke="${p.star}" stroke-width="4" stroke-linecap="round" fill="none"/><circle cx="138" cy="60" r="2.6" fill="${p.star}"/>
+      <path d="M112 44q0-5 4.5-5t4.5 4.5q0 3.5-4.5 4.5v3" stroke="${p.star}" stroke-width="3" stroke-linecap="round" fill="none" opacity=".8"/>
+      <path d="M36 42q-5 7 0 10q5-3 0-10z" fill="${p.soft}" stroke="${p.line}" stroke-width="1.5"/>`;
+    return wrap(body + prop, p, shadow);
+  }
+  if (scene === "done") {
+    prop = arm("M96 80q12-6 16-22") +
+      `<path d="M114 64l8-44" stroke="${p.line}" stroke-width="3.5" stroke-linecap="round"/>
+      <path d="M121.5 22l26 6-4 10 5 9-26-5z" fill="${p.okbg}" stroke="${p.ok}" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M126 32l4 4 7-7" stroke="${p.ok}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>` + armL +
+      spark(150, 74, 0.9, p.star) + spark(102, 22, 0.6, p.star) + spark(146, 110, 0.55, p.star);
     return wrap(body + prop, p, shadow);
   }
   // erase：举着板擦，擦过的地方留下一道干净的弧线

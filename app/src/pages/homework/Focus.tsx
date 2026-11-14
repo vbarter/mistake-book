@@ -1,15 +1,35 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Icon } from "../../components/Icon";
-import { Button, Sheet, Spinner } from "../../components/ui";
-import { act, alarmKey, clockOf, hourMin, hwSubjectLabel, liveUsed, loadDay, minSec, mmss, nextTodo, orderOf, uploadPhotos, useHomework, type HwItem } from "../../lib/homework";
+import { RoleIcon } from "../../components/RoleIcon";
+import { Button, Empty, Sheet, Spinner } from "../../components/ui";
+import { act, alarmKey, CHALK, clockOf, focusRingSvg, groupBySubject, hwSubjectLabel, liveUsed, loadDay, minSec, mmss, nextTodo, orderOf, uploadPhotos, useHomework, type ChalkTone, type HwItem } from "../../lib/homework";
+import { useTheme } from "../../lib/theme";
 import { haptic, pickImages, takePhoto } from "../../lib/native";
 import { toast, toastError } from "../../store/banner";
 import { useTick } from "./shared";
 
 const MORE_MINUTES = 10;
 
-/** 10 计时中 · 11 做完了（停表、完成拍照）· 13 超时（卡住了怎么办） */
+/** 烘好的粉笔数字（tools/chalk-digits.mjs）：<色>-<字>.png，冒号是 c */
+const DIGITS = import.meta.glob<string>("../../assets/chalk/num/*.png", { eager: true, import: "default" });
+const digit = (tone: ChalkTone, ch: string) => DIGITS[`../../assets/chalk/num/${tone}-${ch === ":" ? "c" : ch}.png`];
+
+/** 黑板上的计时数字：一个字一张图，数字格子等宽，跳秒时不晃。超过一小时（1:05:32）整体缩小一号，还在圈里 */
+function ChalkTime({ text, tone }: { text: string; tone: ChalkTone }) {
+  return (
+    <span className={`fb__t${text.length > 5 ? " fb__t--long" : ""}`} role="timer" aria-label={text} style={{ color: CHALK[tone] }}>
+      {[...text].map((ch, i) => <img key={i} className={ch === ":" ? "fb__tc" : "fb__td"} src={digit(tone, ch)} alt="" />)}
+    </span>
+  );
+}
+
+const DOODLE = {
+  sun: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8" /></svg>,
+  star: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z" /></svg>,
+};
+
+/** 10 计时中 · 11 做完了（停表、完成拍照）· 13 超时（卡住了怎么办）。整块计时区是一块黑板（和首页同一套），左下角是拿秒表的试卷小人 */
 /** 换一项时整页重来（做完的弹窗、超时提醒都是这一项的） */
 export default function FocusRoute() {
   const { id = "" } = useParams();
@@ -27,6 +47,10 @@ function Focus() {
   const [busy, setBusy] = useState(false);
   const [stuck, setStuck] = useState(false);
   const [finished, setFinished] = useState<HwItem | null>(null);
+  const theme = useTheme((s) => s.theme);
+  const dark = useTheme((s) => s.dark);
+  // 圆环头上那颗点用领带色；SVG 属性里用不了 CSS 变量，换主题时取一次
+  const tie = useMemo(() => getComputedStyle(document.documentElement).getPropertyValue("--tie").trim() || "#a3303f", [theme, dark]); // eslint-disable-line react-hooks/exhaustive-deps
   /** 超时后「再做 10 分钟」：到这个已用秒数再提醒一次 */
   const remindAgainAt = useRef<number | null>(null);
 
@@ -48,18 +72,17 @@ function Focus() {
     }
   }, [used, estSec, item, finished]);
 
-  if (!data) return <div className="hw-focus"><Spinner /></div>;
+  if (!data) return <div className="fz"><Spinner /></div>;
   if (!item && !finished) {
     return (
-      <div className="hw-focus">
-        <div className="hw-focus__top"><button className="hw-focus__close" onClick={() => nav("/homework", { replace: true })}><Icon name="chevron-down" size={16} stroke={2.4} />收起</button></div>
-        <div className="hw-focus__what"><span className="hw-focus__title">这一项不在了</span></div>
+      <div className="fz">
+        <div className="fz__nav"><button className="fz__close" onClick={() => nav("/homework", { replace: true })}><Icon name="chevron-down" size={16} stroke={2.6} />收起</button></div>
+        <Empty icon="document" title="这一项不在了" />
       </div>
     );
   }
   const cur = (item ?? finished)!;
   const idx = orderOf(data.items, cur.id);
-  const doneCount = data.summary.done;
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     try {
@@ -88,50 +111,80 @@ function Focus() {
         nav(`/homework/focus/${next.id}`, { replace: true });
       } else close();
     });
-  const ratio = Math.min(1, used / estSec);
-  const R = 118;
-  const C = 2 * Math.PI * R;
   const left = Math.ceil((estSec - used) / 60);
+  const paused = cur.status === "paused";
+  const done = cur.status === "done" || !!finished;
+  const diff = used - estSec;
+  const tone: ChalkTone = done ? "g" : over ? "o" : "w";
+  const flat = groupBySubject(data.items).flatMap((g) => g.items);
+  const started = cur.firstStartedAt ? `${clockOf(cur.firstStartedAt)} ${cur.autoStarted ? "自动开始" : "开始"}` : "";
 
   return (
-    <div className={`hw-focus${over && cur.status !== "done" ? " hw-focus--over" : ""}`}>
-      <div className="hw-focus__top">
-        <button className="hw-focus__close" onClick={close}><Icon name="chevron-down" size={16} stroke={2.4} />收起</button>
+    <div className={`fz${done ? " fz--done" : over ? " fz--over" : paused ? " fz--paused" : ""}`}>
+      <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+        <filter id="fz-chalk" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves={2} seed={3} result="n" />
+          <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.4 2.05" result="m" />
+          <feComposite in="SourceGraphic" in2="m" operator="in" />
+        </filter>
+      </svg>
+      <div className="fz__nav">
+        <button className="fz__close" onClick={close}><Icon name="chevron-down" size={16} stroke={2.6} />收起</button>
       </div>
-      <div className="hw-focus__what">
-        <span className="hw-focus__tag"><i>{hwSubjectLabel(cur.subject)}</i>第 {idx} 项 / 共 {data.items.length} 项</span>
-        <span className="hw-focus__title">{cur.title}</span>
+
+      <div className="fb">
+        <div className="fb__face">
+          <div className="fb__row">
+            <span className="fb__tag">第<b>{idx}</b>项 / 共<b>{data.items.length}</b>项</span>
+            <span className="fb__subj">{hwSubjectLabel(cur.subject)}</span>
+          </div>
+          <div className="fb__title">{cur.title}</div>
+          <svg className="fb__line" width="120" height="8" viewBox="0 0 120 8" fill="none" aria-hidden="true"><path d="M2 6C30 2.5 76 1.5 118 3" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" /></svg>
+          <div className="fb__ring">
+            <span className="fb__ringsvg" dangerouslySetInnerHTML={{ __html: focusRingSvg({ used, est: estSec, paused, done, tie, filter: "fz-chalk" }) }} />
+            <div className="fb__in">
+              <ChalkTime text={mmss(used)} tone={tone} />
+              {done ? (
+                <span className="fb__s">{diff > 0 ? `超了 ${minSec(diff)}` : `快了 ${minSec(-diff)}`}</span>
+              ) : over ? (
+                <span className="fb__badge">已超 <b>{Math.floor(diff / 60)}</b> 分钟</span>
+              ) : (
+                <span className="fb__s">{paused ? "已暂停" : "计时中"} · 还剩 <b>{left}</b> 分</span>
+              )}
+            </div>
+          </div>
+          <span className="fb__doodle fb__doodle--r" aria-hidden="true">{done ? DOODLE.star : DOODLE.sun}</span>
+          <span className="fb__doodle fb__doodle--l" aria-hidden="true">{DOODLE.star}</span>
+          <span className="fb__est">预计 <b>{cur.est}</b> 分钟{started && <><br />{started}</>}</span>
+          {paused && <span className="fb__zz" aria-hidden="true">z z</span>}
+          <RoleIcon name={done ? "done" : over ? "stuck" : "focus"} size={112} shadow={false} className="fb__buddy" />
+        </div>
+        <span className="fb__tray" aria-hidden="true"><i /><i /></span>
       </div>
-      <div className="hw-ring">
-        <svg width="260" height="260" viewBox="0 0 260 260">
-          <circle cx="130" cy="130" r={R} fill="none" stroke="rgba(255,255,255,.16)" strokeWidth="12" />
-          <circle cx="130" cy="130" r={R} fill="none" stroke="#fff" strokeWidth="12" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - ratio)} style={{ transition: "stroke-dashoffset 1s linear" }} />
-        </svg>
-        <div className="hw-ring__in">
-          <span className="hw-ring__t">{mmss(used)}</span>
-          {over ? (
-            <span className="hw-ring__over"><Icon name="clock" size={12} stroke={2.6} />已超 {Math.floor((used - estSec) / 60)} 分钟</span>
-          ) : (
-            <span className="hw-ring__s">
-              {cur.status === "paused" ? "已暂停" : cur.autoStarted && cur.startedAt ? `${clockOf(cur.firstStartedAt)} 自动开始` : "计时中"} · 还剩 {left} 分
+
+      <div className="fs">
+        <span className="fs__l"><small>今天做完</small><b><i>{data.summary.done}</i> / {data.items.length} 项</b></span>
+        <span className="fs__dots">
+          {flat.map((it, i) => (
+            <span key={it.id} className={`fs__d${it.id === cur.id && !done ? " cur" : it.status === "done" ? " done" : ""}`}>
+              <span className="fs__c">{it.status === "done" ? <Icon name="check" size={14} stroke={3} /> : i + 1}</span>
+              {hwSubjectLabel(it.subject).slice(0, 1)}
             </span>
-          )}
-        </div>
+          ))}
+        </span>
       </div>
-      <div className="hw-focus__note">预计 {cur.est} 分钟 · 今天已用 {hourMin(data.summary.used)} · 做完 {doneCount} 项</div>
       {cur.planAssignmentId && (
-        <div className="hw-focus__links">
-          <button onClick={() => nav(`/plans/a/${cur.planAssignmentId}`)}><Icon name="document" size={16} />看老师布置的作业</button>
-        </div>
+        <button className="fz__link" onClick={() => nav(`/plans/a/${cur.planAssignmentId}`)}><Icon name="document" size={15} stroke={2.2} />看老师布置的作业<Icon name="chevron-right" size={12} stroke={2.6} /></button>
       )}
-      <div className="hw-ctl">
-        {cur.status === "paused" ? (
-          <button disabled={busy} onClick={() => run(() => act(cur.id, "resume"))}><span className="hw-ctl__b"><Icon name="play" size={22} fill /></span>继续</button>
+
+      <div className="fc">
+        {paused ? (
+          <button className="fc__b" disabled={busy} onClick={() => run(() => act(cur.id, "resume"))}><span className="fc__box"><span className="fc__i"><Icon name="play" size={24} fill /></span></span>继续</button>
         ) : (
-          <button disabled={busy || cur.status !== "running"} onClick={() => run(() => act(cur.id, "pause"))}><span className="hw-ctl__b"><Icon name="pause" size={22} stroke={2.6} /></span>暂停</button>
+          <button className="fc__b" disabled={busy || cur.status !== "running"} onClick={() => run(() => act(cur.id, "pause"))}><span className="fc__box"><span className="fc__i"><Icon name="pause" size={24} stroke={3} /></span></span>暂停</button>
         )}
-        <button disabled={busy || cur.status === "done"} onClick={finish}><span className="hw-ctl__main"><Icon name="check" size={38} stroke={3.2} /></span>做完了</button>
-        <button disabled={busy} onClick={() => setStuck(true)}><span className="hw-ctl__b"><Icon name="help" size={24} stroke={2.2} /></span>卡住了</button>
+        <button className="fc__b fc__b--main" disabled={busy || cur.status === "done"} onClick={finish}><span className="fc__box"><span className="fc__main"><Icon name="check" size={40} stroke={3.2} /></span></span>做完了</button>
+        <button className="fc__b" disabled={busy} onClick={() => setStuck(true)}><span className="fc__box"><span className="fc__i"><Icon name="help" size={26} stroke={2.2} /></span></span>卡住了</button>
       </div>
 
       <Sheet open={stuck} onClose={() => setStuck(false)} title={over ? "超过预计时间了" : "卡住了？"}>
