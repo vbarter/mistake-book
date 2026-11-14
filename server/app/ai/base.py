@@ -191,3 +191,9 @@ class AIProvider:
     def tag_topics(self, sheets: list[DigitizedPage], grade: str) -> int:
         """给做错 / 半对 / 没作答的题块挑图谱知识点（写进 block.topic）。返回标上的题块数；默认什么都不做。"""
         return 0
+
+    def parse_homework(self, text: str, images: list[Crop]) -> list[dict]:
+        """今天作业计划：把老师的消息、家校本照片拆成一项一项作业 [{title, subject, est}]。默认只按规则拆文字，不看照片。"""
+        from ..homework_parse import split_text
+
+        return split_text(text)
