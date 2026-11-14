@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Picker, Text, View } from "@tarojs/components";
 import Taro, { useRouter } from "@tarojs/taro";
 import { ColorIcon } from "../../components/ColorIcon";
+import { Icon } from "../../components/Icon";
 import { RemindChip, RemindSheet, useTick } from "../../components/homework";
 import { Button, SubjectTile } from "../../components/ui";
 import { errorText } from "../../lib/api";
 import { toast } from "../../lib/hooks";
-import { defaultStart, groupBySubject, hwSubjectLabel, loadDay, orderOf, schedule, tileSubject, useHomework, type HwItem } from "../../lib/homework";
-import { useThemeClass } from "../../lib/theme";
+import { defaultStart, groupBySubject, liveNow, hwSubjectLabel, loadDay, orderOf, schedule, tileSubject, useHomework, type HwItem } from "../../lib/homework";
+import { C, useThemeClass } from "../../lib/theme";
 
 const back = () => void Taro.navigateBack().catch(() => Taro.redirectTo({ url: "/pages/homework/index" }));
 
-/** 06 设置提醒时间（和 App 一致）：一键从几点开始按预计用时排好；每一项也可以单独改 */
+/** 06 提醒时间（和 App 一致）：顶部一个时钟定开始时间，一进来就按预计用时把每一项排好，改时钟立刻重排；每一项也可以单独改 */
 export default function HomeworkRemind() {
   const tc = useThemeClass();
   const day = useRouter().params.day || undefined;
@@ -26,10 +27,11 @@ export default function HomeworkRemind() {
   const todo = useMemo(() => data?.items.filter((it) => it.status === "todo") ?? [], [data]);
   const auto = todo.some((it) => it.remindAt || it.chain);
   const firstAt = todo.find((it) => it.remindAt)?.remindAt;
+  const { fetchedAt } = useHomework();
   const [from, setFrom] = useState("");
   useEffect(() => {
-    if (data && !from) setFrom(firstAt ?? defaultStart(data.now));
-  }, [data, firstAt, from]);
+    if (data && !from) setFrom(firstAt ?? (data.day === data.today ? defaultStart(liveNow(data.now, fetchedAt)) : "18:00"));
+  }, [data, firstAt, from, fetchedAt]);
 
   const run = async (start: string | null) => {
     setBusy(true);
@@ -41,6 +43,14 @@ export default function HomeworkRemind() {
       setBusy(false);
     }
   };
+
+  // 一进来就按顶部的开始时间把每一项排好（一项都还没设提醒时）；不想要可以关掉开关，或单独改某一项（和 App 一致）
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (!data || !from || autoTried.current || (day && data.day !== day)) return;
+    autoTried.current = true;
+    if (todo.length && !auto) void run(from);
+  }, [data, from]);
 
   if (!data) {
     return (
@@ -63,19 +73,24 @@ export default function HomeworkRemind() {
           </View>
         </View>
         <View className="hw-auto__row">
-          <Text>从</Text>
           <Picker
             mode="time"
             value={from || "18:00"}
             onChange={(e) => {
               const v = String(e.detail.value);
               setFrom(v);
-              if (auto) void run(v);
+              void run(v);
             }}
           >
-            <Text className="hw-auto__time">{from}</Text>
+            <View className="hw-clock">
+              <Icon name="clock" size={18} color={C.brand} stroke={2.4} />
+              <Text className="hw-clock__t">{from}</Text>
+            </View>
           </Picker>
-          <Text>开始，按用时排好</Text>
+          <View className="hw-auto__txt">
+            <Text className="hw-auto__txtb">开始</Text>
+            <Text>每一项按预计用时自动排好</Text>
+          </View>
           <View className={`hw-switch${auto ? " hw-switch--on" : ""}`} onClick={() => !busy && todo.length && void run(auto ? null : from)} />
         </View>
       </View>

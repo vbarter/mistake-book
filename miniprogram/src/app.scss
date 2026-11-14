@@ -1075,7 +1075,10 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .hw-help__s { font-size: 12px; color: $secondary; }
 .hw-auto__b { font-size: 15.5px; font-weight: 700; color: $label; display: block; }
 .hw-auto__s { font-size: 12px; color: $secondary; }
-.hw-auto__time { height: 30px; line-height: 30px; border-radius: 8px; background: $brand-tint; color: $brand; font-weight: 700; padding: 0 10px; font-size: 14px; }
+.hw-clock { display: flex; align-items: center; gap: 6px; height: 52px; padding: 0 14px 0 12px; border-radius: 14px; background: $brand-tint; flex-shrink: 0; }
+.hw-clock__t { color: $brand; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hw-auto__txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 12px; color: $secondary; line-height: 1.35; }
+.hw-auto__txtb { font-size: 15px; font-weight: 700; color: $label; }
 .hw-switch__v { margin-left: auto; }
 .hw-banner__b { font-size: 15.5px; font-weight: 700; color: $label; }
 .hw-banner__s { font-size: 12px; color: $secondary; }
