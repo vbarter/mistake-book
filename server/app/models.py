@@ -553,3 +553,35 @@ class PlanView(db.Model):
     assignment_id = db.Column(db.String(32), index=True, nullable=False)
     user_id = db.Column(db.String(32), index=True, nullable=False)
     viewed_at = db.Column(db.DateTime, default=datetime.now)
+
+
+# --------------------------------------------------------------------------- 今天作业计划（待办）
+
+
+class HomeworkItem(db.Model):
+    """「今天作业计划」里的一项作业。一个人一天一份清单（user_id + day），不单独建「计划」表。
+    每项可以设一个提醒时间：到点自动开始计时（服务器读清单时按时间推进，见 routes/homework.py 的 advance）。"""
+
+    __tablename__ = "homework_items"
+    __table_args__ = (db.Index("ix_homework_user_day", "user_id", "day"),)
+
+    id = db.Column(db.String(32), primary_key=True, default=_uuid)
+    user_id = db.Column(db.String(32), nullable=False)
+    day = db.Column(db.String(10), nullable=False)  # YYYY-MM-DD，按北京时间算哪一天
+    title = db.Column(db.String(120), default="")
+    subject = db.Column(db.String(16), default="other")  # SUBJECTS 之一或 other
+    position = db.Column(db.Integer, default=0)
+    source = db.Column(db.String(8), default="text")  # text | voice | photo | plan
+    plan_assignment_id = db.Column(db.String(32), nullable=True)  # 对上了学习计划里的哪份作业
+    remind_at = db.Column(db.String(5), nullable=True)  # "HH:MM"；空 = 不提醒、不自动开始
+    chain = db.Column(db.Boolean, default=False, nullable=False)  # 接着上一项：上一项做完就开始
+    est_minutes = db.Column(db.Integer, default=20)  # 系统估的用时，只在计时时用
+    status = db.Column(db.String(8), default="todo")  # todo | running | paused | done
+    started_at = db.Column(db.DateTime, nullable=True)  # 这一段计时的起点（running 时才有）
+    first_started_at = db.Column(db.DateTime, nullable=True)
+    elapsed = db.Column(db.Integer, default=0)  # 之前几段累计的秒数（暂停、跳过时折进来）
+    auto_started = db.Column(db.Boolean, default=False, nullable=False)  # 这次是到点自动开始的
+    finished_at = db.Column(db.DateTime, nullable=True)
+    photos = db.Column(JSON, nullable=True)  # 完成照片 [{id, uploaded}]，文件在对象存储 hw/<itemId>/<id>.jpg
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)

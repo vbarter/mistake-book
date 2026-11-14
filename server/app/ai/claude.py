@@ -441,6 +441,37 @@ TAG_SCHEMA = {
 }
 
 
+HOMEWORK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "subject": {"type": "string", "enum": ["math", "chinese", "english", "science", "physics", "chemistry", "biology", "history", "geography", "politics", "other"]},
+                    "est": {"type": "integer"},
+                },
+                "required": ["title", "subject", "est"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["items"],
+    "additionalProperties": False,
+}
+HOMEWORK_SYSTEM = "你帮小学和初中学生整理每天的家庭作业清单。只整理作业，不做题，不加评论。"
+HOMEWORK_PROMPT = (
+    "下面是学生今天的作业：可能是黑板、家校本、作业单的照片，也可能是老师在群里发的一段话，或者学生自己说的话。\n"
+    "把它拆成一项一项要做的事，每项给：\n"
+    "- title：照抄原文的说法，去掉序号，简短清楚（不超过 30 个字），不要改写成别的话；\n"
+    "- subject：学科。看抬头（「英语：」「M：」= 数学，「E」= 英语，「C」= 语文）和内容判断，判断不了用 other；\n"
+    "- est：一个普通学生大概要做几分钟（整数）。背默、订正签字约 10，一张卷子约 25，作文约 30。\n"
+    "照片里和作业无关的字（日期、班级、老师名字、提醒带的东西）不要列。一句话里有两件事就拆成两项。"
+)
+
+
 def candidate_text(subject: str, grade: str) -> str:
     """候选知识点清单：该学科全部知识点，一行一个「id｜名称｜章节」，和学生年级相近的在前。"""
     rows = taxonomy.candidates(subject, grade)
@@ -1026,6 +1057,19 @@ class ClaudeProvider(AIProvider):
             if x1 > x0 and y1 > y0:
                 boxes.append([round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4)])
         return boxes
+
+    def parse_homework(self, text: str, images: list[Crop]) -> list[dict]:
+        from ..homework_parse import normalize
+
+        content: list[dict] = []
+        for i, img in enumerate(images):
+            content.append({"type": "text", "text": f"第 {i + 1} 张照片："})
+            content.append({"type": "image", "source": {"type": "base64", "media_type": img.media_type, "data": base64.standard_b64encode(img.data).decode("utf-8")}})
+        if text.strip():
+            content.append({"type": "text", "text": f"文字：\n{text.strip()}"})
+        content.append({"type": "text", "text": HOMEWORK_PROMPT})
+        data = self._call(HOMEWORK_SYSTEM, content, HOMEWORK_SCHEMA, max_tokens=4000)
+        return normalize(data.get("items") or [], text)
 
     def tag_topics(self, sheets: list[DigitizedPage], grade: str, batch: int = 30) -> int:
         """识别后的第四步：做错 / 半对 / 没作答的题块按学科分组，连同该学科学段的知识点清单交给大模型挑一个知识点 id（纯文本，不传照片）。

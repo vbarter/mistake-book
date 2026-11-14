@@ -6,7 +6,8 @@ import { ColorIcon } from "../components/ColorIcon";
 import { Icon } from "../components/Icon";
 import { Buddy } from "../components/Illustration";
 import { Sheet } from "../components/ui";
-import { Avatar } from "../components/v2";
+import { Avatar, SubjectTile } from "../components/v2";
+import { hourMin, nextTodo, tileSubject, useHomework } from "../lib/homework";
 import { listFolders, thumbOf, type Folder } from "../lib/folders";
 import { useJobs } from "../lib/jobs";
 import { isScanErrorSeen, markScanErrorSeen } from "../lib/scanNotice";
@@ -158,6 +159,8 @@ export default function Home() {
           </button>
         )}
 
+        <HomeworkCard />
+
         <section className="rise" style={{ ["--i" as string]: 2 }}>
           <div className="h4__sech">
             <button className="h4__sect" onClick={() => nav("/plans")}>学习计划</button>
@@ -184,5 +187,36 @@ export default function Home() {
         </div>
       </Sheet>
     </div>
+  );
+}
+
+/** 首页的「今天作业计划」卡片：没有事项时引导添加；做到一半显示进度和下一项；做完了显示用时 */
+function HomeworkCard() {
+  const nav = useNavigate();
+  const data = useHomework((s) => s.data);
+  const today = data && data.day === data.today ? data : null;
+  const s = today?.summary;
+  const next = today ? (today.items.find((it) => it.id === s?.currentId) ?? (s?.nextId ? today.items.find((it) => it.id === s.nextId) : null) ?? nextTodo(today.items)) : null;
+  const sub = !s || !s.total ? "打一句、拍一张，自动列清单" : s.allDone ? `${s.total} 项全做完了 · 用了 ${hourMin(s.used)}` : `做完 ${s.done} 项，还剩 ${s.left} 项`;
+  const go = !s || !s.total ? "添加" : s.allDone ? "看看" : s.done || s.currentId ? "继续" : "查看";
+  return (
+    <button className="h4__hw rise" style={{ ["--i" as string]: 1 }} onClick={() => nav("/homework")}>
+      <span className="h4__hwtop">
+        <ColorIcon name="todo" size={40} />
+        <span style={{ minWidth: 0 }}>
+          <b>今天作业计划</b>
+          <span className="ellipsis" style={{ display: "block" }}>{sub}</span>
+        </span>
+        <span className="h4__hwgo">{go}<Icon name="chevron-right" size={12} stroke={2.6} /></span>
+      </span>
+      {s && s.total > 0 && !s.allDone && <span className="hw-bar" style={{ margin: 0 }}><i style={{ width: `${(s.done / s.total) * 100}%` }} /></span>}
+      {next && s && !s.allDone && (
+        <span className="h4__hwnext">
+          <SubjectTile subject={tileSubject(next.subject)} size="xs" />
+          <span className="ellipsis">{next.status === "todo" ? "下一项" : "正在做"} {next.title}</span>
+          {next.status === "todo" && next.remindAt && <span className="hw-rmd"><ColorIcon name="remind" size={18} />{next.remindAt}</span>}
+        </span>
+      )}
+    </button>
   );
 }

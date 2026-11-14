@@ -42,13 +42,24 @@ import PlanDetail from "./pages/plans/PlanDetail";
 import PlanJoin from "./pages/plans/PlanJoin";
 import Assignment from "./pages/plans/Assignment";
 import Submission from "./pages/plans/Submission";
+import HomeworkToday from "./pages/homework/Today";
+import HomeworkConfirm from "./pages/homework/Confirm";
+import HomeworkRemind from "./pages/homework/Remind";
+import HomeworkItem from "./pages/homework/Item";
+import HomeworkFocus from "./pages/homework/Focus";
+import { HomeworkAlarm } from "./components/HomeworkAlarm";
 
 function RequireAuth() {
   const { ready, token } = useAuth();
   const loc = useLocation();
   if (!ready) return <Spinner />;
   if (!token) return <Navigate to="/welcome" replace state={{ from: loc.pathname }} />;
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <HomeworkAlarm />
+    </>
+  );
 }
 
 function TabLayout() {
@@ -263,6 +274,11 @@ export default function App() {
           <Route path="/plans/s/:submissionId" element={<Submission />} />
           <Route path="/plans/:planId" element={<PlanDetail />} />
           <Route path="/plans/:planId/new" element={<PlanNew />} />
+          <Route path="/homework" element={<HomeworkToday />} />
+          <Route path="/homework/confirm" element={<HomeworkConfirm />} />
+          <Route path="/homework/remind" element={<HomeworkRemind />} />
+          <Route path="/homework/focus/:id" element={<HomeworkFocus />} />
+          <Route path="/homework/:id" element={<HomeworkItem />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

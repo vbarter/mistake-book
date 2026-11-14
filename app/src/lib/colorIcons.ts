@@ -52,6 +52,7 @@ const GROUPS: Group[] = [
   ["submit", "交作业", r(11, 5, 26, 30, 4) + ln("M24 27V13M18 18.5l6-6 6 6", G, 3.2) + p("M5 31h9l2.5 5h15l2.5-5h9v8a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z", GT)],
   ["review", "批阅", r(7, 8, 27, 34, 4) + ln("M12.5 26l5 5 9.5-11.5", R, 3.6) + pencil(37, 24, 28, R)],
   ["deadline", "截止时间", ln("M9.5 12.5l6-5M38.5 12.5l-6-5", R, 4) + ln("M14 38l-3.5 4M34 38l3.5 4") + c(24, 26, 14.5) + ln("M24 17.5V26l5.5 3.5", R, 3)],
+  ["remind", "提醒时间", c(20, 28, 14.5) + ln("M20 20v8l5.5 3.5", B, 3.2) + c(20, 28, 1.8, L, false) + c(35.5, 14, 11.5, W, false) + p("M35.5 4.5a6 6 0 0 0-6 6v4L27 18.5h17L41.5 14.5v-4a6 6 0 0 0-6-6z", Y) + ln("M33.5 21.5a2 2 0 0 0 4 0") + ln("M44.5 6.5l-1.5 1.5M27 6.5l1.5 1.5", R, 2.6)],
   ["done", "已完成", c(24, 24, 18, GT) + ln("M15 24.5l6.2 6.2L33 17.5", G, 4.2)],
   ["teacher", "老师布置", r(5, 6, 38, 26, 4, T.board) + ln("M11 14h11M11 20h6", W, 2.6) + ln("M27 23l3-7.5 3 7.5M28.2 20.5h3.6", Y, 2.2) + ln("M24 32v5M15 43l9-6 9 6")],
   ["members", "成员", p("M23 38c0-6.5 4-10 10-10s10 3.5 10 10z", RT) + c(33, 17, 6, Y) + p("M4 42c0-8.5 5.5-13 13.5-13S31 33.5 31 42z", BT) + c(17.5, 19, 7.5)],
@@ -119,6 +120,7 @@ if (T.pop) {
     "plan-mine": ln("M11 43h12") + p("M17 8h23l-6 8 6 8H17z", R) + face(25.5, 15, .8, W) + ln("M17 5.5V43", L, 3),
     "plan-joined": `<rect x="7" y="5" width="23" height="38" rx="4" fill="${BT}" ${s(B)}/>` + face(18, 15, .8, B) + ln("M27 26H23", W, 7.5) + ln("M44 26H23M29.5 19.5L23 26l6.5 6.5", R, 3.4),
     "plan-quit": `<path d="M25 6H13a5 5 0 0 0-5 5v26a5 5 0 0 0 5 5h12z" fill="${BT}"/>` + ln("M25 6H13a5 5 0 0 0-5 5v26a5 5 0 0 0 5 5h12", B) + ln("M19 24h24", W, 7.5) + ln("M19.5 24H42M34.5 16.5L42 24l-7.5 7.5", R, 3.4),
+    remind: c(20, 28, 14.5) + ln("M20 20v8l5.5 3.5", B, 3.2) + blush(20, 34, 7) + c(35.5, 14, 11.5, W, false) + p("M35.5 4.5a6 6 0 0 0-6 6v4L27 18.5h17L41.5 14.5v-4a6 6 0 0 0-6-6z", YT, Y) + ln("M33.5 21.5a2 2 0 0 0 4 0", Y) + c(35.5, 12, 1.5, "#e89a00", false) + ln("M44.5 6.5l-1.5 1.5M27 6.5l1.5 1.5", R, 2.6),
     "plan-dissolve": ln("M8 43h12") + p("M14 8h23l-6 8 6 8H14z", RT, B) + ln("M14 5.5V43", B, 3) + `<circle cx="34.5" cy="34.5" r="9.5" fill="${R}" ${s(R)}/>` + ln("M31 31l7 7M38 31l-7 7", W, 2.3),
   };
   // 背后错开的色块，粉蓝交替
@@ -145,7 +147,7 @@ function table(key: string): Record<string, string> {
 export type ColorIconName =
   | "home" | "papers" | "camera" | "analysis" | "me"
   | "collect" | "album" | "erase" | "scan" | "wrong" | "ranking" | "knowledge" | "export" | "folder" | "file" | "video" | "retry" | "horn"
-  | "plan" | "plan-new" | "homework" | "submit" | "review" | "deadline" | "done" | "teacher" | "members" | "invite"
+  | "plan" | "plan-new" | "homework" | "submit" | "review" | "deadline" | "remind" | "done" | "teacher" | "members" | "invite"
   | "chinese" | "math" | "english" | "science" | "physics" | "chemistry" | "biology" | "history" | "geography" | "politics"
   | "grade" | "privacy" | "account" | "service" | "about" | "settings" | "bell" | "search" | "star" | "trash" | "todo" | "pomodoro"
   | "plan-mine" | "plan-joined" | "plan-quit" | "plan-dissolve";

@@ -22,6 +22,11 @@ export default defineAppConfig({
     "pages/plan-task/index",
     "pages/plan-review/index",
     "pages/plan-join/index",
+    "pages/homework/index",
+    "pages/homework-confirm/index",
+    "pages/homework-remind/index",
+    "pages/homework-item/index",
+    "pages/homework-focus/index",
   ],
   window: {
     backgroundTextStyle: "dark",

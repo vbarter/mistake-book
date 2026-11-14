@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "@tarojs/components";
-import Taro, { usePullDownRefresh } from "@tarojs/taro";
+import Taro, { useDidShow, usePullDownRefresh } from "@tarojs/taro";
 import { AvatarPrompt } from "../../components/AvatarPrompt";
 import { Buddy } from "../../components/Buddy";
 import { ColorIcon } from "../../components/ColorIcon";
 import { Icon, base64 } from "../../components/Icon";
-import { Avatar, Progress, useMenuButton } from "../../components/ui";
+import { Avatar, Progress, SubjectTile, useMenuButton } from "../../components/ui";
+import { hourMin, loadDay, nextTodo, tileSubject, useHomework } from "../../lib/homework";
 import { captureInto } from "../../lib/capture";
 import { useDataVersion, useTabBar } from "../../lib/hooks";
 import { pollPendingJobs } from "../../lib/jobs";
@@ -216,6 +217,8 @@ export default function Home() {
           </View>
         )}
 
+        <HomeworkCard />
+
         <View className="rise rise--2">
           <View className="h4__sech">
             <Text className="h4__sect" onClick={() => go("/pages/plans/index")}>学习计划</Text>
@@ -241,6 +244,53 @@ export default function Home() {
           </View>
         </View>
       </View>
+    </View>
+  );
+}
+
+/** 首页的「今天作业计划」卡片（和 App 一致）：没有事项时引导添加；做到一半显示进度和下一项；做完了显示用时 */
+function HomeworkCard() {
+  const { data } = useHomework();
+  useDidShow(() => {
+    if (isLoggedIn()) loadDay().catch(() => undefined);
+  });
+  const today = data && data.day === data.today ? data : null;
+  const s = today?.summary;
+  const next = today ? (today.items.find((it) => it.id === s?.currentId) ?? (s?.nextId ? today.items.find((it) => it.id === s.nextId) : null) ?? nextTodo(today.items)) : null;
+  const sub = !s || !s.total ? "打一句、拍一张，自动列清单" : s.allDone ? `${s.total} 项全做完了 · 用了 ${hourMin(s.used)}` : `做完 ${s.done} 项，还剩 ${s.left} 项`;
+  const go = !s || !s.total ? "添加" : s.allDone ? "看看" : s.done || s.currentId ? "继续" : "查看";
+  return (
+    <View className="h4__hw rise rise--1" hoverClass="card--pressed" onClick={() => void Taro.navigateTo({ url: "/pages/homework/index" })}>
+      <View className="h4__hwtop">
+        <ColorIcon name="todo" size={40} />
+        <View className="minw0 flex1">
+          <Text className="h4__hwb">今天作业计划</Text>
+          <Text className="h4__hws ellipsis">{sub}</Text>
+        </View>
+        <View className="h4__hwgo">
+          <Text className="h4__hwgot">{go}</Text>
+          <Icon name="chevron-right" size={12} color="#ffffff" stroke={2.6} />
+        </View>
+      </View>
+      {s && s.total > 0 && !s.allDone && (
+        <View className="hw-bar" style={{ margin: 0 }}>
+          <View className="hw-bar__in" style={{ width: `${(s.done / s.total) * 100}%` }} />
+        </View>
+      )}
+      {next && s && !s.allDone && (
+        <View className="h4__hwnext">
+          <SubjectTile subject={tileSubject(next.subject)} size="xs" />
+          <Text className="ellipsis flex1">
+            {next.status === "todo" ? "下一项" : "正在做"} {next.title}
+          </Text>
+          {next.status === "todo" && next.remindAt && (
+            <View className="hw-rmd">
+              <ColorIcon name="remind" size={18} />
+              <Text>{next.remindAt}</Text>
+            </View>
+          )}
+        </View>
+      )}
     </View>
   );
 }

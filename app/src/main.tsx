@@ -10,6 +10,7 @@ import "./styles/nav.css";
 import "./styles/home.css";
 import "./styles/rank.css";
 import "./styles/scan.css";
+import "./styles/homework.css";
 import "./styles/tablet.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

@@ -367,3 +367,28 @@ CREATE TABLE IF NOT EXISTS plan_tombstones (
   PRIMARY KEY (ref),
   KEY ix_plan_tombstones_plan_id (plan_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习计划：解散后留的记号（计划 id / 邀请码 / 作业 id），再有人点进来时说清已解散';
+
+CREATE TABLE IF NOT EXISTS homework_items (
+  id                 VARCHAR(32)  NOT NULL,
+  user_id            VARCHAR(32)  NOT NULL,
+  day                VARCHAR(10)  NOT NULL COMMENT 'YYYY-MM-DD（北京时间）',
+  title              VARCHAR(120) NULL,
+  subject            VARCHAR(16)  NULL COMMENT 'SUBJECTS 之一或 other',
+  position           INT          NULL,
+  source             VARCHAR(8)   NULL COMMENT 'text | voice | photo | plan',
+  plan_assignment_id VARCHAR(32)  NULL COMMENT '对上的学习计划作业',
+  remind_at          VARCHAR(5)   NULL COMMENT '提醒时间 HH:MM，到点自动开始计时',
+  chain              TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '接着上一项：上一项做完就开始',
+  est_minutes        INT          NULL COMMENT '系统估的用时（分钟）',
+  status             VARCHAR(8)   NULL COMMENT 'todo | running | paused | done',
+  started_at         DATETIME     NULL,
+  first_started_at   DATETIME     NULL,
+  elapsed            INT          NULL COMMENT '之前几段累计的秒数',
+  auto_started       TINYINT(1)   NOT NULL DEFAULT 0,
+  finished_at        DATETIME     NULL,
+  photos             JSON         NULL COMMENT '完成照片 [{id, uploaded}]，本体在对象存储 hw/<itemId>/<id>.jpg',
+  created_at         DATETIME     NULL,
+  updated_at         DATETIME     NULL,
+  PRIMARY KEY (id),
+  KEY ix_homework_user_day (user_id, day)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='今天作业计划：每项作业、提醒时间和计时';
