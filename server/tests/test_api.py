@@ -1731,6 +1731,24 @@ def test_baidu_drops_neighbour_page_strip():
         assert own in lines
 
 
+def test_baidu_drops_handwriting_only_strip_on_split_half():
+    """客户端把横拍的照片当宽幅切成两半后的右半张：邻页残片里只剩手写和一小块图，照样去掉，残片里的图也不列成插图"""
+    import json
+    from pathlib import Path
+
+    from app.ai import ocr
+
+    r = json.loads((Path(__file__).parent / "fixtures" / "baidu_math_sideways_half.json").read_text(encoding="utf-8"))
+    size = tuple(r["image_size"])
+    page = ocr.baidu_page(r, size)
+    lines = page.text.splitlines()
+    for gone in ("[手写] 50-96", "[手写] 354(d)", "[手写] 0", "[图中文字][手写] 吨"):
+        assert gone in ocr.baidu_lines(r).splitlines() and gone not in lines
+    assert "【竖排文字】" not in page.text and len(page.regions) == 1
+    for own in ("们也如上图那样拼成一个正方形。问:直角三角形的斜边是多少厘米?", "[手写] 答:直角三角形的斜边是13cm。", ".75.", "[手写] 169Bu"):
+        assert own in lines
+
+
 def test_baidu_neighbour_strip_needs_print_and_edge():
     from app.ai import ocr
 
@@ -1743,6 +1761,12 @@ def test_baidu_neighbour_strip_needs_print_and_edge():
     lines = ocr.baidu_lines(r, None, (1000, 1000)).splitlines()
     assert "级" not in lines and "[手写] 3+5" not in lines
     assert "[手写] 草稿" in lines and "10cm" in lines
+    # 贴边的一侧没有印刷字、但版面分析在那儿认出了插图：也是邻页（宽幅照片切成两半后，残片里常常只剩手写和半张图）
+    fig = {"layout": "figure", "layout_idx": [], "layout_location": [{"x": 940, "y": 500}, {"x": 999, "y": 600}]}
+    r2 = {"results": body + [line("3+5", 950, 200, 50, "handwriting")], "layouts": [fig]}
+    assert "[手写] 3+5" in ocr.baidu_lines({"results": r2["results"]}, None, (1000, 1000)).splitlines()
+    page = ocr.baidu_page(r2, (1000, 1000))
+    assert "[手写] 3+5" not in page.text.splitlines() and page.regions == []
     # 正文行太少、或正文边界离照片边很远（对页拍在一张里）：不动
     assert "级" in ocr.baidu_lines({"results": body[:3] + [line("级", 960, 100, 40)]}, None, (1000, 1000)).splitlines()
     assert "级" in ocr.baidu_lines({"results": body + [line("级", 1960, 100, 40)]}, None, (2000, 1000)).splitlines()

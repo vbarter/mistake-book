@@ -374,7 +374,9 @@ def baidu_regions(r: dict, size: tuple[int, int] | None) -> list[dict]:
         return []
     w, h = size
     results = r.get("results") or []
-    vertical = _vertical_lines(results, _direction(r))
+    direction = _direction(r)
+    vertical = _vertical_lines(results, direction)
+    strip_sides = _strip_sides(r, size, vertical)
     out = []
     for lay in r.get("layouts") or []:
         kind = lay.get("layout")
@@ -383,6 +385,8 @@ def baidu_regions(r: dict, size: tuple[int, int] | None) -> list[dict]:
             continue
         xs = [float(p.get("x", 0)) for p in pts]
         ys = [float(p.get("y", 0)) for p in pts]
+        if any(outside(_upright(_layout_box(lay), direction, size)) for outside in strip_sides):
+            continue  # 邻页残片里的图
         box = [max(0.0, min(xs) / w), max(0.0, min(ys) / h), min(1.0, max(xs) / w), min(1.0, max(ys) / h)]
         # 太小的（印章、页码框之类）不算插图
         if (box[2] - box[0]) * (box[3] - box[1]) < 0.002:  # 图片选项可能很小，别滤掉
@@ -422,24 +426,56 @@ def _text_bounds(results: list, boxes: dict, skip: set[int], page_w: float) -> t
     return min(b[0] for b in body), max(b[0] + b[2] for b in body)
 
 
-def _neighbour_strip(results: list, boxes: dict, skip: set[int], page_w: float) -> set[int]:
-    """照片边上拍进来的邻页残片：整个落在正文左 / 右边界之外、又贴着照片边缘的行。
-    这一侧的这些行里要有印刷的字才丢（只有手写的，是学生写到页边的，留着）；正文边界离照片边缘太远（对页照片）时不动。"""
-    bounds = _text_bounds(results, boxes, skip, page_w)
+def _layout_box(lay: dict) -> tuple[float, float, float, float] | None:
+    pts = lay.get("layout_location") or []
+    if len(pts) < 2:
+        return None
+    xs = [float(p.get("x", 0)) for p in pts]
+    ys = [float(p.get("y", 0)) for p in pts]
+    return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
+
+
+def _strip_sides(r: dict, size: tuple[int, int] | None, vertical: set[int] | None = None) -> list:
+    """照片边上拍进来的邻页残片在哪：返回若干判断函数（收转正后的框，说它是不是残片）；没有残片返回空列表。
+    残片 = 整个落在正文左 / 右边界之外、又贴着照片边缘的东西。这一侧要有印刷的字或版面分析认出的插图 / 表格才算邻页
+    （只有手写的，是学生写到页边的，留着）；正文边界离照片边缘太远（对页照片）时不动。"""
+    if not size:
+        return []
+    results = r.get("results") or []
+    direction = _direction(r)
+    vertical = _vertical_lines(results, direction) if vertical is None else vertical
+    page_w = float(size[1] if direction % 2 else size[0])
+    boxes = {i: (_upright(b, direction, size) if (b := _box(item)) else None) for i, item in enumerate(results)}
+    bounds = _text_bounds(results, boxes, vertical, page_w)
     if not bounds:
-        return set()
+        return []
     left, right = bounds
-    out: set[int] = set()
+    figures = [_upright(b, direction, size) for lay in r.get("layouts") or [] if lay.get("layout") in FIGURE_LAYOUTS and (b := _layout_box(lay))]
     sides = (
         (left <= STRIP_MAX * page_w, lambda b: b[0] + b[2] < left - STRIP_OUTSIDE * page_w and b[0] <= STRIP_EDGE * page_w),
         (right >= (1 - STRIP_MAX) * page_w, lambda b: b[0] > right + STRIP_OUTSIDE * page_w and b[0] + b[2] >= (1 - STRIP_EDGE) * page_w),
     )
+    out = []
     for narrow, outside in sides:
         if not narrow:
             continue
-        side = {i for i, b in boxes.items() if b and i not in skip and outside(b)}
-        if any(results[i].get("words_type") != "handwriting" and re.search(r"\w", _word(results[i])) for i in side):
-            out |= side
+        printed = any(b and i not in vertical and outside(b) and results[i].get("words_type") != "handwriting" and re.search(r"\w", _word(results[i])) for i, b in boxes.items())
+        if printed or any(outside(b) for b in figures):
+            out.append(outside)
+    return out
+
+
+def _neighbour_strip(r: dict, size: tuple[int, int] | None, vertical: set[int]) -> set[int]:
+    """邻页残片里的行（下标）"""
+    sides = _strip_sides(r, size, vertical)
+    if not sides:
+        return set()
+    direction = _direction(r)
+    out: set[int] = set()
+    for i, item in enumerate(r.get("results") or []):
+        b = _box(item)
+        if b and i not in vertical and any(outside(_upright(b, direction, size)) for outside in sides):
+            out.add(i)
     return out
 
 
@@ -452,11 +488,7 @@ def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
     vertical = _vertical_lines(results, direction)
     in_figure = _figure_lines(r, vertical)
     red = _red_lines(results, rgb)
-    # 转正后的行框：邻页残片按卷子自己的左右来算；没有照片尺寸时算不了
-    strip: set[int] = set()
-    if size:
-        boxes = {i: (_upright(b, direction, size) if (b := _box(item)) else None) for i, item in enumerate(results)}
-        strip = _neighbour_strip(results, boxes, vertical, float(size[1] if direction % 2 else size[0]))
+    strip = _neighbour_strip(r, size, vertical)  # 没有照片尺寸时算不了，不去
     chunks: list[str] = []
     for group in _baidu_order(r):
         lines: list[str] = []
