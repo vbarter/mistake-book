@@ -179,9 +179,13 @@ def _baidu_doc_analysis(data: bytes, timeout: float) -> dict:
 
 FIGURE_TAG = "[图中文字]"
 FIGURE_LAYOUTS = {"figure": "插图", "table": "表格"}
-RED_TAG = "[红笔] "
+RED_TAG = "[红笔] "  # 手写行里红笔占多数：多半是老师的批改、分数，不是学生作答
 DOUBT_TAG = "[存疑] "  # 印刷行里最没把握的字置信度低于 DOUBT_BELOW：多半有生僻字、形近字或声调认错了
-DOUBT_BELOW = 0.65  # 手写行里红笔占多数：多半是老师的批改、分数，不是学生作答
+DOUBT_BELOW = 0.65
+# 手写行整行的平均置信度低于这个：OCR 基本没认出来（实测乱码「布书」「hahal」「零」「卫」都在 0.65 以下，认对的英文句子在 0.9 以上），
+# 标 [看不清]，让大模型别照抄 OCR 的猜测，自己也看不清时作答写「□」：这样不算错题、不进错题归类，但照样给出正确答案
+UNCLEAR_TAG = "[看不清] "
+UNCLEAR_BELOW = 0.65
 
 # 竖排：行框高是宽的这么多倍以上（还要比横排行高很多）。百度 doc_analysis 只按横排识别，竖格抄写的古诗会被认成一两个怪字
 VERTICAL_RATIO = 2.5
@@ -202,6 +206,14 @@ def _box(item: dict) -> tuple[float, float, float, float] | None:
 def _line_min_prob(words: dict) -> float:
     try:
         return float((words.get("line_probability") or {}).get("min", 1.0))
+    except (TypeError, ValueError, AttributeError):
+        return 1.0
+
+
+def _line_avg_prob(words: dict) -> float:
+    p = words.get("line_probability") or {}
+    try:
+        return float(p.get("average", p.get("min", 1.0)))
     except (TypeError, ValueError, AttributeError):
         return 1.0
 
@@ -444,7 +456,7 @@ def _neighbour_strip(results: list, boxes: dict, skip: set[int], page_w: float) 
 
 
 def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
-    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]），
+    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]，整行没认出来的加 [看不清]），
     印刷行置信度低的加 [存疑]，
     落在插图 / 表格里的行加 [图中文字] 前缀；竖排的行认不出，略去并在末尾列出位置；照片边上的邻页残片去掉；没有 results 时退回 words_result。"""
     results = r.get("results") or []
@@ -468,7 +480,7 @@ def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
             word = _word(item)
             if word:
                 if item.get("words_type") == "handwriting":
-                    tag = RED_TAG if i in red else HANDWRITING_TAG
+                    tag = RED_TAG if i in red else UNCLEAR_TAG if _line_avg_prob(words) < UNCLEAR_BELOW else HANDWRITING_TAG
                 else:
                     tag = DOUBT_TAG if _line_min_prob(words) < DOUBT_BELOW else ""
                 lines.append(in_figure.get(i, "") + tag + word)

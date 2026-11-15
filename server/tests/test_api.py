@@ -660,6 +660,24 @@ def test_baidu_ocr_lines_and_token_refresh(monkeypatch):
     assert ocr.baidu_lines({"words_result": [{"words": "a"}, {"words": "b"}]}) == "a\nb"
 
 
+def test_baidu_unclear_handwriting_tagged():
+    """整行平均置信度低的手写行标 [看不清]（OCR 没认出来，多半是乱码）；只有 min 低、平均高的照旧是 [手写]；提示词里讲了 [看不清] 怎么处理"""
+    from app.ai import claude, ocr
+
+    def hand(word, mn, avg):
+        return {"words_type": "handwriting", "words": {"word": word, "line_probability": {"min": mn, "average": avg}}}
+
+    r = {"results": [
+        {"words_type": "print", "words": {"word": "1. How do you ____ today?"}},
+        hand("teeltoday?", 0.586, 0.944),
+        hand("hahal", 0.300, 0.639),
+        hand("零", 0.142, 0.142),
+        {"words_type": "handwriting", "words": {"word": "drink"}},
+    ]}
+    assert ocr.baidu_lines(r).splitlines() == ["1. How do you ____ today?", "[手写] teeltoday?", "[看不清] hahal", "[看不清] 零", "[手写] drink"]
+    assert "[看不清]" in claude.DIGITIZE_SYSTEM_PROMPT and "[看不清]" in claude.TEXT_ONLY_DIGITIZE_NOTE
+
+
 def test_unwrap_lines_joins_wrapped_sentences():
     """OCR 排版换行合回一行；分段、选项、序号行保留换行；中文相连不加空格。"""
     from app.ai.digitize import unwrap_lines, clean_block
@@ -1725,9 +1743,9 @@ def test_baidu_drops_neighbour_page_strip():
     r, size = _sideways_fixture()
     lines = ocr.baidu_page(r, size).text.splitlines()
     kept = ocr.baidu_lines(r).splitlines()  # 不给尺寸就不去残片
-    assert sorted(set(kept) - set(lines) | {x for x in kept if kept.count(x) > lines.count(x)}) == sorted(["级", "[手写] 的", "[手写] 2", "[手写] 50-96=", "[手写] =354()", "[手写] 0"])
+    assert sorted(set(kept) - set(lines) | {x for x in kept if kept.count(x) > lines.count(x)}) == sorted(["级", "[看不清] 的", "[手写] 2", "[手写] 50-96=", "[手写] =354()", "[看不清] 0"])
     assert len(kept) - len(lines) == 6
-    for own in ("[手写] ④", "⑤", "1", "2", "B级", "[手写] 千克涂", "[手写] 169Bu", "。 75."):
+    for own in ("[手写] ④", "⑤", "1", "2", "B级", "[手写] 千克涂", "[看不清] 169Bu", "。 75."):
         assert own in lines
 
 
