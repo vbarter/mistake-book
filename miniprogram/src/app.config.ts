@@ -51,8 +51,4 @@ export default defineAppConfig({
   // 上传整页试卷、等大模型批改都比较久
   networkTimeout: { request: 600000, uploadFile: 600000, downloadFile: 120000 },
   lazyCodeLoading: "requiredComponents",
-  // 语音输入用微信同声传译（src/lib/voice.ts）；要先在小程序后台「设置 › 第三方设置 › 插件管理」添加
-  plugins: {
-    WechatSI: { version: "0.3.5", provider: "wx069ba97219f66d99" },
-  },
 });
