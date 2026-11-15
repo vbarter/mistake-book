@@ -333,3 +333,31 @@ def test_homework_parse_uses_only_deepseek(make, monkeypatch):
     monkeypatch.setattr(provider, "_call_deepseek", ds_fail)
     with pytest.raises(AIError):
         provider.parse_homework("数学：口算", [])
+
+
+def test_illegible_blank_gets_answer_but_no_verdict(make, monkeypatch):
+    """作答整个看不清（□）的空：不判对错、不进错因（保持 unmarked），但缺正确答案时送去补答案；
+    已有答案的看不清不再送；verdict = unclear 时也把答案留下。"""
+    from app.ai.digitize import sheets_from_dicts
+
+    provider = make([])
+    sheets = sheets_from_dicts([{"page": 0, "label": "p1", "blocks": [
+        {"type": "item", "number": "1", "questionType": "choice", "text": "Lily fell into a pool. [[1]]", "blanks": [{"id": "1", "student": "□", "mark": "unmarked", "answer": ""}]},
+        {"type": "item", "number": "2", "questionType": "choice", "text": "Lily swam fifty metres. [[2]]", "blanks": [{"id": "2", "student": "□", "mark": "unmarked", "answer": "F"}]},
+        {"type": "item", "number": "3", "questionType": "fill", "text": "I also [[3]] (have) a headache.", "blanks": [{"id": "3", "student": "hahal", "mark": "unmarked", "answer": ""}]},
+    ]}])
+    seen = []
+
+    def fake_call(system, content, schema, max_tokens=16000, on_text=None):
+        seen.append(content[0]["text"])
+        return {"results": [
+            {"key": "s0b0#1", "answer": "T", "verdict": "wrong", "analysis": "x"},  # 模型就算判了也不采纳
+            {"key": "s0b2#3", "answer": "had", "verdict": "unclear", "analysis": ""},
+        ]}
+
+    monkeypatch.setattr(provider, "_call", fake_call)
+    assert provider.grade_unmarked(sheets, grade="5") == 0
+    assert "s0b0#1" in seen[0] and "学生作答：看不清" in seen[0] and "s0b1#2" not in seen[0]
+    blanks = [b for blk in sheets[0].blocks for b in blk.blanks]
+    assert [b.mark for b in blanks] == ["unmarked", "unmarked", "unmarked"]
+    assert [b.answer for b in blanks] == ["T", "F", "had"] and not any(b.aiGraded for b in blanks)
