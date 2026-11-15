@@ -11,6 +11,8 @@ import { useCapture } from "./store/capture";
 import { toast, toastError } from "./store/banner";
 import { BannerHost, Spinner } from "./components/ui";
 import { PhotoConfirmHost } from "./components/PhotoConfirm";
+import { AssistantHost } from "./components/Assistant";
+import { isAssistantOpen } from "./store/assistant";
 import { confirmPhoto } from "./store/photoConfirm";
 import { TabBar } from "./components/TabBar";
 import Startup from "./components/Startup";
@@ -81,7 +83,7 @@ function ScrollToTop() {
 /** 边缘右滑返回（网页层兜底；iOS 原生手势先识别时这里不会触发） */
 function EdgeSwipeBack() {
   const nav = useNavigate();
-  useEffect(() => setupEdgeSwipeBack(() => nav(-1), () => isTabRoot(window.location.pathname) || window.history.length <= 1), [nav]);
+  useEffect(() => setupEdgeSwipeBack(() => nav(-1), () => isTabRoot(window.location.pathname) || window.history.length <= 1 || isAssistantOpen()), [nav]);
   return null;
 }
 
@@ -234,6 +236,8 @@ export default function App() {
       <EdgeSwipeBack />
       <BannerHost />
       <PhotoConfirmHost />
+      {/* 智能聊天「问小壹」：右侧入口 + 对话浮层，盖在所有页面上面；服务端没开通时不渲染 */}
+      <AssistantHost />
       <Routes>
         <Route path="/" element={<Navigate to={token ? "/home" : "/welcome"} replace />} />
         <Route path="/welcome" element={token ? <Navigate to="/home" replace /> : <Welcome />} />

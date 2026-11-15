@@ -181,7 +181,7 @@ export function Empty({ icon, art = EMPTY_ART[icon], title, text, action }: { ic
  * position: fixed 的底部面板仍贴着布局视口底部 → 整块被键盘盖住。
  * 这里跟着 visualViewport 算出键盘上方真正看得见的区域，交给 Sheet 去贴齐。
  */
-function useVisibleViewport(active: boolean) {
+export function useVisibleViewport(active: boolean) {
   const [vp, setVp] = useState({ top: 0, height: 0, keyboard: 0 });
   useEffect(() => {
     const vv = window.visualViewport;
