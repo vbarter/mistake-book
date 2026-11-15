@@ -13,9 +13,15 @@ import { confirmPhoto } from "../../lib/confirm";
  * 取景上面的东西（对齐框、提示）用 CoverView：<camera> 是原生组件，普通 View 在一部分手机上盖不上去；其它按钮都放在取景外面。
  * 相机起不来（没给权限等）时把 null 交回去，调用方退回微信自带的拍照界面。
  * 有的手机上相机起不来也不报错（系统没给微信相机权限、相机被占着），只是一片黑：等 INIT_TIMEOUT 还没就绪就当作起不来。
+ * 去确认页时把 <camera> 拆掉、回来再建一个新的：iPhone 上页面被盖住时相机会被暂停，回来既不恢复画面也不发 stop，
+ * 留着旧的就是一片黑、快门按了也拍不出来（连拍第二张黑屏就是这个）。
  */
 /** 相机多久还没就绪算起不来（ms）。正常一秒内就绪 */
 const INIT_TIMEOUT = 4000;
+/** 回到这一页后等多久再建相机（ms）：iPhone 上旧相机还没放干净就建新的，新的也会黑 */
+const REMOUNT_DELAY = 300;
+/** 按快门后多久没回来算没拍成（ms），免得快门一直灰着 */
+const TAKE_TIMEOUT = 5000;
 /** 底部操作区高度（和 .cam__bottom 一致，不含底部安全区） */
 const BOTTOM_H = 132;
 /** 对齐框：离取景边缘多远、角标多长多粗（px） */
@@ -30,7 +36,6 @@ export default function CameraPage() {
   const single = useMemo(() => cameraSingle(), []);
   const mb = useMenuButton();
   const sys = useMemo(() => Taro.getSystemInfoSync(), []);
-  const ctx = useMemo(() => Taro.createCameraContext(), []);
   const [shots, setShots] = useState<CameraShot[]>([]);
   const [torch, setTorch] = useState(false);
   const [ready, setReady] = useState(false);
@@ -38,7 +43,9 @@ export default function CameraPage() {
   // 换一个 key 就是把 <camera> 拆掉重建一个
   const [camKey, setCamKey] = useState(0);
   const [visible, setVisible] = useState(true);
-  const stopped = useRef(false);
+  // 页面在前台、<camera> 挂着：去确认页时拆掉，回来稍等一下再挂
+  const [mounted, setMounted] = useState(true);
+  const mountedRef = useRef(true);
 
   // 结果在页面关掉时才交回去（和确认页一样）：调用方接着要弹框 / 上传，得等这一页退出以后
   const shotsRef = useRef<CameraShot[]>([]);
@@ -56,10 +63,21 @@ export default function CameraPage() {
     });
   };
 
-  /** 拍一张原图；个别基础库不认 original 时退到 high */
+  /** 拍一张原图；个别基础库不认 original 时退到 high。每次现取相机上下文，对上重建后的那个 <camera>；超时不回来也算没拍成 */
   const take = (quality: "original" | "high") =>
     new Promise<string>((resolve, reject) => {
-      ctx.takePhoto({ quality, success: (r) => resolve(r.tempImagePath), fail: reject } as unknown as TakeOption);
+      const t = setTimeout(() => reject(new Error("timeout")), TAKE_TIMEOUT);
+      Taro.createCameraContext().takePhoto({
+        quality,
+        success: (r: { tempImagePath: string }) => {
+          clearTimeout(t);
+          resolve(r.tempImagePath);
+        },
+        fail: (e: unknown) => {
+          clearTimeout(t);
+          reject(e);
+        },
+      } as unknown as TakeOption);
     });
 
   const shoot = async () => {
@@ -90,30 +108,44 @@ export default function CameraPage() {
 
   /** 换一个新的 <camera>，重新等它就绪 */
   const rebuild = () => {
-    stopped.current = false;
     setReady(false);
     setCamKey((k) => k + 1);
   };
 
-  // 相机被系统停掉（切后台、被别的页面占用等）：画面会停住或变黑，重建一个。页面不在前台时先记着，回来再建
+  // 相机在前台被系统停掉（被别的应用占用等）：画面会停住或变黑，重建一个
   const visibleRef = useRef(true);
   const onStop = () => {
     if (visibleRef.current) rebuild();
-    else stopped.current = true;
   };
+  // 不在前台（去确认页、切后台）就把 <camera> 拆掉；回来等旧的放干净再建新的。第一次进来也会走 show，那时相机本来就挂着，不动
+  const remountTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useDidShow(() => {
     visibleRef.current = true;
     setVisible(true);
-    if (stopped.current) rebuild();
+    if (mountedRef.current) return;
+    if (remountTimer.current) clearTimeout(remountTimer.current);
+    remountTimer.current = setTimeout(() => {
+      remountTimer.current = null;
+      if (!visibleRef.current) return;
+      mountedRef.current = true;
+      setMounted(true);
+      rebuild();
+    }, REMOUNT_DELAY);
   });
   useDidHide(() => {
     visibleRef.current = false;
     setVisible(false);
+    if (remountTimer.current) clearTimeout(remountTimer.current);
+    remountTimer.current = null;
+    mountedRef.current = false;
+    setMounted(false);
+    setReady(false);
+    setTorch(false);
   });
 
   // 页面在前台、相机却迟迟不就绪也不报错：不让人对着黑屏干等。还没拍的退回微信自带的拍照界面，拍过的把已拍的交回去
   useEffect(() => {
-    if (ready || !visible) return;
+    if (ready || !visible || !mounted) return;
     const t = setTimeout(() => {
       if (closing.current) return;
       failed.current = true;
@@ -121,7 +153,7 @@ export default function CameraPage() {
       close();
     }, INIT_TIMEOUT);
     return () => clearTimeout(t);
-  }, [ready, visible, camKey]);
+  }, [ready, visible, mounted, camKey]);
 
   // 取景：宽度占满，高度按 3:4；屏幕矮放不下时压矮一点
   const topH = mb.bottom + 8;
@@ -154,6 +186,7 @@ export default function CameraPage() {
       </View>
 
       <View className="cam__view" style={{ width: `${camW}px`, height: `${camH}px` }}>
+        {mounted && (
         <Camera
           key={camKey}
           className="cam__camera"
@@ -179,6 +212,7 @@ export default function CameraPage() {
             把试卷放进框里，四个角都拍到
           </CoverView>
         </Camera>
+        )}
       </View>
 
       <View className="cam__bottom" style={{ paddingBottom: `${safeBottom}px` }}>
