@@ -7,11 +7,12 @@ import { DETECT_SIDE, detectQuad, QuadTracker, type Quad } from "../../lib/docDe
 import { finishFlow } from "../../lib/flow";
 import { haptic, loadImage, pickImages, releaseCanvas, takePhoto } from "../../lib/native";
 import { canUseLiveCamera, coverMapping, openCamera, setTorch, stopCamera, takeStill, torchSupported } from "../../lib/scanCamera";
+import { finishChatScan } from "../../store/assistant";
 import { toastError } from "../../store/banner";
 import { useCapture } from "../../store/capture";
 import { addAlbumPages, addShot, clearScan, loadScanPrefs, removeShot, restoreDraft, setAutoShoot, setEnhance, startScan, useScan } from "../../store/scan";
 
-type EntryState = { folderId?: string | null; from?: string; plan?: string | null } | null;
+type EntryState = { folderId?: string | null; from?: string; plan?: string | null; chat?: boolean } | null;
 
 /** 检测间隔（毫秒）：每秒约 8 次，够跟手，也不太费电 */
 const DETECT_MS = 120;
@@ -33,6 +34,7 @@ export default function ScanCamera() {
   const autoShoot = useScan((s) => s.autoShoot);
   const enhance = useScan((s) => s.enhance);
   const plan = useScan((s) => s.plan);
+  const chat = useScan((s) => s.chat);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const viewRef = useRef<HTMLDivElement>(null);
@@ -63,7 +65,7 @@ export default function ScanCamera() {
   useEffect(() => {
     void loadScanPrefs();
     void restoreDraft().then((n) => { if (n) showToast(`上次拍的 ${n} 张还在`); });
-    startScan(entry?.folderId ?? null, entry?.from || "/home", entry?.plan ?? null);
+    startScan(entry?.folderId ?? null, entry?.from || "/home", entry?.plan ?? null, !!entry?.chat);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -274,10 +276,13 @@ export default function ScanCamera() {
     else exit();
   };
 
-  /** 拍完去哪：平时去整理页；学习计划里拍作业的回计划页，在那边选交哪一份 */
+  /** 拍完去哪：平时去整理页；学习计划里拍作业的回计划页，在那边选交哪一份；「问小壹」里拍的回原来的页面，照片交给对话 */
   const next = () => {
-    const { plan, from } = useScan.getState();
-    if (plan) finishFlow(nav, from, `/plans/${plan}`);
+    const { plan, from, chat } = useScan.getState();
+    if (chat) {
+      exit();
+      void finishChatScan();
+    } else if (plan) finishFlow(nav, from, `/plans/${plan}`);
     else nav("/scan/arrange", { replace: true });
   };
   const finish = () => {
@@ -312,7 +317,7 @@ export default function ScanCamera() {
   /** 退回系统相机的旧流程（录入页） */
   const systemCamera = () => {
     setMore(false);
-    if (useScan.getState().plan) return void planSystemCamera();
+    if (useScan.getState().plan || useScan.getState().chat) return void planSystemCamera();
     const cap = useCapture.getState();
     cap.reset();
     cap.setReturnTo(useScan.getState().from || "/home");
@@ -446,8 +451,8 @@ export default function ScanCamera() {
         </div>
       </Sheet>
 
-      <Sheet open={leaving} onClose={() => setLeaving(false)} title={plan ? `已拍 ${n} 张，还没交` : `已拍 ${n} 张，还没识别`}>
-        <Button onClick={() => { setLeaving(false); finish(); }}>{plan ? "去选作业、交给老师" : "去整理、开始识别"}</Button>
+      <Sheet open={leaving} onClose={() => setLeaving(false)} title={chat ? `已拍 ${n} 张，还没发给小壹` : plan ? `已拍 ${n} 张，还没交` : `已拍 ${n} 张，还没识别`}>
+        <Button onClick={() => { setLeaving(false); finish(); }}>{chat ? "发给小壹" : plan ? "去选作业、交给老师" : "去整理、开始识别"}</Button>
         <Button variant="tinted" onClick={() => { setLeaving(false); exit(); }}>先留着，下次接着拍</Button>
         <Button variant="danger" onClick={() => { setLeaving(false); clearScan(); exit(); }}>全部不要</Button>
       </Sheet>

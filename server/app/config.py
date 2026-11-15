@@ -70,6 +70,13 @@ class Config:
     APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "").strip()  # 没装 App 的人去哪下载
     SYNC_URL_EXPIRES = int(os.getenv("SYNC_URL_EXPIRES", "900"))  # 上传 / 下载签名链接有效期（秒）
 
+    # 智能聊天「问小壹」：试卷知识库（eduction_rag）。两项都配了才开放，App 靠 /api/kb/token 判断显不显示入口
+    KB_PUBLIC_URL = os.getenv("KB_PUBLIC_URL", "").strip()  # App 访问知识库的地址，如 https://example.com/kb（不带末尾斜杠）
+    KB_JWT_SECRET = os.getenv("KB_JWT_SECRET", "").strip()  # 和知识库 .env 里的 JWT_SECRET 一致；不要用主站的 JWT_SECRET_KEY
+    KB_TOKEN_TTL = int(os.getenv("KB_TOKEN_TTL", "3600"))  # 票的有效期（秒）
+    KB_JWT_AUDIENCE = os.getenv("KB_JWT_AUDIENCE", "").strip()  # 知识库配了 JWT_AUDIENCE / JWT_ISSUER 时填同样的值
+    KB_JWT_ISSUER = os.getenv("KB_JWT_ISSUER", "").strip()
+
     MAX_CROPS_PER_RECOGNIZE = 6
     MAX_PAGES_PER_SCAN = 100  # 前端不限照片张数；宽幅照片会拆成左右两张上传，这里只防滥用
     DAILY_REVIEW_LIMIT = 20

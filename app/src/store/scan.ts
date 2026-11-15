@@ -33,6 +33,8 @@ interface ScanState {
   from: string;
   /** 这批是在学习计划里拍来交作业的（计划 id）：拍完不去整理页，回计划页选交哪一份作业 */
   plan: string | null;
+  /** 这批是在「问小壹」对话里拍的：拍完不去整理页，照片交回对话、传进知识库 */
+  chat: boolean;
   enhance: boolean;
   autoShoot: boolean;
   restored: boolean; // 已经试过读本机草稿
@@ -45,6 +47,7 @@ export const useScan = create<ScanState>(() => ({
   folderId: null,
   from: "/home",
   plan: null,
+  chat: false,
   enhance: true,
   autoShoot: false,
   restored: false,
@@ -86,6 +89,7 @@ interface DraftManifest {
   folderId: string | null;
   from: string;
   plan?: string | null;
+  chat?: boolean;
   cuts: string[];
   mode: ScanMode;
   shots: (Omit<ScanShot, "raw" | "page" | "status"> & { page?: Omit<FullPage, "src"> })[];
@@ -105,6 +109,7 @@ function saveManifest() {
       folderId: s.folderId,
       from: s.from,
       plan: s.plan,
+      chat: s.chat,
       cuts: s.cuts,
       mode: s.mode,
       shots: s.shots.map(({ raw: _raw, page, status: _st, ...rest }) => {
@@ -141,7 +146,7 @@ export async function restoreDraft(): Promise<number> {
     }
     if (!shots.length) return 0;
     const ids = new Set(shots.map((s) => s.id));
-    useScan.setState({ shots, cuts: m.cuts.filter((c) => ids.has(c)), mode: m.mode, folderId: m.folderId, from: m.from, plan: m.plan ?? null });
+    useScan.setState({ shots, cuts: m.cuts.filter((c) => ids.has(c)), mode: m.mode, folderId: m.folderId, from: m.from, plan: m.plan ?? null, chat: !!m.chat });
     for (const s of shots) if (s.status !== "ok") reprocess(s.id);
     return shots.length;
   } catch {
@@ -197,17 +202,29 @@ export function reprocess(id: string) {
 
 // ---------------------------------------------------------------- 增删改
 
-export function startScan(folderId: string | null, from: string, plan: string | null = null) {
+export function startScan(folderId: string | null, from: string, plan: string | null = null, chat = false) {
   const s = useScan.getState();
   // 已有没提交的照片：接着用原来那批（放进的文件夹以原来的为准），这次是从哪进来的就跟着哪边走
   if (s.shots.length) {
-    if (s.plan !== plan) {
-      useScan.setState({ plan, from });
+    if (s.plan !== plan || s.chat !== chat) {
+      useScan.setState({ plan, chat, from });
       saveManifest();
     }
     return;
   }
-  useScan.setState({ folderId, from, plan, cuts: [], mode: "one" });
+  useScan.setState({ folderId, from, plan, chat, cuts: [], mode: "one" });
+}
+
+/**
+ * 「问小壹」里拍完：等后台把每张都拉正，按顺序交出处理好的照片，然后清空这一批。
+ * 个别照片处理失败就用原图；等太久（20 秒）也不再等，没好的用原图。
+ */
+export async function takeScanPages(): Promise<{ src: string; width?: number; height?: number }[]> {
+  const deadline = Date.now() + 20000;
+  while (useScan.getState().shots.some((s) => s.status === "busy") && Date.now() < deadline) await new Promise((r) => setTimeout(r, 150));
+  const pages = useScan.getState().shots.map((s) => (s.page ? { src: s.page.src, width: s.page.width, height: s.page.height } : { src: s.raw, width: s.rawW, height: s.rawH }));
+  clearScan();
+  return pages;
 }
 
 /** 拍下一张：先放进来（显示「调正中」），后台拉正 */
@@ -318,7 +335,7 @@ export function unitsOf(shots: ScanShot[], cuts: string[]): number[][] {
 export function clearScan() {
   queue.length = 0;
   version.clear();
-  useScan.setState({ shots: [], cuts: [], mode: "one", plan: null, restored: true });
+  useScan.setState({ shots: [], cuts: [], mode: "one", plan: null, chat: false, restored: true });
   if (saveTimer) clearTimeout(saveTimer);
   void clearDraftRows().catch(() => undefined);
 }

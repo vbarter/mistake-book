@@ -1,13 +1,14 @@
 /**
  * 角色图标：首页四块黑板上的「试卷小人」，各拿一样东西（待办事项拿夹板清单、学习计划拿台历、错题收集拿打叉的卷子、试卷擦除举板擦）；
  * 计时页再用三张：focus 捧着秒表、stuck 秒表超了冒问号、done 举起打勾的小旗。
+ * 智能聊天「问小壹」两张：chat 举着对话气泡（打招呼用）、face 只有身体没有道具（头像用，裁上半张）。
  * 身体和插画 Buddy（App components/Illustration.tsx、小程序 components/Buddy.tsx）是同一张画，只是整体左移 16 给道具让位。160×160 画布。
  * 两套主题 × 深浅色各一份配色，和 tokens.css 的 --ill-* 同一套值。设计稿和 SVG 素材在项目文件 screenshots/home-blackboard/。
  * 这个文件 App 和小程序各放一份，内容保持一致（app/src/lib/roleIcons.ts ↔ miniprogram/src/lib/roleIcons.ts）。
  */
 import type { ThemeName } from "./colorIcons";
 
-export type RoleName = "todo" | "plan" | "wrong" | "erase" | "focus" | "stuck" | "done";
+export type RoleName = "todo" | "plan" | "wrong" | "erase" | "focus" | "stuck" | "done" | "chat" | "face";
 interface Palette { paper: string; paper2: string; line: string; ink: string; cheek: string; tie: string; star: string; ok: string; okbg: string; shadow: string; wrong: string; wrongbg: string; soft: string }
 
 const PALETTES: Record<string, Palette> = {
@@ -16,12 +17,12 @@ const PALETTES: Record<string, Palette> = {
   pop:            { paper: "#ffffff", paper2: "#ffd6e2", line: "#f4608f", ink: "#4a2a36", cheek: "#ffb4a8", tie: "#00aeec", star: "#ffc53d", ok: "#00aeec", okbg: "#d3f1fd", shadow: "rgba(120,40,70,.12)", wrong: "#f4608f", wrongbg: "#ffe3ec", soft: "#d3f1fd" },
   "pop-dark":     { paper: "#f4f6ff", paper2: "#5a2c3d", line: "#ff8fb0", ink: "#2a1a22", cheek: "#ff9d90", tie: "#5cc8f0", star: "#ffc53d", ok: "#00aeec", okbg: "#d3f1fd", shadow: "rgba(0,0,0,.45)", wrong: "#f4608f", wrongbg: "#ffe3ec", soft: "#d3f1fd" },
 };
-export const ROLE_NAMES: Record<RoleName, string> = { todo: "待办事项", plan: "学习计划", wrong: "错题收集", erase: "试卷擦除", focus: "计时中", stuck: "卡住了", done: "做完了" };
+export const ROLE_NAMES: Record<RoleName, string> = { todo: "待办事项", plan: "学习计划", wrong: "错题收集", erase: "试卷擦除", focus: "计时中", stuck: "卡住了", done: "做完了", chat: "问小壹", face: "小壹" };
 
 function inner(scene: RoleName, p: Palette, shadow: boolean): string {
   const S = `stroke="${p.line}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"`;
   const arm = (d: string) => `<path d="${d}" stroke="${p.line}" stroke-width="5" stroke-linecap="round" fill="none"/>`;
-  const happy = scene === "erase" || scene === "done";
+  const happy = scene === "erase" || scene === "done" || scene === "chat" || scene === "face";
   const face = happy
     ? `<path d="M60 87q4-6 8 0M84 87q4-6 8 0" stroke="${p.ink}" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M68 97q8 9 16 0z" fill="${p.ink}"/>`
     : scene === "wrong" || scene === "stuck"
@@ -97,6 +98,15 @@ function inner(scene: RoleName, p: Palette, shadow: boolean): string {
       `<path d="M130 40q0-9 8-9t8 8q0 6-8 8v5" stroke="${p.star}" stroke-width="4" stroke-linecap="round" fill="none"/><circle cx="138" cy="60" r="2.6" fill="${p.star}"/>
       <path d="M112 44q0-5 4.5-5t4.5 4.5q0 3.5-4.5 4.5v3" stroke="${p.star}" stroke-width="3" stroke-linecap="round" fill="none" opacity=".8"/>
       <path d="M36 42q-5 7 0 10q5-3 0-10z" fill="${p.soft}" stroke="${p.line}" stroke-width="1.5"/>`;
+    return wrap(body + prop, p, shadow);
+  }
+  if (scene === "face") return wrap(body, p, shadow);
+  if (scene === "chat") {
+    // 对话气泡：三个点分别是领带色、描边色、星星色
+    prop = `<g transform="rotate(6 124 80)">
+      <path d="M104 58h40a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8h-22l-10 10v-10h-8a8 8 0 0 1-8-8V66a8 8 0 0 1 8-8z" fill="${p.paper}" ${S}/>
+      <circle cx="114" cy="77" r="3" fill="${p.tie}"/><circle cx="125" cy="77" r="3" fill="${p.line}"/><circle cx="136" cy="77" r="3" fill="${p.star}"/>
+    </g>` + arm("M96 96q4 8 10 10") + armL + spark(146, 40, 0.8, p.star);
     return wrap(body + prop, p, shadow);
   }
   if (scene === "done") {
