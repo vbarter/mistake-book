@@ -1174,3 +1174,17 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .fz--over .fc__main { background: $accent-on; box-shadow: 0 8px 20px rgba(179, 83, 0, 0.3), 0 0 0 6px $accent-bg; }
 .fz--over .fc__b--main { color: $accent-on; }
 .fz .sheet, .fz .sheet__panel { color: $label; }
+
+/* ---------- 智能聊天「问小壹」的入口（components/AssistantOrb）：贴在 Tab 页右边缘，在 Tab 栏（30）之下 ---------- */
+.as-face { display: flex; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 50%; overflow: hidden; background: linear-gradient(160deg, var(--hero-a), var(--hero-b)); }
+.as-orb { position: fixed; right: 0; bottom: calc(#{$tabbar-h} + env(safe-area-inset-bottom) + 46px); z-index: 28; display: flex; align-items: center; gap: 6px; height: 56px; padding: 0 8px 0 6px; border-radius: 28px 0 0 28px; background: $card; box-shadow: 0 6px 18px $brand-glow, inset 0 0 0 1.5px $brand-tint; animation: as-orb-in 0.45s $spring both; transition: transform 0.25s $spring; }
+.as-orb--raised { bottom: calc(#{$tabbar-h} + env(safe-area-inset-bottom) + 112px); }
+.as-orb--drag { transform: scale(0.94); }
+.as-orb__ring { display: flex; padding: 2px; margin: -2px; border-radius: 50%; }
+.as-orb__dot { position: absolute; left: 38px; top: 5px; width: 12px; height: 12px; border-radius: 6px; background: var(--hero-pin); box-shadow: 0 0 0 2px $card; }
+.as-orb__txt { display: flex; flex-direction: column; padding-right: 2px; font-size: 11px; line-height: 14px; font-weight: 700; color: $secondary; white-space: nowrap; }
+.as-orb__name { font-size: 13px; font-weight: 800; color: $brand; }
+@keyframes as-orb-in { from { transform: translateX(100%); } to { transform: none; } }
+.as-bubble { position: fixed; right: 12px; bottom: calc(#{$tabbar-h} + env(safe-area-inset-bottom) + 108px); z-index: 28; max-width: 260px; padding: 10px 12px; border-radius: 16px 16px 4px 16px; background: $card; box-shadow: 0 8px 24px rgba(10, 16, 32, 0.2); font-size: 13px; line-height: 19px; font-weight: 600; color: $label; animation: as-pop 0.35s $spring both; transform-origin: 100% 100%; }
+.as-bubble--raised { bottom: calc(#{$tabbar-h} + env(safe-area-inset-bottom) + 174px); }
+@keyframes as-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }

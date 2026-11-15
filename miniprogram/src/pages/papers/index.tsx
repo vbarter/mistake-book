@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { AssistantOrb } from "../../components/AssistantOrb";
 import { Image, Text, View } from "@tarojs/components";
 import Taro, { usePullDownRefresh } from "@tarojs/taro";
 import { AddSheet } from "../../components/AddSheet";
@@ -140,6 +141,7 @@ export default function Papers() {
       })}
 
       <AddSheet open={adding} onClose={() => setAdding(false)} onPick={add} />
+      <AssistantOrb />
     </View>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { AssistantOrb } from "../../components/AssistantOrb";
 import { Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { AvatarSheet } from "../../components/AvatarPrompt";
@@ -15,7 +16,7 @@ import { listFolders, photosSizeMB } from "../../lib/store";
 import { useShare, useShareTimelineToo } from "../../lib/share";
 
 /** 小程序版本：三位 */
-const VERSION = "1.8.9";
+const VERSION = "1.12.44";
 
 /** 我的：和 App 的「我的」同一套布局——账号卡片、统计、学习设置、数据与隐私、关于。没登录也能看，账号卡片换成「登录」。只留图标和短标题，不放解释性的段落 */
 export default function Profile() {
@@ -166,6 +167,7 @@ export default function Profile() {
           ))}
         </View>
       </Sheet>
+      <AssistantOrb />
     </View>
   );
 }
