@@ -46,6 +46,43 @@ location /kb/ { return 404; }
 
 临时测试也可以直接把 `KB_PUBLIC_URL` 填成知识库的 ngrok 地址（`scripts/tunnel.sh url`），App 会自动带上 `ngrok-skip-browser-warning` 头；国内网络下不稳定，不建议给用户用。
 
+## 2b. 另一种入口：单独的子域名转到 ngrok（rag.openmindai.cn）
+
+知识库继续用 ngrok 固定域名出公网（`https://rag.openmindai.cn.ngrok.app`），上海服务器上给 `rag.openmindai.cn` 单开一个站点转过去。
+App 和小程序都只认 `rag.openmindai.cn`（小程序后台的 request / uploadFile 合法域名都要填它）。主站 `.env`：`KB_PUBLIC_URL=https://rag.openmindai.cn`。
+
+要做三件事：
+
+1. 给 `rag.openmindai.cn` 签证书（`certbot --nginx -d rag.openmindai.cn`）。没有证书时 HTTPS 会落到服务器上别的站点，App 和小程序都连不上。
+2. Nginx 加站点：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name rag.openmindai.cn;
+    # ssl_certificate / ssl_certificate_key 由 certbot 写入
+
+    location ~ ^/(healthz|v1/personal/papers|v1/(personal|system)/(search|answers/stream)|v1/tasks/[A-Za-z0-9_]+|v1/(personal|system)/questions/[A-Za-z0-9_]+)$ {
+        proxy_pass https://rag.openmindai.cn.ngrok.app;
+        proxy_ssl_server_name on;                          # 上游是 HTTPS，要带 SNI
+        proxy_set_header Host rag.openmindai.cn.ngrok.app; # ngrok 按 Host 认隧道
+        proxy_set_header ngrok-skip-browser-warning 1;     # 免费隧道不加这个头会先返回一张提示网页
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        client_max_body_size 50m;
+        proxy_buffering off;                               # 流式回答不缓冲
+        proxy_request_buffering off;
+        proxy_read_timeout 300s;
+    }
+    location / { return 404; }
+}
+```
+
+3. 知识库用带「App 对话」改动的版本，并重启隧道（`scripts/tunnel.sh stop && scripts/tunnel.sh start`）让新的白名单生效：
+   App 的 WebView 是跨域调用，浏览器会先发 `OPTIONS` 预检，老版本的白名单会把它挡成 404。小程序不走跨域，不受这条影响。
+
+注意：这条路上海服务器要能稳定连到 ngrok（境外）。连不稳的话改用第 2 节的反向隧道（frp 把 Mac 的 8000 映射到服务器本机），Nginx 站点不变，只把 `proxy_pass` 换成 `http://127.0.0.1:18000` 并去掉 ngrok 相关的三行。
+
 ## 3. 本机开发
 
 - 知识库起在 8000；主站后端 `.env` 里 `KB_PUBLIC_URL=/kb`、`KB_JWT_SECRET` 和知识库的 `JWT_SECRET` 一致；
