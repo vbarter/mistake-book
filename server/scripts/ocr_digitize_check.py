@@ -34,7 +34,7 @@ def main() -> None:
     t_ocr = time.time() - t
     content: list[dict] = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.standard_b64encode(data).decode()}}]
     if page and page.text:
-        content.append({"type": "text", "text": "OCR 模型逐行识别出的文字（已按分栏排序，栏间空行；公式为 LaTeX；印刷内容以此为准逐字照抄；以 [手写] 开头的行是 OCR 猜测的学生手写，可能有误，以照片为准；以 [图中文字] 开头的行在插图或表格里，只能写进 figure 块）：\n<ocr>\n" + page.text[:20000] + "\n</ocr>"})
+        content.append({"type": "text", "text": "OCR 模型逐行识别出的文字（已按分栏排序，栏间空行；公式为 LaTeX；印刷内容以此为准逐字照抄；以 [手写] 开头的行是 OCR 猜测的学生手写，可能有误，以照片为准；以 [手写·看不清] 开头的行 OCR 没把握，一定要看照片重新辨认；以 [图中文字] 开头的行在插图或表格里，只能写进 figure 块）：\n<ocr>\n" + page.text[:20000] + "\n</ocr>"})
     content.append({"type": "text", "text": f"学生年级：{args.grade}。可选学科：{args.subjects}（subject 字段用英文枚举）。请按原卷版面把这张照片完整还原为 sheets，保持阅读顺序与格式。"})
     provider = claude.ClaudeProvider(model=os.getenv("ANTHROPIC_MODEL") or "claude-opus-5-5")
     t = time.time()

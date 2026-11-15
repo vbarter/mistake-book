@@ -130,7 +130,7 @@ DIGITIZE_SYSTEM_PROMPT = (
     "你是一位教师助手，负责把试卷照片逐字逐段还原成电子版，并且保持与原卷一致的版面结构。你会收到一张试卷照片，"
     "有时还会附上 OCR 模型逐行识别出的印刷文字：题目、选项、大题说明、页眉页脚等印刷内容的汉字和英文单词以 OCR 文字为准逐字照抄，不要改写；"
     "但 OCR 经常漏掉或认错数学符号（负号、上标 ²³、下标、分数线、根号、括号），式子里出现的「区」「☒」「×」等怪字通常就是负号或上标被认错：公式和数字一律以照片为准重新写对，不要照抄 OCR 的错误，也不要因此写成「□」；"
-    "照片用来判断版面结构（分栏、分块、空格位置）、学生手写作答和老师批改符号。OCR 文字里以「[手写]」开头的行是 OCR 猜测的学生手写内容，这个猜测可能出错（整行印刷题干也可能被标成手写），一律以照片为准：照片里是印刷的仍照抄为题干，是学生手写的就填进 student，不要因为带了 [手写] 标记就漏掉题目。以「[红笔]」开头的行是红笔写的，多为老师的分数、批注，不是学生作答，只用来判 mark 和 note。"
+    "照片用来判断版面结构（分栏、分块、空格位置）、学生手写作答和老师批改符号。OCR 文字里以「[手写]」开头的行是 OCR 猜测的学生手写内容，这个猜测可能出错（整行印刷题干也可能被标成手写），一律以照片为准：照片里是印刷的仍照抄为题干，是学生手写的就填进 student，不要因为带了 [手写] 标记就漏掉题目。以「[红笔]」开头的行是红笔写的，多为老师的分数、批注，不是学生作答，只用来判 mark 和 note。以「[手写·看不清]」开头的行也是学生手写，但 OCR 自己没把握、多半认错了：一律看照片重新辨认，照片上也看不清的字写「□」，不要照抄这行 OCR，也不要按正确答案去猜。"
     "OCR 对生僻字、形近字和拼音声调也会认错（如「干将发硎」认成「千将发删」），以「[存疑]」开头的行 OCR 自己也没把握，一律对照照片逐字写对；语文字音、字形、释义辨析题（如「下列字音、字形完全正确的一项是」）选项里的错别字、错注音是题目故意印的考点，照片上印的是什么就照抄什么，不要改成正确写法。OCR 文字末尾有【竖排文字】时，照片那一块是竖排书写（多为竖格抄写古诗）：从右往左逐列阅读，转写时一列一行，抄写格是作答区不是插图。"
     "OCR 文字里的 LaTeX 标记要这样处理：\\underline{...} 表示原卷划线，正文只保留划线里的文字，并在 instruction 里注明划线部分（如「对划线部分提问：With the help of these games」）；"
     "\\text{...}、\\( \\) 这类包装只是排版，去掉只留内容。\n"
@@ -529,6 +529,10 @@ TEXT_ONLY_DIGITIZE_NOTE = (
     "- 以 [手写] 开头的行是学生的作答：按它在 OCR 里的先后位置和内容，对应到最近的题和空，填进 student。"
     "手写 OCR 错读很多，只能依据学生自己的算式前后文校正明显的错读（如漏掉的小数点、运算符），校正不了的字写「□」；"
     "不要根据题意或正确答案去猜学生写了什么。整行印刷题干被误标成 [手写] 时仍照抄为题干。\n"
+    "- 以 [手写·看不清] 开头的行 OCR 自己没把握，多半认错了：选择题、判断题、填空题的作答来自这种行时 student 整个写「□」，"
+    "解答题里这一步认不准的字写「□」。没有标记的 [手写] 行如果和题目要求的作答形式对不上（判断题写成了汉字或 T/F 以外的字母、"
+    "选择题写成了选项里没有的字母、英语填空里夹着汉字或明显不是单词的字母串），也同样当看不清写「□」。"
+    "看不清的空 mark 保持 unmarked（不要判 wrong），answer 照样给出正确答案。\n"
     "- 你看不到勾、叉等批改符号：只有 [红笔] 行给出了明确的对错或分数时才按它判 mark，否则有作答的空一律 mark = unmarked，没作答的仍是 blank。\n"
     "- 你看不到图形。题目依赖插图（几何图形、统计图、实物图等）时，只能用题干和 [图中文字] 行里的标注作答；"
     "条件足够就正常给出 answer；图形关系无法从文字确定时，answer 写「需看图」，analysis 以「缺图：」开头说明缺什么条件，"
@@ -540,7 +544,7 @@ NEEDS_FIGURE = "需看图"  # 纯文字链路里依赖插图、文字条件不�
 # 纯文字链路的阅卷：学生作答是手写 OCR 的结果
 TEXT_ONLY_GRADE_NOTE = (
     "注意：学生作答是手写 OCR 识别出来的，错读很多（漏小数点、数字和符号认错、多行串在一起）。"
-    "能从学生自己的算式前后文看出最终答案的，按那个答案判；作答确实读不清、无法确定学生写了什么时，这个空的 verdict 写 unclear，不要判错。"
+    "能从学生自己的算式前后文看出最终答案的，按那个答案判；作答确实读不清、无法确定学生写了什么时，这个空的 verdict 写 unclear，不要判错，answer 照样写正确答案。"
 )
 # 跨页重新作答、写讲解两步没有照片时的说明
 TEXT_ONLY_SOLVE_NOTE = (
@@ -814,7 +818,7 @@ class ClaudeProvider(AIProvider):
                 },
             ]
             if ocr_text:
-                content.append({"type": "text", "text": "OCR 模型逐行识别出的文字（已按分栏排序，栏间空行；公式为 LaTeX；印刷内容以此为准逐字照抄；以 [手写] 开头的行是 OCR 猜测的学生手写，可能有误，以照片为准；以 [图中文字] 开头的行在插图或表格里，只能写进 figure 块）：\n<ocr>\n" + ocr_text[:20000] + "\n</ocr>"})
+                content.append({"type": "text", "text": "OCR 模型逐行识别出的文字（已按分栏排序，栏间空行；公式为 LaTeX；印刷内容以此为准逐字照抄；以 [手写] 开头的行是 OCR 猜测的学生手写，可能有误，以照片为准；以 [手写·看不清] 开头的行 OCR 没把握，一定要看照片重新辨认；以 [图中文字] 开头的行在插图或表格里，只能写进 figure 块）：\n<ocr>\n" + ocr_text[:20000] + "\n</ocr>"})
             content += [
                 {
                     "type": "text",
@@ -1233,8 +1237,11 @@ class ClaudeProvider(AIProvider):
                     continue
                 options = block.options or (_nearby_wordbank(sheet.blocks, bi) if block.type == "passage" else [])
                 for b in block.blanks:
-                    # 没写的不送；整个看不清的也不送（猜不出来，界面显示「看不清」并提示重拍）
-                    if b.mark != "unmarked" or not b.student.strip() or unreadable(b.student):
+                    # 没写的不送；整个看不清的不判对错（界面显示「未识别」并提示重拍），只在还缺正确答案时送去补答案
+                    if b.mark != "unmarked" or not b.student.strip():
+                        continue
+                    blurred = unreadable(b.student)
+                    if blurred and b.answer.strip():
                         continue
                     if b.answer.strip().startswith(NEEDS_FIGURE):
                         continue  # 纯文字链路：这题要看图才能做，没有答案可比，留给用户自己核对
@@ -1245,7 +1252,7 @@ class ClaudeProvider(AIProvider):
                         f"题号：{b.number or b.id}（{block.questionType}）",
                         f"题目：{stem[:1500]} {extra}".strip(),
                         f"选项 / 词库：{'　'.join(options)}" if options else "",
-                        f"学生作答：{b.student}",
+                        "学生作答：看不清（不判对错，verdict 写 unclear，只给出正确答案 answer）" if blurred else f"学生作答：{b.student}",
                         f"识别时给出的参考答案：{b.answer}" if b.answer else "",
                     ] if x)
                     todo.append((f"s{si}b{bi}#{b.id}", b, ctx))
@@ -1263,7 +1270,13 @@ class ClaudeProvider(AIProvider):
             by_key = {str(r.get("key")): r for r in data.get("results", []) if isinstance(r, dict)}
             for key, b, _ in chunk:
                 r = by_key.get(key)
-                if not r or r.get("verdict") not in ("correct", "wrong", "partial"):
+                if not r:
+                    continue
+                if r.get("verdict") not in ("correct", "wrong", "partial") or unreadable(b.student):
+                    # 读不清的作答不判对错（保持 unmarked，不进错因归类），但正确答案照样留下
+                    ans = str(r.get("answer") or "").strip()
+                    if ans and not b.answer and not ans.startswith(NEEDS_FIGURE):
+                        b.answer = ans[:200]
                     continue
                 b.mark = r["verdict"]
                 b.aiGraded = True

@@ -1687,6 +1687,27 @@ def test_baidu_chinese_paper_vertical_red_and_doubt():
     assert page.regions == [] and not any(line.startswith(ocr.FIGURE_TAG + "[") for line in lines)
 
 
+def test_baidu_low_confidence_handwriting_marked_illegible():
+    """百度没把握的手写行标 [手写·看不清]：单个字看这个字，多个字看整行平均（没有平均值看最差的字）；没开置信度不标。"""
+    from app.ai import ocr
+
+    def hand(word, lo, avg=None):
+        return {"words_type": "handwriting", "words": {"word": word, "line_probability": {"min": lo, **({"average": avg} if avg is not None else {})}}}
+
+    r = {"results": [
+        hand("零", 0.14),            # 英语卷判断题的 T 认成「零」
+        hand("hahal", 0.30, 0.64),   # had
+        hand("twice", 0.99, 0.998),
+        hand("=10x9 =90 =45+45", 0.37, 0.84),  # 算式里只一个字没把握：不标
+        hand("解:(4+5)x n=2)-3x", 0.25, 0.48),
+        hand("心协力", 0.48),             # 没有平均值
+        {"words_type": "handwriting", "words": {"word": "F"}},  # 没有置信度
+    ]}
+    lines = ocr.baidu_lines(r).splitlines()
+    assert lines == ["[手写·看不清] 零", "[手写·看不清] hahal", "[手写] twice", "[手写] =10x9 =90 =45+45",
+                     "[手写·看不清] 解:(4+5)x n=2)-3x", "[手写·看不清] 心协力", "[手写] F"]
+
+
 def _sideways_fixture():
     import json
     from pathlib import Path
@@ -1725,9 +1746,9 @@ def test_baidu_drops_neighbour_page_strip():
     r, size = _sideways_fixture()
     lines = ocr.baidu_page(r, size).text.splitlines()
     kept = ocr.baidu_lines(r).splitlines()  # 不给尺寸就不去残片
-    assert sorted(set(kept) - set(lines) | {x for x in kept if kept.count(x) > lines.count(x)}) == sorted(["级", "[手写] 的", "[手写] 2", "[手写] 50-96=", "[手写] =354()", "[手写] 0"])
+    assert sorted(set(kept) - set(lines) | {x for x in kept if kept.count(x) > lines.count(x)}) == sorted(["级", "[手写·看不清] 的", "[手写] 2", "[手写] 50-96=", "[手写] =354()", "[手写·看不清] 0"])
     assert len(kept) - len(lines) == 6
-    for own in ("[手写] ④", "⑤", "1", "2", "B级", "[手写] 千克涂", "[手写] 169Bu", "。 75."):
+    for own in ("[手写] ④", "⑤", "1", "2", "B级", "[手写] 千克涂", "[手写·看不清] 169Bu", "。 75."):
         assert own in lines
 
 

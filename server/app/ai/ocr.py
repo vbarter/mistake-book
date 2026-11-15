@@ -182,6 +182,13 @@ FIGURE_LAYOUTS = {"figure": "插图", "table": "表格"}
 RED_TAG = "[红笔] "
 DOUBT_TAG = "[存疑] "  # 印刷行里最没把握的字置信度低于 DOUBT_BELOW：多半有生僻字、形近字或声调认错了
 DOUBT_BELOW = 0.65  # 手写行里红笔占多数：多半是老师的批改、分数，不是学生作答
+# 手写行 OCR 自己没把握：多半认错了（英语卷上 T/F 被认成「下」「零」、had 认成 hahal）。
+# 告诉大模型这一行看不清：能对照照片就以照片为准，看不准就写「□」，这个空不判对错、不进错因，但照样给正确答案
+ILLEGIBLE_TAG = "[手写·看不清] "
+# 单个字（选择、判断）看这个字的置信度；多个字看整行平均（算式里一个字认不准很常见，看最差的字会把大半页解题过程都标上）。
+# 阈值按英语卷（T/F 认成「零」「卫」、had 认成 hahal）和数学卷手写校的
+ILLEGIBLE_CHAR_BELOW = 0.7
+ILLEGIBLE_AVG_BELOW = 0.8
 
 # 竖排：行框高是宽的这么多倍以上（还要比横排行高很多）。百度 doc_analysis 只按横排识别，竖格抄写的古诗会被认成一两个怪字
 VERTICAL_RATIO = 2.5
@@ -204,6 +211,21 @@ def _line_min_prob(words: dict) -> float:
         return float((words.get("line_probability") or {}).get("min", 1.0))
     except (TypeError, ValueError, AttributeError):
         return 1.0
+
+
+def illegible(words: dict) -> bool:
+    """手写行百度自己没把握：单个字置信度低于 ILLEGIBLE_CHAR_BELOW，多个字整行平均低于 ILLEGIBLE_AVG_BELOW
+    （没返回平均值时按最差的字和 ILLEGIBLE_CHAR_BELOW 比）。没有置信度（没开 line_probability）时不标。"""
+    prob = words.get("line_probability") if isinstance(words, dict) else None
+    if not isinstance(prob, dict):
+        return False
+    core = re.sub(r"\s", "", str(words.get("word") or ""))
+    try:
+        if len(core) > 1 and prob.get("average") is not None:
+            return float(prob["average"]) < ILLEGIBLE_AVG_BELOW
+        return float(prob.get("min", 1.0)) < ILLEGIBLE_CHAR_BELOW
+    except (TypeError, ValueError):
+        return False
 
 
 def _direction(r: dict) -> int:
@@ -444,7 +466,7 @@ def _neighbour_strip(results: list, boxes: dict, skip: set[int], page_w: float) 
 
 
 def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
-    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]），
+    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]，OCR 没把握的加 [手写·看不清]），
     印刷行置信度低的加 [存疑]，
     落在插图 / 表格里的行加 [图中文字] 前缀；竖排的行认不出，略去并在末尾列出位置；照片边上的邻页残片去掉；没有 results 时退回 words_result。"""
     results = r.get("results") or []
@@ -468,7 +490,7 @@ def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
             word = _word(item)
             if word:
                 if item.get("words_type") == "handwriting":
-                    tag = RED_TAG if i in red else HANDWRITING_TAG
+                    tag = RED_TAG if i in red else ILLEGIBLE_TAG if illegible(words) else HANDWRITING_TAG
                 else:
                     tag = DOUBT_TAG if _line_min_prob(words) < DOUBT_BELOW else ""
                 lines.append(in_figure.get(i, "") + tag + word)
