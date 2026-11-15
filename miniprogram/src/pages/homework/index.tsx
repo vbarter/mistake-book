@@ -14,6 +14,7 @@ import {
   serverClockOffset, setDraft, shiftDay, tileSubject, useHomework, type HwDay, type HwItem,
 } from "../../lib/homework";
 import { toast } from "../../lib/hooks";
+import { useVoiceInput } from "../../lib/voice";
 import { C, useThemeClass } from "../../lib/theme";
 
 /** 作业流程里的页面互相都用 redirectTo：页面栈一直是「首页 → 当前这一页」，不管走到哪一步，返回都直接回首页 */
@@ -27,6 +28,15 @@ export default function Homework() {
   const { data, fetchedAt } = useHomework();
   const [parsing, setParsing] = useState<{ photos: number; text: boolean } | null>(null);
   const [text, setText] = useState("");
+  // 这一段里有说出来的话：拆出来的事项记成 voice
+  const [spoke, setSpoke] = useState(false);
+  const voice = useVoiceInput(
+    (said) => {
+      setText((t) => (t.trim() ? `${t.trim()}，${said}` : said).slice(0, 4000));
+      setSpoke(true);
+    },
+    (msg) => toast(msg),
+  );
   const logged = isLoggedIn();
   const shown = data && (!day || data.day === day) ? data : null;
   const running = shown?.items.some((it) => it.status === "running") ?? false;
@@ -57,13 +67,14 @@ export default function Homework() {
     if (!words && !images.length) return;
     setParsing({ photos: images.length, text: !!words });
     try {
-      const res = await parseHomework(words, images, shown?.day);
+      const res = await parseHomework(words, images, shown?.day, spoke && !!words);
       if (!res.items.length && !res.planDue.length) {
         toast(images.length ? "照片里没认出作业，换一张或者打字试试" : "没认出作业，换个说法试试");
         return;
       }
       setDraft(res.items, res.planDue);
       setText("");
+      setSpoke(false);
       void go(`/pages/homework-confirm/index${shown ? `?day=${shown.day}` : ""}`);
     } catch (e) {
       toast(errorText(e));
@@ -111,9 +122,26 @@ export default function Homework() {
       <View className="bottom-bar" style={{ flexDirection: "column" }}>
         {shown && <MainAction data={shown} />}
         <View className="hw-dock">
-          {!shown?.items.length && <Text className="hw-dock__hint">打一句、拍一张，或者直接打字；粘贴一大段会自动拆成多项</Text>}
+          {!shown?.items.length && <Text className="hw-dock__hint">按住话筒说一句、拍一张，或者直接打字；一大段会自动拆成多项</Text>}
+          {voice.state !== "idle" && (
+            <View className="hw-voice">
+              <View className="hw-voice__wave">
+                <View /><View /><View /><View /><View />
+              </View>
+              <Text className={voice.live ? "hw-voice__text" : "hw-voice__hint"}>{voice.live || (voice.state === "listening" ? "正在听，说完松开" : "正在识别…")}</Text>
+            </View>
+          )}
           <View className="hw-input">
-            <Input className="hw-input__field" value={text} onInput={(e) => setText(e.detail.value)} placeholder="添加一项，如「背 U6 单词」" confirmType="send" onConfirm={() => void submit([])} maxlength={4000} />
+            <View
+              className={`hw-ib${voice.state === "listening" ? " hw-ib--rec" : ""}`}
+              onTouchStart={() => void voice.down()}
+              onTouchEnd={voice.up}
+              onTouchCancel={voice.up}
+              catchMove
+            >
+              <Icon name="mic" size={20} color={voice.state === "listening" ? "#ffffff" : C.brand} />
+            </View>
+            <Input className="hw-input__field" value={text} onInput={(e) => { setText(e.detail.value); if (!e.detail.value.trim()) setSpoke(false); }} placeholder="添加一项，如「背 U6 单词」" confirmType="send" onConfirm={() => void submit([])} maxlength={4000} />
             {text.trim() ? (
               <View className="hw-ib hw-ib--send" hoverClass="hw-press" onClick={() => void submit([])}>
                 <Icon name="check" size={20} color="#ffffff" stroke={2.6} />
@@ -176,6 +204,7 @@ function Headline({ data, fetchedAt, now }: { data: HwDay; fetchedAt: number; no
 function EmptyDay() {
   const ways: [string, string][] = [
     ["pencil", "「写周记，再做练习部分第 13 课」"],
+    ["mic", "按住话筒，直接把作业说出来"],
     ["camera", "拍黑板、家校本，自动拆成一项一项"],
     ["photo", "群里老师发的作业截图"],
     ["document", "粘贴老师的消息，一段话也能拆开"],
@@ -185,7 +214,7 @@ function EmptyDay() {
       <View className="hw-empty">
         <Buddy scene="empty" size={120} />
         <Text className="hw-empty__b">今天要做什么？</Text>
-        <Text className="t-sub">在下面打一句、拍一张，或者直接打字。</Text>
+        <Text className="t-sub">在下面说一句、拍一张，或者直接打字。</Text>
       </View>
       <View className="hw-ways">
         {ways.map(([icon, t]) => (

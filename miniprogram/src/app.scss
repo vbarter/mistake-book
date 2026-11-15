@@ -948,6 +948,18 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .hw-input .hw-ib--send { background: $brand; color: #fff; }
 .hw-dock { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .hw-dock__hint { font-size: 12px; color: $tertiary; text-align: center; }
+.hw-input .hw-ib--rec { background: $brand; transform: scale(1.12); transition: transform 0.15s; }
+/* 按住说话时录入条上方的浮层：跳动的声波 + 边说边出的文字 */
+.hw-voice { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 16px; background: $brand-tint; }
+.hw-voice__wave { display: flex; align-items: center; gap: 3px; height: 22px; flex-shrink: 0; }
+.hw-voice__wave view { width: 3px; height: 22px; border-radius: 2px; background: $brand; animation: hw-wave 0.9s ease-in-out infinite; }
+.hw-voice__wave view:nth-child(2) { animation-delay: 0.15s; }
+.hw-voice__wave view:nth-child(3) { animation-delay: 0.3s; }
+.hw-voice__wave view:nth-child(4) { animation-delay: 0.45s; }
+.hw-voice__wave view:nth-child(5) { animation-delay: 0.6s; }
+@keyframes hw-wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+.hw-voice__text { flex: 1; min-width: 0; font-size: 15px; color: $label; }
+.hw-voice__hint { flex: 1; font-size: 14px; color: $secondary; }
 
 .hw-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 12px 12px; text-align: center; }
 .hw-ways { display: flex; flex-direction: column; background: $card; border-radius: $radius-list; overflow: hidden; }
