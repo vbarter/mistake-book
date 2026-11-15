@@ -292,6 +292,33 @@ def _red_lines(results: list, rgb) -> set[int]:
     return out
 
 
+# 彩笔 / 红笔的圈画被百度当成手写行时认出来的「字」：圆圈认成「O」「○」，横线认成「一」「—」，不含任何勾叉和数字
+_DOODLE_ONLY = re.compile(r"[\sOoＯ○〇◯一—–\-－_~～丨|｜.·。、,，'‘’\"“”°]+")
+_VERDICT_CHARS = re.compile(r"[✓✔√☑vV✗✘×xX乂╳/／\\对错\d]")  # 勾、叉、斜杠、分数：留给大模型当批改看
+DOODLE_COVERS = 2  # 一个红笔框把这么多行印刷文字的中心包在里面：是圈在题号、题干、选项上的大圈，不是批改
+
+
+def _doodle_lines(results: list, red: set[int]) -> set[int]:
+    """红笔行里其实只是圈画、划线的行：批改记号只认勾和叉，而且得落在学生的手写作答上；
+    圈住题号、盖在印刷题干和选项上的圆圈、横线不是批改，整行丢掉，免得被当成判错。"""
+    out: set[int] = set()
+    printed = [b for item in results if item.get("words_type") != "handwriting" and _word(item) and (b := _box(item))]
+    for i in red:
+        word = _word(results[i])
+        if not word:
+            continue
+        if _DOODLE_ONLY.fullmatch(word):
+            out.add(i)
+            continue
+        b = _box(results[i])
+        if not b or _VERDICT_CHARS.search(word):
+            continue
+        inside = sum(1 for p in printed if b[0] <= p[0] + p[2] / 2 <= b[0] + b[2] and b[1] <= p[1] + p[3] / 2 <= b[1] + b[3])
+        if inside >= DOODLE_COVERS:
+            out.add(i)
+    return out
+
+
 def _rgb(data: bytes | None):
     if not data:
         return None
@@ -466,7 +493,7 @@ def _neighbour_strip(results: list, boxes: dict, skip: set[int], page_w: float) 
 
 
 def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
-    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]，OCR 没把握的加 [手写·看不清]），
+    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]，其中只是圈画、划线的丢掉；OCR 没把握的加 [手写·看不清]），
     印刷行置信度低的加 [存疑]，
     落在插图 / 表格里的行加 [图中文字] 前缀；竖排的行认不出，略去并在末尾列出位置；照片边上的邻页残片去掉；没有 results 时退回 words_result。"""
     results = r.get("results") or []
@@ -474,6 +501,7 @@ def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
     vertical = _vertical_lines(results, direction)
     in_figure = _figure_lines(r, vertical)
     red = _red_lines(results, rgb)
+    doodle = _doodle_lines(results, red)
     # 转正后的行框：邻页残片按卷子自己的左右来算；没有照片尺寸时算不了
     strip: set[int] = set()
     if size:
@@ -483,7 +511,7 @@ def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
     for group in _baidu_order(r):
         lines: list[str] = []
         for i in group:
-            if i in vertical or i in strip:
+            if i in vertical or i in strip or i in doodle:
                 continue
             item = results[i]
             words = item.get("words") or {}
