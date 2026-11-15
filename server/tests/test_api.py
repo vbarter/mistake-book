@@ -1682,9 +1682,94 @@ def test_baidu_chinese_paper_vertical_red_and_doubt():
         assert garbage not in lines and f"[手写] {garbage}" not in lines and f"[存疑] {garbage}" not in lines
     assert "【竖排文字】" in lines[-1] and "[0.49, 0.38, 0.83, 0.53]" in lines[-1]
     assert "[红笔] 伴" in lines and "[红笔] 1" in lines
-    assert "[手写] 精巧" in lines and "[手写] 不可" in lines  # 学生黑笔照旧，红勾穿过也不算红笔
+    assert "[手写] 不可" in lines  # 学生黑笔照旧，红勾穿过也不算红笔
+    assert "颗颗珍珠,jīng qiǎo(〔手写：精巧〕" in lines and "[手写] 精巧" not in lines  # 写在印刷括号里的作答拼回括号里
     assert "[存疑] 平衡 千将发删(磨刀石)" in lines and "七夕今宵看碧霄," in lines
     assert page.regions == [] and not any(line.startswith(ocr.FIGURE_TAG + "[") for line in lines)
+
+
+def test_baidu_red_doodles_are_not_marks():
+    """彩笔圈在题号、选项上的圆圈和划线不是批改：被认成「O」「一」的红笔行、把几行印刷文字包在里面的红笔框都丢掉；
+    挨着手写作答的红勾、红叉、分数照旧标 [红笔]"""
+    import numpy as np
+
+    from app.ai import ocr
+
+    def line(word, x, y, w, h=30, hand=False):
+        return {"words_type": "handwriting" if hand else "print", "words": {"word": word, "words_location": {"left": x, "top": y, "width": w, "height": h}}}
+
+    r = {
+        "results": [
+            line("A. 甲>乙", 300, 100, 200),
+            line("B. 甲<乙", 300, 150, 200),
+            line("C. 甲=乙", 300, 200, 200),
+            line("O", 100, 130, 250, 120, hand=True),  # 橙色圆圈，认成了 O
+            line("乙", 150, 140, 380, 110, hand=True),  # 圈被认成别的字，但框里包着两行印刷选项
+            line("(3) 求下图的面积", 300, 300, 400),
+            line("5×7=35", 300, 400, 200, hand=True),
+            line("一", 300, 460, 200, hand=True),  # 橙色横线
+            line("×", 520, 400, 40, hand=True),  # 作答旁的红叉
+            line("-2", 600, 400, 40, hand=True),  # 扣分
+        ]
+    }
+    rgb = np.full((600, 1000, 3), 240, dtype=np.uint8)
+    for i in (3, 4, 7, 8, 9):  # 这几行的墨迹是橙 / 红色
+        b = r["results"][i]["words"]["words_location"]
+        rgb[b["top"] + 2 : b["top"] + 12, b["left"] + 2 : b["left"] + 30] = (240, 120, 60)
+    lines = ocr.baidu_lines(r, rgb).splitlines()
+    assert "[红笔] O" not in lines and "[红笔] 乙" not in lines and "[红笔] 一" not in lines
+    assert "[红笔] ×" in lines and "[红笔] -2" in lines and "[手写] 5×7=35" in lines
+    assert "B. 甲<乙" in lines and "(3) 求下图的面积" in lines  # 被圈住的印刷行还在
+    # 没有照片（判断不了颜色）时不动
+    assert "[手写] O" in ocr.baidu_lines(r).splitlines()
+
+
+def test_baidu_handwriting_inside_printed_brackets():
+    """题目里的括号是印刷的，括号里面的是学生手写：又短又落在空括号上的手写行拼回那一行（「(〔手写：A〕)」），
+    不再单独成行；括号被百度拆成两行、看不清的作答、写在别处的演算都要分清"""
+    from app.ai import ocr
+
+    def line(word, x, y, w, h=30, hand=False, prob=None):
+        words = {"word": word, "words_location": {"left": x, "top": y, "width": w, "height": h}}
+        if prob is not None:
+            words["line_probability"] = {"min": prob, "average": prob}
+        return {"words_type": "handwriting" if hand else "print", "words": words}
+
+    r = {
+        "results": [
+            line("法与算式相对应的是( )", 100, 100, 400),
+            line("A", 440, 95, 40, 45, hand=True),  # 写在行尾的括号里
+            line("(", 100, 200, 12),  # 一对括号被拆成两行
+            line(")21. Our handmade bookmarks", 150, 200, 500),
+            line("C", 118, 195, 30, 40, hand=True),
+            line("3. 4的倍数都是偶数。( )", 100, 300, 400),
+            line("下", 445, 298, 30, hand=True, prob=0.4),  # 判断题的勾被认成了字
+            line("1. 张伯伯有一块平行四边形菜地( )。", 100, 400, 600),
+            line("=(12+9)×2", 150, 450, 300, 40, hand=True),  # 题目下面的演算，学生自己写的括号
+            line("=42", 300, 405, 80, hand=True),  # 同一行但离括号很远
+        ]
+    }
+    lines = ocr.baidu_lines(r).splitlines()
+    assert "法与算式相对应的是(〔手写：A〕 )" in lines and "[手写] A" not in lines
+    assert "〔手写：C〕)21. Our handmade bookmarks" in lines and "[手写] C" not in lines
+    assert "3. 4的倍数都是偶数。(〔手写·看不清：下〕 )" in lines
+    assert "1. 张伯伯有一块平行四边形菜地( )。" in lines and "[手写] =(12+9)×2" in lines and "[手写] =42" in lines
+
+
+def test_digitize_prompts_only_take_ticks_and_crosses_on_answers():
+    from app.ai import claude
+
+    assert "圈出 = wrong" not in claude.DIGITIZE_SYSTEM_PROMPT and "划掉、圈出" not in claude.DIGITIZE_SYSTEM_PROMPT
+    assert "只认勾和叉" in claude.DIGITIZE_SYSTEM_PROMPT and "圆圈、涂画" in claude.DIGITIZE_SYSTEM_PROMPT
+    assert "圈画不是批改" in claude.TEXT_ONLY_DIGITIZE_NOTE
+    assert "〔手写：A〕" in claude.DIGITIZE_SYSTEM_PROMPT and "〔手写：A〕" in claude.TEXT_ONLY_DIGITIZE_NOTE
+    assert ocr_tag_matches()
+
+
+def ocr_tag_matches():
+    from app.ai import ocr
+
+    return ocr.BRACKET_HAND.format("A") == "〔手写：A〕"
 
 
 def test_baidu_low_confidence_handwriting_marked_illegible():

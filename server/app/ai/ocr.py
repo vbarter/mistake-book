@@ -292,6 +292,97 @@ def _red_lines(results: list, rgb) -> set[int]:
     return out
 
 
+# 彩笔 / 红笔的圈画被百度当成手写行时认出来的「字」：圆圈认成「O」「○」，横线认成「一」「—」，不含任何勾叉和数字
+_DOODLE_ONLY = re.compile(r"[\sOoＯ○〇◯一—–\-－_~～丨|｜.·。、,，'‘’\"“”°]+")
+_VERDICT_CHARS = re.compile(r"[✓✔√☑vV✗✘×xX乂╳/／\\对错\d]")  # 勾、叉、斜杠、分数：留给大模型当批改看
+DOODLE_COVERS = 2  # 一个红笔框把这么多行印刷文字的中心包在里面：是圈在题号、题干、选项上的大圈，不是批改
+
+
+def _doodle_lines(results: list, red: set[int]) -> set[int]:
+    """红笔行里其实只是圈画、划线的行：批改记号只认勾和叉，而且得落在学生的手写作答上；
+    圈住题号、盖在印刷题干和选项上的圆圈、横线不是批改，整行丢掉，免得被当成判错。"""
+    out: set[int] = set()
+    printed = [b for item in results if item.get("words_type") != "handwriting" and _word(item) and (b := _box(item))]
+    for i in red:
+        word = _word(results[i])
+        if not word:
+            continue
+        if _DOODLE_ONLY.fullmatch(word):
+            out.add(i)
+            continue
+        b = _box(results[i])
+        if not b or _VERDICT_CHARS.search(word):
+            continue
+        inside = sum(1 for p in printed if b[0] <= p[0] + p[2] / 2 <= b[0] + b[2] and b[1] <= p[1] + p[3] / 2 <= b[1] + b[3])
+        if inside >= DOODLE_COVERS:
+            out.add(i)
+    return out
+
+
+# ---------- 写在印刷括号里的作答 ----------
+
+BRACKET_HAND = "〔手写：{}〕"  # 嵌进印刷行的括号里：括号是题目印的，里面是学生写的
+BRACKET_HAND_ILLEGIBLE = "〔手写·看不清：{}〕"
+BRACKET_HAND_CHARS = 8  # 括号里的作答（选项字母、勾叉、一个数、一个词）不会比这长；再长的是写在旁边的演算
+_EMPTY_BRACKET = re.compile(r"[（(]\s*[)）]")
+_OPEN_END = re.compile(r"[（(]\s*$")
+_CLOSE_START = re.compile(r"^\s*[)）]")
+
+
+def _text_width(text: str) -> float:
+    """一段印刷文字大致占多宽：汉字和全角符号算 2，其余算 1。只用来估计括号在这一行里的横向位置。"""
+    return float(sum(2 if ord(ch) > 0x2E7F else 1 for ch in text))
+
+
+def _bracket_slots(word: str, b: tuple[float, float, float, float]) -> list[tuple[float, int]]:
+    """这一行印刷文字里能写作答的括号：[(括号中心的 x, 作答要插进文字的位置)]。
+    空括号「( )」按字数比例估位置；百度常把一对括号拆到两行（上一行以「(」结尾、下一行以「)」开头），这种行的行尾 / 行首也算。"""
+    total = _text_width(word) or 1.0
+    slots = [(b[0] + b[2] * (_text_width(word[: m.start()]) + _text_width(m.group()) / 2) / total, m.start() + 1) for m in _EMPTY_BRACKET.finditer(word)]
+    if m := _OPEN_END.search(word):
+        slots.append((b[0] + b[2], len(word)))
+    if m := _CLOSE_START.search(word):
+        slots.append((b[0], 0))
+    return slots
+
+
+def _bracket_answers(results: list, boxes: dict, skip: set[int]) -> dict[int, tuple[int, int]]:
+    """学生写在印刷括号里的作答：{手写行: (印刷行, 插入位置)}。
+    题目里的括号是印刷的，括号里面的才是手写；百度把这两样分成两行，手写那行按阅读顺序常常排到别处，
+    后面就分不清它是哪道题的答案。这里按位置把又短又落在某个空括号上的手写行找出来，拼回那一行的括号里。
+    boxes 是转正后的行框；skip 里的行（竖排、残片、红笔、圈画）不参与。"""
+    printed = []
+    for i, item in enumerate(results):
+        b = boxes.get(i)
+        if b and i not in skip and item.get("words_type") != "handwriting":
+            for x, pos in _bracket_slots(_word(item), b):
+                printed.append((i, x, pos, b))
+    if not printed:
+        return {}
+    best: dict[tuple[int, int], tuple[float, int]] = {}  # 每个括号只收离它最近的一行手写
+    for j, item in enumerate(results):
+        h = boxes.get(j)
+        if not h or j in skip or item.get("words_type") != "handwriting":
+            continue
+        core = re.sub(r"\s", "", _word(item))
+        if not core or len(core) > BRACKET_HAND_CHARS:
+            continue
+        cx, cy = h[0] + h[2] / 2, h[1] + h[3] / 2
+        for i, x, pos, b in printed:
+            # 同一行（手写的字常比印刷字大、略微偏上偏下），横向落在括号附近
+            if abs(cy - (b[1] + b[3] / 2)) > 0.75 * max(b[3], h[3]):
+                continue
+            dist = abs(cx - x)
+            if dist > max(1.5 * b[3], h[2] / 2):
+                continue
+            if (i, pos) not in best or dist < best[(i, pos)][0]:
+                best[(i, pos)] = (dist, j)
+    out: dict[int, tuple[int, int]] = {}
+    for (i, pos), (dist, j) in sorted(best.items(), key=lambda kv: kv[1][0]):
+        out.setdefault(j, (i, pos))  # 一行手写只进离它最近的那个括号
+    return out
+
+
 def _rgb(data: bytes | None):
     if not data:
         return None
@@ -466,7 +557,8 @@ def _neighbour_strip(results: list, boxes: dict, skip: set[int], page_w: float) 
 
 
 def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
-    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]，OCR 没把握的加 [手写·看不清]），
+    """把 doc_analysis 结果拼成逐行文字：按分栏排序，栏与栏之间空一行；手写行加 [手写] 前缀（红笔为主的加 [红笔]，其中只是圈画、划线的丢掉；OCR 没把握的加 [手写·看不清]），
+    写在印刷括号里的短手写拼回括号里（「( 〔手写：A〕 )」），
     印刷行置信度低的加 [存疑]，
     落在插图 / 表格里的行加 [图中文字] 前缀；竖排的行认不出，略去并在末尾列出位置；照片边上的邻页残片去掉；没有 results 时退回 words_result。"""
     results = r.get("results") or []
@@ -474,20 +566,32 @@ def baidu_lines(r: dict, rgb=None, size: tuple[int, int] | None = None) -> str:
     vertical = _vertical_lines(results, direction)
     in_figure = _figure_lines(r, vertical)
     red = _red_lines(results, rgb)
+    doodle = _doodle_lines(results, red)
     # 转正后的行框：邻页残片按卷子自己的左右来算；没有照片尺寸时算不了
     strip: set[int] = set()
+    boxes: dict = {}
     if size:
         boxes = {i: (_upright(b, direction, size) if (b := _box(item)) else None) for i, item in enumerate(results)}
         strip = _neighbour_strip(results, boxes, vertical, float(size[1] if direction % 2 else size[0]))
+    elif direction == 0:
+        boxes = {i: _box(item) for i, item in enumerate(results)}
+    # 写在印刷括号里的作答拼回括号里：{印刷行: [(插入位置, 手写行)]}
+    in_bracket = _bracket_answers(results, boxes, vertical | strip | red | doodle) if boxes else {}
+    fills: dict[int, list[tuple[int, int]]] = {}
+    for j, (i, pos) in in_bracket.items():
+        fills.setdefault(i, []).append((pos, j))
     chunks: list[str] = []
     for group in _baidu_order(r):
         lines: list[str] = []
         for i in group:
-            if i in vertical or i in strip:
+            if i in vertical or i in strip or i in doodle or i in in_bracket:
                 continue
             item = results[i]
             words = item.get("words") or {}
             word = _word(item)
+            for pos, j in sorted(fills.get(i, ()), reverse=True):  # 从后往前插，前面的位置不变
+                hand = results[j].get("words") or {}
+                word = word[:pos] + (BRACKET_HAND_ILLEGIBLE if illegible(hand) else BRACKET_HAND).format(_word(results[j])) + word[pos:]
             if word:
                 if item.get("words_type") == "handwriting":
                     tag = RED_TAG if i in red else ILLEGIBLE_TAG if illegible(words) else HANDWRITING_TAG
