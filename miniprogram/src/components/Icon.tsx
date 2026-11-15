@@ -9,7 +9,7 @@ export type IconName =
   | "viewfinder" | "loop" | "family" | "shield" | "brain"
   | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation"
   | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "rotate" | "eye" | "eye-off" | "link" | "unlink"
-  | "play" | "pause" | "timer" | "help" | "bulb" | "skip" | "undo";
+  | "play" | "pause" | "timer" | "help" | "bulb" | "skip" | "undo" | "mic";
 
 const paths: Record<IconName, string> = {
   play: "M8 5.5v13l10.5-6.5z",
@@ -50,6 +50,7 @@ const paths: Record<IconName, string> = {
   books: "M4 4h4v16H4zM10 4h4v16h-4zM16.5 5l3.5.8-3 14-3.5-.8z",
   pencil: "M4 20h4l10-10-4-4L4 16zM12.5 7.5l4 4",
   person: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
+  mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7",
   camera: "M4 8h3l2-3h6l2 3h3v11H4zM12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z",
   photo: "M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M16 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z",
   sparkles: "M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z",

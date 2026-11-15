@@ -132,7 +132,7 @@ export async function loadDay(day?: string): Promise<HwDay> {
   return apply(await api<HwDay>(`/api/homework${day ? `?day=${day}` : ""}`));
 }
 
-export async function parseHomework(text: string, imagePaths: string[], day?: string): Promise<{ items: DraftItem[]; planDue: PlanDue[] }> {
+export async function parseHomework(text: string, imagePaths: string[], day?: string, voice = false): Promise<{ items: DraftItem[]; planDue: PlanDue[] }> {
   const images: string[] = [];
   for (const p of imagePaths) {
     let path = p;
@@ -144,7 +144,7 @@ export async function parseHomework(text: string, imagePaths: string[], day?: st
     images.push(`data:image/jpeg;base64,${Taro.getFileSystemManager().readFileSync(path, "base64") as string}`);
   }
   const res = await api<{ items: Omit<DraftItem, "key" | "source">[]; planDue: PlanDue[] }>("/api/homework/parse", { method: "POST", body: { text, images, day }, timeoutMs: 120000 });
-  const source: DraftItem["source"] = images.length ? "photo" : "text";
+  const source: DraftItem["source"] = images.length ? "photo" : voice ? "voice" : "text";
   return { items: res.items.map((it) => ({ ...it, key: newKey(), source })), planDue: res.planDue };
 }
 
