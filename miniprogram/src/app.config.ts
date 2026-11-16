@@ -26,6 +26,7 @@ export default defineAppConfig({
     "pages/homework-confirm/index",
     "pages/homework-item/index",
     "pages/homework-focus/index",
+    "pages/assistant/index",
   ],
   window: {
     backgroundTextStyle: "dark",

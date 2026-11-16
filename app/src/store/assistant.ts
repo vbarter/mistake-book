@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { imagesToPdf, imageToJpeg, type PdfPageInput } from "../lib/imagesPdf";
-import { askStream, countQuestions, getTask, kbAvailable, KbError, MAX_UPLOAD_BYTES, resetKbSession, searchQuestions, taskDone, taskFailed, UPLOAD_EXTS, uploadPaper, type KbCitation, type KbTask, type Turn } from "../lib/kb";
+import { askStream, countQuestions, getTask, kbAvailable, KbError, MAX_UPLOAD_BYTES, resetKbSession, searchQuestions, taskDone, wantsPaper, taskFailed, UPLOAD_EXTS, uploadPaper, type KbCitation, type KbTask, type Turn } from "../lib/kb";
 import { newId } from "../lib/folders";
 import { haptic } from "../lib/native";
 import { takeScanPages } from "./scan";
@@ -328,8 +328,9 @@ export async function sendQuestion(raw: string) {
     if (finding) {
       const items = await searchQuestions(text, scope);
       if (ctl.signal.aborted) return finish({ state: "stopped" });
-      if (!items.length) return finish({ state: "not_found", text: s.focus ? "这份试卷里没找到相关的题，去掉上面的试卷标签再找找看。" : "没找到相关的题。换个说法试试，或者把相关的试卷传给我。" });
-      finish({ state: "done", text: `找到 ${items.length} 道相关的题，点开看原题：`, citations: items });
+      const papers = !s.focus && wantsPaper(text);
+      if (!items.length) return finish({ state: "not_found", text: s.focus ? "这份试卷里没找到相关的题，去掉上面的试卷标签再找找看。" : papers ? "没找到这样的试卷。换个说法试试，或者把试卷传给我。" : "没找到相关的题。换个说法试试，或者把相关的试卷传给我。" });
+      finish({ state: "done", text: papers ? `找到 ${items.length} 份相关的试卷，点开看里面的题：` : `找到 ${items.length} 道相关的题，点开看原题：`, citations: items });
       notify("小壹：帮你找到题了，点我看看");
       return;
     }

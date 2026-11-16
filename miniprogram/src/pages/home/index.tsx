@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AssistantOrb } from "../../components/AssistantOrb";
 import { Image, Text, View } from "@tarojs/components";
 import Taro, { useDidShow, usePullDownRefresh } from "@tarojs/taro";
 import { AvatarPrompt } from "../../components/AvatarPrompt";
@@ -225,6 +226,7 @@ export default function Home() {
           <Icon name="chevron-right" size={14} color={C.tertiary} stroke={2.4} />
         </View>
       </View>
+      <AssistantOrb />
     </View>
   );
 }

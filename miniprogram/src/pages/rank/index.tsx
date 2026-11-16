@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { AssistantOrb } from "../../components/AssistantOrb";
 import { ScrollView, Text, View } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { Buddy } from "../../components/Buddy";
@@ -151,6 +152,7 @@ export default function Ranking() {
         </View>
       )}
       <ExportSheet open={exporting} onClose={() => setExporting(false)} title={exportNew ? "新增错题" : "全部错题"} errors={fresh.length > 0 ? fresh : errors} />
+      <AssistantOrb raised={errors.length > 0} />
     </View>
   );
 }
