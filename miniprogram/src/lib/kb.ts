@@ -194,6 +194,8 @@ export interface KbCitation {
   number: string;
   content?: string;
   options?: { label?: string; text?: string }[];
+  /** 这一条是整份试卷（找试卷时）：questionId 是 paper:<试卷 id>，content 是里面相关的几道题 */
+  isPaper?: boolean;
 }
 
 interface RawItem { ref?: number; kb?: string; scope?: string; question_id: string; paper_id: string; paper_title: string; question_number: string; content?: string; options?: unknown }
@@ -374,13 +376,62 @@ export async function askStream(question: string, history: Turn[], scope: AskSco
   return end ?? { status: "error", message: "回答中断了" };
 }
 
-/** 找题：返回题目卡片（带题干）。mine / system 都开时两边各找一遍，按相关度合并 */
+/** 说了「试卷 / 卷子」又没提「题」：要的是整份试卷，按试卷返回 */
+export const wantsPaper = (q: string) => /试卷|卷子|考卷|[份套张].{0,8}卷/.test(q) && !/题/.test(q);
+
+/** 知识库从问题里认出来的标签（学科、年级、地区、考试类型）→ 检索的筛选字段。认出来了就当硬条件再找一遍，不然「初三数学」只是几个字，别的学科也会混进来 */
+const SUGGEST_FIELDS: Record<string, string> = { subject: "subject_tag_ids", grade: "grade_tag_ids", source_region: "region_tag_ids", exam_type: "exam_type_tag_ids" };
+interface RawPaperHit { paper_id: string; paper_title: string; matched_question_count?: number; matched_questions?: { question_number?: string; snippet?: string }[] }
+type RawHit = (RawItem | RawPaperHit) & { score?: number };
+interface SearchResp { items?: RawHit[]; interpreted_filters?: { suggested?: Record<string, { id?: string }[]> } }
+
+const searchPost = (path: string, body: Record<string, unknown>) => kbJson<SearchResp>(path, { method: "POST", body });
+
+function suggestedFilters(data: SearchResp): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  for (const [type, field] of Object.entries(SUGGEST_FIELDS)) {
+    const ids = (data.interpreted_filters?.suggested?.[type] ?? []).map((t) => t.id).filter((id): id is string => !!id);
+    if (ids.length) out[field] = ids;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function paperCitation(raw: RawPaperHit, i: number, kb: "personal" | "system"): KbCitation {
+  const lines = (raw.matched_questions ?? []).map((q) => `第 ${q.question_number ?? "?"} 题　${(q.snippet ?? "").replace(/\s+/g, " ").trim()}`);
+  const n = raw.matched_question_count ?? lines.length;
+  return {
+    ref: i + 1,
+    kb,
+    questionId: `paper:${raw.paper_id}`,
+    paperId: raw.paper_id,
+    paperTitle: raw.paper_title || "未命名试卷",
+    number: "",
+    content: lines.length ? lines.join("\n") : `这份试卷里有 ${n} 道相关的题`,
+    isPaper: true,
+  };
+}
+
+/**
+ * 找题 / 找试卷。mine / system 都开时两边各找一遍，按相关度合并。
+ * 每个库先按原话找一遍；知识库认出学科、年级这些标签时，带上它们当筛选条件再找一遍，以第二遍为准。
+ * 个人库里没打这类标签的试卷照样算（include_unclassified）；系统题库都打过标签，不放宽。
+ */
 export async function searchQuestions(query: string, scope: AskScope, topK = 6): Promise<KbCitation[]> {
   const focused = !!scope.paperIds?.length;
+  const paper = !focused && wantsPaper(query);
   const run = async (kb: "personal" | "system") => {
     const body: Record<string, unknown> = { query, mode: "related", top_k: topK };
+    if (paper) body.target = "paper";
     if (focused && !legacy) body.filters = { paper_ids: scope.paperIds };
-    const data = await kbJson<{ items?: (RawItem & { score?: number })[] }>(`/v1/${kb}/search`, { method: "POST", body });
+    let data = await searchPost(`/v1/${kb}/search`, body);
+    const extra = focused ? null : suggestedFilters(data);
+    if (extra) {
+      try {
+        data = await searchPost(`/v1/${kb}/search`, { ...body, filters: kb === "personal" ? { ...extra, include_unclassified: true } : extra });
+      } catch {
+        // 带条件的这一遍没成（条件组合太多、老版本不认）：用第一遍的结果
+      }
+    }
     return (data.items ?? []).map((it) => ({ it, kb }));
   };
   const targets: ("personal" | "system")[] = focused ? ["personal"] : [...(scope.mine ? ["personal" as const] : []), ...(scope.system ? ["system" as const] : [])];
@@ -391,7 +442,7 @@ export async function searchQuestions(query: string, scope: AskScope, topK = 6):
     if (failed && !failed.ok) throw failed.e;
   }
   ok.sort((a, b) => (b.it.score ?? 0) - (a.it.score ?? 0));
-  return ok.slice(0, topK).map(({ it, kb }, i) => toCitation({ ...it, ref: i + 1 }, i, kb));
+  return ok.slice(0, topK).map(({ it, kb }, i) => (paper ? paperCitation(it as RawPaperHit, i, kb) : toCitation({ ...(it as RawItem), ref: i + 1 }, i, kb)));
 }
 
 /** 一份试卷拆出了几道题。老版本知识库不支持按试卷筛选，返回 null */
