@@ -1,0 +1,16 @@
+{
+  "name": "shangyike-promo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "上壹课小程序功能宣传视频：HTML/CSS 动画 + 无头浏览器逐帧截图 + ffmpeg 合成，配乐用代码合成",
+  "scripts": {
+    "render": "node render.mjs overview",
+    "still": "node render.mjs overview --stills",
+    "music": "node audio/build.mjs overview"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans-sc": "^5.2.9",
+    "esbuild": "^0.25.0"
+  }
+}
