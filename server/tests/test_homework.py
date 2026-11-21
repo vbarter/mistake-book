@@ -127,6 +127,43 @@ def test_add_schedule_and_auto_start(app, client):
     assert second["status"] == "running" and second["startedAt"].endswith("19:00:00") and second["used"] == 0
 
 
+def test_schedule_later_stops_current(app, client):
+    """第一项已经在计时（进清单时自动排的时间到了），再把整体开始时间改到后面：第一项停下来一起重排，到点才开始"""
+    clock = Clock(app, "10:05")
+    h, _ = _login(client, "13800000021")
+    _add(client, h, [{"title": "订签校默", "est": 10}, {"title": "熟读P62", "est": 10}, {"title": "自默P62", "est": 10}])
+    client.post("/api/homework/schedule", json={"day": DAY, "from": "10:10"}, headers=h)
+    clock.set("10:10")
+    first = _get(client, h)["items"][0]
+    assert first["status"] == "running" and first["autoStarted"]
+    clock.tick(seconds=12)
+    client.post(f"/api/homework/items/{first['id']}/pause", headers=h)
+
+    clock.set("10:13")
+    day = client.post("/api/homework/schedule", json={"day": DAY, "from": "11:30"}, headers=h).get_json()
+    assert [it["status"] for it in day["items"]] == ["todo"] * 3
+    assert [it["remindAt"] for it in day["items"]] == ["11:30", "11:40", "11:50"]
+    first = day["items"][0]
+    assert first["used"] == 0 and first["firstStartedAt"] is None and not first["autoStarted"]
+    assert day["summary"]["currentId"] is None and day["summary"]["nextAt"] == "11:30" and day["summary"]["startedAt"] is None
+
+    clock.set("11:29")
+    assert _get(client, h)["items"][0]["status"] == "todo"
+    clock.set("11:30")
+    first = _get(client, h)["items"][0]
+    assert first["status"] == "running" and first["autoStarted"] and first["used"] == 0
+
+    # 已经做了一阵的：停下来重排，已用时间留着
+    clock.set("11:35")
+    day = client.post("/api/homework/schedule", json={"day": DAY, "from": "14:00"}, headers=h).get_json()
+    assert day["items"][0]["status"] == "todo" and day["items"][0]["used"] == 300 and day["items"][0]["remindAt"] == "14:00"
+
+    # 开始时间已经过了的：正在计时的不动，后面的照排
+    client.post(f"/api/homework/items/{first['id']}/start", headers=h)
+    day = client.post("/api/homework/schedule", json={"day": DAY, "from": "11:00"}, headers=h).get_json()
+    assert day["items"][0]["status"] == "running" and day["items"][1]["remindAt"] == "11:00"
+
+
 def test_chain_starts_after_previous(app, client):
     clock = Clock(app, "18:00")
     h, _ = _login(client, "13800000003")

@@ -455,7 +455,8 @@ def delete_item(item_id: str):
 @login_required
 def schedule():
     """一键排好提醒时间：从 from 开始，按清单顺序和每项估的用时依次排（第一项之后的都排成具体钟点，不用「接着上一项」）。
-    做完的和正在计时的不动；body 里 off: true 表示把没做的项都改成不提醒。"""
+    做完的不动。开始时间还没到时，正在计时 / 暂停的那一项也停下来一起重排（到点再开始）：已用时间留着，不到 1 分钟的当作没开始、清零；
+    开始时间已经过了的，正在计时的不动。body 里 off: true 表示把没做的项都改成不提醒。"""
     user = current_user()
     data = request.get_json(silent=True) or {}
     day = _day_arg(data.get("day"))
@@ -470,6 +471,16 @@ def schedule():
     if not start:
         abort(400, "从几点开始？")
     t = _at(day, start)
+    now = now_local()
+    if t > now:
+        # 定了一个还没到的开始时间：这之前不该有哪一项在计时（多半是进清单时按「现在往后 5 分钟」自动开始的）
+        for it in items:
+            if it.status not in ("running", "paused"):
+                continue
+            _stop(it, now)
+            it.status, it.auto_started = "todo", False
+            if (it.elapsed or 0) < 60:
+                it.elapsed, it.first_started_at = 0, None
     for it in items:
         if it.status != "todo":
             continue
