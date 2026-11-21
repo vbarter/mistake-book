@@ -862,6 +862,8 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .swipe-row { position: relative; }
 .swipe-row__action { background: $wrong; position: absolute; right: 0; top: 0; bottom: 0; width: 68px; border-radius: $radius-list; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #fff; font-size: 13px; line-height: 18px; font-weight: 600; transition: opacity 0.1s; }
 .swipe-row__content { position: relative; }
+.swipe-row__actions { position: absolute; right: 0; top: 0; bottom: 0; display: flex; transition: opacity 0.1s; }
+.swipe-row__act { width: 68px; background: $wrong; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #fff; font-size: 12px; line-height: 16px; font-weight: 600; }
 /* 卡片里的一行向左滑（成员「解绑」交过的作业）：按钮直角贴边，行自己带底色盖住它 */
 .swipe-row--inline .swipe-row__action { border-radius: 0; }
 .swipe-row--inline .swipe-row__content { background: $card; }
@@ -1188,3 +1190,61 @@ view, text, image, button, input, textarea, scroll-view, swiper, picker, navigat
 .as-bubble { position: fixed; right: 12px; bottom: calc(#{$tabbar-h} + env(safe-area-inset-bottom) + 108px); z-index: 28; max-width: 260px; padding: 10px 12px; border-radius: 16px 16px 4px 16px; background: $card; box-shadow: 0 8px 24px rgba(10, 16, 32, 0.2); font-size: 13px; line-height: 19px; font-weight: 600; color: $label; animation: as-pop 0.35s $spring both; transform-origin: 100% 100%; }
 .as-bubble--raised { bottom: calc(#{$tabbar-h} + env(safe-area-inset-bottom) + 174px); }
 @keyframes as-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+
+/* 待办事项（1.13，界面稿 screenshots/todo-simplify-v4/）：待办 / 已归档两个列表，每项能左滑；右下角加号添加 */
+.td-page { padding-bottom: calc(110px + env(safe-area-inset-bottom)); gap: 6px; }
+.td-head { display: flex; align-items: baseline; gap: 10px; padding: 2px 4px 4px; }
+.td-head__t { font-size: 30px; line-height: 36px; font-weight: 800; letter-spacing: -0.4px; color: $label; }
+.td-head__s { font-size: 13px; font-weight: 600; color: $secondary; }
+.td-seg .seg__item { font-size: 14px; color: $secondary; }
+.td-seg .seg__item.on { color: $label; font-weight: 700; }
+.td-seg__n { font-size: 12px; font-weight: 700; color: $tertiary; }
+.td-seg .seg__item.on .td-seg__n { color: $brand; }
+.td-sec { display: flex; align-items: baseline; gap: 8px; padding: 10px 4px 6px; }
+.td-sec__b { font-size: 15px; font-weight: 800; color: $label; }
+.td-sec__s { font-size: 12px; font-weight: 600; color: $tertiary; }
+.td-list { background: $card; border-radius: $radius-card; overflow: hidden; }
+.td-row { display: flex; align-items: center; gap: 12px; min-height: 58px; box-sizing: border-box; padding: 9px 6px 9px 14px; border-top: 1px solid $sep-light; background: $card; }
+.td-list > .swipe-row:first-child .td-row { border-top: 0; }
+.td-row--cur { background: $brand-tint; }
+.td-row--done { padding-right: 14px; }
+.td-check { width: 24px; height: 24px; border-radius: 12px; border: 2px solid $sep; box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.td-check--run { border-color: $brand; }
+.td-check--run::after { content: ""; width: 10px; height: 10px; border-radius: 5px; background: $brand; }
+.td-check--done { background: var(--brand-solid); border-color: var(--brand-solid); }
+.td-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.td-title { font-size: 16px; line-height: 21px; font-weight: 600; color: $label; }
+.td-row--done .td-title { color: $tertiary; text-decoration: line-through; font-weight: 500; }
+.td-sub { display: flex; align-items: center; gap: 10px; font-size: 12px; line-height: 16px; }
+.td-subj { font-weight: 700; }
+.td-meta { display: flex; align-items: center; gap: 3px; font-weight: 600; color: $secondary; white-space: nowrap; }
+.td-meta--run { color: $brand; font-weight: 700; }
+.td-row--done .td-meta { color: $tertiary; }
+.td-go { width: 30px; height: 40px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.td-hint { display: block; font-size: 13px; line-height: 18px; color: $secondary; text-align: center; padding: 10px 4px 0; }
+.td-tile { background: $card; }
+.td-tile__icon2 { background: $brand-tint; }
+.td-fab { position: fixed; right: 18px; bottom: calc(28px + env(safe-area-inset-bottom)); z-index: 20; width: 58px; height: 58px; border-radius: 29px; background: var(--brand-solid); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px $brand-glow; }
+.td-snack { position: fixed; left: 16px; right: 16px; bottom: calc(34px + env(safe-area-inset-bottom)); z-index: 30; min-height: 46px; box-sizing: border-box; padding: 0 16px 0 12px; border-radius: 23px; background: rgba(28, 30, 40, 0.94); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22); }
+.td-snack--fab { right: 92px; }
+.td-snack__ok { width: 20px; height: 20px; border-radius: 10px; background: $ok; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.td-snack__t { flex: 1; min-width: 0; }
+.td-snack__u { color: #9db8ff; font-weight: 700; padding: 12px 0 12px 8px; flex-shrink: 0; }
+.td-opt { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: $fill-light; }
+.td-opt__ic { width: 40px; height: 40px; border-radius: 12px; background: $card; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.td-opt__ic--main { background: var(--brand-solid); }
+.td-lab { font-size: 13px; font-weight: 700; color: $secondary; margin-bottom: -4px; }
+.td-chip { display: inline-flex; align-items: center; }
+
+/* 待办的时钟计时页：点时钟开始 / 暂停，下面一句提示和一个「完成」 */
+.fb__ring--press { opacity: 0.82; }
+.fb__ring--idle::after { content: ""; position: absolute; left: -6px; top: -6px; right: -6px; bottom: -6px; border-radius: 50%; border: 2px dashed rgba(255, 255, 255, 0.35); }
+.fb__ico { width: 30px; height: 30px; border-radius: 15px; background: rgba(255, 255, 255, 0.16); display: flex; align-items: center; justify-content: center; margin-bottom: -2px; }
+.fb__t--idle { opacity: 0.8; }
+.fs--hint { justify-content: center; padding: 14px; font-size: 14px; font-weight: 600; color: $secondary; }
+.fs--done { gap: 12px; }
+.fs__ok { width: 32px; height: 32px; border-radius: 16px; background: $ok; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.fs__b { display: block; font-size: 15px; font-weight: 800; color: $label; }
+.fs__s { display: block; font-size: 12px; color: $secondary; }
+.fs__undo { font-size: 14px; font-weight: 700; color: $brand; padding: 8px 0 8px 8px; }
+.fc--col { flex-direction: column; justify-content: center; padding: 8px 0 24px; }

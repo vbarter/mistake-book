@@ -312,3 +312,99 @@ def test_add_merge_links_plan(app, client):
     r = _add(client, h, [{"title": "U5拓学单", "subject": "english", "planAssignmentId": "pa123"}])
     assert r["merged"] == 1
     assert _by(r, "U5 拓学单")["planAssignmentId"] == "pa123"
+
+
+# --------------------------------------------------------------------------- 待办事项（不分天：待办 / 已归档）
+
+
+def _todos(client, h):
+    r = client.get("/api/homework/todos", headers=h)
+    assert r.status_code == 200, r.get_json()
+    return r.get_json()
+
+
+def test_todos_view_across_days_archive_and_reopen(app, client):
+    clock = Clock(app, "19:00")
+    h, _ = _login(client, "13800000031")
+    client.post("/api/homework/items", json={"day": "2026-11-12", "items": [{"title": "第三单元练习", "subject": "math"}]}, headers=h)
+    r = client.post("/api/homework/items?view=todos", json={"items": [{"title": "订签校默", "subject": "english"}, {"title": "U5-6 拓学单", "subject": "english"}]}, headers=h)
+    assert r.status_code == 201
+    body = r.get_json()
+    # 新加的那天在前，前几天没做完的还在
+    assert [(it["title"], it["day"]) for it in body["todo"]] == [("订签校默", DAY), ("U5-6 拓学单", DAY), ("第三单元练习", "2026-11-12")]
+    assert body["archived"] == [] and body["archivedTotal"] == 0 and body["today"] == DAY
+    a, b, old = (it["id"] for it in body["todo"])
+
+    # 点时钟开始、暂停、继续，点完成归档
+    assert client.post(f"/api/homework/items/{a}/start?view=todos", headers=h).get_json()["todo"][0]["status"] == "running"
+    clock.tick(minutes=5)
+    paused = client.post(f"/api/homework/items/{a}/pause?view=todos", headers=h).get_json()["todo"][0]
+    assert (paused["status"], paused["used"]) == ("paused", 300)
+    clock.tick(minutes=10)
+    client.post(f"/api/homework/items/{a}/resume?view=todos", headers=h)
+    clock.tick(minutes=3)
+    body = client.post(f"/api/homework/items/{a}/finish?view=todos", headers=h).get_json()
+    assert [it["title"] for it in body["todo"]] == ["U5-6 拓学单", "第三单元练习"]
+    assert [(it["title"], it["used"], it["status"]) for it in body["archived"]] == [("订签校默", 480, "done")]
+    assert body["archivedTotal"] == 1
+
+    # 不计时直接归档（左滑归档）
+    body = client.post(f"/api/homework/items/{old}/finish?view=todos", headers=h).get_json()
+    assert [it["title"] for it in body["archived"]] == ["第三单元练习", "订签校默"]
+
+    # 重新打开：回到待办，用时留着，接着计
+    body = client.post(f"/api/homework/items/{a}/undo?view=todos", headers=h).get_json()
+    back = next(it for it in body["todo"] if it["id"] == a)
+    assert (back["status"], back["used"], back["finishedAt"]) == ("todo", 480, None)
+    client.post(f"/api/homework/items/{a}/start?view=todos", headers=h)
+    clock.tick(minutes=2)
+    assert next(it for it in _todos(client, h)["todo"] if it["id"] == a)["used"] == 600
+
+    # 编辑、删除也返回同一种看法；不带 view 的还是按天的清单
+    body = client.put(f"/api/homework/items/{b}?view=todos", json={"title": "U5-6 拓学单（订正）", "subject": "english"}, headers=h).get_json()
+    assert "U5-6 拓学单（订正）" in [it["title"] for it in body["todo"]]
+    body = client.delete(f"/api/homework/items/{b}?view=todos", headers=h).get_json()
+    assert b not in [it["id"] for it in body["todo"]]
+    assert "items" in client.put(f"/api/homework/items/{a}", json={"title": "订签校默"}, headers=h).get_json()
+
+
+def test_todos_start_stops_item_from_another_day(app, client):
+    clock = Clock(app, "19:00")
+    h, _ = _login(client, "13800000032")
+    client.post("/api/homework/items", json={"day": "2026-11-12", "items": [{"title": "周末卷 A"}]}, headers=h)
+    body = client.post("/api/homework/items?view=todos", json={"items": [{"title": "背单词"}]}, headers=h).get_json()
+    new, old = (it["id"] for it in body["todo"])
+    client.post(f"/api/homework/items/{old}/start?view=todos", headers=h)
+    clock.tick(minutes=4)
+    body = client.post(f"/api/homework/items/{new}/start?view=todos", headers=h).get_json()
+    by = {it["id"]: it for it in body["todo"]}
+    assert (by[new]["status"], by[old]["status"], by[old]["used"]) == ("running", "todo", 240)
+
+
+def test_todos_add_merges_with_open_items_from_other_days(app, client):
+    Clock(app, "19:00")
+    h, _ = _login(client, "13800000033")
+    client.post("/api/homework/items", json={"day": "2026-11-12", "items": [{"title": "复习 U4-U6"}, {"title": "口算 20 题"}]}, headers=h)
+    old = client.get("/api/homework?day=2026-11-12", headers=h).get_json()["items"]
+    client.post(f"/api/homework/items/{old[1]['id']}/finish", headers=h)
+    body = client.post("/api/homework/items?view=todos", json={"items": [{"title": "复习U4-U6"}, {"title": "口算 20 题"}]}, headers=h).get_json()
+    # 没做完的那项算重复；已归档的那项可以再加一次
+    assert body["merged"] == 1 and body["mergedTitles"] == ["复习U4-U6"]
+    assert sorted(it["title"] for it in body["todo"]) == ["口算 20 题", "复习 U4-U6"]
+
+
+def test_parse_files_docx_and_bad_type(client):
+    import base64
+    import io
+    import zipfile
+
+    h, _ = _login(client, "13800000034")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", '<w:document><w:body><w:p><w:r><w:t>英语：</w:t></w:r></w:p><w:p><w:r><w:t>1.订签校默</w:t></w:r></w:p><w:p><w:r><w:t>2.U5-6拓学单</w:t></w:r></w:p></w:body></w:document>')
+    data = base64.b64encode(buf.getvalue()).decode()
+    r = client.post("/api/homework/parse", json={"files": [{"name": "周五作业.docx", "data": data}]}, headers=h)
+    assert r.status_code == 200, r.get_json()
+    assert [i["title"] for i in r.get_json()["items"]] == ["订签校默", "U5-6拓学单"]
+    r = client.post("/api/homework/parse", json={"files": [{"name": "a.xlsx.zip.exe", "data": base64.b64encode(b"MZ123").decode()}]}, headers=h)
+    assert r.status_code == 400

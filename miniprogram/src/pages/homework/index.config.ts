@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: "今天作业计划", enablePullDownRefresh: true });
+export default definePageConfig({ navigationBarTitleText: "待办事项", enablePullDownRefresh: true });

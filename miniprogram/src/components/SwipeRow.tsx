@@ -7,6 +7,7 @@
  *   这种不算滚动，不然刚滑开就被收回去了
  * - 滑动过的那一下不算点击：swipeGuard.moved 为真时，卡片里各行自己的 onClick 应该直接返回
  * - hint：首次引导，自己滑出一小截再弹回，露一下红色按钮，不加文字
+ * - actions：一排几个按钮（待办事项：编辑 / 归档 / 删除），给了就不用 onDelete 那一个红色按钮
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { View, Text, type ITouchEvent } from "@tarojs/components";
@@ -64,10 +65,19 @@ type Gesture =
   | { kind: "swipe"; x: number; from: number; dx: number }
   | { kind: "pass" };
 
+export interface SwipeAction {
+  label: string;
+  icon: IconName;
+  /** 按钮底色，不给是红色 */
+  color?: string;
+  onClick: () => void;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onDelete: () => void;
+  onDelete?: () => void;
+  actions?: SwipeAction[];
   children: ReactNode;
   label?: string;
   icon?: IconName;
@@ -77,8 +87,9 @@ interface Props {
   onHintDone?: () => void;
 }
 
-export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删除", icon = "trash", inline, hint, onHintDone }: Props) {
-  const SHIFT = inline ? SHIFT_INLINE : SHIFT_CARD;
+export function SwipeRow({ open, onOpenChange, onDelete, actions, children, label = "删除", icon = "trash", inline, hint, onHintDone }: Props) {
+  const n = actions?.length || 1;
+  const SHIFT = n > 1 ? Math.round((ACTION_W * n + (inline ? 0 : GAP)) * ratio) : inline ? SHIFT_INLINE : SHIFT_CARD;
   const g = useRef<Gesture>({ kind: "idle" });
   const [x, setXState] = useState(open ? -SHIFT : 0);
   const [animate, setAnimate] = useState(false);
@@ -187,17 +198,36 @@ export function SwipeRow({ open, onOpenChange, onDelete, children, label = "删�
 
   return (
     <View className={inline ? "swipe-row swipe-row--inline" : "swipe-row"}>
-      <View
-        className="swipe-row__action"
-        style={{ opacity: x < 0 ? 1 : 0 }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-      >
-        <Icon name={icon} size={22} color="#fff" stroke={2} />
-        <Text>{label}</Text>
-      </View>
+      {actions ? (
+        <View className="swipe-row__actions" style={{ opacity: x < 0 ? 1 : 0 }}>
+          {actions.map((a) => (
+            <View
+              key={a.label}
+              className="swipe-row__act"
+              style={a.color ? { background: a.color } : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                a.onClick();
+              }}
+            >
+              <Icon name={a.icon} size={20} color="#fff" stroke={2} />
+              <Text>{a.label}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View
+          className="swipe-row__action"
+          style={{ opacity: x < 0 ? 1 : 0 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete?.();
+          }}
+        >
+          <Icon name={icon} size={22} color="#fff" stroke={2} />
+          <Text>{label}</Text>
+        </View>
+      )}
       <View
         className={inline ? "swipe-row__content" : "swipe-row__content group"}
         style={{ transform: `translateX(${x}px)`, transition: animate ? "transform 0.22s ease" : "none" }}
