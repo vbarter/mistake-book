@@ -9,7 +9,7 @@ import { Progress, SubjectTile, subjectColors, useMenuButton } from "../../compo
 import type { ThemeName } from "../../lib/colorIcons";
 import { allErrors } from "../../lib/errors";
 import { SUBJECT_LABEL } from "../../lib/format";
-import { loadDay, nextTodo, tileSubject, useHomework, type HwCheckin } from "../../lib/homework";
+import { currentItem, loadTodos, tileSubject, useHomework, type HwCheckin } from "../../lib/homework";
 import { analyze, inRange } from "../../lib/insights";
 import { roleIconSvg, type RoleName } from "../../lib/roleIcons";
 import { captureInto } from "../../lib/capture";
@@ -28,7 +28,7 @@ const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 /**
  * 首页（和 App 一致，界面稿见项目文件 screenshots/home-blackboard/）：顶部品牌名、「今天，学一点」和连续打卡天数；本周打卡条；
  * 四块黑板入口「待办事项」「学习计划」「错题收集」「试卷擦除」（板面颜色跟主题走，粉笔字是 assets/chalk/ 里烘好的透明图，小人是 lib/roleIcons.ts 的角色图标）；
- * 下面是识别进度、没扫出来的小喇叭通知、今天作业计划的下一项、近 30 天错题数。打卡：当天作业计划全部做完算打一次卡（GET /api/homework 带的 checkin）。
+ * 下面是识别进度、没扫出来的小喇叭通知、待办的下一项、近 30 天错题数。打卡：某天加的待办全部做完算打一次卡（GET /api/homework/todos 带的 checkin）。
  */
 export default function Home() {
   const tc = useThemeClass();
@@ -132,13 +132,12 @@ export default function Home() {
 
   const { data: hw } = useHomework();
   useDidShow(() => {
-    if (isLoggedIn()) loadDay().catch(() => undefined); // 打卡和下一项都从这里来
+    if (isLoggedIn()) loadTodos().catch(() => undefined); // 打卡和下一项都从这里来
   });
-  const hs = hw && hw.day === hw.today ? hw.summary : null;
   const checkin = (isLoggedIn() && hw?.checkin) || null;
 
   // 四块黑板右下角的粉笔圈：一个最要紧的数
-  const todoBadge = !hs || !hs.total ? "去添加" : hs.allDone ? "全做完" : <>还剩<Text className="bb__numb">{hs.left}</Text>项</>;
+  const todoBadge = !isLoggedIn() || !hw ? "去添加" : hw.todo.length ? <>还剩<Text className="bb__numb">{hw.todo.length}</Text>项</> : checkin?.today ? "全做完" : "去添加";
   const planBadge = plans && plans.todo > 0 ? <><Text className="bb__numb">{plans.todo}</Text>份待交</>
     : MARK_REVIEWED && plans && plans.toReview > 0 ? <><Text className="bb__numb">{plans.toReview}</Text>份待批</>
     : planCount ? <><Text className="bb__numb">{planCount}</Text>个计划</>
@@ -303,36 +302,24 @@ function Board({ role, doodle, badge, math, height, onClick }: { role: RoleName;
   );
 }
 
-/** 今天作业计划的下一项（或正在做的那项，和 App 一致）：点「开始 / 继续」直接去做。没有清单或全做完了就不显示 */
+/** 待办的下一项（正在计时或停着的那项优先，没有就是列表第一项）：点「开始 / 继续」直接进时钟计时页。没有待办就不显示 */
 function NextUp() {
   const { data } = useHomework();
-  const today = data && data.day === data.today ? data : null;
-  const s = today?.summary;
-  if (!today || !s || !s.total || s.allDone) return null;
-  const next = today.items.find((it) => it.id === s.currentId) ?? (s.nextId ? today.items.find((it) => it.id === s.nextId) : null) ?? nextTodo(today.items);
-  if (!next) return null;
+  if (!isLoggedIn() || !data?.todo.length) return null;
+  const next = currentItem(data.todo) ?? data.todo[0];
   const doing = next.status === "running" || next.status === "paused";
-  const meta = doing ? "正在做" : next.remindAt ? `下一项 · ${next.remindAt} 开始` : `下一项 · 约 ${next.est} 分钟`;
+  const meta = next.status === "running" ? "计时中" : next.status === "paused" ? "已暂停" : `还剩 ${data.todo.length} 项`;
   return (
-    <View
-      className="hb__next rise rise--1"
-      hoverClass="h4--hover"
-      onClick={() => void Taro.navigateTo({ url: doing ? `/pages/homework-focus/index?id=${next.id}` : `/pages/homework-item/index?id=${next.id}` })}
-    >
+    <View className="hb__next rise rise--1" hoverClass="h4--hover" onClick={() => void Taro.navigateTo({ url: `/pages/homework-focus/index?id=${next.id}` })}>
       <SubjectTile subject={tileSubject(next.subject)} size="sm" />
       <View className="hb__nextm">
-        <Text className="hb__nexts ellipsis">今天作业计划 · {meta}</Text>
+        <Text className="hb__nexts ellipsis">待办事项 · {meta}</Text>
         <Text className="hb__nextb ellipsis">{next.title}</Text>
       </View>
       <View className="hb__go">
         <Text>{doing ? "继续" : "开始"}</Text>
         <Icon name="chevron-right" size={13} color="#ffffff" stroke={2.6} />
       </View>
-      {s.done > 0 && (
-        <View className="hb__nextbar">
-          <View className="hb__nextbari" style={{ width: `${(s.done / s.total) * 100}%` }} />
-        </View>
-      )}
     </View>
   );
 }

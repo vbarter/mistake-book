@@ -8,11 +8,18 @@
 - 完成照片走对象存储签名链接直传，key 为 hw/<itemId>/<photoId>.jpg。
 
 界面稿见项目文件 screenshots/homework-today/，产品设计文档「今天作业计划（待办事项）产品设计」。
+
+小程序 1.13 起的「待办事项」（界面稿 screenshots/todo-simplify-v4/）用同一张表、换一种看法：不分天，
+没做完的都在「待办」，做完的（status = done）就是「已归档」，取消完成（undo）就是重新打开。
+GET /homework/todos 给这种看法；改清单、计时的接口带上 ?view=todos 时也返回它。不设提醒时间、不自动开始。
 """
 from __future__ import annotations
 
 import base64
+import io
 import logging
+import re
+import zipfile
 import secrets
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -31,6 +38,9 @@ bp = Blueprint("homework", __name__)
 log = logging.getLogger(__name__)
 
 MAX_IMAGES = 6
+MAX_FILES = 3
+MAX_FILE_BYTES = 10 * 1024 * 1024
+ARCHIVE_LIMIT = 200  # 「已归档」一次给最近的这么多项
 MAX_PHOTOS = 9
 SNOOZE_MINUTES = 10
 STATUSES = ("todo", "running", "paused", "done")
@@ -247,6 +257,33 @@ def _day_payload(user_id: str, day: str) -> dict:
     }
 
 
+def _todos_payload(user_id: str) -> dict:
+    """「待办事项」的看法：不分天。todo 是没做完的（新加的那天在前，同一天按清单顺序），archived 是做完的（刚做完的在前）。
+    不按提醒时间推进：这种看法里没有到点自动开始"""
+    now = now_local()
+    q = HomeworkItem.query.filter_by(user_id=user_id)
+    todo = q.filter(HomeworkItem.status != "done").order_by(HomeworkItem.day.desc(), HomeworkItem.position, HomeworkItem.created_at).all()
+    done = q.filter(HomeworkItem.status == "done")
+    archived = done.order_by(HomeworkItem.finished_at.desc(), HomeworkItem.updated_at.desc()).limit(ARCHIVE_LIMIT).all()
+    today = _today()
+    return {
+        "today": today, "now": _iso(now),
+        "todo": [_view(it, now, []) for it in todo],
+        "archived": [_view(it, now, []) for it in archived],
+        "archivedTotal": done.count(),
+        "checkin": checkin(user_id, today),
+    }
+
+
+def _todos_view() -> bool:
+    return request.args.get("view") == "todos"
+
+
+def _reply(user_id: str, day: str) -> dict:
+    """改完之后返回什么：小程序的待办事项页（?view=todos）要不分天的那份，其余要这一天的清单"""
+    return _todos_payload(user_id) if _todos_view() else _day_payload(user_id, day)
+
+
 def _own(item_id: str) -> HomeworkItem:
     item = db.session.get(HomeworkItem, item_id)
     if item is None or item.user_id != current_user().id:
@@ -302,6 +339,45 @@ def get_day():
     return jsonify(_day_payload(current_user().id, _day_arg(request.args.get("day"))))
 
 
+@bp.get("/homework/todos")
+@login_required
+def get_todos():
+    """待办事项：没做完的和已归档的，不分天"""
+    return jsonify(_todos_payload(current_user().id))
+
+
+def _file_text(name: str, blob: bytes) -> str:
+    """从微信聊天里选的文件：PDF、Word（.docx）取出里面的文字，交给拆作业的那一步。扫描件 PDF 里没有文字，让用户改传图片"""
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext == "pdf" or blob[:5] == b"%PDF-":
+        try:
+            from pypdf import PdfReader
+
+            pages = PdfReader(io.BytesIO(blob)).pages[:10]
+            text = "\n".join((p.extract_text() or "") for p in pages)
+        except Exception:  # noqa: BLE001
+            abort(400, f"「{name}」打不开，换成图片试试")
+        if not text.strip():
+            abort(400, f"「{name}」是扫描件，里面没有文字，请截图或拍照上传")
+        return text
+    if ext == "docx" or blob[:2] == b"PK":
+        try:
+            xml = zipfile.ZipFile(io.BytesIO(blob)).read("word/document.xml").decode("utf-8", "ignore")
+        except Exception:  # noqa: BLE001
+            abort(400, f"「{name}」打不开，换成图片试试")
+        xml = re.sub(r"</w:p>|<w:br[^>]*/>", "\n", xml)
+        xml = re.sub(r"<w:tab[^>]*/>", " ", xml)
+        text = re.sub(r"<[^>]+>", "", xml)
+        for a, b in (("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'), ("&apos;", "'"), ("&amp;", "&")):
+            text = text.replace(a, b)
+        if not text.strip():
+            abort(400, f"「{name}」里没有文字")
+        return text
+    if ext in ("txt", "md"):
+        return blob.decode("utf-8", "ignore")
+    abort(400, "只支持图片、PDF 和 Word（.docx）")
+
+
 @bp.post("/homework/parse")
 @login_required
 def parse():
@@ -312,6 +388,20 @@ def parse():
     raw_images = data.get("images") or []
     if not isinstance(raw_images, list) or len(raw_images) > MAX_IMAGES:
         abort(400, f"一次最多 {MAX_IMAGES} 张照片")
+    raw_files = data.get("files") or []
+    if not isinstance(raw_files, list) or len(raw_files) > MAX_FILES:
+        abort(400, f"一次最多 {MAX_FILES} 个文件")
+    for f in raw_files:
+        # files: [{name, data}]，data 是 base64（可以带 data: 前缀）
+        if not isinstance(f, dict):
+            abort(400, "格式不对")
+        try:
+            blob = base64.b64decode(str(f.get("data") or "").split(",", 1)[-1])
+        except Exception:  # noqa: BLE001
+            abort(400, "文件解码失败")
+        if len(blob) > MAX_FILE_BYTES:
+            abort(400, "文件太大了，最多 10 MB")
+        text = (text + "\n" + _file_text(str(f.get("name") or "文件")[:80], blob)).strip()[:4000]
     if not text.strip() and not raw_images:
         abort(400, "说一句、拍一张，或者打几个字")
     images = []
@@ -387,6 +477,10 @@ def add_items():
         abort(400, "一天的作业太多了，先删掉一些")
     pos = max((it.position or 0 for it in existing), default=-1) + 1
     seen = {dup_key(it.title): it for it in existing}
+    if _todos_view():
+        # 待办事项不分天：前几天加的、还没做完的同一项也算重复
+        for it in HomeworkItem.query.filter(HomeworkItem.user_id == user.id, HomeworkItem.day != day, HomeworkItem.status != "done").all():
+            seen.setdefault(dup_key(it.title), it)
     merged: list[str] = []
     for r in raw:
         if not isinstance(r, dict):
@@ -405,7 +499,7 @@ def add_items():
             seen[key] = item
         pos += 1
     db.session.commit()
-    return jsonify({**_day_payload(user.id, day), "merged": len(merged), "mergedTitles": merged}), 201
+    return jsonify({**_reply(user.id, day), "merged": len(merged), "mergedTitles": merged}), 201
 
 
 @bp.route("/homework/items/<item_id>", methods=["PATCH", "PUT"])  # 小程序的 wx.request 没有 PATCH
@@ -437,7 +531,7 @@ def update_item(item_id: str):
         except (TypeError, ValueError):
             abort(400, "顺序不对")
     db.session.commit()
-    return jsonify(_day_payload(item.user_id, item.day))
+    return jsonify(_reply(item.user_id, item.day))
 
 
 @bp.delete("/homework/items/<item_id>")
@@ -448,7 +542,7 @@ def delete_item(item_id: str):
     _delete_photos([item])
     db.session.delete(item)
     db.session.commit()
-    return jsonify(_day_payload(user_id, day))
+    return jsonify(_reply(user_id, day))
 
 
 @bp.post("/homework/schedule")
@@ -502,9 +596,9 @@ def act(item_id: str, action: str):
     if action == "start":
         if item.status == "done":
             abort(409, "这一项已经做完了")
-        # 同一时间只计一项：别的正在计的先停下（回到没做，已用时间保留）
-        for other in items:
-            if other.id != item.id and other.status in ("running", "paused"):
+        # 同一时间只计一项：别的正在计的先停下（回到没做，已用时间保留）。前几天没做完、还在计时的也算
+        for other in HomeworkItem.query.filter(HomeworkItem.user_id == item.user_id, HomeworkItem.status.in_(("running", "paused"))).all():
+            if other.id != item.id:
                 _stop(other, now)
                 other.status = "todo"
                 if other.remind_at and _at(other.day, other.remind_at) <= now:
@@ -522,7 +616,7 @@ def act(item_id: str, action: str):
         item.status, item.started_at = "running", now
     elif action == "finish":
         if item.status == "done":
-            return jsonify(_day_payload(item.user_id, item.day))
+            return jsonify(_reply(item.user_id, item.day))
         _stop(item, now)
         item.status, item.finished_at = "done", now
         item.first_started_at = item.first_started_at or now
@@ -552,7 +646,7 @@ def act(item_id: str, action: str):
     else:
         abort(404)
     db.session.commit()
-    return jsonify(_day_payload(item.user_id, item.day))
+    return jsonify(_reply(item.user_id, item.day))
 
 
 @bp.post("/homework/items/<item_id>/photos")

@@ -9,9 +9,10 @@ export type IconName =
   | "viewfinder" | "loop" | "family" | "shield" | "brain"
   | "folder" | "document" | "grid" | "pin" | "printer" | "list" | "xcircle" | "checkcircle" | "alert" | "arrows" | "letters" | "graduation"
   | "calculator" | "brush" | "bubble" | "flask" | "atom" | "tube" | "leaf" | "scroll" | "map" | "scales" | "rotate" | "eye" | "eye-off" | "link" | "unlink"
-  | "play" | "pause" | "timer" | "help" | "bulb" | "skip" | "undo" | "mic";
+  | "play" | "pause" | "timer" | "help" | "bulb" | "skip" | "undo" | "mic" | "archive";
 
 const paths: Record<IconName, string> = {
+  archive: "M3 5h18v4H3zM5 9v10h14V9M10 13h4",
   play: "M8 5.5v13l10.5-6.5z",
   pause: "M8 5v14M16 5v14",
   timer: "M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 1.5M10 2.5h4M19 5.5l1.5 1.5",
